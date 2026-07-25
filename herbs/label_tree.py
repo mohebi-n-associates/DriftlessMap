@@ -1,9 +1,9 @@
 import os
 import sys
 import numpy as np
-from PyQt5.QtWidgets import *
-from PyQt5.QtGui import *
-from PyQt5.QtCore import *
+from PyQt6.QtWidgets import *
+from PyQt6.QtGui import *
+from PyQt6.QtCore import *
 import pyqtgraph as pg
 from .uuuuuu import read_qss_file
 
@@ -76,7 +76,7 @@ class LabelTree(QWidget):
         
         self.tree = QTreeWidget(self)
         self.layout.addWidget(self.tree)
-        self.tree.header().setSectionResizeMode(QHeaderView.ResizeToContents)
+        self.tree.header().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         self.tree.headerItem().setText(0, "id")
         self.tree.headerItem().setText(1, "name")
         self.tree.headerItem().setText(2, "color")
@@ -110,7 +110,7 @@ class LabelTree(QWidget):
                 color = label_data['color'][i]
                 if label_id <= self.label_level:
                     self.current_lut[label_id] = np.array([color[0], color[1], color[2], 255])
-                da_color = QColor(color[0], color[1], color[2]).name(QColor.HexRgb)
+                da_color = QColor(color[0], color[1], color[2]).name(QColor.NameFormat.HexRgb)
                 name = label_data['label'][i]
                 acronym = label_data['abbrev'][i]
                 if parent < 0:
@@ -139,8 +139,8 @@ class LabelTree(QWidget):
 
     def add_label(self, label_id, parent, name, acronym, color):
         item = QTreeWidgetItem([acronym.decode(), name.decode(), ''])
-        item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
-        item.setCheckState(0, Qt.Unchecked)
+        item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+        item.setCheckState(0, Qt.CheckState.Unchecked)
 
         btn = pg.ColorButton(color=pg.mkColor(color.decode()))
         btn.defaultColor = QColor(btn.color())
@@ -166,7 +166,7 @@ class LabelTree(QWidget):
         self.checked = set()
 
     def item_change(self, item, col):
-        checked = item.checkState(0) == Qt.Checked
+        checked = item.checkState(0) == Qt.CheckState.Checked
         with SignalBlock(self.tree.itemChanged, self.item_change):
             self.check_recursive(item, checked)
     
@@ -176,11 +176,11 @@ class LabelTree(QWidget):
     def check_recursive(self, item, checked):
         if checked:
             self.checked.add(item.id)
-            item.setCheckState(0, Qt.Checked)
+            item.setCheckState(0, Qt.CheckState.Checked)
         else:
             if item.id in self.checked:
                 self.checked.remove(item.id)
-            item.setCheckState(0, Qt.Unchecked)
+            item.setCheckState(0, Qt.CheckState.Unchecked)
     
         for i in range(item.childCount()):
             self.check_recursive(item.child(i), checked)

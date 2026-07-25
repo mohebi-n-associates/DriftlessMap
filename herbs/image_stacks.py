@@ -2,9 +2,9 @@ import colorsys
 import os
 import sys
 import numpy as np
-from PyQt5.QtWidgets import *
-from PyQt5.QtCore import *
-from PyQt5.QtGui import *
+from PyQt6.QtWidgets import *
+from PyQt6.QtCore import *
+from PyQt6.QtGui import *
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtGui, QtCore
 from .movable_points import TriangulationPoints
@@ -81,17 +81,17 @@ class SliceStack(pg.GraphicsLayoutWidget):
         self.base_layer.mouseHovered.connect(self.mouse_hovered)
 
         self.img_layer = pg.ImageItem()
-        self.img_layer.setCompositionMode(QPainter.CompositionMode_Plus)
+        self.img_layer.setCompositionMode(QPainter.CompositionMode.CompositionMode_Plus)
 
-        circle_follow = pg.PlotDataItem(pen=pg.mkPen('r', width=2, style=Qt.DashLine))
-        lasso_path = pg.PlotDataItem(pen=pg.mkPen(color=(0, 255, 255), width=3, style=Qt.DashLine),
+        circle_follow = pg.PlotDataItem(pen=pg.mkPen('r', width=2, style=Qt.PenStyle.DashLine))
+        lasso_path = pg.PlotDataItem(pen=pg.mkPen(color=(0, 255, 255), width=3, style=Qt.PenStyle.DashLine),
                                      symbolPen=(0, 255, 255), symbol='o', symbolSize=4)
 
-        ruler_path = pg.PlotDataItem(pen=pg.mkPen(color='y', width=3, style=Qt.DashLine),
+        ruler_path = pg.PlotDataItem(pen=pg.mkPen(color='y', width=3, style=Qt.PenStyle.DashLine),
                                      symbolPen='y', symbolBrush='y', symbol='s', symbolSize=4)
 
         overlay_img = pg.ImageItem()
-        overlay_img.setCompositionMode(QPainter.CompositionMode_Plus)
+        overlay_img.setCompositionMode(QPainter.CompositionMode.CompositionMode_Plus)
         overlay_contour = pg.ImageItem()
         overlay_contour.setLevels(levels=(0, 1))
 
@@ -202,7 +202,7 @@ class SliceStack(pg.GraphicsLayoutWidget):
         self.sig_mouse_clicked.emit(pos)
 
     def keyPressEvent(self, event):
-        if event.key() == QtCore.Qt.Key_Backspace:
+        if event.key() == QtCore.Qt.Key.Key_Backspace:
             print("Killing")
             self.sig_key_pressed.emit('delete')
 
@@ -234,22 +234,22 @@ class ImageStacks(pg.GraphicsLayoutWidget):
         self.base_layer.mouseHovered.connect(self.mouse_hovered)
 
         img1 = pg.ImageItem()
-        img1.setCompositionMode(QPainter.CompositionMode_Plus)
+        img1.setCompositionMode(QPainter.CompositionMode.CompositionMode_Plus)
         img2 = pg.ImageItem()
-        img2.setCompositionMode(QPainter.CompositionMode_Plus)
+        img2.setCompositionMode(QPainter.CompositionMode.CompositionMode_Plus)
         img3 = pg.ImageItem()
-        img3.setCompositionMode(QPainter.CompositionMode_Plus)
+        img3.setCompositionMode(QPainter.CompositionMode.CompositionMode_Plus)
         img4 = pg.ImageItem()
-        img4.setCompositionMode(QPainter.CompositionMode_Plus)
+        img4.setCompositionMode(QPainter.CompositionMode.CompositionMode_Plus)
 
-        circle_follow = pg.PlotDataItem(pen=pg.mkPen('r', width=2, style=Qt.DashLine))
-        lasso_path = pg.PlotDataItem(pen=pg.mkPen(color=(0, 255, 255), width=3, style=Qt.DashLine),
+        circle_follow = pg.PlotDataItem(pen=pg.mkPen('r', width=2, style=Qt.PenStyle.DashLine))
+        lasso_path = pg.PlotDataItem(pen=pg.mkPen(color=(0, 255, 255), width=3, style=Qt.PenStyle.DashLine),
                                      symbolPen=(0, 255, 255), symbol='o', symbolSize=4)
-        ruler_path = pg.PlotDataItem(pen=pg.mkPen(color='y', width=3, style=Qt.DashLine),
+        ruler_path = pg.PlotDataItem(pen=pg.mkPen(color='y', width=3, style=Qt.PenStyle.DashLine),
                                      symbolPen='y', symbolBrush='y', symbol='s', symbolSize=4)
 
         overlay_img = pg.ImageItem()
-        overlay_img.setCompositionMode(QPainter.CompositionMode_Plus)
+        overlay_img.setCompositionMode(QPainter.CompositionMode.CompositionMode_Plus)
         overlay_contour = pg.ImageItem()
         overlay_contour.setLevels(levels=(0, 1))
 
@@ -345,10 +345,10 @@ class ImageStacks(pg.GraphicsLayoutWidget):
         self.setBackground(color)
 
     def keyPressEvent(self, event):
-        if event.key() == Qt.Key_Backspace or event.key() == Qt.Key_Delete:
+        if event.key() == Qt.Key.Key_Backspace or event.key() == Qt.Key.Key_Delete:
             print("Killing")
             self.sig_key_pressed.emit('delete')
-        # elif event.key() == Qt.Key_Enter or event.key() == Qt.Key_Return:
+        # elif event.key() == Qt.Key.Key_Enter or event.key() == Qt.Key.Key_Return:
         #     print('enter')
         #     self.sig_key_pressed.emit('enter')
 

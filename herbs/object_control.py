@@ -3,9 +3,9 @@ import sys
 import numpy as np
 from random import randint
 import pyqtgraph as pg
-from PyQt5.QtWidgets import *
-from PyQt5.QtGui import *
-from PyQt5.QtCore import *
+from PyQt6.QtWidgets import *
+from PyQt6.QtGui import *
+from PyQt6.QtCore import *
 from .wtiles import QDoubleButton
 from .uuuuuu import read_qss_file
 from .resources import resource_path
@@ -207,7 +207,7 @@ class CompareWindow(QDialog):
         channel_info_layout.addWidget(sec_group)
 
         # ok button, used to close window
-        ok_btn = QDialogButtonBox(QDialogButtonBox.Ok)
+        ok_btn = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
         ok_btn.accepted.connect(self.accept)
 
         # add widget to layout
@@ -269,7 +269,7 @@ class CellsInfoWindow(QDialog):
             slayout.addWidget(QLabel(str(data["region_count"][i])), i + 1, 3, 1, 1)
 
         # ok button, used to close window
-        ok_btn = QDialogButtonBox(QDialogButtonBox.Ok)
+        ok_btn = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
         ok_btn.accepted.connect(self.accept)
 
         # add widget to layout
@@ -345,7 +345,7 @@ class VirusInfoWindow(QDialog):
                 sec_layout.addWidget(row_val[j], i + 1, j, 1, 1)
 
         # ok button, used to close window
-        ok_btn = QDialogButtonBox(QDialogButtonBox.Ok)
+        ok_btn = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
         ok_btn.accepted.connect(self.accept)
 
         # add widget to layout
@@ -379,22 +379,22 @@ class ProbeInfoWindow(QDialog):
         self.label.setStyleSheet(label_style)
 
         ap_angle_label = QLabel("AP Angle : ")
-        ap_angle_label.setAlignment(Qt.AlignCenter)
+        ap_angle_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         ml_angle_label = QLabel("ML Angle : ")
-        ml_angle_label.setAlignment(Qt.AlignCenter)
+        ml_angle_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         probe_length_label = QLabel("Probe Length : ")
-        probe_length_label.setAlignment(Qt.AlignCenter)
+        probe_length_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         dv_label = QLabel("DV : ")
-        dv_label.setAlignment(Qt.AlignCenter)
+        dv_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         insertion_coords_label = QLabel("Insertion coordinates : ")
-        insertion_coords_label.setAlignment(Qt.AlignCenter)
+        insertion_coords_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         insertion_voxels_label = QLabel("Insertion voxels : ")
-        insertion_voxels_label.setAlignment(Qt.AlignCenter)
+        insertion_voxels_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         terminus_coords_label = QLabel("Terminus coordinates : ")
-        terminus_coords_label.setAlignment(Qt.AlignCenter)
+        terminus_coords_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         terminus_voxels_label = QLabel("Terminus voxels : ")
-        terminus_voxels_label.setAlignment(Qt.AlignCenter)
+        terminus_voxels_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         ap_angle_value = QLabel("{} \u00B0".format(np.round(data["ap_angle"], 2)))
         ml_angle_value = QLabel("{} \u00B0".format(np.round(data["ml_angle"], 2)))
@@ -566,7 +566,7 @@ class ProbeInfoWindow(QDialog):
         channel_info_layout.addWidget(sec_group)
 
         # ok button, used to close window
-        ok_btn = QDialogButtonBox(QDialogButtonBox.Ok)
+        ok_btn = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
         ok_btn.accepted.connect(self.accept)
 
         # add widget to layout
@@ -630,7 +630,7 @@ class SinglePiece(QWidget):
         self.inner_layout = QHBoxLayout(self.inner_frame)
         self.inner_layout.setContentsMargins(0, 0, 0, 0)
         self.inner_layout.setSpacing(0)
-        self.inner_layout.setAlignment(Qt.AlignVCenter)
+        self.inner_layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
         self.inner_layout.addWidget(self.tbnail)
         self.inner_layout.addSpacing(5)
         self.inner_layout.addWidget(self.text_btn)
@@ -640,7 +640,7 @@ class SinglePiece(QWidget):
         outer_layout = QHBoxLayout()
         outer_layout.setContentsMargins(0, 0, 0, 0)
         outer_layout.setSpacing(0)
-        outer_layout.setAlignment(Qt.AlignVCenter)
+        outer_layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
         outer_layout.addWidget(self.inner_frame)
 
         self.setLayout(outer_layout)
@@ -719,8 +719,8 @@ class RegisteredObject(QWidget):
         self.eye_button.setStyleSheet(eye_button_style)
         self.eye_button.setCheckable(True)
         eye_icon = QIcon()
-        eye_icon.addPixmap(QPixmap(resource_path("icons/layers/eye_on.png")), QIcon.Normal, QIcon.Off)
-        eye_icon.addPixmap(QPixmap(resource_path("icons/layers/eye_off.png")), QIcon.Normal, QIcon.On)
+        eye_icon.addPixmap(QPixmap(resource_path("icons/layers/eye_on.png")), QIcon.Mode.Normal, QIcon.State.Off)
+        eye_icon.addPixmap(QPixmap(resource_path("icons/layers/eye_off.png")), QIcon.Mode.Normal, QIcon.State.On)
         self.eye_button.setIcon(eye_icon)
         self.eye_button.setIconSize(QSize(20, 20))
         self.eye_button.clicked.connect(self.eye_on_click)
@@ -734,16 +734,16 @@ class RegisteredObject(QWidget):
         self.text_btn = ObjectTextButton()
         self.text_btn.setText(self.object_name)
         self.text_btn.clicked.connect(self.text_btn_on_click)
-        # self.text_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Ignored)
+        # self.text_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Ignored)
 
         self.link_button = QPushButton()
         self.link_button.setFixedSize(QSize(25, 40))
         self.link_button.setCheckable(True)
         link_icon = QIcon()
         link_icon.addPixmap(
-            QPixmap(resource_path("icons/sidebar/link_off.svg")), QIcon.Normal, QIcon.Off
+            QPixmap(resource_path("icons/sidebar/link_off.svg")), QIcon.Mode.Normal, QIcon.State.Off
         )
-        link_icon.addPixmap(QPixmap(resource_path("icons/sidebar/link.svg")), QIcon.Normal, QIcon.On)
+        link_icon.addPixmap(QPixmap(resource_path("icons/sidebar/link.svg")), QIcon.Mode.Normal, QIcon.State.On)
         self.link_button.setIcon(link_icon)
         self.link_button.setIconSize(QSize(20, 20))
         self.link_button.clicked.connect(self.on_linked)
@@ -753,7 +753,7 @@ class RegisteredObject(QWidget):
         self.inner_layout = QHBoxLayout(self.inner_frame)
         self.inner_layout.setContentsMargins(0, 0, 0, 0)
         self.inner_layout.setSpacing(0)
-        self.inner_layout.setAlignment(Qt.AlignVCenter)
+        self.inner_layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
         self.inner_layout.addWidget(self.eye_button)
         self.inner_layout.addSpacing(5)
         self.inner_layout.addWidget(self.tbnail)
@@ -765,7 +765,7 @@ class RegisteredObject(QWidget):
         outer_layout = QHBoxLayout()
         outer_layout.setContentsMargins(0, 0, 0, 0)
         outer_layout.setSpacing(0)
-        outer_layout.setAlignment(Qt.AlignVCenter)
+        outer_layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
         outer_layout.addWidget(self.inner_frame)
 
         self.setLayout(outer_layout)
@@ -905,7 +905,7 @@ class ObjectControl(QObject):
 
         obj_opacity_label = QLabel("Opacity:")
         obj_opacity_label.setFixedWidth(80)
-        self.obj_opacity_slider = QSlider(Qt.Horizontal)
+        self.obj_opacity_slider = QSlider(Qt.Orientation.Horizontal)
         self.obj_opacity_slider.setMaximum(100)
         self.obj_opacity_slider.setMinimum(0)
         self.obj_opacity_slider.setValue(100)
@@ -923,14 +923,14 @@ class ObjectControl(QObject):
 
         obj_size_label = QLabel("Size/Width: ")
         obj_size_label.setFixedWidth(80)
-        self.obj_size_slider = QSlider(Qt.Horizontal)
+        self.obj_size_slider = QSlider(Qt.Orientation.Horizontal)
         self.obj_size_slider.setValue(2)
         self.obj_size_slider.setMinimum(1)
         self.obj_size_slider.setMaximum(10)
         self.obj_size_slider.valueChanged.connect(self.change_size_label_value)
         self.obj_size_slider.sliderMoved.connect(self.send_size_changed_signal)
         self.obj_size_val_label = QLabel("2")
-        self.obj_size_val_label.setAlignment(Qt.AlignCenter)
+        self.obj_size_val_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.obj_size_val_label.setFixedWidth(40)
         size_wrap = QFrame()
         size_wrap_layout = QHBoxLayout(size_wrap)
@@ -953,33 +953,33 @@ class ObjectControl(QObject):
 
         self.layer_frame = QFrame()
         self.layer_frame.setStyleSheet("background: transparent; border: 0px;")
-        self.layer_frame.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.layer_layout = QBoxLayout(QBoxLayout.BottomToTop, self.layer_frame)
-        self.layer_layout.setAlignment(Qt.AlignBottom)
+        self.layer_frame.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.layer_layout = QBoxLayout(QBoxLayout.Direction.BottomToTop, self.layer_frame)
+        self.layer_layout.setAlignment(Qt.AlignmentFlag.AlignBottom)
         self.layer_layout.setContentsMargins(0, 0, 0, 0)
         self.layer_layout.setSpacing(5)
 
         self.layer_scroll = QScrollArea()
         self.layer_scroll.setStyleSheet("background: transparent; border: 0px;")
-        self.layer_scroll.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.layer_scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.layer_scroll.setWidget(self.layer_frame)
-        self.layer_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
-        self.layer_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.layer_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
+        self.layer_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.layer_scroll.setWidgetResizable(True)
 
         mid_frame = QFrame()
         mid_frame.setStyleSheet(
             "background: transparent; border: 1px solid rgb(128, 128, 128);"
         )
-        mid_frame.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        mid_frame.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         mid_layout = QGridLayout(mid_frame)
         mid_layout.setContentsMargins(0, 0, 0, 0)
         mid_layout.setSpacing(0)
-        mid_layout.setAlignment(Qt.AlignBottom)
+        mid_layout.setAlignment(Qt.AlignmentFlag.AlignBottom)
         mid_layout.addWidget(self.layer_scroll, 0, 0, 1, 1)
 
         self.outer_frame = QFrame()
-        self.outer_frame.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.outer_frame.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         outer_layout = QVBoxLayout(self.outer_frame)
         outer_layout.setSpacing(0)
         outer_layout.addWidget(top_frame)

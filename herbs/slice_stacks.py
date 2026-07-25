@@ -2,8 +2,8 @@ import os
 import sys
 import numpy as np
 import pyqtgraph as pg
-from PyQt5.QtCore import *
-from PyQt5.QtGui import *
+from PyQt6.QtCore import *
+from PyQt6.QtGui import *
 
 from .movable_points import TriangulationPoints
 
@@ -81,10 +81,10 @@ class SliceStacks(pg.GraphicsLayoutWidget):
         tri_pnts = TriangulationPoints()
         self.tri_lines_list = []
 
-        circle_follow = pg.PlotDataItem(pen=pg.mkPen('r', width=2, style=Qt.DashLine))
-        lasso_path = pg.PlotDataItem(pen=pg.mkPen(color=(0, 255, 255), width=3, style=Qt.DashLine),
+        circle_follow = pg.PlotDataItem(pen=pg.mkPen('r', width=2, style=Qt.PenStyle.DashLine))
+        lasso_path = pg.PlotDataItem(pen=pg.mkPen(color=(0, 255, 255), width=3, style=Qt.PenStyle.DashLine),
                                      symbolPen=(0, 255, 255), symbol='o', symbolSize=4)
-        ruler_path = pg.PlotDataItem(pen=pg.mkPen(color='y', width=3, style=Qt.DashLine),
+        ruler_path = pg.PlotDataItem(pen=pg.mkPen(color='y', width=3, style=Qt.PenStyle.DashLine),
                                      symbolPen='y', symbolBrush='y', symbol='s', symbolSize=3)
 
         overlay_img = pg.ImageItem()
@@ -198,7 +198,9 @@ class SliceStacks(pg.GraphicsLayoutWidget):
         self.label_img.setLookupTable(lut)
 
     def set_overlay(self, overlay):
-        mode = getattr(QPainter, 'CompositionMode_' + overlay)
+        mode = getattr(
+            QPainter.CompositionMode, "CompositionMode_" + overlay
+        )
         self.label_img.setCompositionMode(mode)
 
     def set_label_opacity(self, o):
@@ -218,4 +220,3 @@ class SliceStacks(pg.GraphicsLayoutWidget):
 
     def mouse_clicked(self, pos):
         self.sig_mouse_clicked.emit(pos)
-

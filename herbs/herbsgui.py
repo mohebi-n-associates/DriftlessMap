@@ -22,22 +22,19 @@ from numba import jit
 import colorsys
 
 
-import PyQt5
-from PyQt5.QtWidgets import *
-from PyQt5.QtCore import *
-from PyQt5.QtGui import *
-from PyQt5.QtSql import QSqlTableModel
-from PyQt5.QtMultimedia import QSound
+from PyQt6.QtWidgets import *
+from PyQt6.QtCore import *
+from PyQt6.QtGui import *
+from PyQt6.QtSql import QSqlTableModel
 
-# from PyQt5 import uic
-from PyQt5.uic import loadUiType
+# from PyQt6 import uic
+from PyQt6.uic import loadUiType
 import pyqtgraph as pg
 
 pg.setConfigOption("imageAxisOrder", "row-major")
 pg.setConfigOption("useNumba", True)
 import pyqtgraph.opengl as gl
 from pyqtgraph.Qt import QtCore, QtGui
-from pyqtgraph import metaarray
 
 import warnings
 
@@ -78,7 +75,6 @@ from .probe_utiles import (
     get_pre_multi_shank_vis_base,
     get_center_lines,
 )
-from .czi_reader import CZIReader
 from .atlas_downloader import AtlasDownloader
 from .allen_downloader import AllenDownloader
 from .atlas_processor import AtlasProcessor
@@ -948,8 +944,8 @@ class HERBS(QMainWindow, FORM_Main):
     def multi_probe_setting_called(self):
         multi_settings = self.multi_settings.get_multi_settings()
         multi_probe_info = MultiProbePlanningDialog(multi_settings)
-        rsp = multi_probe_info.exec_()
-        if rsp == QDialog.Accepted:
+        rsp = multi_probe_info.exec()
+        if rsp == QDialog.DialogCode.Accepted:
             self.multi_settings.set_multi_probes(multi_probe_info.multi_settings)
             msg = self.multi_settings.check_multi_settings()
             if msg is not None:
@@ -1588,10 +1584,10 @@ class HERBS(QMainWindow, FORM_Main):
             file_path = self.home_path
         else:
             file_path = self.atlas_img_path
-        file_options = QFileDialog.Options()
-        file_options |= QFileDialog.DontUseNativeDialog
+        file_options = QFileDialog.Option(0)
+        file_options |= QFileDialog.Option.DontUseNativeDialog
         file_dialog = QFileDialog()
-        file_dialog.setFileMode(QFileDialog.ExistingFiles)
+        file_dialog.setFileMode(QFileDialog.FileMode.ExistingFiles)
         image_file_path = file_dialog.getOpenFileName(
             self, file_title, file_path, file_filter, options=file_options
         )
@@ -1763,7 +1759,7 @@ class HERBS(QMainWindow, FORM_Main):
             return
         filter = "HERBS Triangulation (*.herbstri);;Legacy HERBS File (*.pkl)"
         dlg = QFileDialog()
-        dlg.setFileMode(QFileDialog.ExistingFiles)
+        dlg.setFileMode(QFileDialog.FileMode.ExistingFiles)
         pnt_path = dlg.getOpenFileName(
             self, "Load Triangulation Points", self.home_path, filter
         )
@@ -2054,7 +2050,7 @@ class HERBS(QMainWindow, FORM_Main):
         # ---------------------------- atlas control panel
         atlas_panel_layout = QVBoxLayout(self.atlascontrolpanel)
         atlas_panel_layout.setContentsMargins(0, 0, 0, 0)
-        atlas_panel_layout.setAlignment(Qt.AlignTop)
+        atlas_panel_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         atlas_control_label = QLabel("Atlasing Controller")
         atlas_control_label.setStyleSheet(decor_label_style)
 
@@ -2064,7 +2060,7 @@ class HERBS(QMainWindow, FORM_Main):
         # ---------------------------- Label Panel
         label_panel_layout = QVBoxLayout(self.treeviewpanel)
         label_panel_layout.setContentsMargins(0, 0, 0, 0)
-        label_panel_layout.setAlignment(Qt.AlignTop)
+        label_panel_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         label_control_label = QLabel("Segmentation View Controller")
         label_control_label.setStyleSheet(decor_label_style)
 
@@ -2072,7 +2068,7 @@ class HERBS(QMainWindow, FORM_Main):
         label_container_layout = QVBoxLayout(label_tree_container)
         # label_container_layout.setContentsMargins(0, 0, 0, 0)
         label_container_layout.setSpacing(0)
-        label_container_layout.setAlignment(Qt.AlignTop)
+        label_container_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         show_3d_button = QPushButton()
         # show_3d_button.setStyleSheet(sidebar_button_style)
         show_3d_button.setCheckable(True)
@@ -2098,18 +2094,18 @@ class HERBS(QMainWindow, FORM_Main):
         image_panel_layout = QVBoxLayout(self.imagecontrolpanel)
         image_panel_layout.setContentsMargins(0, 0, 0, 0)
         image_panel_layout.setSpacing(0)
-        image_panel_layout.setAlignment(Qt.AlignTop)
+        image_panel_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         image_control_label = QLabel("Image View Controller")
         image_control_label.setStyleSheet(decor_label_style)
 
         image_panel_layout.addWidget(image_control_label)
 
-        space_item = QSpacerItem(300, 10, QSizePolicy.Expanding)
+        space_item = QSpacerItem(300, 10, QSizePolicy.Policy.Expanding)
 
         image_container = QFrame()
         image_container_layout = QVBoxLayout(image_container)
         image_container_layout.setSpacing(5)
-        image_container_layout.setAlignment(Qt.AlignTop)
+        image_container_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         image_container_layout.addWidget(self.image_view.outer_frame)
         # image_container_layout.addSpacerItem(space_item)
         # image_container_layout.addWidget(self.image_view.chn_widget_wrap)
@@ -2121,7 +2117,7 @@ class HERBS(QMainWindow, FORM_Main):
         layer_panel_layout = QVBoxLayout(self.layerpanel)
         layer_panel_layout.setContentsMargins(0, 0, 0, 0)
         layer_panel_layout.setSpacing(0)
-        layer_panel_layout.setAlignment(Qt.AlignTop)
+        layer_panel_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         layer_control_label = QLabel("Layer View Controller")
         layer_control_label.setStyleSheet(decor_label_style)
 
@@ -2131,7 +2127,7 @@ class HERBS(QMainWindow, FORM_Main):
         layer_btm_layout = QHBoxLayout(layer_btm_ctrl)
         layer_btm_layout.setContentsMargins(0, 0, 0, 0)
         layer_btm_layout.setSpacing(5)
-        layer_btm_layout.setAlignment(Qt.AlignRight)
+        layer_btm_layout.setAlignment(Qt.AlignmentFlag.AlignRight)
         layer_btm_layout.addWidget(self.layer_ctrl.add_layer_btn)
         layer_btm_layout.addWidget(self.layer_ctrl.delete_layer_btn)
 
@@ -2144,7 +2140,7 @@ class HERBS(QMainWindow, FORM_Main):
         object_panel_layout = QVBoxLayout(self.probecontrolpanel)
         object_panel_layout.setContentsMargins(0, 0, 0, 0)
         object_panel_layout.setSpacing(0)
-        object_panel_layout.setAlignment(Qt.AlignTop)
+        object_panel_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         object_control_label = QLabel("Object View Controller")
         object_control_label.setStyleSheet(decor_label_style)
 
@@ -2154,7 +2150,7 @@ class HERBS(QMainWindow, FORM_Main):
         object_btm_layout = QHBoxLayout(object_btm_ctrl)
         object_btm_layout.setContentsMargins(0, 0, 0, 0)
         object_btm_layout.setSpacing(5)
-        object_btm_layout.setAlignment(Qt.AlignRight)
+        object_btm_layout.setAlignment(Qt.AlignmentFlag.AlignRight)
 
         # object_btm_layout.addSpacing(10)
         object_btm_layout.addWidget(self.object_ctrl.unmerge_btn)
@@ -2183,19 +2179,19 @@ class HERBS(QMainWindow, FORM_Main):
         color = np.ravel(ev.color().getRgb())
         width = self.tool_box.ruler_width_slider.value()
         self.image_view.img_stacks.image_dict["ruler_path"].setPen(
-            pg.mkPen(color, width=width, style=Qt.DashLine)
+            pg.mkPen(color, width=width, style=Qt.PenStyle.DashLine)
         )
         self.atlas_view.cimg.image_dict["ruler_path"].setPen(
-            pg.mkPen(color, width=width, style=Qt.DashLine)
+            pg.mkPen(color, width=width, style=Qt.PenStyle.DashLine)
         )
         self.atlas_view.himg.image_dict["ruler_path"].setPen(
-            pg.mkPen(color, width=width, style=Qt.DashLine)
+            pg.mkPen(color, width=width, style=Qt.PenStyle.DashLine)
         )
         self.atlas_view.simg.image_dict["ruler_path"].setPen(
-            pg.mkPen(color, width=width, style=Qt.DashLine)
+            pg.mkPen(color, width=width, style=Qt.PenStyle.DashLine)
         )
         self.atlas_view.slice_stack.image_dict["ruler_path"].setPen(
-            pg.mkPen(color, width=width, style=Qt.DashLine)
+            pg.mkPen(color, width=width, style=Qt.PenStyle.DashLine)
         )
         self.image_view.img_stacks.image_dict["ruler_path"].setSymbolPen(color=color)
         self.atlas_view.cimg.image_dict["ruler_path"].setSymbolPen(color=color)
@@ -2213,19 +2209,19 @@ class HERBS(QMainWindow, FORM_Main):
         self.tool_box.ruler_width_slider.setValue(width)
         color = np.ravel(self.tool_box.ruler_color_btn.color().getRgb())
         self.image_view.img_stacks.image_dict["ruler_path"].setPen(
-            pg.mkPen(color, width=width, style=Qt.DashLine)
+            pg.mkPen(color, width=width, style=Qt.PenStyle.DashLine)
         )
         self.atlas_view.cimg.image_dict["ruler_path"].setPen(
-            pg.mkPen(color, width=width, style=Qt.DashLine)
+            pg.mkPen(color, width=width, style=Qt.PenStyle.DashLine)
         )
         self.atlas_view.himg.image_dict["ruler_path"].setPen(
-            pg.mkPen(color, width=width, style=Qt.DashLine)
+            pg.mkPen(color, width=width, style=Qt.PenStyle.DashLine)
         )
         self.atlas_view.simg.image_dict["ruler_path"].setPen(
-            pg.mkPen(color, width=width, style=Qt.DashLine)
+            pg.mkPen(color, width=width, style=Qt.PenStyle.DashLine)
         )
         self.atlas_view.slice_stack.image_dict["ruler_path"].setPen(
-            pg.mkPen(color, width=width, style=Qt.DashLine)
+            pg.mkPen(color, width=width, style=Qt.PenStyle.DashLine)
         )
         self.image_view.img_stacks.image_dict["ruler_path"].setSymbolSize(width)
         self.atlas_view.cimg.image_dict["ruler_path"].setSymbolSize(width)
@@ -2326,22 +2322,22 @@ class HERBS(QMainWindow, FORM_Main):
         )
         if self.img_lasso_is_closure:
             self.image_view.img_stacks.image_dict["lasso_path"].setPen(
-                pg.mkPen(color=self.lasso_color, width=3, style=Qt.SolidLine)
+                pg.mkPen(color=self.lasso_color, width=3, style=Qt.PenStyle.SolidLine)
             )
         else:
             self.image_view.img_stacks.image_dict["lasso_path"].setPen(
-                pg.mkPen(color=self.lasso_color, width=3, style=Qt.DashLine)
+                pg.mkPen(color=self.lasso_color, width=3, style=Qt.PenStyle.DashLine)
             )
         self.image_view.img_stacks.image_dict["lasso_path"].setSymbolPen(
             color=self.lasso_color
         )
         if self.atlas_lasso_is_closure:
             self.atlas_view.slice_stack.image_dict["lasso_path"].setPen(
-                pg.mkPen(color=self.lasso_color, width=3, style=Qt.SolidLine)
+                pg.mkPen(color=self.lasso_color, width=3, style=Qt.PenStyle.SolidLine)
             )
         else:
             self.atlas_view.slice_stack.image_dict["lasso_path"].setPen(
-                pg.mkPen(color=self.lasso_color, width=3, style=Qt.DashLine)
+                pg.mkPen(color=self.lasso_color, width=3, style=Qt.PenStyle.DashLine)
             )
         self.atlas_view.working_atlas.image_dict["lasso_path"].setSymbolPen(
             color=self.lasso_color
@@ -2352,7 +2348,7 @@ class HERBS(QMainWindow, FORM_Main):
         self.image_view.img_stacks.image_dict["lasso_path"].clear()
         self.image_view.img_stacks.image_dict["lasso_path"].updateItems()
         self.image_view.img_stacks.image_dict["lasso_path"].setPen(
-            pg.mkPen(color=self.lasso_color, width=3, style=Qt.DashLine)
+            pg.mkPen(color=self.lasso_color, width=3, style=Qt.PenStyle.DashLine)
         )
         self.img_lasso_is_closure = False
 
@@ -2367,7 +2363,7 @@ class HERBS(QMainWindow, FORM_Main):
             )
             self.img_lasso_is_closure = True
             self.image_view.img_stacks.image_dict["lasso_path"].setPen(
-                pg.mkPen(color=self.lasso_color, width=3, style=Qt.SolidLine)
+                pg.mkPen(color=self.lasso_color, width=3, style=Qt.PenStyle.SolidLine)
             )
         else:
             self.inactive_lasso()
@@ -2377,7 +2373,7 @@ class HERBS(QMainWindow, FORM_Main):
         self.atlas_view.slice_stack.image_dict["lasso_path"].clear()
         self.atlas_view.slice_stack.image_dict["lasso_path"].updateItems()
         self.atlas_view.slice_stack.image_dict["lasso_path"].setPen(
-            pg.mkPen(color=self.lasso_color, width=3, style=Qt.DashLine)
+            pg.mkPen(color=self.lasso_color, width=3, style=Qt.PenStyle.DashLine)
         )
         self.atlas_lasso_is_closure = False
 
@@ -2392,7 +2388,7 @@ class HERBS(QMainWindow, FORM_Main):
             )
             self.atlas_lasso_is_closure = True
             self.atlas_view.slice_stack.image_dict["lasso_path"].setPen(
-                pg.mkPen(color=self.lasso_color, width=3, style=Qt.SolidLine)
+                pg.mkPen(color=self.lasso_color, width=3, style=Qt.PenStyle.SolidLine)
             )
         else:
             self.inactive_slice_window_lasso()
@@ -2478,8 +2474,8 @@ class HERBS(QMainWindow, FORM_Main):
         if temp_settings["probe_length"] is None:
             temp_settings = None
         ls_probe_info = LinearSiliconInfoDialog(temp_settings)
-        rsp = ls_probe_info.exec_()
-        if rsp == QDialog.Accepted:
+        rsp = ls_probe_info.exec()
+        if rsp == QDialog.DialogCode.Accepted:
             self.probe_settings.set_linear_silicon(ls_probe_info.probe_settings)
             if self.probe_settings.probe_length == 0:
                 self.valid_probe_settings = False
@@ -4021,7 +4017,7 @@ class HERBS(QMainWindow, FORM_Main):
                     mask_img, mask_img, mask=thresh.astype(np.uint8)
                 )
             modifiers = QApplication.keyboardModifiers()
-            if modifiers == Qt.ShiftModifier:
+            if modifiers == Qt.KeyboardModifier.ShiftModifier:
                 if self.working_img_data["img-mask"] is None:
                     self.working_img_data["img-mask"] = cv2.bitwise_or(
                         mask_img, mask_img, mask=self.white_img
@@ -4073,7 +4069,7 @@ class HERBS(QMainWindow, FORM_Main):
                     self.working_img_data["lasso_path"][0]
                 )
                 self.image_view.img_stacks.image_dict["lasso_path"].setPen(
-                    pg.mkPen(color="r", width=3, style=Qt.SolidLine)
+                    pg.mkPen(color="r", width=3, style=Qt.PenStyle.SolidLine)
                 )
                 self.img_lasso_is_closure = True
             else:
@@ -4932,7 +4928,7 @@ class HERBS(QMainWindow, FORM_Main):
                     self.working_atlas_data["lasso_path"][0]
                 )
                 self.atlas_view.slice_stack.image_dict["lasso_path"].setPen(
-                    pg.mkPen(color="r", width=3, style=Qt.SolidLine)
+                    pg.mkPen(color="r", width=3, style=Qt.PenStyle.SolidLine)
                 )
                 self.atlas_lasso_is_closure = True
             else:
@@ -5032,7 +5028,7 @@ class HERBS(QMainWindow, FORM_Main):
             )
 
             modifiers = QApplication.keyboardModifiers()
-            if modifiers == Qt.ShiftModifier:
+            if modifiers == Qt.KeyboardModifier.ShiftModifier:
                 if self.working_atlas_data["atlas-mask"] is None:
                     self.working_atlas_data["atlas-mask"] = cv2.bitwise_or(
                         mask_img, mask_img, mask=white_img
@@ -5526,13 +5522,13 @@ class HERBS(QMainWindow, FORM_Main):
         da_link = ev[0]
         blend_mode = ev[1]
         if blend_mode == "Plus":
-            da_mode = QPainter.CompositionMode_Plus
+            da_mode = QPainter.CompositionMode.CompositionMode_Plus
         elif blend_mode == "Multiply":
-            da_mode = QPainter.CompositionMode_Multiply
+            da_mode = QPainter.CompositionMode.CompositionMode_Multiply
         elif blend_mode == "Overlay":
-            da_mode = QPainter.CompositionMode_Overlay
+            da_mode = QPainter.CompositionMode.CompositionMode_Overlay
         elif blend_mode == "SourceOver":
-            da_mode = QPainter.CompositionMode_SourceOver
+            da_mode = QPainter.CompositionMode.CompositionMode_SourceOver
         else:
             return
         if da_link == "img-process":
@@ -6134,10 +6130,10 @@ class HERBS(QMainWindow, FORM_Main):
             file_path = self.home_path
         else:
             file_path = self.current_img_path
-        file_options = QFileDialog.Options()
-        file_options |= QFileDialog.DontUseNativeDialog
+        file_options = QFileDialog.Option(0)
+        file_options |= QFileDialog.Option.DontUseNativeDialog
         file_dialog = QFileDialog()
-        file_dialog.setFileMode(QFileDialog.ExistingFiles)
+        file_dialog.setFileMode(QFileDialog.FileMode.ExistingFiles)
         image_file_path = file_dialog.getOpenFileName(
             self, file_title, file_path, file_filter, options=file_options
         )
@@ -6169,6 +6165,15 @@ class HERBS(QMainWindow, FORM_Main):
     ):
         with pg.BusyCursor():
             if image_file_type == ".czi":
+                try:
+                    from .czi_reader import CZIReader
+                except ImportError:
+                    self.print_message(
+                        "CZI support is not installed. Use Python 3.10–3.13 "
+                        "and install HERBS with the 'czi' extra.",
+                        self.error_message_color,
+                    )
+                    return False
                 try:
                     image_file = CZIReader(image_file_path)
                 except (IOError, OSError, IndexError, AttributeError, TypeError, ValueError):
@@ -6546,8 +6551,8 @@ class HERBS(QMainWindow, FORM_Main):
             file_path = self.home_path
         else:
             file_path = self.current_atlas_path
-        file_options = QFileDialog.Options()
-        file_options |= QFileDialog.DontUseNativeDialog
+        file_options = QFileDialog.Option(0)
+        file_options |= QFileDialog.Option.DontUseNativeDialog
         atlas_folder = str(
             QFileDialog.getExistingDirectory(
                 self, dialog_title, file_path, options=file_options
@@ -6712,10 +6717,10 @@ class HERBS(QMainWindow, FORM_Main):
             msg = "Loading objects functions only when single atlas slice window displayed."
             self.print_message(msg, self.error_message_color)
             return
-        file_options = QFileDialog.Options()
-        file_options |= QFileDialog.DontUseNativeDialog
+        file_options = QFileDialog.Option(0)
+        file_options |= QFileDialog.Option.DontUseNativeDialog
         dlg = QFileDialog()
-        dlg.setFileMode(QFileDialog.ExistingFiles)
+        dlg.setFileMode(QFileDialog.FileMode.ExistingFiles)
         object_file_path = dlg.getOpenFileNames(
             self,
             "Load Object Files",
@@ -7182,10 +7187,10 @@ class HERBS(QMainWindow, FORM_Main):
 
     def load_layers_called(self):
         self.print_message("Loading layers ...", self.normal_color)
-        file_options = QFileDialog.Options()
-        file_options |= QFileDialog.DontUseNativeDialog
+        file_options = QFileDialog.Option(0)
+        file_options |= QFileDialog.Option.DontUseNativeDialog
         dlg = QFileDialog()
-        dlg.setFileMode(QFileDialog.ExistingFiles)
+        dlg.setFileMode(QFileDialog.FileMode.ExistingFiles)
         layer_files_path = dlg.getOpenFileNames(
             self,
             "Load Layer Files",
@@ -7607,20 +7612,20 @@ class HERBS(QMainWindow, FORM_Main):
                 self,
                 "Message",
                 "Saving current project?",
-                QMessageBox.Yes,
-                QMessageBox.No,
+                QMessageBox.StandardButton.Yes,
+                QMessageBox.StandardButton.No,
             )
 
-            if reply == QMessageBox.Yes:
+            if reply == QMessageBox.StandardButton.Yes:
                 self.save_project_called()
 
             self.object_ctrl.clear_all()
 
         self.print_message("Loading project....", self.normal_color)
-        file_options = QFileDialog.Options()
-        file_options |= QFileDialog.DontUseNativeDialog
+        file_options = QFileDialog.Option(0)
+        file_options |= QFileDialog.Option.DontUseNativeDialog
         dlg = QFileDialog()
-        dlg.setFileMode(QFileDialog.ExistingFiles)
+        dlg.setFileMode(QFileDialog.FileMode.ExistingFiles)
         project_path = dlg.getOpenFileName(
             self,
             "Load Project",
@@ -7696,10 +7701,10 @@ class HERBS(QMainWindow, FORM_Main):
             self.print_message(msg, self.error_message_color)
             return
 
-        file_options = QFileDialog.Options()
-        file_options |= QFileDialog.DontUseNativeDialog
+        file_options = QFileDialog.Option(0)
+        file_options |= QFileDialog.Option.DontUseNativeDialog
         dlg = QFileDialog()
-        dlg.setFileMode(QFileDialog.ExistingFiles)
+        dlg.setFileMode(QFileDialog.FileMode.ExistingFiles)
         data_file_path = dlg.getOpenFileName(
             self,
             "Load Point Data",
@@ -7858,7 +7863,7 @@ def main():
     # print(sys.flags.interactive)  # 0
     # print(hasattr(QtCore, 'PYQT_VERSION')) # true
     # if (sys.flags.interactive != 1) or not hasattr(QtCore, 'PYQT_VERSION'):
-    #     app.instance().exec_()
+    #     app.instance().exec()
     window = HERBS()
     window.show()
-    return app.exec_()
+    return app.exec()

@@ -2,7 +2,7 @@ import os
 import sys
 import numpy as np
 import pyqtgraph as pg
-from PyQt5.QtCore import *
+from PyQt6.QtCore import *
 from pyqtgraph.Qt import QtGui, QtCore
 
 
@@ -32,7 +32,7 @@ class MovablePoints(pg.GraphItem):
         pg.GraphItem.setData(self, **self.data)
 
     def mouseDragEvent(self, ev):
-        if ev.button() != QtCore.Qt.LeftButton:
+        if ev.button() != QtCore.Qt.MouseButton.LeftButton:
             ev.ignore()
             return
 
@@ -102,7 +102,7 @@ class TriangulationPoints(pg.GraphItem):
         self.y_range = y_range
 
     def mouseDragEvent(self, ev):
-        if ev.button() != Qt.LeftButton:
+        if ev.button() != Qt.MouseButton.LeftButton:
             ev.ignore()
             return
 
@@ -207,7 +207,7 @@ class TriangulationPointsTest(pg.ScatterPlotItem):
         self.y_range = y_range
 
     def mouseDragEvent(self, ev):
-        if ev.button() != Qt.LeftButton:
+        if ev.button() != Qt.MouseButton.LeftButton:
             ev.ignore()
             return
 

@@ -1,9 +1,9 @@
 import numpy as np
 import os
 from os.path import dirname, join
-from PyQt5.QtWidgets import *
-from PyQt5.QtGui import *
-from PyQt5.QtCore import *
+from PyQt6.QtWidgets import *
+from PyQt6.QtGui import *
+from PyQt6.QtCore import *
 
 import pickle
 import shutil
@@ -204,7 +204,7 @@ class AtlasDownloader(QDialog):
                                    'This window will be closed automatically when processing finished.\n')
 
         # ok button, used to close window
-        ok_btn = QDialogButtonBox(QDialogButtonBox.Ok)
+        ok_btn = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
         ok_btn.accepted.connect(self.accept)
 
         layout.addWidget(self.label_bar)
@@ -355,9 +355,9 @@ class AtlasDownloader(QDialog):
             event.ignore()
             return
         reply = QMessageBox.question(self, 'Message',
-                                     "Do you want to leave?", QMessageBox.Yes, QMessageBox.No)
+                                     "Do you want to leave?", QMessageBox.StandardButton.Yes, QMessageBox.StandardButton.No)
 
-        if reply == QMessageBox.Yes:
+        if reply == QMessageBox.StandardButton.Yes:
             self.continue_process = False
             event.accept()
         else:

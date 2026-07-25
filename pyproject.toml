@@ -1,9 +1,97 @@
 [build-system]
-requires = ["setuptools>=42"]
+requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
+[project]
+name = "herbs"
+dynamic = ["version"]
+description = "A GUI for Histological E-data Registration in Brain Space"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE.txt"]
+authors = [
+    { name = "Jingyi GF", email = "jingyi.g.fuglstad@gmail.com" },
+]
+keywords = [
+    "brain atlas",
+    "histological image registration",
+    "probe coordinates",
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Education",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX",
+    "Operating System :: MacOS",
+]
+dependencies = [
+    "PyQt6>=6.8,<7",
+    "pyqtgraph>=0.14,<0.15",
+    "PyOpenGL>=3.1.7,<4",
+    "superqt>=0.8,<0.9",
+    "opencv-python>=4.10,<6",
+    "numba>=0.61,<1",
+    "numpy>=2.0,<3",
+    "scipy>=1.13,<2",
+    "requests>=2.32,<3",
+    "nibabel>=5.2,<6",
+    "pynrrd>=1.0,<2",
+    "tifffile>=2024.7",
+    "pandas>=2.2,<4",
+    "natsort>=8.4,<9",
+    "imagecodecs>=2024.6",
+]
+
+[project.optional-dependencies]
+czi = [
+    "aicspylibczi>=3.3.1; python_version < '3.14'",
+]
+test = [
+    "pytest>=8.3",
+    "ruff>=0.9",
+    "tomli>=2; python_version < '3.11'",
+]
+
+[project.scripts]
+herbs = "herbs.run_herbs:run_herbs"
+
+[project.urls]
+Homepage = "https://github.com/mohebi-n-associates/HERBS"
+"Bug Tracker" = "https://github.com/mohebi-n-associates/HERBS/issues"
+Documentation = "https://github.com/mohebi-n-associates/HERBS#readme"
+
+[tool.setuptools.dynamic]
+version = { attr = "herbs.version.__version__" }
+
+[tool.setuptools.packages.find]
+include = ["herbs*"]
+
+[tool.setuptools.package-data]
+herbs = [
+    "main_window.ui",
+    "data/*.csv",
+    "data/*.pkl",
+    "icons/*.svg",
+    "icons/*.png",
+    "icons/*/*.svg",
+    "icons/*/*.png",
+    "qss/*.qss",
+    "herbs.png",
+]
+
 [tool.ruff]
-target-version = "py38"
+target-version = "py310"
 
 [tool.ruff.lint]
 select = ["E9", "F63", "F7", "F82"]

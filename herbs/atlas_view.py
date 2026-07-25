@@ -5,9 +5,9 @@ import pyqtgraph as pg
 # from pyqtgraph.Qt import QtGui, QtCore
 import pyqtgraph.functions as fn
 import pyqtgraph.opengl as gl
-from PyQt5.QtWidgets import *
-from PyQt5.QtGui import *
-from PyQt5.QtCore import *
+from PyQt6.QtWidgets import *
+from PyQt6.QtGui import *
+from PyQt6.QtCore import *
 
 from .image_stacks import SliceStack
 from .slice_stacks import SliceStacks
@@ -33,7 +33,7 @@ class PageController(QWidget):
 
         self.max_val = None
 
-        self.page_slider = QSlider(Qt.Horizontal)
+        self.page_slider = QSlider(Qt.Orientation.Horizontal)
         self.page_slider.setMinimum(0)
         self.page_slider.valueChanged.connect(self.slider_value_changed)
 
@@ -137,7 +137,7 @@ class SliceRotation(QWidget):
         self.rot_range = 30
         self.n_steps = int(self.rot_range / self.prec)
 
-        self.h_slider = QSlider(Qt.Horizontal)
+        self.h_slider = QSlider(Qt.Orientation.Horizontal)
         self.h_slider.valueChanged.connect(self.h_slider_changed)
         self.h_slider.setValue(0)
         self.h_slider.setRange(-self.n_steps, self.n_steps)
@@ -151,7 +151,7 @@ class SliceRotation(QWidget):
         self.h_spinbox.setSingleStep(self.prec)
         self.h_spinbox.setMinimumSize(50, 20)
 
-        self.v_slider = QSlider(Qt.Horizontal)
+        self.v_slider = QSlider(Qt.Orientation.Horizontal)
         self.v_slider.valueChanged.connect(self.v_slider_changed)
         self.v_slider.setValue(0)
         self.v_slider.setRange(-self.n_steps, self.n_steps)
@@ -198,9 +198,9 @@ class ImageLabel(QWidget):
         self.pixmap = QPixmap(img)
         self.pixmap = self.pixmap.scaled(QSize(20, 10))
         self.label3.setPixmap(self.pixmap)
-        self.label3.setAlignment(Qt.AlignCenter)
+        self.label3.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.title.setMinimumHeight(self.pixmap.height())
-        self.title.setAlignment(Qt.AlignCenter)
+        self.title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.label3)
         layout.addWidget(self.title)
         self.label3.setStyleSheet('background-color: transparent;')
@@ -370,7 +370,7 @@ class AtlasView(QObject):
         self.radio_group.setStyleSheet('QFrame{border: 1px solid gray; border-radius: 3px}')
         radio_group_layout = QHBoxLayout(self.radio_group)
         radio_group_layout.setContentsMargins(5, 0, 5, 0)
-        radio_group_layout.setAlignment(Qt.AlignCenter)
+        radio_group_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.section_rabnt1 = QRadioButton('Coronal')
         self.section_rabnt1.setChecked(True)
         self.section_rabnt2 = QRadioButton('Sagittal')
@@ -393,7 +393,7 @@ class AtlasView(QObject):
 
         # opacity
         atlas_op_label = QLabel('Opacity: ')
-        self.atlas_op_slider = QSlider(Qt.Horizontal)
+        self.atlas_op_slider = QSlider(Qt.Orientation.Horizontal)
         self.atlas_op_slider.setValue(100)
         self.atlas_op_slider.setMinimum(0)
         self.atlas_op_slider.setMaximum(100)

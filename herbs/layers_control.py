@@ -3,9 +3,9 @@ import sys
 import numpy as np
 import pyqtgraph as pg
 import pyqtgraph.functions as fn
-from PyQt5.QtWidgets import *
-from PyQt5.QtGui import *
-from PyQt5.QtCore import *
+from PyQt6.QtWidgets import *
+from PyQt6.QtGui import *
+from PyQt6.QtCore import *
 
 import cv2
 
@@ -107,8 +107,8 @@ class SingleLayer(QWidget):
         self.eye_button.setStyleSheet(eye_button_style)
         self.eye_button.setCheckable(True)
         eye_icon = QIcon()
-        eye_icon.addPixmap(QPixmap(resource_path("icons/layers/eye_on.png")), QIcon.Normal, QIcon.Off)
-        eye_icon.addPixmap(QPixmap(resource_path("icons/layers/eye_off.png")), QIcon.Normal, QIcon.On)
+        eye_icon.addPixmap(QPixmap(resource_path("icons/layers/eye_on.png")), QIcon.Mode.Normal, QIcon.State.Off)
+        eye_icon.addPixmap(QPixmap(resource_path("icons/layers/eye_off.png")), QIcon.Mode.Normal, QIcon.State.On)
         self.eye_button.setIcon(eye_icon)
         self.eye_button.setIconSize(QSize(20, 20))
         self.eye_button.clicked.connect(self.eye_on_click)
@@ -143,7 +143,7 @@ class SingleLayer(QWidget):
         self.inner_layout = QHBoxLayout(self.inner_frame)
         self.inner_layout.setContentsMargins(0, 0, 0, 0)
         self.inner_layout.setSpacing(0)
-        self.inner_layout.setAlignment(Qt.AlignVCenter)
+        self.inner_layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
         self.inner_layout.addWidget(self.eye_button)
         self.inner_layout.addSpacing(5)
         self.inner_layout.addWidget(self.tbnail)
@@ -156,7 +156,7 @@ class SingleLayer(QWidget):
         outer_layout = QHBoxLayout()
         outer_layout.setContentsMargins(0, 0, 0, 0)
         outer_layout.setSpacing(0)
-        outer_layout.setAlignment(Qt.AlignVCenter)
+        outer_layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
         outer_layout.addWidget(self.inner_frame)
 
         self.setLayout(outer_layout)
@@ -214,7 +214,7 @@ class SingleLayer(QWidget):
         im_shape = np.ravel(im.shape[:2])
 
         size = QSize(int(im_shape[1] / 2), int(im_shape[0] / 2))
-        image = QImage(im.data, im_shape[1], im_shape[0], im.strides[0], QImage.Format_RGB888)
+        image = QImage(im.data, im_shape[1], im_shape[0], im.strides[0], QImage.Format.Format_RGB888)
         pixmap = QPixmap(image)
 
         self.tbnail.setIcon(QIcon(pixmap.scaled(size)))
@@ -265,7 +265,7 @@ class LayersControl(QWidget):
 
         combo_label = QLabel('Composition:')
         self.layer_blend_combo = QComboBox()
-        self.layer_blend_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
+        self.layer_blend_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
         self.layer_blend_combo.setEditable(False)
         combo_value = ['Plus', 'Multiply', 'Overlay', 'SourceOver']
         self.layer_blend_combo.addItems(combo_value)
@@ -282,7 +282,7 @@ class LayersControl(QWidget):
         opacity_layout.setSpacing(5)
 
         layer_opacity_label = QLabel('Opacity:')
-        self.layer_opacity_slider = QSlider(Qt.Horizontal)
+        self.layer_opacity_slider = QSlider(Qt.Orientation.Horizontal)
         # self.layer_opacity_slider.setFixedWidth(100)
         self.layer_opacity_slider.setMaximum(100)
         self.layer_opacity_slider.setMinimum(0)
@@ -297,27 +297,27 @@ class LayersControl(QWidget):
 
         self.layer_frame = QFrame()
         self.layer_frame.setStyleSheet('background: transparent; border: 0px;')
-        self.layer_frame.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.layer_layout = QBoxLayout(QBoxLayout.BottomToTop, self.layer_frame)
-        self.layer_layout.setAlignment(Qt.AlignBottom)
+        self.layer_frame.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.layer_layout = QBoxLayout(QBoxLayout.Direction.BottomToTop, self.layer_frame)
+        self.layer_layout.setAlignment(Qt.AlignmentFlag.AlignBottom)
         self.layer_layout.setContentsMargins(0, 0, 0, 0)
         self.layer_layout.setSpacing(0)
 
         self.layer_scroll = QScrollArea()
         self.layer_scroll.setStyleSheet('background: transparent; border: 0px;')
-        self.layer_scroll.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.layer_scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.layer_scroll.setWidget(self.layer_frame)
-        self.layer_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
-        self.layer_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.layer_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
+        self.layer_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.layer_scroll.setWidgetResizable(True)
 
         mid_frame = QFrame()
         mid_frame.setStyleSheet('background: transparent; border: 1px solid rgb(128, 128, 128);')
-        mid_frame.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        mid_frame.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         mid_layout = QGridLayout(mid_frame)
         mid_layout.setContentsMargins(0, 0, 0, 0)
         mid_layout.setSpacing(0)
-        mid_layout.setAlignment(Qt.AlignBottom)
+        mid_layout.setAlignment(Qt.AlignmentFlag.AlignBottom)
         mid_layout.addWidget(self.layer_scroll, 0, 0, 1, 1)
 
         # extra btn
@@ -426,7 +426,7 @@ class LayersControl(QWidget):
         clicked_index = np.where(np.ravel(self.layer_id) == clicked_id)[0][0]
 
         modifiers = QApplication.keyboardModifiers()
-        if modifiers == Qt.ControlModifier:
+        if modifiers == Qt.KeyboardModifier.ControlModifier:
             if clicked_index in self.current_layer_index:
                 self.layer_list[clicked_index].set_checked(False)
                 remove_ind = np.where(np.ravel(self.current_layer_index) == clicked_index)[0][0]

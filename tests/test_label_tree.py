@@ -9,8 +9,8 @@ import numpy as np
 
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-from PyQt5.QtGui import QColor
-from PyQt5.QtWidgets import QApplication
+from PyQt6.QtGui import QColor
+from PyQt6.QtWidgets import QApplication
 
 
 PACKAGE_PATH = Path(__file__).parents[1] / "herbs"

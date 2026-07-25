@@ -1,6 +1,6 @@
-from PyQt5.QtWidgets import *
-from PyQt5.QtCore import *
-from PyQt5.QtGui import *
+from PyQt6.QtWidgets import *
+from PyQt6.QtCore import *
+from PyQt6.QtGui import *
 import numpy as np
 from .uuuuuu import read_qss_file
 from .resources import resource_path
@@ -29,7 +29,7 @@ class LayerSettingDialog(QDialog):
 
         self.val = val
 
-        self.val_slider = QSlider(Qt.Horizontal)
+        self.val_slider = QSlider(Qt.Orientation.Horizontal)
         self.val_slider.setValue(val)
         self.val_slider.setMinimum(min_val)
         self.val_slider.setMaximum(max_val)
@@ -44,7 +44,7 @@ class LayerSettingDialog(QDialog):
         self.val_spinbox.valueChanged.connect(self.value_changed)
 
         # ok button, used to close window
-        ok_btn = QDialogButtonBox(QDialogButtonBox.Ok)
+        ok_btn = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
         ok_btn.accepted.connect(self.accept)
 
         # add widget to layout
@@ -103,7 +103,7 @@ class SliceSettingDialog(QDialog):
         self.distance_val.valueChanged.connect(self.distance_val_changed)
 
         # ok button, used to close window
-        ok_btn = QDialogButtonBox(QDialogButtonBox.Ok)
+        ok_btn = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
         ok_btn.accepted.connect(self.accept)
 
         # add widget to layout
@@ -160,17 +160,17 @@ class QDoubleButton(QPushButton):
         self.installEventFilter(self)
 
     def eventFilter(self, obj, event):
-        if event.type() == QEvent.MouseButtonPress:
+        if event.type() == QEvent.Type.MouseButtonPress:
             if not self.timer.isActive():
                 self.timer.start()
 
             self.is_left_click = False
-            if event.button() == Qt.LeftButton:
+            if event.button() == Qt.MouseButton.LeftButton:
                 self.is_left_click = True
 
             return True
 
-        elif event.type() == QEvent.MouseButtonDblClick:
+        elif event.type() == QEvent.Type.MouseButtonDblClick:
             self.is_double = True
             return True
 
@@ -222,9 +222,9 @@ class QFrameClickable(QFrame):
         super(QFrameClickable, self).__init__(parent)
 
     # def mousePressEvent(self, QMouseEvent):
-    #     if QMouseEvent.button() == Qt.LeftButton:
+    #     if QMouseEvent.button() == Qt.MouseButton.LeftButton:
     #         self.clicked.emit()
-    #     elif QMouseEvent.button() == Qt.RightButton:
+    #     elif QMouseEvent.button() == Qt.MouseButton.RightButton:
     #         self.clicked.emit()
     #     self.update()
 
@@ -257,7 +257,7 @@ class LineEditEntered(QLineEdit):
     def keyPressEvent(self, event):
         super(LineEditEntered, self).keyPressEvent(event)
 
-        if event.key() == Qt.Key_Return or event.key() == Qt.Key_Enter:
+        if event.key() == Qt.Key.Key_Return or event.key() == Qt.Key.Key_Enter:
             self.sig_return_pressed.emit()
 
 
@@ -293,7 +293,7 @@ class LinearSiliconInfoDialog(QDialog):
         self.setWindowTitle('Linear Silicon Probe Geometry Setting Window')
         self.setStyleSheet(dialog_style)
 
-        btn_box = QDialogButtonBox.Ok | QDialogButtonBox.Cancel
+        btn_box = QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
 
         self.button_box = QDialogButtonBox(btn_box)
         self.button_box.accepted.connect(self.accept)
@@ -566,7 +566,7 @@ class MultiProbePlanningDialog(QDialog):
         self.setWindowTitle('Multi-Probe Geometry Setting Window')
         self.setStyleSheet(dialog_style)
 
-        btn_box = QDialogButtonBox.Ok | QDialogButtonBox.Cancel
+        btn_box = QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
 
         self.button_box = QDialogButtonBox(btn_box)
         self.button_box.accepted.connect(self.accept)

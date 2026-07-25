@@ -1,58 +1,68 @@
 from pathlib import Path
-import runpy
-from unittest import mock
 import unittest
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - Python 3.10
+    import tomli as tomllib
 
 
 REPOSITORY_ROOT = Path(__file__).parents[1]
 
 
+def project_metadata():
+    with (REPOSITORY_ROOT / "pyproject.toml").open("rb") as handle:
+        return tomllib.load(handle)["project"]
+
+
 class PackagingMetadataTests(unittest.TestCase):
-    def test_supported_python_versions_always_install_pyqt(self):
-        with mock.patch("setuptools.setup") as setup:
-            runpy.run_path(str(REPOSITORY_ROOT / "setup.py"), run_name="__main__")
+    def test_modern_runtime_and_dependency_baseline(self):
+        metadata = project_metadata()
 
-        metadata = setup.call_args.kwargs
-        self.assertEqual(metadata["version"], "0.2.8.1")
-        self.assertEqual(metadata["python_requires"], ">=3.8.10,<3.13")
-        self.assertIn("PyQt5 >= 5.15.5", metadata["install_requires"])
-        self.assertIn("pyqtgraph == 0.12.3", metadata["install_requires"])
-        self.assertIn("numpy >= 1.20.3, < 2", metadata["install_requires"])
-        self.assertIn(
-            "opencv-python >= 4.5.4.60, < 4.12", metadata["install_requires"]
-        )
+        self.assertEqual(metadata["requires-python"], ">=3.10")
+        self.assertIn("PyQt6>=6.8,<7", metadata["dependencies"])
+        self.assertIn("pyqtgraph>=0.14,<0.15", metadata["dependencies"])
+        self.assertIn("superqt>=0.8,<0.9", metadata["dependencies"])
+        self.assertIn("numpy>=2.0,<3", metadata["dependencies"])
+        self.assertIn("opencv-python>=4.10,<6", metadata["dependencies"])
         self.assertFalse(
-            any(requirement.startswith(("h5py", "tables"))
-                for requirement in metadata["install_requires"])
+            any(
+                requirement.startswith(("PyQt5", "h5py", "tables"))
+                for requirement in metadata["dependencies"]
+            )
         )
+        for version in ("3.10", "3.11", "3.12", "3.13", "3.14"):
+            self.assertIn(
+                "Programming Language :: Python :: {}".format(version),
+                metadata["classifiers"],
+            )
+
+    def test_czi_support_is_optional_on_supported_upstream_runtimes(self):
+        metadata = project_metadata()
+
         self.assertFalse(
-            any(requirement.startswith("PyQt5") and ";" in requirement
-                for requirement in metadata["install_requires"])
+            any(
+                requirement.startswith("aicspylibczi")
+                for requirement in metadata["dependencies"]
+            )
         )
-        self.assertIn(
-            "Programming Language :: Python :: 3.11", metadata["classifiers"]
-        )
-        self.assertIn(
-            "Programming Language :: Python :: 3.12", metadata["classifiers"]
-        )
-        self.assertNotIn("Typing :: Typed", metadata["classifiers"])
         self.assertEqual(
-            metadata["entry_points"]["console_scripts"],
-            ["herbs=herbs.run_herbs:run_herbs"],
+            metadata["optional-dependencies"]["czi"],
+            ["aicspylibczi>=3.3.1; python_version < '3.14'"],
         )
 
-    def test_project_links_point_to_the_current_repository(self):
-        with mock.patch("setuptools.setup") as setup:
-            runpy.run_path(str(REPOSITORY_ROOT / "setup.py"), run_name="__main__")
+    def test_project_links_and_entry_point_use_the_current_repository(self):
+        metadata = project_metadata()
 
-        metadata = setup.call_args.kwargs
         self.assertEqual(
-            metadata["url"], "https://github.com/mohebi-n-associates/HERBS"
+            metadata["urls"]["Homepage"],
+            "https://github.com/mohebi-n-associates/HERBS",
         )
         self.assertEqual(
-            metadata["project_urls"]["Bug Tracker"],
+            metadata["urls"]["Bug Tracker"],
             "https://github.com/mohebi-n-associates/HERBS/issues",
         )
+        self.assertEqual(metadata["scripts"]["herbs"], "herbs.run_herbs:run_herbs")
 
 
 if __name__ == "__main__":

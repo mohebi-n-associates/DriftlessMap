@@ -8,9 +8,9 @@ import nibabel as nib
 import numpy as np
 import pandas as pd
 import cv2
-from PyQt5.QtGui import *
-from PyQt5.QtCore import *
-from PyQt5.QtWidgets import *
+from PyQt6.QtGui import *
+from PyQt6.QtCore import *
+from PyQt6.QtWidgets import *
 import pyqtgraph.opengl as gl
 
 from .uuuuuu import read_qss_file, make_contour_img, read_excel_file, hex2rgb
@@ -422,7 +422,9 @@ class AtlasProcessor(QDialog):
 
         valid_input = QIntValidator(0, 99999)
 
-        float_input = QRegExpValidator(QRegExp(r"[0-9].+"))
+        float_input = QRegularExpressionValidator(
+            QRegularExpression(r"[0-9].+")
+        )
         # float_input = QDoubleValidator(0.0, 100.0, 6)
 
         bregma_label = QLabel("Bregma Coordinates (voxel): ")
@@ -490,7 +492,7 @@ class AtlasProcessor(QDialog):
         pw_layout = QHBoxLayout(progress_wrap)
         pw_layout.setSpacing(5)
         pw_layout.setContentsMargins(0, 0, 0, 0)
-        pw_layout.setAlignment(Qt.AlignRight)
+        pw_layout.setAlignment(Qt.AlignmentFlag.AlignRight)
         pw_layout.addWidget(self.progress)
         pw_layout.addWidget(self.progress_label)
 
@@ -587,8 +589,8 @@ class AtlasProcessor(QDialog):
         self.folder_path = os.path.dirname(file_path)
 
     def get_data_file(self):
-        file_options = QFileDialog.Options()
-        file_options |= QFileDialog.DontUseNativeDialog
+        file_options = QFileDialog.Option(0)
+        file_options |= QFileDialog.Option.DontUseNativeDialog
         dlg = QFileDialog()
         if self.folder_path is not None:
             data_path = dlg.getOpenFileName(
@@ -603,8 +605,8 @@ class AtlasProcessor(QDialog):
         self.data_line.setText(self.data_local)
 
     def get_seg_file(self):
-        file_options = QFileDialog.Options()
-        file_options |= QFileDialog.DontUseNativeDialog
+        file_options = QFileDialog.Option(0)
+        file_options |= QFileDialog.Option.DontUseNativeDialog
         dlg = QFileDialog()
         if self.folder_path is not None:
             seg_path = dlg.getOpenFileName(
@@ -619,8 +621,8 @@ class AtlasProcessor(QDialog):
         self.seg_line.setText(self.segmentation_local)
 
     def get_mask_file(self):
-        file_options = QFileDialog.Options()
-        file_options |= QFileDialog.DontUseNativeDialog
+        file_options = QFileDialog.Option(0)
+        file_options |= QFileDialog.Option.DontUseNativeDialog
         dlg = QFileDialog()
         if self.folder_path is not None:
             mask_path = dlg.getOpenFileName(
@@ -635,8 +637,8 @@ class AtlasProcessor(QDialog):
         self.mask_line.setText(self.mask_local)
 
     def get_info_file(self):
-        file_options = QFileDialog.Options()
-        file_options |= QFileDialog.DontUseNativeDialog
+        file_options = QFileDialog.Option(0)
+        file_options |= QFileDialog.Option.DontUseNativeDialog
         dlg = QFileDialog()
         if self.folder_path is not None:
             info_path = dlg.getOpenFileName(

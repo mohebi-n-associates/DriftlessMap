@@ -2,12 +2,12 @@ import os
 import sys
 import numpy as np
 import pyqtgraph as pg
-from PyQt5.QtWidgets import *
-from PyQt5.QtGui import *
-from PyQt5.QtCore import *
+from PyQt6.QtWidgets import *
+from PyQt6.QtGui import *
+from PyQt6.QtCore import *
 from pyqtgraph.Qt import QtGui, QtCore
 
-from qtrangeslider import QRangeSlider
+from superqt import QRangeSlider
 import scipy.interpolate
 # from scipy.interpolate import interp1d
 
@@ -231,20 +231,20 @@ class CurvesPlot(pg.PlotWidget):
         if self.lut_line[self.active_index].mouseShape().contains(pnts):
             if len(sct) == 0:
                 if data[0, 0] < pnts.x() < data[-1, 0]:
-                    self.setCursor(Qt.CrossCursor)
+                    self.setCursor(Qt.CursorShape.CrossCursor)
                     self.adding_allowed = True
                 else:
-                    self.setCursor(Qt.ArrowCursor)
+                    self.setCursor(Qt.CursorShape.ArrowCursor)
                     self.adding_allowed = False
             else:
-                self.setCursor(Qt.OpenHandCursor)
+                self.setCursor(Qt.CursorShape.OpenHandCursor)
                 self.adding_allowed = False
         else:
             self.adding_allowed = False
             if len(sct) == 0:
-                self.setCursor(Qt.ArrowCursor)
+                self.setCursor(Qt.CursorShape.ArrowCursor)
             else:
-                self.setCursor(Qt.OpenHandCursor)
+                self.setCursor(Qt.CursorShape.OpenHandCursor)
 
     def update_table(self, data):
         cind = np.logical_and(self.table_input >= data[0, 0], self.table_input <= data[-1, 0])
@@ -296,7 +296,7 @@ class CurveWidget(QWidget):
         self.curve_plot.sig_line_change.connect(self.table_changed)
         # self.curve_plot.sigBoundChange.connect(self.spinbox_bound_changed)
         multi_handle_slider_style = read_qss_file('qss/multi_handle_slider.qss')
-        self.multi_handle_slider = QRangeSlider(Qt.Horizontal)
+        self.multi_handle_slider = QRangeSlider(Qt.Orientation.Horizontal)
         self.multi_handle_slider.setStyleSheet(multi_handle_slider_style)
         self.multi_handle_slider.setMinimum(0)
         self.multi_handle_slider.setMaximum(65535)
@@ -352,9 +352,9 @@ class CurveWidget(QWidget):
         bgw_wrap = QFrame()
         bgw_wrap_layout = QHBoxLayout(bgw_wrap)
         bgw_wrap_layout.setContentsMargins(0, 0, 0, 0)
-        bgw_wrap_layout.addWidget(self.black_spinbox, alignment=Qt.AlignLeft)
-        bgw_wrap_layout.addWidget(self.gamma_spinbox, alignment=Qt.AlignCenter)
-        bgw_wrap_layout.addWidget(self.white_spinbox, alignment=Qt.AlignRight)
+        bgw_wrap_layout.addWidget(self.black_spinbox, alignment=Qt.AlignmentFlag.AlignLeft)
+        bgw_wrap_layout.addWidget(self.gamma_spinbox, alignment=Qt.AlignmentFlag.AlignCenter)
+        bgw_wrap_layout.addWidget(self.white_spinbox, alignment=Qt.AlignmentFlag.AlignRight)
 
         slider_wrap = QFrame()
         slider_wrap_layout = QVBoxLayout(slider_wrap)
@@ -572,7 +572,6 @@ class CurveWidget(QWidget):
     def set_channel_enable(self, ind, is_enable):
         self.curve_plot.set_enable(ind, is_enable)
         self.set_enable_induced_slider()
-
 
 
 

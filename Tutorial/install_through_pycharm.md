@@ -1,7 +1,7 @@
 ## Install HERBS through PyCharm
 
-In this file, we will illustrate how to install herbs using PyCharm. Here we assume Python>=3.8.10
- < 3.11 and PyCharm is already installed.
+This guide assumes Python 3.10–3.14 and a current PyCharm release. Python 3.14
+is recommended, or Python 3.13 if Zeiss CZI support is required.
 
 If PyCharm is not installed, please install PyCharm first through (https://www.jetbrains.com/pycharm/). For more details about how to install and set up PyCharm (https://www.jetbrains.com/help/pycharm/installation-guide.html). For example,
 
@@ -45,7 +45,10 @@ And press the **+** button.
 <tr>
 <td>
 <ul>
-<li>Type **herbs** and press **Install Package** button.
+<li>Clone the HERBS repository, open it as the PyCharm project, and select a
+fresh Python 3.14 interpreter. In PyCharm's terminal, run
+<code>python -m pip install -e .</code>. For CZI support with Python 3.13, run
+<code>python -m pip install -e ".[czi]"</code>.
 </li>
 </ul>
 </td>
@@ -55,4 +58,3 @@ And press the **+** button.
 </tr>
 
 </table>
-

@@ -1,4 +1,4 @@
-from PyQt5.QtWidgets import *
+from PyQt6.QtWidgets import *
 from .version import __version__
 
 
@@ -6,7 +6,7 @@ class AboutHERBSWindow(QMessageBox):
     def __init__(self):
         super().__init__()
 
-        self.setIcon(QMessageBox.NoIcon)
+        self.setIcon(QMessageBox.Icon.NoIcon)
         self.setWindowTitle("About HERBS")
         self.setText("HERBS {}\n\n".format(__version__) +
                      "HERBS is aiming to provide a pleasant platform "
@@ -22,4 +22,4 @@ class AboutHERBSWindow(QMessageBox):
                      "\n"
                      "Please always read the Update Log after updating: \n"
                      "https://github.com/mohebi-n-associates/HERBS/blob/main/UpdateLog.md")
-        self.setStandardButtons(QMessageBox.Close)
+        self.setStandardButtons(QMessageBox.StandardButton.Close)

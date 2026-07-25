@@ -1,6 +1,19 @@
 ## Create Enviroment in Anaconda
 
-Here we take Anaconda on Windows 10 for example. 
+The screenshots below show the Anaconda graphical interface. For HERBS 1.0,
+the equivalent and recommended terminal setup is:
+
+```bash
+conda create --name HERBS python=3.14 -y
+conda activate HERBS
+python -m pip install --upgrade pip
+python -m pip install .
+```
+
+Use Python 3.13 and `python -m pip install ".[czi]"` instead when Zeiss CZI
+support is required.
+
+The graphical workflow is otherwise the same:
 
 - After clicking Anaconda, a main window will show up. On the left panel, there are tabs for 'Home', 'Environments', 'Learning' and 'Community'. All available softwares are listed in the main area, and there is a 'Applications on' combobox on top. This combobox shows which enviroment you are using. e.g. I already chose an enviroment called 'conda38_3' in the screeshot. But when you start Anaconda, an enviroment called 'base' is the one shows there.
 <img src="../image/anaconda_0.PNG">
@@ -11,4 +24,3 @@ Here we take Anaconda on Windows 10 for example.
 
 
 - Click the small triangle arrow to go to Terminal. Install or update the desired package in the Terminal. Click the 'Update index...' button on the top of pakcage list. You can check the versions of packages in the package list also.
-

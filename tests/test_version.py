@@ -3,7 +3,7 @@ import unittest
 
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-from PyQt5.QtWidgets import QApplication
+from PyQt6.QtWidgets import QApplication
 
 import herbs
 from herbs.about_herbs import AboutHERBSWindow
@@ -16,7 +16,7 @@ class VersionTests(unittest.TestCase):
         cls.app = QApplication.instance() or QApplication([])
 
     def test_public_package_version_uses_the_canonical_value(self):
-        self.assertEqual(__version__, "0.2.8.1")
+        self.assertEqual(__version__, "1.0.0")
         self.assertEqual(herbs.__version__, __version__)
 
     def test_about_dialog_reports_version_and_current_repository(self):

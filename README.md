@@ -4,7 +4,9 @@ A Python-based GUI for Histological E-data Registration in Brain Space
 
 HERBS is an open source, extensible, intuitive and interactive software platform for image visualisation and image registration. Where the image registration is the process of identifying a spatial transformation that maps images to a template such that corresponding anatomical structures are optimally aligned, or in other words, a voxel-wise ‘correspondence’ is established between the images and template.
 
-HERBS has been tested on Windows 10, macOS (Big Sur–Monterey), and Linux (Kubuntu 18.04 and Ubuntu 22.04 LTS). Python 3.12 in a dedicated Conda environment is recommended, with PyQt5 5.15.5 or newer. For details, see the HERBS CookBook or the latest tutorials.
+HERBS 1.0 supports Python 3.10–3.14 and uses Qt 6 through PyQt6. Python
+3.14 in a dedicated environment is recommended for new installations. For
+details, see the HERBS CookBook or the latest tutorials.
 
 HERBS provides users:
 
@@ -14,24 +16,41 @@ HERBS provides users:
 
 ## Install
 
-> **Note:** The PyPI package (`pip install herbs`) is no longer maintained and is out of date. Please install HERBS from the source repository as shown below.
+> **Note:** Until HERBS 1.0 is published to PyPI, install it from this source
+> repository as shown below.
 
-Install [Miniconda or Anaconda](https://docs.conda.io/projects/conda/en/latest/user-guide/install/index.html), then create a dedicated environment named `HERBS` with Python 3.12:
+Install [Miniconda or Anaconda](https://docs.conda.io/projects/conda/en/latest/user-guide/install/index.html), then create a dedicated environment named `HERBS` with Python 3.14:
 
 ```bash
-conda create --name HERBS python=3.12 -y
+conda create --name HERBS python=3.14 -y
 conda activate HERBS
 python --version
 python -m pip install --upgrade pip
 ```
 
-The version check should report Python 3.12. Clone this repository and install HERBS while the `HERBS` environment is active:
+The version check should report Python 3.14. Clone this repository and install
+HERBS while the `HERBS` environment is active:
 
 ```bash
 git clone https://github.com/mohebi-n-associates/HERBS.git
 cd HERBS
 python -m pip install .
 ```
+
+### Zeiss CZI files
+
+CZI support uses the optional `aicspylibczi` package. Its prebuilt packages
+currently support Python through 3.13, so use a Python 3.13 environment and
+install the `czi` extra when you need to open CZI files:
+
+```bash
+conda create --name HERBS-CZI python=3.13 -y
+conda activate HERBS-CZI
+python -m pip install --upgrade pip
+python -m pip install ".[czi]"
+```
+
+All other HERBS features work on Python 3.14 without this optional dependency.
 
 Run `conda activate HERBS` again whenever you open a new terminal before launching or updating HERBS.
 
@@ -51,7 +70,8 @@ python -m pip install . --upgrade
 
 Please always use the newest version of HERBS.
 
-See [What’s New in HERBS 0.2.8.1](WhatsNew-0.2.8.1.md) for the release details and upgrade notes.
+See [What’s New in HERBS 1.0.0](WhatsNew-1.0.0.md) for release details and
+upgrade notes.
 
 <details>
 <summary>Downloaded a ZIP instead of cloning?</summary>
@@ -116,14 +136,11 @@ fullName = '/System/Library/Frameworks/OpenGL.framework/OpenGL'
 
 - Install and run HERBS in the dedicated Conda environment named `HERBS` described above to prevent dependency conflicts with other Python programs.
 
-## Some Dependencies Conflict Issues
-- The initial of test of HERBS was carried on Windows 10 (one user claimed he had a Windows 11 before, but it turned out to be a Windows 10 at the end), MacOSx (Big Sur - Monterey) and Linux (Kubuntu 18.04, Ubuntu 22.04 LTS) with Python==3.8.10 and the corresponding dependencies listed in CookBook. 
+## Dependency issues
 
-- The current tests showed that different version of Python accepts different versions of dependencies. For example, PyQt5 == 5.14.2 works when Python>=3.8.10 and PyQt5 >= 5.15.0 works when Python==3.9. 
-
-- HERBS depends on Numba and the valid version for Numba is highly depends on the version of Numpy. For example, Numba == 0.54 only works when Numpy <= 1.20 and Numba == 0.55 only works when Numpy <= 1.21 and so on.
-
-- If you face to these kinds of problems, the easiest way to install HERBS is to create a new environment and install HERBS without previous installation of any dependencies.
+Use a fresh environment and let `python -m pip install .` resolve the compatible
+NumPy, Numba, OpenCV, PyQt6, and pyqtgraph versions. Do not install PyQt5 into
+the same environment: HERBS 1.0 is a Qt 6 application.
 
 ### 
 Please report your issues: https://github.com/mohebi-n-associates/HERBS/issues. Please have a good description (maybe a screenshot or an error message). Any feedback welcome!

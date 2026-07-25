@@ -1,7 +1,7 @@
-import PyQt5
-from PyQt5.QtWidgets import *
-from PyQt5.QtCore import *
-from PyQt5.QtGui import *
+import PyQt6
+from PyQt6.QtWidgets import *
+from PyQt6.QtCore import *
+from PyQt6.QtGui import *
 
 
 class PopupMessage(QMessageBox):
@@ -12,5 +12,5 @@ class PopupMessage(QMessageBox):
         self.setWindowTitle("Caution!")
         self.setText('Histological image: is oversized.')
         button = self.exec()
-        if button == QMessageBox.Ok:
+        if button == QMessageBox.StandardButton.Ok:
             print('222')

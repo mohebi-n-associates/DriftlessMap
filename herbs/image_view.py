@@ -7,9 +7,9 @@ import copy
 import pyqtgraph.functions as fn
 import numpy as np
 import pyqtgraph as pg
-from PyQt5.QtWidgets import *
-from PyQt5.QtGui import *
-from PyQt5.QtCore import *
+from PyQt6.QtWidgets import *
+from PyQt6.QtGui import *
+from PyQt6.QtCore import *
 from pyqtgraph.Qt import QtGui, QtCore
 import scipy.ndimage as ndi
 
@@ -36,7 +36,7 @@ class ImagePageController(QWidget):
 
         self.max_val = None
 
-        self.page_slider = QSlider(Qt.Horizontal)
+        self.page_slider = QSlider(Qt.Orientation.Horizontal)
         self.page_slider.setMinimum(0)
         self.page_slider.valueChanged.connect(self.slider_value_changed)
 
@@ -138,10 +138,10 @@ class ImageView(QObject):
         self.check_scenes = QPushButton('Load ALL Scenes')
         self.check_scenes.setStyleSheet(sidebar_button_style)
         self.check_scenes.setCheckable(True)
-        self.scene_slider = QSlider(Qt.Horizontal)
+        self.scene_slider = QSlider(Qt.Orientation.Horizontal)
         self.scene_slider.setMinimum(0)
         self.scene_slider.setValue(0)
-        self.scene_slider.setTickPosition(QSlider.TicksBelow)
+        self.scene_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
         self.scene_slider.setTickInterval(1)
         self.scene_slider.valueChanged.connect(self.scene_index_changed)
         self.scene_label = QLabel('0/ 0')
@@ -156,7 +156,7 @@ class ImageView(QObject):
         # self.scene_wrap.setVisible(False)
 
         # scale control
-        self.scale_slider = QSlider(Qt.Horizontal)
+        self.scale_slider = QSlider(Qt.Orientation.Horizontal)
         self.scale_slider.setMinimum(1)
         self.scale_slider.setMaximum(100)
         self.scale_slider.setValue(10)

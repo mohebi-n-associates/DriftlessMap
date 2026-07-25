@@ -1,9 +1,9 @@
 import os
 import sys
 import numpy as np
-from PyQt5.QtWidgets import *
-from PyQt5.QtGui import *
-from PyQt5.QtCore import *
+from PyQt6.QtWidgets import *
+from PyQt6.QtGui import *
+from PyQt6.QtCore import *
 from .uuuuuu import hsv2rgb, gamma_line, get_qhsv_from_czi_hsv, make_hist_data, read_qss_file
 
 
@@ -16,7 +16,7 @@ class BWSpin(QWidget):
         wrap_layout.setSpacing(0)
 
         self.spin_nam = QLabel()
-        self.spin_nam.setAlignment(Qt.AlignCenter)
+        self.spin_nam.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.spin_val = QSpinBox()
 
         wrap_layout.addWidget(self.spin_nam)
@@ -32,7 +32,7 @@ class GammaSpin(QWidget):
         wrap_layout.setSpacing(0)
 
         self.spin_nam = QLabel()
-        self.spin_nam.setAlignment(Qt.AlignCenter)
+        self.spin_nam.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.spin_val = QDoubleSpinBox()
         self.spin_val.setDecimals(2)
 
