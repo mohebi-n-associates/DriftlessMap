@@ -13,6 +13,8 @@ Atlas setup, particularly for the 10 µm CCFv3 2017 atlas.
   sorting the entire 1.2-billion-voxel volume for label discovery.
 - Reports progress while scanning the annotation and while downloading each
   mesh.
+- Displays the current processing phase and item counts during mesh conversion,
+  large cache writes, fallback mesh generation, and boundary construction.
 - Resumes mesh setup by preserving and skipping mesh files that were already
   downloaded successfully.
 - Handles the Allen hierarchy root's intentionally missing parent ID without a
@@ -40,6 +42,13 @@ The status area also displays the current mesh number and Allen structure ID.
 If setup is restarted, existing non-empty `.obj` files are retained and
 skipped. Atlas intensity and annotation files do not need to be downloaded
 again.
+
+During processing, the status area now names long-running operations instead of
+leaving the percentage as the only feedback. Mesh conversion and packing show
+item counts, fallback mesh generation reports its internal phase, and sagittal,
+coronal, and horizontal boundary construction report their current slice.
+Large cache writes are identified explicitly because their underlying pickle
+operation does not expose byte-level progress.
 
 ## Allen label hierarchy
 

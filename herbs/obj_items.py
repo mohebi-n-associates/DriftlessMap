@@ -83,18 +83,40 @@ def render_volume(atlas_data, atlas_folder, factor=2, level=0.1):
     return md
 
 
-def render_small_volume(label_id, save_path, atlas_data, atlas_label, factor=2, level=0.1):
+def render_small_volume(
+    label_id,
+    save_path,
+    atlas_data,
+    atlas_label,
+    factor=2,
+    level=0.1,
+    progress=None,
+):
+    if progress is not None:
+        progress(0.0, "copying atlas intensities")
     temp_atlas = atlas_data.copy()
+    if progress is not None:
+        progress(0.2, "masking the selected structure")
     temp_atlas[atlas_label != label_id] = 0
+    if progress is not None:
+        progress(0.4, "downsampling the structure volume")
     pimg = np.ascontiguousarray(temp_atlas[::factor, ::factor, ::factor])
-    verts, faces = pg.isosurface(ndi.gaussian_filter(pimg.astype('float64'), (2, 2, 2)), np.max(temp_atlas) * level)
+    if progress is not None:
+        progress(0.5, "smoothing the structure volume")
+    smoothed = ndi.gaussian_filter(pimg.astype("float64"), (2, 2, 2))
+    if progress is not None:
+        progress(0.75, "extracting the mesh surface")
+    verts, faces = pg.isosurface(smoothed, np.max(temp_atlas) * level)
     # small_verts_list[str(id)] = verts
     # small_faces_list[str(id)] = faces
 
     md = gl.MeshData(vertexes=verts * factor, faces=faces)
 
+    if progress is not None:
+        progress(0.9, "saving the generated mesh")
     outfile = open(os.path.join(save_path, '{}.pkl'.format(label_id)), 'wb')
     pickle.dump(md, outfile)
     outfile.close()
-
+    if progress is not None:
+        progress(1.0, "mesh complete")
 

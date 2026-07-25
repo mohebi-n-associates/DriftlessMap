@@ -73,6 +73,7 @@ class WorkerProcessAllen(QObject):
     finished = pyqtSignal()
     failed = pyqtSignal(str)
     progress = pyqtSignal(float)
+    status = pyqtSignal(str)
 
     def __init__(self):
         super(WorkerProcessAllen, self).__init__()
@@ -113,6 +114,7 @@ class WorkerProcessAllen(QObject):
         self.finished.emit()
 
     def _run(self):
+        self.status.emit("Scanning annotation structure IDs...")
         self.progress.emit(1)
         segmentation_path = os.path.join(
             self.saving_folder, self.segmentation_local
@@ -124,10 +126,16 @@ class WorkerProcessAllen(QObject):
             ),
         )
         self.progress.emit(10)
+        self.status.emit(
+            "Loading the {} µm annotation volume into memory...".format(
+                self.vox_size
+            )
+        )
         label_data, header = nrrd.read(segmentation_path)
         self.progress.emit(14)
 
         n_unique_labels = len(self.unique_label)
+        self.status.emit("Preparing downloaded structure meshes...")
         mesh_path = os.path.join(self.saving_folder, 'meshes')
         if not os.path.exists(mesh_path):
             os.mkdir(mesh_path)
@@ -145,10 +153,17 @@ class WorkerProcessAllen(QObject):
         downloaded_mesh_path = os.path.join(self.saving_folder, 'downloaded_meshes')
 
         progress_step = np.linspace(15, 30, n_unique_labels)
+        mesh_status_interval = max(1, n_unique_labels // 100)
         missing_mesh_index = []
         for i in range(n_unique_labels):
             ind = self.unique_label[i]
             self.progress.emit(progress_step[i])
+            if i % mesh_status_interval == 0 or i == n_unique_labels - 1:
+                self.status.emit(
+                    "Converting structure meshes: {} of {}...".format(
+                        i + 1, n_unique_labels
+                    )
+                )
             if ind in [0]:
                 continue
 
@@ -177,6 +192,7 @@ class WorkerProcessAllen(QObject):
             else:
                 missing_mesh_index.append(ind)
 
+        self.status.emit("Loading the whole-brain mesh...")
         target = os.path.join(self.saving_folder, "atlas_meshdata.pkl")
         shutil.copyfile(join(mesh_path, '997.pkl'), target)
 
@@ -187,6 +203,7 @@ class WorkerProcessAllen(QObject):
         infile.close()
         self.progress.emit(33)
 
+        self.status.emit("Preparing the Allen label hierarchy...")
         df = pd.read_csv(os.path.join(self.saving_folder, self.label_local))
 
         da_labels = df['safe_name'].values
@@ -230,10 +247,17 @@ class WorkerProcessAllen(QObject):
 
         self.progress.emit(38)
 
+        self.status.emit(
+            "Loading the {} µm atlas intensity volume into memory...".format(
+                self.vox_size
+            )
+        )
         volume_data, header = nrrd.read(os.path.join(self.saving_folder, self.data_local))
         self.progress.emit(45)
+        self.status.emit("Transforming the atlas intensity volume...")
         volume_data = np.transpose(volume_data[::-1, ::-1, :], (2, 0, 1))
         self.progress.emit(46)
+        self.status.emit("Normalizing atlas intensities...")
         self.atlas_data = volume_data.copy()
         self.atlas_data = self.atlas_data - np.min(self.atlas_data)
         self.atlas_data = self.atlas_data / np.max(self.atlas_data)
@@ -257,11 +281,13 @@ class WorkerProcessAllen(QObject):
 
         atlas = {'data': self.atlas_data, 'info': self.atlas_info}
 
+        self.status.emit("Saving the normalized atlas cache; this file can be large...")
         outfile = open(os.path.join(self.saving_folder, 'atlas_pre_made.pkl'), 'wb')
         pickle.dump(atlas, outfile)
         outfile.close()
         self.progress.emit(53)
 
+        self.status.emit("Transforming the annotation volume...")
         self.segmentation_data = np.transpose(label_data[::-1, ::-1, :], (2, 0, 1))
         self.segmentation_data = self.segmentation_data.astype(int)
         print(self.segmentation_data.shape)
@@ -270,6 +296,7 @@ class WorkerProcessAllen(QObject):
 
         segment = {'data': self.segmentation_data, 'unique_label': self.unique_label}
 
+        self.status.emit("Saving the annotation cache; this file can be large...")
         outfile = open(os.path.join(self.saving_folder, 'segment_pre_made.pkl'), 'wb')
         pickle.dump(segment, outfile)
         outfile.close()
@@ -277,15 +304,40 @@ class WorkerProcessAllen(QObject):
         self.progress.emit(58)
 
         if missing_mesh_index:
-            for da_ind in missing_mesh_index:
-                render_small_volume(da_ind, mesh_path, self.atlas_data, self.segmentation_data, factor=2, level=0.1)
+            missing_count = len(missing_mesh_index)
+            for missing_index, da_ind in enumerate(missing_mesh_index):
+                def report_missing_mesh(fraction, phase, index=missing_index, label_id=da_ind):
+                    self.progress.emit(58 + 2 * (index + fraction) / missing_count)
+                    self.status.emit(
+                        "Generating fallback mesh {} of {} for structure {}: {}...".format(
+                            index + 1, missing_count, label_id, phase
+                        )
+                    )
+
+                render_small_volume(
+                    da_ind,
+                    mesh_path,
+                    self.atlas_data,
+                    self.segmentation_data,
+                    factor=2,
+                    level=0.1,
+                    progress=report_missing_mesh,
+                )
 
         self.progress.emit(60)
 
+        self.status.emit("Packing processed structure meshes...")
         file_list = os.listdir(mesh_path)
         progress_step = np.linspace(60, 68, len(file_list))
+        file_status_interval = max(1, len(file_list) // 100)
         for i in range(len(file_list)):
             self.progress.emit(progress_step[i])
+            if i % file_status_interval == 0 or i == len(file_list) - 1:
+                self.status.emit(
+                    "Packing processed structure meshes: {} of {}...".format(
+                        i + 1, len(file_list)
+                    )
+                )
             da_file = file_list[i]
             file_name = os.path.basename(da_file)
             da_name, file_extension = os.path.splitext(file_name)
@@ -296,6 +348,7 @@ class WorkerProcessAllen(QObject):
 
                 self.small_mesh_list[str(da_name)] = md
 
+        self.status.emit("Saving the processed structure-mesh cache...")
         outfile = open(os.path.join(self.saving_folder, 'atlas_small_meshdata.pkl'), 'wb')
         pickle.dump(self.small_mesh_list, outfile)
         outfile.close()
@@ -303,50 +356,77 @@ class WorkerProcessAllen(QObject):
 
         segment_data_shape = self.segmentation_data.shape
 
+        self.status.emit("Allocating atlas boundary volumes...")
         sagital_contour_img = np.zeros(segment_data_shape, 'i')
         coronal_contour_img = np.zeros(segment_data_shape, 'i')
         horizontal_contour_img = np.zeros(segment_data_shape, 'i')
 
         # pre-process boundary ----- todo: change this part as optional
         process_index = np.linspace(70, 78, segment_data_shape[0])
+        status_interval = max(1, segment_data_shape[0] // 100)
         for i in range(segment_data_shape[0]):
             self.progress.emit(process_index[i])
+            if i % status_interval == 0 or i == segment_data_shape[0] - 1:
+                self.status.emit(
+                    "Computing sagittal boundaries: slice {} of {}...".format(
+                        i + 1, segment_data_shape[0]
+                    )
+                )
             da_slice = self.segmentation_data[i, :, :].copy()
             contour_img = make_contour_img(da_slice)
             sagital_contour_img[i, :, :] = contour_img
 
+        self.status.emit("Saving the sagittal boundary cache...")
         outfile_ct = open(os.path.join(self.saving_folder, 'sagital_contour_pre_made.pkl'), 'wb')
         pickle.dump(sagital_contour_img, outfile_ct)
         outfile_ct.close()
         self.progress.emit(80)
 
         process_index = np.linspace(80, 88, segment_data_shape[1])
+        status_interval = max(1, segment_data_shape[1] // 100)
         for i in range(segment_data_shape[1]):
             self.progress.emit(process_index[i])
+            if i % status_interval == 0 or i == segment_data_shape[1] - 1:
+                self.status.emit(
+                    "Computing coronal boundaries: slice {} of {}...".format(
+                        i + 1, segment_data_shape[1]
+                    )
+                )
             da_slice = self.segmentation_data[:, i, :].copy()
             contour_img = make_contour_img(da_slice)
             coronal_contour_img[:, i, :] = contour_img
 
+        self.status.emit("Saving the coronal boundary cache...")
         outfile_ct = open(os.path.join(self.saving_folder, 'coronal_contour_pre_made.pkl'), 'wb')
         pickle.dump(coronal_contour_img, outfile_ct)
         outfile_ct.close()
         self.progress.emit(90)
 
         process_index = np.linspace(90, 98, segment_data_shape[2])
+        status_interval = max(1, segment_data_shape[2] // 100)
         for i in range(segment_data_shape[2]):
             self.progress.emit(process_index[i])
+            if i % status_interval == 0 or i == segment_data_shape[2] - 1:
+                self.status.emit(
+                    "Computing horizontal boundaries: slice {} of {}...".format(
+                        i + 1, segment_data_shape[2]
+                    )
+                )
             da_slice = self.segmentation_data[:, :, i].copy()
             contour_img = make_contour_img(da_slice)
             horizontal_contour_img[:, :, i] = contour_img
 
+        self.status.emit("Saving the horizontal boundary cache...")
         outfile_ct = open(os.path.join(self.saving_folder, 'horizontal_contour_pre_made.pkl'), 'wb')
         pickle.dump(horizontal_contour_img, outfile_ct)
         outfile_ct.close()
-        self.progress.emit(100)
 
+        self.status.emit("Finalizing atlas boundaries...")
         self.boundary = make_boundary_dict(
             sagital_contour_img, coronal_contour_img, horizontal_contour_img
         )
+        self.progress.emit(100)
+        self.status.emit("Atlas processing complete.")
 
         # target = os.path.join(self.saving_folder, 'atlas_labels.pkl')
         # if not os.path.exists(target):
@@ -763,6 +843,7 @@ class AllenDownloader(QDialog):
             # self.worker.finished.connect(self.worker.deleteLater)
             self.thread.finished.connect(self.thread.deleteLater)
             self.worker.progress.connect(self.report_progress)
+            self.worker.status.connect(self.process_status_changed)
             self.thread.start()
 
     def on_finish(self):
@@ -776,6 +857,9 @@ class AllenDownloader(QDialog):
         self.continue_process = False
         QMessageBox.warning(self, 'Atlas processing failed', message)
         self.reject()
+
+    def process_status_changed(self, message):
+        self.process_info.setText(message)
 
     def closeEvent(self, event):
         if self.process_finished:
