@@ -1,3 +1,4 @@
+import gzip
 import os
 from os.path import dirname, join
 from PyQt6.QtWidgets import *
@@ -17,6 +18,55 @@ from .obj_items import render_volume, render_small_volume
 from .atlas_downloader import DownloadThread
 from .atlas_transform import make_boundary_dict
 from .download_utils import download_file
+
+
+def _stream_unique_nrrd_values(filename, progress=None, chunk_size=8 * 1024 * 1024):
+    """Return unique NRRD values without loading or sorting the whole volume."""
+    with open(filename, "rb") as source:
+        header = nrrd.read_header(source)
+        dtype = nrrd.reader._determine_datatype(header)
+        encoding = str(header["encoding"]).lower()
+        total_values = int(np.prod(header["sizes"], dtype=np.int64))
+
+        if encoding in ("gzip", "gz"):
+            data_stream = gzip.GzipFile(fileobj=source)
+        elif encoding == "raw":
+            data_stream = source
+        else:
+            raise ValueError(
+                "Unsupported NRRD encoding for label scan: {}".format(encoding)
+            )
+
+        unique_values = set()
+        remainder = b""
+        values_read = 0
+        if progress is not None:
+            progress(0, total_values)
+
+        try:
+            while True:
+                chunk = data_stream.read(chunk_size)
+                if not chunk:
+                    break
+                chunk = remainder + chunk
+                aligned_size = len(chunk) - (len(chunk) % dtype.itemsize)
+                if aligned_size:
+                    values = np.frombuffer(chunk[:aligned_size], dtype=dtype)
+                    unique_values.update(int(value) for value in np.unique(values))
+                    values_read += values.size
+                    if progress is not None:
+                        progress(values_read, total_values)
+                remainder = chunk[aligned_size:]
+        finally:
+            if data_stream is not source:
+                data_stream.close()
+
+    if remainder or values_read != total_values:
+        raise ValueError(
+            "Annotation data size does not match its NRRD header: "
+            "{} of {} values read.".format(values_read, total_values)
+        )
+    return np.asarray(sorted(unique_values), dtype=dtype)
 
 
 class WorkerProcessAllen(QObject):
@@ -64,9 +114,17 @@ class WorkerProcessAllen(QObject):
 
     def _run(self):
         self.progress.emit(1)
-        label_data, header = nrrd.read(os.path.join(self.saving_folder, self.segmentation_local))
+        segmentation_path = os.path.join(
+            self.saving_folder, self.segmentation_local
+        )
+        self.unique_label = _stream_unique_nrrd_values(
+            segmentation_path,
+            progress=lambda current, total: self.progress.emit(
+                1 + 8 * current / total
+            ),
+        )
         self.progress.emit(10)
-        self.unique_label = np.unique(label_data)
+        label_data, header = nrrd.read(segmentation_path)
         self.progress.emit(14)
 
         n_unique_labels = len(self.unique_label)
@@ -162,7 +220,7 @@ class WorkerProcessAllen(QObject):
 
         self.label_info = {'index': df['id'].values.astype(int),
                            'label': da_labels,
-                           'parent': df['parent_structure_id'].values.astype(int),
+                           'parent': df['parent_structure_id'].fillna(0).values.astype(int),
                            'abbrev': da_short_label,
                            'color': rgb_colors,
                            'level_indicator': levels}
@@ -298,7 +356,8 @@ class WorkerProcessAllen(QObject):
 
 class MeshDownloader(QObject):
     finished = pyqtSignal()
-    progress = pyqtSignal(int)
+    progress = pyqtSignal(int, int)
+    status = pyqtSignal(str)
     failed = pyqtSignal(str)
 
     def __init__(self):
@@ -314,12 +373,24 @@ class MeshDownloader(QObject):
 
     def run(self):
         try:
-            label_data, _ = nrrd.read(self.segmentation_local)
-            unique_label = [int(value) for value in np.unique(label_data) if value not in (0, 545)]
             downloaded_mesh_path = os.path.join(self.save_folder, 'downloaded_meshes')
             os.makedirs(downloaded_mesh_path, exist_ok=True)
+            self.status.emit("Scanning atlas structure IDs...")
+            unique_label = [
+                int(value)
+                for value in _stream_unique_nrrd_values(
+                    self.segmentation_local, progress=self.progress.emit
+                )
+                if value not in (0, 545)
+            ]
+            total_labels = len(unique_label)
 
             for index, label_id in enumerate(unique_label):
+                self.status.emit(
+                    "Downloading mesh {} of {} (structure {})...".format(
+                        index + 1, total_labels, label_id
+                    )
+                )
                 url = (
                     'https://download.alleninstitute.org/informatics-archive/'
                     'current-release/mouse_ccf/annotation/ccf_2017/'
@@ -328,8 +399,16 @@ class MeshDownloader(QObject):
                 destination = os.path.join(
                     downloaded_mesh_path, '{}.obj'.format(label_id)
                 )
-                download_file(url, destination)
-                self.progress.emit(int((index + 1) / len(unique_label) * 100))
+                progress_maximum = max(1, total_labels * 100)
+                if not os.path.isfile(destination) or os.path.getsize(destination) == 0:
+                    download_file(
+                        url,
+                        destination,
+                        progress=lambda value, base=index: self.progress.emit(
+                            base * 100 + value, progress_maximum
+                        ),
+                    )
+                self.progress.emit((index + 1) * 100, progress_maximum)
             self.success = True
         except Exception as exc:
             self.failed.emit(str(exc))
@@ -560,6 +639,7 @@ class AllenDownloader(QDialog):
             self.download_mesh_btn.setVisible(False)
             self.downloading_meshes = True
             self.download_btn.setEnabled(False)
+            self.mesh_bar.setValue(0)
             self.mesh_worker.set_data(saving_folder, self.segmentation_local)
             self.mesh_worker.moveToThread(self.mesh_thread)
             self.mesh_thread.started.connect(self.mesh_worker.run)
@@ -568,6 +648,7 @@ class AllenDownloader(QDialog):
             self.mesh_worker.finished.connect(self.mesh_worker.deleteLater)
             self.mesh_thread.finished.connect(self.mesh_thread.deleteLater)
             self.mesh_worker.progress.connect(self.mesh_report_progress)
+            self.mesh_worker.status.connect(self.mesh_download_status)
             self.mesh_worker.failed.connect(self.mesh_download_failed)
             self.mesh_thread.start()
 
@@ -607,7 +688,8 @@ class AllenDownloader(QDialog):
         self.downloading_meshes = False
         if self.mesh_worker.success:
             self.finish[2] = True
-            self.mesh_bar.setValue(100)
+            self.mesh_bar.setValue(self.mesh_bar.maximum())
+            self.process_info.setText('Mesh download finished.')
 
     # Setting progress bar
     def set_data_bar_value(self, value):
@@ -632,12 +714,12 @@ class AllenDownloader(QDialog):
         # self.progress.setFormat("%.02f %%" % val)
         self.progress_label.setText("%.02f %%" % val)
 
-    def mesh_report_progress(self, i):
-        self.mesh_bar.setValue(i)
-        if i == 100:
-            self.finish[2] = True
-            self.downloading_meshes = False
-            return
+    def mesh_report_progress(self, value, maximum):
+        self.mesh_bar.setRange(0, max(1, maximum))
+        self.mesh_bar.setValue(value)
+
+    def mesh_download_status(self, message):
+        self.process_info.setText(message)
 
     def process_start(self):
         if self.has_active_downloads() or self.downloading_meshes:
