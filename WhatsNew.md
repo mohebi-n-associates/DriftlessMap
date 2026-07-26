@@ -3,6 +3,94 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## HERBS 1.0.5
+
+Release date: 25 July 2026
+
+HERBS 1.0.5 makes probe reconstruction more robust, easier to evaluate, and
+ready for contact-level analysis outside HERBS.
+
+### Highlights
+
+- Uses an outlier-resistant orthogonal 3D fit so an isolated misplaced control
+  point does not pull the reconstructed probe away from the remaining track.
+- Finds insertion at the fitted trajectory’s true three-dimensional
+  intersection with the atlas brain mask, including for oblique probes.
+- Reports retained points, RMS and maximum deviation, and straight-line
+  agreement in the Probe Information Window.
+- Clearly distinguishes tilt, insertion-to-tip length, vertical depth change,
+  physical contact count, and anatomical path length.
+- Labels the probe schematic with region acronyms and contact counts.
+- Exports insertion, tip, every physical contact, and region traversal to CSV
+  with atlas, anatomical, and fit-quality metadata.
+- Correctly summarizes probes whose reconstructed path remains entirely
+  within one anatomical region.
+
+### More robust trajectory mapping
+
+Merged probes now use an outlier-resistant orthogonal 3D line fit. An isolated
+misplaced probe point is excluded from the trajectory instead of pulling the
+estimated insertion, angle, contacts, and tip away from the remaining track.
+HERBS records the retained-point count, retained-point RMS deviation,
+all-point maximum deviation, and straight-line agreement so the reconstruction
+can be reviewed rather than silently accepted.
+
+Insertion correction now follows the fitted oblique trajectory through the
+three-dimensional atlas label mask and selects its first brain intersection.
+Earlier versions estimated the surface from a vertical label column, which
+could shift the insertion point for angled probes. Tracks contained entirely
+within one anatomical region are also handled correctly instead of failing
+while their region summary is assembled.
+
+### Clearer probe information
+
+The Probe Information Window now distinguishes:
+
+- AP and ML tilt measured from the dorsoventral axis.
+- Insertion-to-tip track length from vertical depth change.
+- Physical contact counts from centerline path length in each brain region.
+- Internal HERBS atlas coordinates from estimated Allen-Bregma AP/ML values.
+
+The probe schematic labels each region with its acronym and contact count.
+Mapping quality is classified as good, review, or poor relative to the atlas
+voxel size, while the underlying measurements remain visible.
+
+### Probe coordinate CSV export
+
+The new **Export trajectory and contacts as CSV** action writes:
+
+- Insertion and tip coordinates.
+- Every physical contact in explicit column and within-column order.
+- Distance from insertion and tip, plus probe-local lateral and surface-normal
+  offsets.
+- Structure ID, acronym, and name for each contact.
+- Region contact totals and reconstructed path lengths.
+- Trajectory angles, length, fit method, retained-point count, residuals, and
+  surface-correction metadata.
+- Continuous HERBS and source-atlas coordinates.
+- For recognized Allen CCFv3 atlases, raw Allen voxels, estimated Bregma AP/ML,
+  and the affine DV value explicitly marked as unsuitable for targeting.
+
+### Upgrade notes
+
+Re-merge an existing probe to calculate its trajectory with the new robust fit
+and three-dimensional surface intersection. Probe objects that already contain
+embedded reconstruction coordinates can be exported, although old objects do
+not gain the new fit diagnostics. Older legacy objects without embedded
+reconstruction data must be re-merged before contact-level CSV export.
+
+Install or update HERBS from the repository:
+
+```bash
+conda activate HERBS
+git pull
+python -m pip install . --upgrade
+```
+
+Restart HERBS after upgrading.
+
+---
+
 ## HERBS 1.0.4
 
 Release date: 25 July 2026

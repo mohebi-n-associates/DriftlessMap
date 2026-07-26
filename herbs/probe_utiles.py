@@ -17,6 +17,7 @@ from .version import __version__
 
 
 PROBE_COORDINATES_OUTSIDE_ATLAS = 16
+_LINE_SAMPLE_STEP_VOX = 0.25
 
 
 def get_closest_point_to_line(p0, r, p):
@@ -25,68 +26,233 @@ def get_closest_point_to_line(p0, r, p):
     return res
 
 
+def _validate_line_points(points):
+    points = np.asarray(points, dtype=float)
+    if points.ndim != 2 or points.shape[1] not in (2, 3):
+        raise ValueError("Probe points must have shape (N, 2) or (N, 3).")
+    if len(points) < 2:
+        raise ValueError("At least two probe points are required.")
+    if not np.all(np.isfinite(points)):
+        raise ValueError("Probe points must contain only finite coordinates.")
+    if np.max(np.linalg.norm(points - points[0], axis=1)) <= 1e-9:
+        raise ValueError("Probe points must contain two distinct locations.")
+    return points
+
+
+def _principal_direction(points, weights=None):
+    if weights is None:
+        center = np.mean(points, axis=0)
+        centered = points - center
+    else:
+        center = np.average(points, axis=0, weights=weights)
+        centered = (points - center) * np.sqrt(weights[:, None])
+    _u, singular_values, vh = np.linalg.svd(centered, full_matrices=False)
+    direction = vh[0]
+    direction = direction / np.linalg.norm(direction)
+    return center, direction, singular_values
+
+
+def _robust_initial_line(points):
+    point_count = len(points)
+    if point_count > 64:
+        candidates = np.unique(
+            np.linspace(0, point_count - 1, 64).astype(int)
+        )
+    else:
+        candidates = np.arange(point_count)
+    best = None
+    for first_pos, first in enumerate(candidates[:-1]):
+        for second in candidates[first_pos + 1 :]:
+            vector = points[second] - points[first]
+            length = np.linalg.norm(vector)
+            if length <= 1e-9:
+                continue
+            direction = vector / length
+            delta = points - points[first]
+            residual = np.linalg.norm(
+                delta - (delta @ direction)[:, None] * direction,
+                axis=1,
+            )
+            score = (
+                float(np.median(residual)),
+                float(np.mean(np.partition(residual, point_count // 2)[
+                    : point_count // 2 + 1
+                ])),
+            )
+            if best is None or score < best[0]:
+                best = (score, points[first], direction)
+    if best is None:
+        raise ValueError("Probe points cannot define a line.")
+    return best[1], best[2]
+
+
+def robust_probe_line_fit(points):
+    """Fit an outlier-resistant principal line and return diagnostics."""
+    points = _validate_line_points(points)
+    initial_origin, direction = _robust_initial_line(points)
+    center = initial_origin
+    inliers = np.ones(len(points), dtype=bool)
+    for _iteration in range(8):
+        projection = (points - center) @ direction
+        residual_vectors = points - center - projection[:, None] * direction
+        residual = np.linalg.norm(residual_vectors, axis=1)
+        median = float(np.median(residual))
+        mad = 1.4826 * float(np.median(np.abs(residual - median)))
+        threshold = max(median + 3.0 * mad, 1.0)
+        new_inliers = residual <= threshold
+        if np.count_nonzero(new_inliers) < 2:
+            break
+        center, direction, _singular_values = _principal_direction(
+            points[new_inliers]
+        )
+        if np.array_equal(new_inliers, inliers):
+            inliers = new_inliers
+            break
+        inliers = new_inliers
+
+    projection = (points - center) @ direction
+    residual_vectors = points - center - projection[:, None] * direction
+    residual = np.linalg.norm(residual_vectors, axis=1)
+    median = float(np.median(residual))
+    mad = 1.4826 * float(np.median(np.abs(residual - median)))
+    inlier_threshold = max(median + 3.0 * mad, 1.0)
+    inliers = residual <= inlier_threshold
+    if np.count_nonzero(inliers) >= 2:
+        center, direction, singular_values = _principal_direction(
+            points[inliers]
+        )
+    else:
+        inliers = np.ones(len(points), dtype=bool)
+        center, direction, singular_values = _principal_direction(points)
+
+    projection = (points - center) @ direction
+    residual_vectors = points - center - projection[:, None] * direction
+    residual = np.linalg.norm(residual_vectors, axis=1)
+    inlier_projection = projection[inliers]
+    endpoint_1 = center + np.min(inlier_projection) * direction
+    endpoint_2 = center + np.max(inlier_projection) * direction
+
+    if points.shape[1] == 2:
+        if endpoint_1[1] > endpoint_2[1]:
+            endpoint_1, endpoint_2 = endpoint_2, endpoint_1
+    elif endpoint_1[2] < endpoint_2[2]:
+        endpoint_1, endpoint_2 = endpoint_2, endpoint_1
+    direction = endpoint_2 - endpoint_1
+    direction = direction / np.linalg.norm(direction)
+
+    inlier_residual = residual[inliers]
+    total_variance = float(
+        np.sum((points[inliers] - np.mean(points[inliers], axis=0)) ** 2)
+    )
+    residual_variance = float(np.sum(inlier_residual**2))
+    explained_fraction = (
+        max(0.0, min(1.0, 1.0 - residual_variance / total_variance))
+        if total_variance > np.finfo(float).eps
+        else 1.0
+    )
+    diagnostics = {
+        "method": "robust orthogonal 3D line fit",
+        "point_count": int(len(points)),
+        "inlier_count": int(np.count_nonzero(inliers)),
+        "inlier_mask": inliers,
+        "residual_vox": residual,
+        "rms_error_vox": float(np.sqrt(np.mean(inlier_residual**2))),
+        "max_error_vox": float(np.max(residual)),
+        "explained_fraction": explained_fraction,
+        "singular_values": singular_values,
+    }
+    return endpoint_1, endpoint_2, center, direction, diagnostics
+
+
+def _line_box_interval(origin, direction, shape):
+    lower = -np.inf
+    upper = np.inf
+    for axis, axis_size in enumerate(shape):
+        if abs(direction[axis]) <= np.finfo(float).eps:
+            if origin[axis] < 0 or origin[axis] > axis_size - 1:
+                return None
+            continue
+        first = (0.0 - origin[axis]) / direction[axis]
+        last = (float(axis_size - 1) - origin[axis]) / direction[axis]
+        lower = max(lower, min(first, last))
+        upper = min(upper, max(first, last))
+    if not np.isfinite(lower) or not np.isfinite(upper) or lower > upper:
+        return None
+    return lower, upper
+
+
+def _first_occupied_point(origin, direction, shape, is_occupied):
+    interval = _line_box_interval(origin, direction, shape)
+    if interval is None:
+        return None
+    lower, upper = interval
+    sample_count = max(
+        2, int(np.ceil((upper - lower) / _LINE_SAMPLE_STEP_VOX)) + 1
+    )
+    distances = np.linspace(lower, upper, sample_count)
+    coordinates = origin + distances[:, None] * direction
+    indexes = np.floor(coordinates).astype(int)
+    indexes = np.clip(indexes, 0, np.asarray(shape, dtype=int) - 1)
+    occupied = np.asarray(is_occupied(indexes), dtype=bool)
+    occupied_indexes = np.flatnonzero(occupied)
+    if not len(occupied_indexes):
+        return None
+    first = int(occupied_indexes[0])
+    return coordinates[first]
+
+
 def line_fit_2d(points_2d, image=None):
     msg = None
-    points = np.asarray(points_2d)
-    sort_order = np.argsort(points[:, 1])
-    points = points[sort_order, :]
-    avg = np.mean(points, 0)
-    subtracted = points - avg
-    u, s, vh = np.linalg.svd(subtracted)
-    direction = vh[0, :] / np.linalg.norm(vh[0, :])
-    p1 = points[0, :]
-    p2 = points[-1, :]
-    sp = get_closest_point_to_line(avg, direction, p1)
-    ep = get_closest_point_to_line(avg, direction, p2)
-
+    sp, ep, center, direction, _diagnostics = robust_probe_line_fit(
+        points_2d
+    )
     if image is not None:
-        direction = sp - ep
-        direction = direction / np.linalg.norm(direction)
+        image = np.asarray(image)
+        if image.ndim != 2:
+            return np.asarray([sp, ep]), "Atlas labels must be two-dimensional."
 
-        valid_ind = np.where(image[:, int(sp[0])] != 0)[0]
-        if len(valid_ind) > 0:
-            valid_ind = valid_ind[0]
+        def occupied(indexes):
+            return image[indexes[:, 1], indexes[:, 0]] != 0
+
+        surface = _first_occupied_point(
+            center,
+            direction,
+            (image.shape[1], image.shape[0]),
+            occupied,
+        )
+        if surface is None:
+            msg = "The fitted probe line does not intersect the atlas brain mask."
         else:
-            msg = "Something went wrong for the probe location. Please contact maintainers."
-
-        if int(sp[1]) < valid_ind:
-            sign_flag = -1
-        elif int(sp[1]) > valid_ind:
-            sign_flag = 1
-        else:
-            sign_flag = 0
-
-        stop_steps = 0
-        temp = sp + 0
-        while int(temp[1]) != valid_ind:
-            stop_steps += 1
-            temp = sp + sign_flag * stop_steps * direction
-            valid_ind = np.where(image[:, int(temp[0])] != 0)[0]
-            if len(valid_ind) > 0:
-                valid_ind = valid_ind[0]
-            else:
-                msg = "Something went wrong for the probe location. Please contact maintainers."
-                break
-
-        sp = sp + sign_flag * stop_steps * direction
-
-    p2 = np.array([sp, ep])
-    return p2, msg
+            sp = surface
+    return np.asarray([sp, ep]), msg
 
 
-def line_fit(points):
-    points = np.asarray(points)
-    sort_order = np.argsort(points[:, 2])[::-1]
-    points = points[sort_order, :]
-    avg = np.mean(points, 0)
-    substracted = points - avg
-    u, s, vh = np.linalg.svd(substracted)
-    direction = vh[0, :] / np.linalg.norm(vh[0, :])
-    p1 = points[0, :]
-    p2 = points[-1, :]
-    sp = get_closest_point_to_line(avg, direction, p1)
-    ep = get_closest_point_to_line(avg, direction, p2)
-    return sp, ep, avg, direction
+def line_fit(points, return_diagnostics=False):
+    result = robust_probe_line_fit(points)
+    if return_diagnostics:
+        return result
+    return result[:4]
+
+
+def find_probe_surface_entry(label_data, center, direction, bregma):
+    """Find the first labeled atlas voxel along the fitted insertion line."""
+    label_data = np.asarray(label_data)
+    absolute_center = np.asarray(center, dtype=float) + np.asarray(
+        bregma, dtype=float
+    )
+
+    def occupied(indexes):
+        return label_data[indexes[:, 0], indexes[:, 1], indexes[:, 2]] != 0
+
+    surface = _first_occupied_point(
+        absolute_center,
+        np.asarray(direction, dtype=float),
+        label_data.shape,
+        occupied,
+    )
+    if surface is None:
+        return np.asarray(center, dtype=float), PROBE_COORDINATES_OUTSIDE_ATLAS
+    return surface - np.asarray(bregma, dtype=float), 0
 
 
 def get_angles(direction):
@@ -367,9 +533,9 @@ def get_column_grouped_info(group_column, column_bound):
             np.append(change_index[1:], np.array([len(group_column)]))
         ]
     else:
-        group_id = group_column[0]
-        start_loc = column_bound[0]
-        end_loc = column_bound[-1]
+        group_id = np.asarray([group_column[0]])
+        start_loc = np.asarray([column_bound[0]])
+        end_loc = np.asarray([column_bound[-1]])
 
     group_column_length = np.abs(end_loc - start_loc)
 
@@ -679,11 +845,13 @@ def calculate_probe_info(
     tip_length_um = probe_settings["tip_length"]
 
     # get direction and probe center start and end (pc - probe center)
-    pc_start_pnt, pc_end_pnt, avg, direction = line_fit(data)
-    direction = pc_end_pnt - pc_start_pnt
-    direction = direction / np.linalg.norm(direction)
-    pc_start_vox = pc_start_pnt + bregma
-    pc_end_vox = pc_end_pnt + bregma
+    (
+        pc_start_pnt,
+        pc_end_pnt,
+        avg,
+        direction,
+        fit_diagnostics,
+    ) = line_fit(data, return_diagnostics=True)
 
     # print('direction', direction)
 
@@ -695,8 +863,8 @@ def calculate_probe_info(
     # print('check-start_pnt', pc_start_pnt)
     # # print(pc_start_vox)
     # correct probe center start point
-    pc_sp, error_index = correct_start_pnt(
-        label_data, pc_start_pnt, pc_start_vox, direction, bregma, verbose=True
+    pc_sp, error_index = find_probe_surface_entry(
+        label_data, avg, direction, bregma
     )
     if error_index != 0:
         return data_dict, error_index
@@ -708,8 +876,22 @@ def calculate_probe_info(
         vxsize_um,
         tip_length_um,
         probe_max_length_um,
-        verbose=True,
+        verbose=False,
     )
+    trajectory_fit = {
+        "method": fit_diagnostics["method"],
+        "surface_method": "3D fitted-line intersection with atlas brain mask",
+        "point_count": fit_diagnostics["point_count"],
+        "inlier_count": fit_diagnostics["inlier_count"],
+        "inlier_mask": fit_diagnostics["inlier_mask"],
+        "residual_um": fit_diagnostics["residual_vox"] * vxsize_um,
+        "rms_error_um": fit_diagnostics["rms_error_vox"] * vxsize_um,
+        "max_error_um": fit_diagnostics["max_error_vox"] * vxsize_um,
+        "explained_fraction": fit_diagnostics["explained_fraction"],
+        "surface_adjustment_um": float(
+            np.linalg.norm(pc_sp - pc_start_pnt) * vxsize_um
+        ),
+    }
 
     pv_sp = pc_sp + bregma
     pv_sp = pv_sp.astype(int)
@@ -865,6 +1047,7 @@ def calculate_probe_info(
         "probe_settings": probe_settings,
         "site_face": site_face,
         "display_sites_merged": bool(merge_sites),
+        "trajectory_fit": trajectory_fit,
     }
 
     atlas_metadata = atlas_metadata or {}
@@ -888,6 +1071,7 @@ def calculate_probe_info(
         atlas_identifier=atlas_metadata.get("identifier"),
         atlas_path=atlas_metadata.get("path"),
         software_version=__version__,
+        trajectory_fit=trajectory_fit,
     )
     return data_dict, error_index
 

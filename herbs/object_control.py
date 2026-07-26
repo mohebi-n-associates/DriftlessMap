@@ -7,6 +7,7 @@ from PyQt6.QtWidgets import *
 from PyQt6.QtGui import *
 from PyQt6.QtCore import *
 from .wtiles import QDoubleButton
+from .probe_csv import write_probe_csv
 from .roi_analysis import write_roi_csv
 from .uuuuuu import read_qss_file
 from .resources import resource_path
@@ -532,6 +533,8 @@ class ProbeInfoWindow(QDialog):
         super().__init__()
 
         self.setWindowTitle("Probe Information Window")
+        self.object_name = name
+        self.probe_data = data
 
         self.label = QLabel(name)
         # self.label = QLabel("Probe % d " % group_id)
@@ -544,41 +547,69 @@ class ProbeInfoWindow(QDialog):
         label_style = "QLabel {background-color: " + color.name() + "; font-size: 20px}"
         self.label.setStyleSheet(label_style)
 
-        ap_angle_label = QLabel("AP Angle : ")
+        ap_angle_label = QLabel("AP tilt from vertical : ")
         ap_angle_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        ml_angle_label = QLabel("ML Angle : ")
+        ap_angle_label.setToolTip(
+            "Angle of the fitted probe from the dorsoventral axis in the "
+            "anterior–posterior plane."
+        )
+        ml_angle_label = QLabel("ML tilt from vertical : ")
         ml_angle_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        probe_length_label = QLabel("Probe Length : ")
+        ml_angle_label.setToolTip(
+            "Angle of the fitted probe from the dorsoventral axis in the "
+            "medial–lateral plane."
+        )
+        probe_length_label = QLabel("Insertion-to-tip length : ")
         probe_length_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        dv_label = QLabel("DV : ")
+        dv_label = QLabel("Vertical depth change : ")
         dv_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        insertion_coords_label = QLabel("Insertion coordinates : ")
+        insertion_coords_label = QLabel("Insertion from configured Bregma : ")
         insertion_coords_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        insertion_voxels_label = QLabel("Insertion voxels : ")
+        insertion_voxels_label = QLabel("Insertion atlas voxel (ML, AP, DV) : ")
         insertion_voxels_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        terminus_coords_label = QLabel("Terminus coordinates : ")
+        terminus_coords_label = QLabel("Tip from configured Bregma : ")
         terminus_coords_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        terminus_voxels_label = QLabel("Terminus voxels : ")
+        terminus_voxels_label = QLabel("Tip atlas voxel (ML, AP, DV) : ")
         terminus_voxels_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        ap_angle_value = QLabel("{} \u00B0".format(np.round(data["ap_angle"], 2)))
-        ml_angle_value = QLabel("{} \u00B0".format(np.round(data["ml_angle"], 2)))
+        ap_angle_value = QLabel(
+            "{} \u00B0 {}".format(
+                np.round(data["ap_angle"], 2), data.get("ap_tilt", "")
+            ).strip()
+        )
+        ml_angle_value = QLabel(
+            "{} \u00B0 {}".format(
+                np.round(data["ml_angle"], 2), data.get("ml_tilt", "")
+            ).strip()
+        )
         probe_length = QLabel("{} \u03BCm".format(np.round(data["probe_length"], 2)))
         dv = QLabel("{} \u03BCm".format(np.round(data["dv"], 2)))
         ic_val = np.round(data["insertion_coords"], 2)
         insertion_coords = QLabel(
-            "ML: {}\u03BCm,  AP: {}\u03BCm".format(ic_val[0], ic_val[1])
+            "ML {:+.3f} mm | AP {:+.3f} mm | DV-dorsal {:+.3f} mm".format(
+                ic_val[0] / 1000.0,
+                ic_val[1] / 1000.0,
+                ic_val[2] / 1000.0,
+            )
         )
-        iv_val = data["insertion_vox"].astype(int)
-        insertion_vox = QLabel("({} {} {})".format(iv_val[0], iv_val[1], iv_val[2]))
+        iv_val = np.asarray(data["insertion_vox"], dtype=int)
+        insertion_vox = QLabel(
+            "({}, {}, {})".format(iv_val[0], iv_val[1], iv_val[2])
+        )
 
         tc_val = np.round(data["terminus_coords"], 2)
         terminus_coords = QLabel(
-            "ML: {}\u03BCm,  AP: {}\u03BCm".format(tc_val[0], tc_val[1])
+            "ML {:+.3f} mm | AP {:+.3f} mm | DV-dorsal {:+.3f} mm".format(
+                tc_val[0] / 1000.0,
+                tc_val[1] / 1000.0,
+                tc_val[2] / 1000.0,
+            )
         )
-        tv_val = data["terminus_vox"]
-        terminus_vox = QLabel("({} {} {})".format(tv_val[0], tv_val[1], tv_val[2]))
+        tv_val = np.asarray(data["terminus_vox"], dtype=int)
+        terminus_vox = QLabel(
+            "({}, {}, {})".format(tv_val[0], tv_val[1], tv_val[2])
+        )
 
         coords_info_group = QGroupBox()
         coords_info_layout = QGridLayout(coords_info_group)
@@ -602,8 +633,115 @@ class ProbeInfoWindow(QDialog):
         coords_info_layout.addWidget(terminus_voxels_label, 3, 2, 1, 1)
         coords_info_layout.addWidget(terminus_vox, 3, 3, 1, 1)
 
+        reconstruction = data.get("reconstruction", {})
+        reconstructed_coordinates = reconstruction.get("coordinates", {})
+        insertion_reconstruction = reconstructed_coordinates.get("insertion", {})
+        tip_reconstruction = reconstructed_coordinates.get("tip", {})
+        if "estimated_stereotaxic_bregma_mm" in insertion_reconstruction:
+            insertion_estimated = insertion_reconstruction[
+                "estimated_stereotaxic_bregma_mm"
+            ]
+            tip_estimated = tip_reconstruction[
+                "estimated_stereotaxic_bregma_mm"
+            ]
+            coords_info_layout.addWidget(
+                QLabel("Estimated Allen Bregma insertion : "),
+                4,
+                0,
+                1,
+                1,
+            )
+            coords_info_layout.addWidget(
+                QLabel(
+                    "AP {:+.3f} mm | ML {:+.3f} mm".format(
+                        insertion_estimated[0], insertion_estimated[2]
+                    )
+                ),
+                4,
+                1,
+                1,
+                1,
+            )
+            coords_info_layout.addWidget(
+                QLabel("Estimated Allen Bregma tip : "), 4, 2, 1, 1
+            )
+            coords_info_layout.addWidget(
+                QLabel(
+                    "AP {:+.3f} mm | ML {:+.3f} mm".format(
+                        tip_estimated[0], tip_estimated[2]
+                    )
+                ),
+                4,
+                3,
+                1,
+                1,
+            )
+
+        fit_group = QGroupBox("Trajectory mapping quality")
+        fit_layout = QFormLayout(fit_group)
+        fit = data.get("trajectory_fit") or reconstruction.get("probe", {}).get(
+            "trajectory_fit"
+        )
+        if fit:
+            voxel_size_um = float(
+                reconstruction.get("atlas", {}).get("voxel_size_um", 1.0)
+            )
+            rms_error = float(fit["rms_error_um"])
+            if rms_error <= 1.5 * voxel_size_um:
+                quality = "Good"
+            elif rms_error <= 3.0 * voxel_size_um:
+                quality = "Review"
+            else:
+                quality = "Poor"
+            fit_layout.addRow(
+                "Fit:",
+                QLabel(
+                    "{} — {} of {} points retained".format(
+                        quality, fit["inlier_count"], fit["point_count"]
+                    )
+                ),
+            )
+            fit_layout.addRow(
+                "Deviation from fitted line:",
+                QLabel(
+                    "retained RMS {:.1f} \u03BCm | all-point max {:.1f} "
+                    "\u03BCm".format(
+                        rms_error, float(fit["max_error_um"])
+                    )
+                ),
+            )
+            fit_layout.addRow(
+                "Straight-line agreement:",
+                QLabel(
+                    "{:.1f}%".format(
+                        100.0 * float(fit["explained_fraction"])
+                    )
+                ),
+            )
+            fit_layout.addRow(
+                "Insertion surface:",
+                QLabel(
+                    fit.get(
+                        "surface_method",
+                        "Atlas surface correction method not recorded",
+                    )
+                ),
+            )
+        else:
+            fit_layout.addRow(
+                QLabel(
+                    "Mapping diagnostics are unavailable for this legacy "
+                    "probe. Re-merge it to calculate them."
+                )
+            )
+
         # group info container
-        region_sites_num = np.ravel(data["region_sites"]).astype(str)[::-1]
+        region_sites_num = np.asarray(
+            [
+                "{:g}".format(float(value))
+                for value in np.ravel(data["region_sites"])
+            ]
+        )[::-1]
         region_label = np.ravel(data["region_label"]).astype(int).astype(str)[::-1]
         region_color = np.asarray(data["label_color"])[::-1, :]
         region_length = np.round(data["region_length"], 3).astype(str)[::-1]
@@ -616,10 +754,16 @@ class ProbeInfoWindow(QDialog):
             QLabel("ID"),
             QLabel("Brain Region"),
             QLabel("Acronym"),
-            QLabel("Sites (stk)"),
-            QLabel("Length (um)"),
+            QLabel("Contacts"),
+            QLabel("Path (\u03BCm)"),
             QLabel("Color"),
         ]
+        column_names[3].setToolTip(
+            "Number of physical probe contacts assigned to this region."
+        )
+        column_names[4].setToolTip(
+            "Length of the reconstructed probe centerline inside this region."
+        )
         for i in range(len(column_names)):
             sec_layout.addWidget(column_names[i], 0, i, 1, 1)
 
@@ -631,6 +775,7 @@ class ProbeInfoWindow(QDialog):
             clb.setStyleSheet(
                 "QLabel {background-color: " + da_color + "; width: 20px; height: 20px}"
             )
+            clb.setFixedSize(50, 24)
 
             row_val = [
                 QLabel(region_label[i]),
@@ -643,6 +788,7 @@ class ProbeInfoWindow(QDialog):
 
             for j in range(len(row_val)):
                 sec_layout.addWidget(row_val[j], i + 1, j, 1, 1)
+        sec_layout.setRowStretch(len(region_label) + 1, 1)
 
         # plot container
         plot_frame = QFrame()
@@ -717,10 +863,18 @@ class ProbeInfoWindow(QDialog):
             view.addItem(da_item)
 
         # draw text
+        plot_region_acronyms = np.ravel(data["label_acronym"])
+        self.probe_region_text_items = []
         for i in range(len(region_label)):
-            region_text = pg.TextItem(str(region_sites[i]))
+            region_text = pg.TextItem(
+                "{}: {} contacts".format(
+                    plot_region_acronyms[i],
+                    "{:g}".format(float(region_sites[i])),
+                )
+            )
             region_text.setPos(n_column + 0.5, region_text_loc[i])
             view.addItem(region_text)
+            self.probe_region_text_items.append(region_text)
 
         view_layout.addWidget(w)
 
@@ -731,18 +885,54 @@ class ProbeInfoWindow(QDialog):
         channel_info_layout.addWidget(plot_frame)
         channel_info_layout.addWidget(sec_group)
 
-        # ok button, used to close window
+        interpretation_note = QLabel(
+            "Angles are measured from the dorsoventral axis. Contacts are "
+            "physical recording sites; path is the fitted centerline length "
+            "inside each region. Allen Bregma AP/ML values are estimates."
+        )
+        interpretation_note.setWordWrap(True)
+
+        # export and close buttons
         ok_btn = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
+        self.export_btn = ok_btn.addButton(
+            "Export trajectory and contacts as CSV",
+            QDialogButtonBox.ButtonRole.ActionRole,
+        )
+        self.export_btn.clicked.connect(self.export_coordinates)
         ok_btn.accepted.connect(self.accept)
 
         # add widget to layout
         layout = QVBoxLayout()
         layout.addWidget(self.label)
         layout.addWidget(coords_info_group)
+        layout.addWidget(fit_group)
         layout.addSpacing(10)
         layout.addWidget(channel_info_frame)
+        layout.addWidget(interpretation_note)
         layout.addWidget(ok_btn)
         self.setLayout(layout)
+
+    def export_coordinates(self):
+        safe_name = "".join(
+            character if character.isalnum() or character in "-_" else "_"
+            for character in self.object_name
+        )
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export probe trajectory and contacts",
+            "{}_probe_coordinates.csv".format(safe_name or "probe"),
+            "CSV files (*.csv)",
+        )
+        if not file_path:
+            return
+        try:
+            write_probe_csv(file_path, self.object_name, self.probe_data)
+        except (KeyError, OSError, TypeError, ValueError) as exc:
+            QMessageBox.warning(
+                self,
+                "Export failed",
+                "Could not export this probe:\n{}".format(exc),
+            )
 
     def accept(self) -> None:
         self.close()

@@ -8,7 +8,11 @@ import numpy as np
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PyQt6.QtWidgets import QApplication
 
-from herbs.object_control import DrawingInfoWindow, ObjectControl
+from herbs.object_control import (
+    DrawingInfoWindow,
+    ObjectControl,
+    ProbeInfoWindow,
+)
 from herbs.roi_analysis import build_drawing_roi_info
 
 
@@ -67,6 +71,93 @@ class DrawingInfoWindowTests(unittest.TestCase):
         self.assertEqual(len(calls), 1)
         self.assertIs(calls[0][0], piece)
         self.assertEqual(calls[0][1], "drawing piece")
+
+
+class ProbeInfoWindowTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
+    def probe_data(self):
+        fit = {
+            "method": "robust orthogonal 3D line fit",
+            "surface_method": (
+                "3D fitted-line intersection with atlas brain mask"
+            ),
+            "point_count": 5,
+            "inlier_count": 4,
+            "rms_error_um": 6.0,
+            "max_error_um": 40.0,
+            "explained_fraction": 0.995,
+        }
+        return {
+            "vis_color": (0, 255, 0, 255),
+            "ap_angle": 11.67,
+            "ml_angle": 0.0,
+            "ap_tilt": "posterior",
+            "ml_tilt": "no tilt",
+            "probe_length": 3569.69,
+            "dv": 3495.93,
+            "insertion_coords": np.array([325.0, 2537.55, 900.0]),
+            "insertion_vox": np.array([241, 412, 249]),
+            "terminus_coords": np.array([325.0, 1815.63, -2600.0]),
+            "terminus_vox": np.array([241, 383, 109]),
+            "region_sites": np.array([2]),
+            "region_label": np.array([10]),
+            "label_color": np.array([[0, 180, 100]]),
+            "region_length": np.array([100.0]),
+            "label_name": np.array(["Test region"]),
+            "label_acronym": np.array(["TR"]),
+            "vis_data": [
+                {
+                    "group_id": np.array([0]),
+                    "start_loc": np.array([0.0]),
+                    "end_loc": np.array([100.0]),
+                    "sites": np.array([20.0, 40.0]),
+                }
+            ],
+            "probe_type_name": "test",
+            "sites_label": [np.array([10, 10])],
+            "text_loc": np.array([50.0]),
+            "trajectory_fit": fit,
+            "reconstruction": {
+                "atlas": {"voxel_size_um": 10.0},
+                "probe": {"trajectory_fit": fit},
+                "coordinates": {},
+            },
+        }
+
+    def test_probe_window_explains_mapping_and_offers_csv_export(self):
+        window = ProbeInfoWindow("probe one", self.probe_data())
+        labels = [label.text() for label in window.findChildren(type(window.label))]
+
+        self.assertEqual(
+            window.export_btn.text(),
+            "Export trajectory and contacts as CSV",
+        )
+        self.assertIn("AP tilt from vertical : ", labels)
+        self.assertIn("Vertical depth change : ", labels)
+        self.assertEqual(
+            window.probe_region_text_items[0].toPlainText(),
+            "TR: 2 contacts",
+        )
+        self.assertTrue(any(text.startswith("Good") for text in labels))
+
+    def test_probe_window_export_uses_the_selected_path(self):
+        window = ProbeInfoWindow("probe one", self.probe_data())
+
+        with (
+            patch(
+                "herbs.object_control.QFileDialog.getSaveFileName",
+                return_value=("/tmp/probe.csv", "CSV files (*.csv)"),
+            ),
+            patch("herbs.object_control.write_probe_csv") as writer,
+        ):
+            window.export_coordinates()
+
+        writer.assert_called_once_with(
+            "/tmp/probe.csv", "probe one", window.probe_data
+        )
 
 
 if __name__ == "__main__":

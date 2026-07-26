@@ -254,6 +254,7 @@ def build_probe_reconstruction(
     atlas_identifier=None,
     atlas_path=None,
     software_version=None,
+    trajectory_fit=None,
 ):
     """Create the reconstruction payload embedded in each merged probe.
 
@@ -380,6 +381,7 @@ def build_probe_reconstruction(
             "settings": probe_settings,
             "site_face": site_face,
             "contact_ordering": contacts["ordering"],
+            "trajectory_fit": trajectory_fit,
         },
         "coordinates": {
             "tip": _coordinate_record(
