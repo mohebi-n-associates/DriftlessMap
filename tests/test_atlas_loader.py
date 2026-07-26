@@ -77,6 +77,28 @@ class AtlasLoaderFailureTests(unittest.TestCase):
             self.assertFalse(loaded.success)
             self.assertIsNone(loaded.boundary)
 
+    def test_gui_loading_compacts_core_volumes_and_skips_boundary_caches(self):
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            volume = np.arange(24, dtype=np.float64).reshape(2, 3, 4)
+            labels = np.arange(24, dtype=np.int64).reshape(2, 3, 4)
+            dump(folder / "atlas_labels.pkl", {"index": np.array([0])})
+            dump(
+                folder / "atlas_pre_made.pkl",
+                {"data": volume, "info": [{"example": True}]},
+            )
+            dump(
+                folder / "segment_pre_made.pkl",
+                {"data": labels, "unique_label": np.unique(labels)},
+            )
+
+            loaded = atlas_loader.AtlasLoader(folder, load_boundaries=False)
+
+        self.assertTrue(loaded.success)
+        self.assertEqual(loaded.atlas_data.dtype, np.float32)
+        self.assertEqual(loaded.segmentation_data.dtype, np.int32)
+        self.assertIsNone(loaded.boundary)
+
 
 if __name__ == "__main__":
     unittest.main()

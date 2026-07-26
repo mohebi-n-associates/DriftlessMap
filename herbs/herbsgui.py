@@ -81,7 +81,12 @@ from .atlas_processor import AtlasProcessor
 from .atlas_loader import AtlasLoader
 from .atlas_view import AtlasView
 
-from .image_reader import ImageReader, ImagesReader, TIFFReader
+from .image_reader import (
+    HISTOLOGY_IMAGE_FILTER,
+    ImageReader,
+    ImagesReader,
+    TIFFReader,
+)
 from .image_curves import *
 from .image_view import ImageView
 
@@ -1067,14 +1072,9 @@ class HERBS(QMainWindow, FORM_Main):
     def vis_atlas_boundary(self):
         if self.atlas_view.atlas_data is None:
             return
-        if self.atlas_view.show_boundary_btn.isChecked():
-            self.atlas_view.cimg.boundary.setVisible(True)
-            self.atlas_view.simg.boundary.setVisible(True)
-            self.atlas_view.himg.boundary.setVisible(True)
-        else:
-            self.atlas_view.cimg.boundary.setVisible(False)
-            self.atlas_view.simg.boundary.setVisible(False)
-            self.atlas_view.himg.boundary.setVisible(False)
+        self.atlas_view.set_boundary_visible(
+            self.atlas_view.show_boundary_btn.isChecked()
+        )
 
     # ------------------------------------------------------------------
     #
@@ -1542,25 +1542,10 @@ class HERBS(QMainWindow, FORM_Main):
         ]
         unique_label = aln.worker.unique_label
 
-        s_boundary = np.transpose(aln.worker.boundary["s_contour"], [2, 0, 1])[
-            ::-1, :, :
-        ]
-        c_boundary = np.transpose(aln.worker.boundary["c_contour"], [2, 0, 1])[
-            ::-1, :, :
-        ]
-        h_boundary = np.transpose(aln.worker.boundary["h_contour"], [2, 0, 1])[
-            ::-1, :, :
-        ]
-
-        boundary = {
-            "s_contour": s_boundary,
-            "c_contour": c_boundary,
-            "h_contour": h_boundary,
-        }
-
         self.set_volume_atlas_to_view(
-            atlas_data, segmentation_data, atlas_info, label_info, boundary
+            atlas_data, segmentation_data, atlas_info, label_info, None
         )
+        aln.worker.boundary = None
         self.set_volume_atlas_3d(
             unique_label, aln.worker.mesh_data, aln.worker.small_mesh_list
         )
@@ -4560,7 +4545,7 @@ class HERBS(QMainWindow, FORM_Main):
         if self.atlas_view.coronal_rotated:
             da_pnt = np.dot(self.atlas_view.c_rotm_2d, (da_pnt - o_rot)) + o_rot
 
-        da_label = self.atlas_view.cimg.label_img.image.copy()
+        da_label = self.atlas_view.cimg.label_data
         da_id = da_label[int(y), int(x)]
 
         vox_val = self.atlas_view.cimg.img.image[int(y), int(x)]
@@ -4646,7 +4631,7 @@ class HERBS(QMainWindow, FORM_Main):
         if self.atlas_view.sagittal_rotated:
             da_pnt = o_rot + np.dot(self.atlas_view.s_rotm_2d, (da_pnt - o_rot))
 
-        da_label = self.atlas_view.simg.label_img.image.copy()
+        da_label = self.atlas_view.simg.label_data
         da_id = da_label[int(y), int(x)]
 
         vox_val = self.atlas_view.simg.img.image[int(y), int(x)]
@@ -4731,7 +4716,7 @@ class HERBS(QMainWindow, FORM_Main):
         if self.atlas_view.horizontal_rotated:
             da_pnt = o_rot + np.dot(self.atlas_view.h_rotm_2d, (da_pnt - o_rot))
 
-        da_label = self.atlas_view.himg.label_img.image.copy()
+        da_label = self.atlas_view.himg.label_data
         da_id = da_label[int(y), int(x)]
 
         vox_val = self.atlas_view.himg.img.image[int(y), int(x)]
@@ -5378,7 +5363,7 @@ class HERBS(QMainWindow, FORM_Main):
 
         valid_id = list(self.small_mesh_list.keys())
         for label_id in valid_id:
-            col_to_set = lut[int(label_id)] / 255
+            col_to_set = self.atlas_view.label_tree.color_for_label(label_id) / 255
             self.small_mesh_list[label_id].setColor(
                 (col_to_set[0], col_to_set[1], col_to_set[2], col_to_set[3])
             )
@@ -6122,10 +6107,7 @@ class HERBS(QMainWindow, FORM_Main):
     def load_image(self):
         self.print_message("Load Image ...", self.normal_color)
         file_title = "Select Histological Image File"
-        file_filter = (
-            "CZI (*.czi);;JPEG (*.jpg *.jpeg);;PNG (*.png);;"
-            "TIFF (*.tif *.tiff);;BMP (*.bmp)"
-        )
+        file_filter = HISTOLOGY_IMAGE_FILTER
         if self.current_img_path is None:
             file_path = self.home_path
         else:
@@ -6460,7 +6442,7 @@ class HERBS(QMainWindow, FORM_Main):
 
         with pg.BusyCursor():
             # from Archived.HERBS.herbs.atlas_loader import AtlasLoader
-            da_atlas = AtlasLoader(atlas_folder)
+            da_atlas = AtlasLoader(atlas_folder, load_boundaries=False)
 
         if not da_atlas.success:
             self.statusbar.showMessage(da_atlas.msg)
@@ -6522,18 +6504,8 @@ class HERBS(QMainWindow, FORM_Main):
         ]
         unique_label = da_atlas.unique_label
 
-        s_boundary = np.transpose(da_atlas.boundary["s_contour"], [2, 0, 1])[::-1, :, :]
-        c_boundary = np.transpose(da_atlas.boundary["c_contour"], [2, 0, 1])[::-1, :, :]
-        h_boundary = np.transpose(da_atlas.boundary["h_contour"], [2, 0, 1])[::-1, :, :]
-
-        boundary = {
-            "s_contour": s_boundary,
-            "c_contour": c_boundary,
-            "h_contour": h_boundary,
-        }
-
         self.set_volume_atlas_to_view(
-            atlas_data, segmentation_data, atlas_info, label_info, boundary
+            atlas_data, segmentation_data, atlas_info, label_info, None
         )
 
         self.set_volume_atlas_3d(unique_label, meshdata, small_meshdata_list)

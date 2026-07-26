@@ -15,6 +15,17 @@ SPEC.loader.exec_module(image_reader)
 
 
 class TiffReaderTests(unittest.TestCase):
+    def test_tiff_is_the_default_histology_dialog_filter(self):
+        self.assertEqual(
+            image_reader.HISTOLOGY_IMAGE_FILTERS[0],
+            "TIFF (*.tif *.tiff)",
+        )
+        self.assertTrue(
+            image_reader.HISTOLOGY_IMAGE_FILTER.startswith(
+                "TIFF (*.tif *.tiff);;"
+            )
+        )
+
     def test_uint8_grayscale_is_one_channel_not_rgb(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "gray.tif"

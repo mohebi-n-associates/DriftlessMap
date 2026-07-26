@@ -76,6 +76,92 @@ def _numpy_pickle_globals():
     return safe_globals
 
 
+class _LegacyPandasNA:
+    """Inert marker for pandas' missing-string singleton."""
+
+    __slots__ = ()
+
+
+_LEGACY_PANDAS_NA = _LegacyPandasNA()
+
+
+class _LegacyPandasStringDtype:
+    """Inert stand-in used while decoding a pandas string-array pickle."""
+
+    __slots__ = ()
+
+    def __init__(self, storage="python", na_value=np.nan):
+        valid_nan = isinstance(na_value, float) and np.isnan(na_value)
+        if storage != "python" or (
+            not valid_nan and na_value is not _LEGACY_PANDAS_NA
+        ):
+            raise pickle.UnpicklingError(
+                "Unsupported legacy pandas string dtype."
+            )
+
+
+class _LegacyPandasStringArray:
+    """Capture the NumPy payload of a legacy pandas StringArray safely."""
+
+    __slots__ = ("values",)
+
+    def __init__(self):
+        self.values = None
+
+    def __setstate__(self, state):
+        if (
+            not isinstance(state, tuple)
+            or len(state) != 2
+            or not isinstance(state[0], _LegacyPandasStringDtype)
+            or not isinstance(state[1], np.ndarray)
+        ):
+            raise pickle.UnpicklingError("Invalid legacy pandas string-array state.")
+        self.values = state[1]
+
+
+def _reconstruct_legacy_pandas_string_array(array_type, checksum, state):
+    """Replace pandas' Cython reconstruction function with an inert shim."""
+    if (
+        array_type is not _LegacyPandasStringArray
+        or not isinstance(checksum, int)
+        or state is not None
+    ):
+        raise pickle.UnpicklingError(
+            "Invalid legacy pandas string-array constructor."
+        )
+    return _LegacyPandasStringArray()
+
+
+def _normalize_legacy_pandas_arrays(value):
+    if isinstance(value, _LegacyPandasStringArray):
+        array = np.asarray(value.values)
+        if array.ndim != 1 or array.dtype.kind not in ("O", "S", "U"):
+            raise pickle.UnpicklingError(
+                "Invalid legacy pandas string-array payload."
+            )
+        if array.dtype.kind == "O" and any(
+            not isinstance(item, (str, np.str_)) for item in array
+        ):
+            raise pickle.UnpicklingError(
+                "Legacy pandas string array contains non-string values."
+            )
+        return array.astype(str)
+    if isinstance(value, dict):
+        return {
+            _normalize_legacy_pandas_arrays(key): _normalize_legacy_pandas_arrays(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_normalize_legacy_pandas_arrays(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_normalize_legacy_pandas_arrays(item) for item in value)
+    if isinstance(value, set):
+        return {_normalize_legacy_pandas_arrays(item) for item in value}
+    if isinstance(value, frozenset):
+        return frozenset(_normalize_legacy_pandas_arrays(item) for item in value)
+    return value
+
+
 class RestrictedUnpickler(pickle.Unpickler):
     """Legacy reader limited to inert builtins and NumPy array machinery."""
 
@@ -84,6 +170,13 @@ class RestrictedUnpickler(pickle.Unpickler):
         ("builtins", "frozenset"): frozenset,
         ("builtins", "set"): set,
         ("builtins", "slice"): slice,
+        (
+            "pandas._libs.arrays",
+            "__pyx_unpickle_NDArrayBacked",
+        ): _reconstruct_legacy_pandas_string_array,
+        ("pandas.arrays", "StringArray"): _LegacyPandasStringArray,
+        ("pandas", "StringDtype"): _LegacyPandasStringDtype,
+        ("pandas", "NA"): _LEGACY_PANDAS_NA,
         **_numpy_pickle_globals(),
     }
 
@@ -100,7 +193,8 @@ def load_legacy_pickle(file_path):
     """Load inert data from a legacy pickle with a consistent result tuple."""
     try:
         with open(file_path, "rb") as infile:
-            return RestrictedUnpickler(infile).load(), None
+            data = RestrictedUnpickler(infile).load()
+        return _normalize_legacy_pandas_arrays(data), None
     except OSError as exc:
         return None, "Unable to read file: {}".format(exc)
     except Exception as exc:

@@ -62,7 +62,7 @@ class PackagingMetadataTests(unittest.TestCase):
             metadata["urls"]["Bug Tracker"],
             "https://github.com/mohebi-n-associates/HERBS/issues",
         )
-        self.assertEqual(metadata["scripts"]["herbs"], "herbs.run_herbs:run_herbs")
+        self.assertEqual(metadata["scripts"]["herbs"], "herbs.run_herbs:run")
 
 
 if __name__ == "__main__":

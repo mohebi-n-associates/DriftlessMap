@@ -1,5 +1,5 @@
-from .run_herbs import run_herbs
+from .run_herbs import run
 
 
 if __name__ == "__main__":
-    raise SystemExit(run_herbs())
+    raise SystemExit(run())

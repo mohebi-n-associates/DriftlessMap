@@ -16,7 +16,12 @@ from .atlas_loader import process_atlas_raw_data
 from .uuuuuu import hex2rgb, obj_data_to_mesh3d, make_contour_img
 from .obj_items import render_volume, render_small_volume
 from .atlas_downloader import DownloadThread
-from .atlas_transform import make_boundary_dict
+from .atlas_transform import (
+    compact_boundary_volume,
+    compact_label_volume,
+    make_boundary_dict,
+    normalize_atlas_volume,
+)
 from .download_utils import download_file
 
 
@@ -206,15 +211,15 @@ class WorkerProcessAllen(QObject):
         self.status.emit("Preparing the Allen label hierarchy...")
         df = pd.read_csv(os.path.join(self.saving_folder, self.label_local))
 
-        da_labels = df['safe_name'].values
+        da_labels = df['safe_name'].to_numpy(dtype=str, copy=True)
         da_labels[da_labels == 'root'] = 'Brain'
         self.progress.emit(34)
 
-        da_short_label = df['acronym'].values
+        da_short_label = df['acronym'].to_numpy(dtype=str, copy=True)
         da_short_label[da_short_label == 'root'] = 'Brain'
         self.progress.emit(35)
 
-        hex_colors = df['color_hex_triplet'].values
+        hex_colors = df['color_hex_triplet'].to_numpy(dtype=str, copy=True)
         rgb_colors = []
         for i in range(len(hex_colors)):
             r, g, b = hex2rgb(hex_colors[i])
@@ -224,7 +229,7 @@ class WorkerProcessAllen(QObject):
         self.progress.emit(36)
 
         levels = []
-        structure_id_path = df['structure_id_path'].values
+        structure_id_path = df['structure_id_path'].to_numpy(dtype=str, copy=True)
         for i in range(len(structure_id_path)):
             da_path = structure_id_path[i]
             da_path_split = da_path.split('/')
@@ -235,9 +240,9 @@ class WorkerProcessAllen(QObject):
 
         self.progress.emit(37)
 
-        self.label_info = {'index': df['id'].values.astype(int),
+        self.label_info = {'index': df['id'].to_numpy(dtype=int, copy=True),
                            'label': da_labels,
-                           'parent': df['parent_structure_id'].fillna(0).values.astype(int),
+                           'parent': df['parent_structure_id'].fillna(0).to_numpy(dtype=int, copy=True),
                            'abbrev': da_short_label,
                            'color': rgb_colors,
                            'level_indicator': levels}
@@ -258,9 +263,8 @@ class WorkerProcessAllen(QObject):
         volume_data = np.transpose(volume_data[::-1, ::-1, :], (2, 0, 1))
         self.progress.emit(46)
         self.status.emit("Normalizing atlas intensities...")
-        self.atlas_data = volume_data.copy()
-        self.atlas_data = self.atlas_data - np.min(self.atlas_data)
-        self.atlas_data = self.atlas_data / np.max(self.atlas_data)
+        self.atlas_data = normalize_atlas_volume(volume_data)
+        del volume_data
         self.progress.emit(47)
 
         b_val = self.b_val.copy()
@@ -289,7 +293,8 @@ class WorkerProcessAllen(QObject):
 
         self.status.emit("Transforming the annotation volume...")
         self.segmentation_data = np.transpose(label_data[::-1, ::-1, :], (2, 0, 1))
-        self.segmentation_data = self.segmentation_data.astype(int)
+        self.segmentation_data = compact_label_volume(self.segmentation_data)
+        del label_data
         print(self.segmentation_data.shape)
 
         self.progress.emit(54)
@@ -357,9 +362,9 @@ class WorkerProcessAllen(QObject):
         segment_data_shape = self.segmentation_data.shape
 
         self.status.emit("Allocating atlas boundary volumes...")
-        sagital_contour_img = np.zeros(segment_data_shape, 'i')
-        coronal_contour_img = np.zeros(segment_data_shape, 'i')
-        horizontal_contour_img = np.zeros(segment_data_shape, 'i')
+        sagital_contour_img = np.zeros(segment_data_shape, dtype=np.uint8)
+        coronal_contour_img = np.zeros(segment_data_shape, dtype=np.uint8)
+        horizontal_contour_img = np.zeros(segment_data_shape, dtype=np.uint8)
 
         # pre-process boundary ----- todo: change this part as optional
         process_index = np.linspace(70, 78, segment_data_shape[0])
@@ -374,7 +379,7 @@ class WorkerProcessAllen(QObject):
                 )
             da_slice = self.segmentation_data[i, :, :].copy()
             contour_img = make_contour_img(da_slice)
-            sagital_contour_img[i, :, :] = contour_img
+            sagital_contour_img[i, :, :] = compact_boundary_volume(contour_img)
 
         self.status.emit("Saving the sagittal boundary cache...")
         outfile_ct = open(os.path.join(self.saving_folder, 'sagital_contour_pre_made.pkl'), 'wb')
@@ -394,7 +399,7 @@ class WorkerProcessAllen(QObject):
                 )
             da_slice = self.segmentation_data[:, i, :].copy()
             contour_img = make_contour_img(da_slice)
-            coronal_contour_img[:, i, :] = contour_img
+            coronal_contour_img[:, i, :] = compact_boundary_volume(contour_img)
 
         self.status.emit("Saving the coronal boundary cache...")
         outfile_ct = open(os.path.join(self.saving_folder, 'coronal_contour_pre_made.pkl'), 'wb')
@@ -414,7 +419,7 @@ class WorkerProcessAllen(QObject):
                 )
             da_slice = self.segmentation_data[:, :, i].copy()
             contour_img = make_contour_img(da_slice)
-            horizontal_contour_img[:, :, i] = contour_img
+            horizontal_contour_img[:, :, i] = compact_boundary_volume(contour_img)
 
         self.status.emit("Saving the horizontal boundary cache...")
         outfile_ct = open(os.path.join(self.saving_folder, 'horizontal_contour_pre_made.pkl'), 'wb')

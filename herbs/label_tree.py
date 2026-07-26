@@ -71,6 +71,8 @@ class LabelTree(QWidget):
 
         self.label_level = None
         self.current_lut = None
+        self.display_label_ids = None
+        self.display_index_by_id = {}
         self.root_item = []
         self.root_acronym = []
         
@@ -100,16 +102,26 @@ class LabelTree(QWidget):
             n_labels = len(label_data['index'])
             if n_labels == 0:
                 raise ValueError('Atlas label data is empty.')
-            self.label_level = int(np.max(label_data['index']))
-            self.current_lut = np.zeros((self.label_level + 1, 4), 'i')
+            label_ids = np.asarray(label_data['index'], dtype=np.int64)
+            self.display_label_ids = np.unique(
+                np.concatenate((np.array([0], dtype=np.int64), label_ids))
+            )
+            self.display_index_by_id = {
+                int(label_id): display_index
+                for display_index, label_id in enumerate(self.display_label_ids)
+            }
+            self.label_level = len(self.display_label_ids) - 1
+            self.current_lut = np.zeros((self.label_level + 1, 4), dtype=np.ubyte)
             # Pass 1: create every item first so that parent lookups in pass 2
             # do not depend on the order labels appear in the atlas data.
             for i in range(n_labels):
-                label_id = label_data['index'][i]
-                parent = label_data['parent'][i]
+                label_id = int(label_data['index'][i])
+                parent = int(label_data['parent'][i])
                 color = label_data['color'][i]
-                if label_id <= self.label_level:
-                    self.current_lut[label_id] = np.array([color[0], color[1], color[2], 255])
+                display_index = self.display_index_by_id[label_id]
+                self.current_lut[display_index] = np.array(
+                    [color[0], color[1], color[2], 255]
+                )
                 da_color = QColor(color[0], color[1], color[2]).name(QColor.NameFormat.HexRgb)
                 name = label_data['label'][i]
                 acronym = label_data['abbrev'][i]
@@ -164,6 +176,8 @@ class LabelTree(QWidget):
         self.root_item = []
         self.root_acronym = []
         self.checked = set()
+        self.display_label_ids = None
+        self.display_index_by_id = {}
 
     def item_change(self, item, col):
         checked = item.checkState(0) == Qt.CheckState.Checked
@@ -193,7 +207,10 @@ class LabelTree(QWidget):
         item = self.labels_by_id[label_id]['item']
         btn = self.labels_by_id[label_id]['btn']
         rgb_color = (color.red(), color.green(), color.blue(), color.alpha())
-        self.current_lut[label_id] = np.array([rgb_color[0], rgb_color[1], rgb_color[2], rgb_color[3]])
+        display_index = self.display_index_by_id[int(label_id)]
+        self.current_lut[display_index] = np.array(
+            [rgb_color[0], rgb_color[1], rgb_color[2], rgb_color[3]]
+        )
         with SignalBlock(btn.sigColorChanged, self.item_color_changed):
             btn.setColor(color)
         if recursive:
@@ -205,12 +222,36 @@ class LabelTree(QWidget):
     
     def lookup_table(self):
         lut = np.zeros((self.label_level + 1, 4), dtype=np.ubyte)
-        # print(lut.shape)
         for layer_id in self.checked:
-            if layer_id >= lut.shape[0]:
+            display_index = self.display_index_by_id.get(int(layer_id))
+            if display_index is None:
                 continue
-            lut[layer_id] = self.labels_by_id[layer_id]['btn'].color(mode='byte')
+            lut[display_index] = self.labels_by_id[layer_id]['btn'].color(mode='byte')
         return lut
+
+    def map_labels(self, label_data):
+        """Map sparse atlas structure IDs to compact display-LUT indexes."""
+        label_data = np.asarray(label_data)
+        if self.display_label_ids is None:
+            return label_data
+
+        flat_labels = label_data.reshape(-1)
+        mapped_indexes = np.searchsorted(self.display_label_ids, flat_labels)
+        valid = mapped_indexes < len(self.display_label_ids)
+        clipped_indexes = np.minimum(mapped_indexes, len(self.display_label_ids) - 1)
+        valid &= self.display_label_ids[clipped_indexes] == flat_labels
+
+        dtype = np.uint16 if self.label_level <= np.iinfo(np.uint16).max else np.uint32
+        mapped = np.zeros(flat_labels.shape, dtype=dtype)
+        mapped[valid] = mapped_indexes[valid]
+        return mapped.reshape(label_data.shape)
+
+    def color_for_label(self, label_id):
+        """Return the configured RGBA color for an original structure ID."""
+        display_index = self.display_index_by_id.get(int(label_id))
+        if display_index is None:
+            return np.zeros(4, dtype=np.ubyte)
+        return self.current_lut[display_index]
 
     def reset_colors(self):
         try:

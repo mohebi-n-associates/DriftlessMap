@@ -42,6 +42,17 @@ class LayersControlTests(unittest.TestCase):
     def setUpClass(cls):
         cls.app = QApplication.instance() or QApplication([])
 
+    def test_new_layers_default_to_overlay_composition(self):
+        control = layers_control.LayersControl()
+        changes = []
+        control.sig_blend_mode_changed.connect(changes.append)
+
+        control.add_layer("img-overlay", [])
+
+        self.assertEqual(control.layer_blend_combo.currentText(), "Overlay")
+        self.assertEqual(control.layer_blend_mode, ["Overlay"])
+        self.assertEqual(changes, [("img-overlay", "Overlay")])
+
     def test_saved_noncontiguous_selection_is_restored_exactly(self):
         control = layers_control.LayersControl()
         control.set_layer_data(layer_state([2, 0]))

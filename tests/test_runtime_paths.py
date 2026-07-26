@@ -10,14 +10,16 @@ import unittest
 
 import herbs
 from herbs.resources import resource_path
-from herbs.run_herbs import run_herbs
+from herbs.run_herbs import run
 from herbs.user_settings import load_last_atlas_path, save_last_atlas_path, settings_path
 from herbs.uuuuuu import read_qss_file
 
 
 class RuntimePathTests(unittest.TestCase):
     def test_package_import_does_not_eagerly_import_the_gui(self):
+        self.assertTrue(callable(herbs.run))
         self.assertTrue(callable(herbs.run_herbs))
+        self.assertIs(herbs.run_herbs, herbs.run)
         self.assertNotIn("herbs.herbsgui", sys.modules)
 
     def test_resources_resolve_outside_the_package_working_directory(self):
@@ -66,7 +68,7 @@ class RuntimePathTests(unittest.TestCase):
         fake_gui.main = fake_main
         original_directory = os.getcwd()
         with mock.patch.dict(sys.modules, {"herbs.herbsgui": fake_gui}):
-            result = run_herbs()
+            result = run()
 
         self.assertEqual(result, 17)
         self.assertEqual(observed_directories, [original_directory])

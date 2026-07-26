@@ -16,7 +16,13 @@ import pyqtgraph.opengl as gl
 from .uuuuuu import read_qss_file, make_contour_img, read_excel_file, hex2rgb
 from .obj_items import render_volume, render_small_volume
 from .atlas_loader import process_atlas_raw_data, AtlasLoader, check_data_path_and_load
-from .atlas_transform import transform_atlas_volumes, validate_downsample_factor
+from .atlas_transform import (
+    compact_boundary_volume,
+    compact_label_volume,
+    normalize_atlas_volume,
+    transform_atlas_volumes,
+    validate_downsample_factor,
+)
 
 
 class CustomerAtlasWorker(QObject):
@@ -80,10 +86,10 @@ class CustomerAtlasWorker(QObject):
         df.columns = reformat_keys
         self.progress.emit(2)
         try:
-            da_labels = df["name"].values
+            da_labels = df["name"].to_numpy(dtype=str, copy=True)
             self.progress.emit(3)
 
-            da_short_label = df["acronym"].values
+            da_short_label = df["acronym"].to_numpy(dtype=str, copy=True)
 
         except KeyError:
             self.error_occur.emit('Label file missing columns "name" or "acronym".')
@@ -92,7 +98,9 @@ class CustomerAtlasWorker(QObject):
 
         try:
             levels = []
-            structure_id_path = df["structure_id_path"].values
+            structure_id_path = df["structure_id_path"].to_numpy(
+                dtype=str, copy=True
+            )
             for i in range(len(structure_id_path)):
                 da_path = structure_id_path[i]
                 da_path_split = da_path.split("/")
@@ -106,7 +114,7 @@ class CustomerAtlasWorker(QObject):
         self.progress.emit(5)
 
         try:
-            hex_colors = df["color_hex_triplet"].values
+            hex_colors = df["color_hex_triplet"].to_numpy(dtype=str, copy=True)
             rgb_colors = []
             for i in range(len(hex_colors)):
                 r, g, b = hex2rgb(hex_colors[i])
@@ -121,8 +129,8 @@ class CustomerAtlasWorker(QObject):
         self.progress.emit(6)
 
         try:
-            parent = df["parent_id"].values.astype(int)
-            ids = df["id"].values.astype(int)
+            parent = df["parent_id"].fillna(0).to_numpy(dtype=int, copy=True)
+            ids = df["id"].to_numpy(dtype=int, copy=True)
         except KeyError:
             self.error_occur.emit(
                 'Label file missing columns "parent_structure_id" or "id".'
@@ -151,7 +159,6 @@ class CustomerAtlasWorker(QObject):
                 "Failed to load atlas data file. Currently only support for .nii and .nrrd."
             )
             return
-        atlas_data = atlas_data - np.min(atlas_data)
         atlas_size = atlas_data.shape
         try:
             self.factor = validate_downsample_factor(self.factor, atlas_size)
@@ -192,14 +199,14 @@ class CustomerAtlasWorker(QObject):
             for i in range(len(mask_data)):
                 self.progress.emit(progress_step[i])
                 segmentation_data[i][mask_data[i] == 0] = 0
-            segmentation_data = segmentation_data.astype("int")
+            segmentation_data = compact_label_volume(segmentation_data)
 
             progress_step = np.linspace(26, 28, len(mask_data))
             for i in range(len(mask_data)):
                 self.progress.emit(progress_step[i])
                 atlas_data[i][mask_data[i] == 0] = 0
 
-        atlas_data = atlas_data / np.max(atlas_data)
+        atlas_data = normalize_atlas_volume(atlas_data)
         self.progress.emit(30)
 
         unique_label = np.unique(segmentation_data)
@@ -211,7 +218,7 @@ class CustomerAtlasWorker(QObject):
         )
         self.progress.emit(38)
 
-        segmentation_data = segmentation_data.astype(int)
+        segmentation_data = compact_label_volume(segmentation_data)
         # print(segmentation_data.shape)
         self.progress.emit(39)
 
@@ -295,9 +302,9 @@ class CustomerAtlasWorker(QObject):
 
         segment_data_shape = segmentation_data.shape
 
-        sagital_contour_img = np.zeros(segment_data_shape, "i")
-        coronal_contour_img = np.zeros(segment_data_shape, "i")
-        horizontal_contour_img = np.zeros(segment_data_shape, "i")
+        sagital_contour_img = np.zeros(segment_data_shape, dtype=np.uint8)
+        coronal_contour_img = np.zeros(segment_data_shape, dtype=np.uint8)
+        horizontal_contour_img = np.zeros(segment_data_shape, dtype=np.uint8)
 
         # pre-process boundary ----- todo: change this part as optional
         process_index = np.linspace(70, 78, segment_data_shape[0])
@@ -305,7 +312,7 @@ class CustomerAtlasWorker(QObject):
             self.progress.emit(process_index[i])
             da_slice = segmentation_data[i, :, :].copy()
             contour_img = make_contour_img(da_slice)
-            sagital_contour_img[i, :, :] = contour_img
+            sagital_contour_img[i, :, :] = compact_boundary_volume(contour_img)
 
         outfile_ct = open(
             os.path.join(self.saving_folder, "sagital_contour_pre_made.pkl"), "wb"
@@ -319,7 +326,7 @@ class CustomerAtlasWorker(QObject):
             self.progress.emit(process_index[i])
             da_slice = segmentation_data[:, i, :].copy()
             contour_img = make_contour_img(da_slice)
-            coronal_contour_img[:, i, :] = contour_img
+            coronal_contour_img[:, i, :] = compact_boundary_volume(contour_img)
 
         outfile_ct = open(
             os.path.join(self.saving_folder, "coronal_contour_pre_made.pkl"), "wb"
@@ -333,7 +340,7 @@ class CustomerAtlasWorker(QObject):
             self.progress.emit(process_index[i])
             da_slice = segmentation_data[:, :, i].copy()
             contour_img = make_contour_img(da_slice)
-            horizontal_contour_img[:, :, i] = contour_img
+            horizontal_contour_img[:, :, i] = compact_boundary_volume(contour_img)
 
         outfile_ct = open(
             os.path.join(self.saving_folder, "horizontal_contour_pre_made.pkl"), "wb"

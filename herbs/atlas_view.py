@@ -20,6 +20,8 @@ from .resources import resource_path
 
 
 class PageController(QWidget):
+    DRAG_UPDATE_DELAY_MS = 75
+
     class SignalProxy(QObject):
         sigPageChanged = pyqtSignal(object)
 
@@ -32,10 +34,17 @@ class PageController(QWidget):
         self.setStyleSheet(page_control_style)
 
         self.max_val = None
+        self._pending_page = None
+        self._last_emitted_page = None
+        self._drag_update_timer = QTimer(self)
+        self._drag_update_timer.setSingleShot(True)
+        self._drag_update_timer.setInterval(self.DRAG_UPDATE_DELAY_MS)
+        self._drag_update_timer.timeout.connect(self._flush_pending_page)
 
         self.page_slider = QSlider(Qt.Orientation.Horizontal)
         self.page_slider.setMinimum(0)
         self.page_slider.valueChanged.connect(self.slider_value_changed)
+        self.page_slider.sliderReleased.connect(self._flush_pending_page)
 
         self.page_label = QLabel()
         self.page_label.setFixedSize(50, 20)
@@ -86,7 +95,26 @@ class PageController(QWidget):
     def slider_value_changed(self):
         val = self.page_slider.value()
         self.page_label.setText(str(val))
+        if self.page_slider.isSliderDown():
+            self._pending_page = val
+            self._drag_update_timer.start()
+            return
+        self._drag_update_timer.stop()
+        self._pending_page = None
+        self._emit_page(val)
+
+    def _emit_page(self, val):
+        if val == self._last_emitted_page:
+            return
+        self._last_emitted_page = val
         self.sig_page_changed.emit(val)
+
+    def _flush_pending_page(self):
+        self._drag_update_timer.stop()
+        val = self._pending_page
+        self._pending_page = None
+        if val is not None:
+            self._emit_page(val)
 
     def left_btn_clicked(self):
         if self.max_val is None:
@@ -768,8 +796,22 @@ class AtlasView(QObject):
     def set_perfect_coronal_slice(self):
         da_atlas_slice = self.atlas_data[:, :, self.current_coronal_index]
         da_atlas_label = self.atlas_label[:, :, self.current_coronal_index]
-        da_atlas_contour = self.atlas_boundary['c_contour'][:, :, self.current_coronal_index]
-        self.cimg.set_data(da_atlas_slice, da_atlas_label, da_atlas_contour, scale=None)
+        da_atlas_contour = None
+        if self.cimg.boundary.isVisible():
+            if self.atlas_boundary is None:
+                da_atlas_contour = make_contour_img(da_atlas_label)
+            else:
+                da_atlas_contour = self.atlas_boundary['c_contour'][
+                    :, :, self.current_coronal_index
+                ]
+        display_label = self.label_tree.map_labels(da_atlas_label)
+        self.cimg.set_data(
+            da_atlas_slice,
+            da_atlas_label,
+            da_atlas_contour,
+            scale=None,
+            display_label=display_label,
+        )
 
         slide_dist = (self.current_coronal_index - self.origin_3d[1])
         ap_plate_verts = self.ap_plate_verts + np.array([0, slide_dist, 0])
@@ -802,8 +844,11 @@ class AtlasView(QObject):
                                origin=(oval_new[0], oval_new[1], oval_new[2]), axes=(0, 1, 2), order=1)
         label = fn.affineSlice(self.atlas_label, shape=(oz_length, ox_length), vectors=[oz_vector, ox_vector],
                                origin=(oval_new[0], oval_new[1], oval_new[2]), axes=(0, 1, 2), order=0)
-        da_contour = make_contour_img(label)
-        self.cimg.set_data(atlas, label, da_contour, scale=None)
+        da_contour = make_contour_img(label) if self.cimg.boundary.isVisible() else None
+        display_label = self.label_tree.map_labels(label)
+        self.cimg.set_data(
+            atlas, label, da_contour, scale=None, display_label=display_label
+        )
 
         self.c_rotm_3d = np.dot(rotation_z(z_angle), rotation_x(-x_angle))
 
@@ -849,8 +894,22 @@ class AtlasView(QObject):
     def set_perfect_sagittal_slice(self):
         da_atlas_slice = self.atlas_data[:, self.current_sagital_index, :]
         da_atlas_label = self.atlas_label[:, self.current_sagital_index, :]
-        da_atlas_contour = self.atlas_boundary['s_contour'][:, self.current_sagital_index, :]
-        self.simg.set_data(da_atlas_slice, da_atlas_label, da_atlas_contour, scale=None)
+        da_atlas_contour = None
+        if self.simg.boundary.isVisible():
+            if self.atlas_boundary is None:
+                da_atlas_contour = make_contour_img(da_atlas_label)
+            else:
+                da_atlas_contour = self.atlas_boundary['s_contour'][
+                    :, self.current_sagital_index, :
+                ]
+        display_label = self.label_tree.map_labels(da_atlas_label)
+        self.simg.set_data(
+            da_atlas_slice,
+            da_atlas_label,
+            da_atlas_contour,
+            scale=None,
+            display_label=display_label,
+        )
 
         slide_dist = (self.current_sagital_index - self.origin_3d[0])
         ml_plate_verts = self.ml_plate_verts + np.array([slide_dist, 0, 0])
@@ -883,8 +942,11 @@ class AtlasView(QObject):
                                origin=(oval_new[0], oval_new[1], oval_new[2]), axes=(0, 1, 2), order=1)
         label = fn.affineSlice(self.atlas_label, shape=(oz_length, oy_length), vectors=[oz_vector, oy_vector],
                                origin=(oval_new[0], oval_new[1], oval_new[2]), axes=(0, 1, 2), order=0)
-        da_contour = make_contour_img(label)
-        self.simg.set_data(atlas, label, da_contour, scale=None)
+        da_contour = make_contour_img(label) if self.simg.boundary.isVisible() else None
+        display_label = self.label_tree.map_labels(label)
+        self.simg.set_data(
+            atlas, label, da_contour, scale=None, display_label=display_label
+        )
 
         self.s_rotm_3d = np.dot(rotation_z(z_angle), rotation_y(-y_angle))
 
@@ -931,8 +993,22 @@ class AtlasView(QObject):
         slice_number = self.atlas_size[0] - 1 - self.current_horizontal_index
         da_atlas_slice = self.atlas_data[slice_number, :, :]
         da_atlas_label = self.atlas_label[slice_number, :, :]
-        da_atlas_contour = self.atlas_boundary['h_contour'][slice_number, :, :]
-        self.himg.set_data(da_atlas_slice, da_atlas_label, da_atlas_contour, scale=None)
+        da_atlas_contour = None
+        if self.himg.boundary.isVisible():
+            if self.atlas_boundary is None:
+                da_atlas_contour = make_contour_img(da_atlas_label)
+            else:
+                da_atlas_contour = self.atlas_boundary['h_contour'][
+                    slice_number, :, :
+                ]
+        display_label = self.label_tree.map_labels(da_atlas_label)
+        self.himg.set_data(
+            da_atlas_slice,
+            da_atlas_label,
+            da_atlas_contour,
+            scale=None,
+            display_label=display_label,
+        )
 
         slide_dist = (self.current_horizontal_index - self.origin_3d[2])
         dv_plate_verts = self.dv_plate_verts + np.array([0, 0, slide_dist])
@@ -964,8 +1040,11 @@ class AtlasView(QObject):
                                origin=(oval_new[0], oval_new[1], oval_new[2]), axes=(0, 1, 2), order=1)
         label = fn.affineSlice(self.atlas_label, shape=(ox_length, oy_length), vectors=[ox_vector, oy_vector],
                                origin=(oval_new[0], oval_new[1], oval_new[2]), axes=(0, 1, 2), order=0)
-        da_contour = make_contour_img(label)
-        self.himg.set_data(atlas, label, da_contour, scale=None)
+        da_contour = make_contour_img(label) if self.himg.boundary.isVisible() else None
+        display_label = self.label_tree.map_labels(label)
+        self.himg.set_data(
+            atlas, label, da_contour, scale=None, display_label=display_label
+        )
 
         self.h_rotm_3d = np.dot(rotation_y(-y_angle), rotation_x(-x_angle))
 
@@ -1007,6 +1086,15 @@ class AtlasView(QObject):
         else:
             self.rotate_horizontal_current_slice()
             self.horizontal_rotated = True
+
+    def set_boundary_visible(self, visible):
+        stacks = (self.cimg, self.simg, self.himg)
+        if visible:
+            for stack in stacks:
+                if stack.label_data is not None:
+                    stack.set_boundary_data(make_contour_img(stack.label_data))
+        for stack in stacks:
+            stack.boundary.setVisible(visible)
 
     # get 3d rotation origin
     def get_3d_origin(self):
@@ -1348,7 +1436,6 @@ class AtlasView(QObject):
     def clear_atlas(self):
         self.clear_volume_atlas()
         self.clear_slice_atlas()
-
 
 
 

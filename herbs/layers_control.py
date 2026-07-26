@@ -13,6 +13,9 @@ from .wtiles import *
 from .resources import resource_path
 
 
+DEFAULT_BLEND_MODE = "Overlay"
+
+
 btm_style = '''
 
 QPushButton {
@@ -269,7 +272,7 @@ class LayersControl(QWidget):
         self.layer_blend_combo.setEditable(False)
         combo_value = ['Plus', 'Multiply', 'Overlay', 'SourceOver']
         self.layer_blend_combo.addItems(combo_value)
-        self.layer_blend_combo.setCurrentText('Plus')
+        self.layer_blend_combo.setCurrentText(DEFAULT_BLEND_MODE)
         self.layer_blend_combo.currentTextChanged.connect(self.blend_mode_changed)
 
         blend_layout.addWidget(combo_label)
@@ -355,7 +358,7 @@ class LayersControl(QWidget):
         self.layer_id.append(self.layer_count)
         self.layer_link.append(widget_link)
         self.layer_opacity.append(100)
-        self.layer_blend_mode.append('Plus')
+        self.layer_blend_mode.append(DEFAULT_BLEND_MODE)
         self.sig_blend_mode_changed.emit((widget_link, 
                                           self.layer_blend_mode[-1]))
         self.layer_color.append(color)
@@ -541,7 +544,6 @@ class LayersControl(QWidget):
         self.layer_blend_mode = []
         self.current_layer_index = []
         self.layer_count = 0
-
 
 
 

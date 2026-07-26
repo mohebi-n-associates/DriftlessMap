@@ -12,6 +12,14 @@ MAX_CHANNELS = 4
 RGB_COLORS = [(255, 0, 0), (0, 255, 0), (0, 0, 255)]
 CHANNEL_COLORS = [(128, 128, 128), (255, 0, 0), (0, 255, 0), (0, 0, 255)]
 CHANNEL_NAMES = ["Gray", "Red", "Green", "Blue"]
+HISTOLOGY_IMAGE_FILTERS = (
+    "TIFF (*.tif *.tiff)",
+    "CZI (*.czi)",
+    "JPEG (*.jpg *.jpeg)",
+    "PNG (*.png)",
+    "BMP (*.bmp)",
+)
+HISTOLOGY_IMAGE_FILTER = ";;".join(HISTOLOGY_IMAGE_FILTERS)
 
 
 def _hsv_colors(rgb_colors):

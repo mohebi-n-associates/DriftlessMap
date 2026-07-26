@@ -16,7 +16,13 @@ from PyQt6.QtWidgets import *
 
 from .uuuuuu import make_contour_img, make_atlas_label_contour
 from .obj_items import render_volume, render_small_volume
-from .atlas_transform import normalize_atlas_volume, prepare_atlas_mask
+from .atlas_transform import (
+    compact_atlas_volume,
+    compact_boundary_volume,
+    compact_label_volume,
+    normalize_atlas_volume,
+    prepare_atlas_mask,
+)
 from .persistence import load_legacy_pickle
 
 
@@ -202,7 +208,7 @@ def process_segmentation_data(atlas_folder, segmentation_path, mask_data):
             # make segmentation with mask
             for i in range(len(mask_data)):
                 segmentation_data[i][mask_data[i] == 0] = 0
-            segmentation_data = segmentation_data.astype('int')
+        segmentation_data = compact_label_volume(segmentation_data)
 
         unique_label = np.unique(segmentation_data)
 
@@ -262,7 +268,7 @@ def process_atlas_data(atlas_folder, atlas_path, mask_data,
 
 
 def process_contour_data(segmentation_data, dim_index=0):
-    contour_img = np.zeros(segmentation_data.shape, 'i')
+    contour_img = np.zeros(segmentation_data.shape, dtype=np.uint8)
 
     # pre-process boundary
     if dim_index == 0:
@@ -348,7 +354,7 @@ def process_atlas_raw_data(atlas_folder, data_file=None, segmentation_file=None,
         # make segmentation with mask
         for i in range(len(mask_data)):
             segmentation_data[i][mask_data[i] == 0] = 0
-        segmentation_data = segmentation_data.astype('int')
+    segmentation_data = compact_label_volume(segmentation_data)
 
     unique_label = np.unique(segmentation_data)
 
@@ -408,7 +414,7 @@ class AtlasMeshProcessor(object):
 
 
 class AtlasLoader(object):
-    def __init__(self, atlas_folder):
+    def __init__(self, atlas_folder, load_boundaries=True):
         self.success = False
         self.msg = ''
         self.label_info = None
@@ -440,11 +446,14 @@ class AtlasLoader(object):
         try:
             self.label_info = self._load_pickle(pre_made_label_info_path)
             atlas = self._load_pickle(pre_made_atlas_path)
-            segment = self._load_pickle(pre_made_segment_path)
-            self.atlas_data = np.asarray(atlas['data'])
+            self.atlas_data = compact_atlas_volume(atlas['data'])
             self.atlas_info = atlas['info']
-            self.segmentation_data = np.asarray(segment['data'])
+            del atlas
+
+            segment = self._load_pickle(pre_made_segment_path)
+            self.segmentation_data = compact_label_volume(segment['data'])
             self.unique_label = np.asarray(segment['unique_label'])
+            del segment
         except (KeyError, TypeError, ValueError) as exc:
             self.msg = 'Please re-process atlas and label segmentation file. {}'.format(exc)
             return
@@ -453,39 +462,44 @@ class AtlasLoader(object):
             self.msg = 'Atlas and segmentation volumes have different shapes.'
             return
 
-        try:
-            if os.path.exists(pre_made_boundary_path):
-                boundary_data = self._load_pickle(pre_made_boundary_path)
-                self.boundary = boundary_data['data']
-            else:
-                boundary_paths = (
-                    pre_s_boundary_path,
-                    pre_c_boundary_path,
-                    pre_h_boundary_path,
-                )
-                if not all(os.path.exists(path) for path in boundary_paths):
-                    self.msg = 'Please pre-process boundary file.'
-                    return
-                self.boundary = {
-                    's_contour': self._load_pickle(pre_s_boundary_path),
-                    'c_contour': self._load_pickle(pre_c_boundary_path),
-                    'h_contour': self._load_pickle(pre_h_boundary_path),
-                }
+        if load_boundaries:
+            try:
+                if os.path.exists(pre_made_boundary_path):
+                    boundary_data = self._load_pickle(pre_made_boundary_path)
+                    raw_boundary = boundary_data['data']
+                    self.boundary = {
+                        key: compact_boundary_volume(raw_boundary[key])
+                        for key in ('s_contour', 'c_contour', 'h_contour')
+                    }
+                else:
+                    boundary_paths = {
+                        's_contour': pre_s_boundary_path,
+                        'c_contour': pre_c_boundary_path,
+                        'h_contour': pre_h_boundary_path,
+                    }
+                    if not all(os.path.exists(path) for path in boundary_paths.values()):
+                        self.msg = 'Please pre-process boundary file.'
+                        return
+                    self.boundary = {}
+                    for key, path in boundary_paths.items():
+                        raw_boundary = self._load_pickle(path)
+                        self.boundary[key] = compact_boundary_volume(raw_boundary)
+                        del raw_boundary
 
-            expected_boundary_keys = {'s_contour', 'c_contour', 'h_contour'}
-            if not isinstance(self.boundary, dict) or not expected_boundary_keys.issubset(
-                self.boundary
-            ):
-                raise ValueError('Boundary file is incomplete.')
-            if any(
-                np.asarray(self.boundary[key]).shape != self.segmentation_data.shape
-                for key in expected_boundary_keys
-            ):
-                raise ValueError('Boundary and segmentation volumes have different shapes.')
-        except (KeyError, TypeError, ValueError) as exc:
-            self.msg = 'Please re-process boundary file. {}'.format(exc)
-            self.boundary = None
-            return
+                expected_boundary_keys = {'s_contour', 'c_contour', 'h_contour'}
+                if not isinstance(self.boundary, dict) or not expected_boundary_keys.issubset(
+                    self.boundary
+                ):
+                    raise ValueError('Boundary file is incomplete.')
+                if any(
+                    np.asarray(self.boundary[key]).shape != self.segmentation_data.shape
+                    for key in expected_boundary_keys
+                ):
+                    raise ValueError('Boundary and segmentation volumes have different shapes.')
+            except (KeyError, TypeError, ValueError) as exc:
+                self.msg = 'Please re-process boundary file. {}'.format(exc)
+                self.boundary = None
+                return
 
         self.success = True
         self.msg = 'Atlas loaded successfully.'

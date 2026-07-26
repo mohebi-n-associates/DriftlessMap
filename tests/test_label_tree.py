@@ -48,6 +48,29 @@ class LabelTreeTests(unittest.TestCase):
         self.assertEqual(tree.labels_by_id[1]["btn"].color().getRgb()[:3], (10, 20, 30))
         np.testing.assert_array_equal(tree.current_lut[1, :3], (10, 20, 30))
 
+    def test_sparse_allen_ids_use_a_compact_display_lut(self):
+        tree = label_tree.LabelTree()
+        tree.set_labels(
+            {
+                "index": np.array([1, 614454277]),
+                "parent": np.array([-1, 1]),
+                "color": np.array([[10, 20, 30], [40, 50, 60]]),
+                "label": np.array(["Root", "Sparse"]),
+                "abbrev": np.array(["R", "S"]),
+            }
+        )
+
+        mapped = tree.map_labels(
+            np.array([[0, 1, 614454277, 999]], dtype=np.int32)
+        )
+
+        self.assertEqual(tree.current_lut.shape, (3, 4))
+        self.assertEqual(mapped.dtype, np.uint16)
+        np.testing.assert_array_equal(mapped, [[0, 1, 2, 0]])
+        np.testing.assert_array_equal(
+            tree.color_for_label(614454277), [40, 50, 60, 255]
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

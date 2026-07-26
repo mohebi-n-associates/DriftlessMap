@@ -39,6 +39,22 @@ class AtlasTransformTests(unittest.TestCase):
     def test_constant_volume_normalizes_without_nan(self):
         normalized = atlas_transform.normalize_atlas_volume(np.ones((2, 2, 2)))
         np.testing.assert_array_equal(normalized, np.zeros((2, 2, 2)))
+        self.assertEqual(normalized.dtype, np.float32)
+
+    def test_runtime_volume_formats_reduce_atlas_memory(self):
+        atlas = atlas_transform.compact_atlas_volume(
+            np.ones((2, 3, 4), dtype=np.float64)
+        )
+        labels = atlas_transform.compact_label_volume(
+            np.ones((2, 3, 4), dtype=np.int64) * 614454277
+        )
+        boundaries = atlas_transform.compact_boundary_volume(
+            np.ones((2, 3, 4), dtype=np.int32)
+        )
+
+        self.assertEqual(atlas.dtype, np.float32)
+        self.assertEqual(labels.dtype, np.int32)
+        self.assertEqual(boundaries.dtype, np.uint8)
 
     def test_boundary_volumes_are_exposed_with_loader_keys(self):
         boundary = atlas_transform.make_boundary_dict(

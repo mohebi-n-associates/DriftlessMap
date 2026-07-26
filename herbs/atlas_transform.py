@@ -26,13 +26,29 @@ def prepare_atlas_mask(mask_data, volume_shape):
 
 
 def normalize_atlas_volume(atlas_data):
-    """Normalize an atlas to [0, 1] without dividing by zero."""
-    atlas_data = np.asarray(atlas_data, dtype=float)
-    atlas_data = atlas_data - np.min(atlas_data)
+    """Normalize an atlas to compact float32 values in [0, 1]."""
+    atlas_data = np.array(atlas_data, dtype=np.float32, copy=True)
+    atlas_data -= np.min(atlas_data)
     maximum = np.max(atlas_data)
     if maximum == 0:
         return np.zeros_like(atlas_data)
-    return atlas_data / maximum
+    atlas_data /= maximum
+    return atlas_data
+
+
+def compact_atlas_volume(atlas_data):
+    """Return atlas intensities in the runtime's compact floating-point format."""
+    return np.asarray(atlas_data, dtype=np.float32)
+
+
+def compact_label_volume(segmentation_data):
+    """Return structure IDs in a compact format that preserves Allen IDs."""
+    return np.asarray(segmentation_data, dtype=np.int32)
+
+
+def compact_boundary_volume(boundary_data):
+    """Return binary atlas boundaries using one byte per voxel."""
+    return np.asarray(boundary_data, dtype=np.uint8)
 
 
 def validate_downsample_factor(factor, volume_shape):

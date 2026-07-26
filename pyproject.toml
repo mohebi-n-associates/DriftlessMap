@@ -64,7 +64,7 @@ test = [
 ]
 
 [project.scripts]
-herbs = "herbs.run_herbs:run_herbs"
+herbs = "herbs.run_herbs:run"
 
 [project.urls]
 Homepage = "https://github.com/mohebi-n-associates/HERBS"

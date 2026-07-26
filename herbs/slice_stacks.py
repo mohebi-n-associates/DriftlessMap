@@ -71,6 +71,7 @@ class SliceStacks(pg.GraphicsLayoutWidget):
         self.img.mouseClicked.connect(self.mouse_clicked)
         self.img.mouseHovered.connect(self.mouse_hovered)
         self.label_img = pg.ImageItem()
+        self.label_data = None
         self.label_img.setCompositionMode(QPainter.CompositionMode.CompositionMode_Multiply)
         self.boundary = pg.ImageItem()
         self.boundary.setCompositionMode(QPainter.CompositionMode.CompositionMode_Plus)
@@ -173,10 +174,17 @@ class SliceStacks(pg.GraphicsLayoutWidget):
         self.pre_trajectory_list.clear()
 
 
-    def set_data(self, atlas, label, contour, scale=None):
+    def set_data(self, atlas, label, contour, scale=None, display_label=None):
         self.img.set_data(atlas)
-        self.label_img.setImage(label, autoLevels=False)
-        self.boundary.setImage(contour, atutoLevels=False)
+        self.label_data = label
+        if display_label is None:
+            display_label = label
+        self.label_img.setImage(display_label, autoLevels=False)
+        if contour is not None:
+            self.set_boundary_data(contour)
+
+    def set_boundary_data(self, contour):
+        self.boundary.setImage(contour, autoLevels=False)
 
     def add_display_obj_to_view(self, obj_data, obj_color, obj_type):
         if obj_type == 'probe':

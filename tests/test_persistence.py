@@ -7,6 +7,7 @@ import tempfile
 import unittest
 
 import numpy as np
+import pandas as pd
 
 
 MODULE_PATH = Path(__file__).parents[1] / "herbs" / "persistence.py"
@@ -68,6 +69,24 @@ class LegacyPickleTests(unittest.TestCase):
         self.assertIsNone(error)
         np.testing.assert_array_equal(loaded["index"], payload["index"])
         np.testing.assert_array_equal(loaded["label"], payload["label"])
+
+    def test_legacy_reader_normalizes_pandas_string_arrays_without_importing_globals(self):
+        payload = {
+            "label": pd.array(["Brain", "Cortex"], dtype="string"),
+            "abbrev": pd.array(["Brain", "CTX"], dtype="string"),
+        }
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "pandas-string-arrays.pkl"
+            with path.open("wb") as stream:
+                pickle.dump(payload, stream, protocol=pickle.HIGHEST_PROTOCOL)
+
+            loaded, error = persistence.load_legacy_pickle(path)
+
+        self.assertIsNone(error)
+        self.assertIsInstance(loaded["label"], np.ndarray)
+        self.assertIsInstance(loaded["abbrev"], np.ndarray)
+        np.testing.assert_array_equal(loaded["label"], ["Brain", "Cortex"])
+        np.testing.assert_array_equal(loaded["abbrev"], ["Brain", "CTX"])
 
     def test_numpy_2_pickle_loads_with_both_numpy_module_layouts(self):
         numpy_2_pickle = base64.b64decode(
