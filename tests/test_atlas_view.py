@@ -4,11 +4,12 @@ import unittest
 import numpy as np
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-from PyQt6.QtCore import QPointF
+from PyQt6.QtCore import QPointF, Qt
+from PyQt6.QtGui import QKeyEvent
 from PyQt6.QtWidgets import QApplication
 
 from herbs.atlas_view import AtlasView, PageController
-from herbs.slice_stacks import image_position_in_bounds
+from herbs.slice_stacks import SliceStacks, image_position_in_bounds
 
 
 class PageControllerTests(unittest.TestCase):
@@ -44,6 +45,49 @@ class PageControllerTests(unittest.TestCase):
         controller._flush_pending_page()
 
         self.assertEqual(pages, [11])
+
+    def test_arrow_keys_advance_a_focused_atlas_plane(self):
+        image = SliceStacks()
+        controller = PageController()
+        image.sig_page_step_requested.connect(controller.step_by)
+        controller.set_max(10)
+        controller.set_val(5)
+
+        image.keyPressEvent(
+            QKeyEvent(
+                QKeyEvent.Type.KeyPress,
+                Qt.Key.Key_Right,
+                Qt.KeyboardModifier.NoModifier,
+            )
+        )
+        self.assertEqual(controller.page_slider.value(), 6)
+        image.keyPressEvent(
+            QKeyEvent(
+                QKeyEvent.Type.KeyPress,
+                Qt.Key.Key_Left,
+                Qt.KeyboardModifier.NoModifier,
+            )
+        )
+        self.assertEqual(controller.page_slider.value(), 5)
+
+        controller.set_val(0)
+        image.keyPressEvent(
+            QKeyEvent(
+                QKeyEvent.Type.KeyPress,
+                Qt.Key.Key_Left,
+                Qt.KeyboardModifier.NoModifier,
+            )
+        )
+        self.assertEqual(controller.page_slider.value(), 0)
+        controller.set_val(10)
+        image.keyPressEvent(
+            QKeyEvent(
+                QKeyEvent.Type.KeyPress,
+                Qt.Key.Key_Right,
+                Qt.KeyboardModifier.NoModifier,
+            )
+        )
+        self.assertEqual(controller.page_slider.value(), 10)
 
 
 class AtlasViewPerformanceTests(unittest.TestCase):

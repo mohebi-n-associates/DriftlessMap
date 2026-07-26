@@ -27,6 +27,16 @@ ALLEN_CCF_SAGITTAL_TILT_DEG = 5.0
 ALLEN_CCF_DV_SCALE = 0.9434
 
 
+def allen_ccf_estimated_bregma_vox(voxel_size_um):
+    """Return the nearest source voxel to the estimated Allen CCF Bregma."""
+    voxel_size_um = float(voxel_size_um)
+    if not np.isfinite(voxel_size_um) or voxel_size_um <= 0:
+        raise ValueError("Voxel size must be a positive finite value.")
+    return np.floor(
+        ALLEN_CCF_ESTIMATED_BREGMA_UM / voxel_size_um + 0.5
+    ).astype(int)
+
+
 def normalize_axis_info(axis_info, herbs_shape):
     """Validate an atlas transform and fill fields required for inversion."""
     herbs_shape = tuple(int(value) for value in herbs_shape)
@@ -140,6 +150,24 @@ def allen_ccf_to_estimated_bregma_mm(ccf_um):
         ap * np.sin(angle) + dv * np.cos(angle)
     ) * ALLEN_CCF_DV_SCALE
     return np.stack((-rotated_ap, rotated_dv, ml), axis=-1) / 1000.0
+
+
+def format_estimated_bregma_report(estimated_mm, surface_depth_um, region=""):
+    """Format the concise Allen coordinate report used by the status bar."""
+    estimated_mm = np.asarray(estimated_mm, dtype=float)
+    if estimated_mm.shape != (3,):
+        raise ValueError("Estimated coordinates must contain AP, DV, and ML.")
+    report = (
+        "Bregma est.: AP {:+.2f} mm | ML {:+.2f} mm | "
+        "Depth {:.2f} mm from surface"
+    ).format(
+        estimated_mm[0],
+        estimated_mm[2],
+        float(surface_depth_um) / 1000.0,
+    )
+    if region:
+        report = "{} | {}".format(report, region)
+    return report
 
 
 def _source_axis_metadata(axis_info):

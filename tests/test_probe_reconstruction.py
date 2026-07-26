@@ -84,6 +84,35 @@ class CoordinateTransformTests(unittest.TestCase):
         self.assertLess(anterior[1], 0)
         self.assertEqual(anterior[2], 1)
 
+    def test_estimated_bregma_defaults_are_nearest_resolution_voxels(self):
+        expected = {
+            10: [540, 44, 570],
+            25: [216, 18, 228],
+            50: [108, 9, 114],
+        }
+
+        for resolution, voxel in expected.items():
+            np.testing.assert_array_equal(
+                reconstruction.allen_ccf_estimated_bregma_vox(resolution),
+                voxel,
+            )
+
+    def test_status_report_prioritizes_targeting_coordinates(self):
+        report = reconstruction.format_estimated_bregma_report(
+            [2.404, 6.709, 1.869],
+            7708,
+            "[385]VISp: Primary visual area",
+        )
+
+        self.assertEqual(
+            report,
+            "Bregma est.: AP +2.40 mm | ML +1.87 mm | "
+            "Depth 7.71 mm from surface | [385]VISp: Primary visual area",
+        )
+        self.assertNotIn("affine", report)
+        self.assertNotIn("ground truth", report)
+        self.assertNotIn("CCF voxel", report)
+
 
 class ProbeReconstructionTests(unittest.TestCase):
     def make_payload(self):

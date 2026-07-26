@@ -117,36 +117,25 @@ class PageController(QWidget):
             self._emit_page(val)
 
     def left_btn_clicked(self):
-        if self.max_val is None:
-            return
-        val = self.page_slider.value() - 1
-        if val < 0:
-            val = 0
-        self.set_val(val)
+        self.step_by(-1)
 
     def right_btn_clicked(self):
+        self.step_by(1)
+
+    def step_by(self, amount):
         if self.max_val is None:
             return
-        val = self.page_slider.value() + 1
-        if val > self.max_val:
-            val = self.max_val
+        val = min(
+            self.max_val,
+            max(0, self.page_slider.value() + int(amount)),
+        )
         self.set_val(val)
 
     def fast_left_btn_clicked(self):
-        if self.max_val is None:
-            return
-        val = self.page_slider.value() - 10
-        if val < 0:
-            val = 0
-        self.set_val(val)
+        self.step_by(-10)
 
     def fast_right_btn_clicked(self):
-        if self.max_val is None:
-            return
-        val = self.page_slider.value() + 10
-        if val > self.max_val:
-            val = self.max_val
-        self.set_val(val)
+        self.step_by(10)
 
 
 class SliceRotation(QWidget):
@@ -369,18 +358,21 @@ class AtlasView(QObject):
         self.cimg = SliceStacks()
         self.cpage_ctrl = PageController()
         self.cpage_ctrl.sig_page_changed.connect(self.coronal_slice_page_changed)
+        self.cimg.sig_page_step_requested.connect(self.cpage_ctrl.step_by)
         self.clut = pg.HistogramLUTWidget()
         self.clut.setImageItem(self.cimg.img)
 
         self.simg = SliceStacks()
         self.spage_ctrl = PageController()
         self.spage_ctrl.sig_page_changed.connect(self.sagital_slice_page_changed)
+        self.simg.sig_page_step_requested.connect(self.spage_ctrl.step_by)
         self.slut = pg.HistogramLUTWidget()
         self.slut.setImageItem(self.simg.img)
 
         self.himg = SliceStacks()
         self.hpage_ctrl = PageController()
         self.hpage_ctrl.sig_page_changed.connect(self.horizontal_slice_page_changed)
+        self.himg.sig_page_step_requested.connect(self.hpage_ctrl.step_by)
         self.hlut = pg.HistogramLUTWidget()
         self.hlut.setImageItem(self.himg.img)
 
@@ -1436,8 +1428,6 @@ class AtlasView(QObject):
     def clear_atlas(self):
         self.clear_volume_atlas()
         self.clear_slice_atlas()
-
-
 
 
 

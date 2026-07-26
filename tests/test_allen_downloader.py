@@ -1,15 +1,48 @@
+import os
 from pathlib import Path
 import tempfile
 import unittest
 
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
 import numpy as np
 import nrrd
+from PyQt6.QtWidgets import QApplication
 
-from herbs.allen_downloader import _stream_unique_nrrd_values
+from herbs.allen_downloader import AllenDownloader, _stream_unique_nrrd_values
 from herbs.obj_items import render_small_volume
 
 
 class AllenDownloaderTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
+    def test_resolution_changes_prefill_estimated_bregma_voxels(self):
+        dialog = AllenDownloader()
+        try:
+            cases = (
+                (dialog.vs_rabnt1, 10, [540, 44, 570]),
+                (dialog.vs_rabnt2, 25, [216, 18, 228]),
+                (dialog.vs_rabnt3, 50, [108, 9, 114]),
+            )
+            for radio_button, resolution, expected in cases:
+                radio_button.setChecked(True)
+                self.app.processEvents()
+
+                self.assertEqual(dialog.voxel_size, resolution)
+                self.assertEqual(dialog.bregma_coord, expected)
+                self.assertEqual(
+                    [
+                        dialog.b_input1.text(),
+                        dialog.b_input2.text(),
+                        dialog.b_input3.text(),
+                    ],
+                    [str(value) for value in expected],
+                )
+        finally:
+            dialog.deleteLater()
+
     def test_stream_unique_nrrd_values_reads_gzip_data_in_chunks(self):
         annotation = np.array(
             [

@@ -115,6 +115,7 @@ from .cell_detection import select_detection_channel
 from .coordinate_validation import coordinates_in_bounds
 from .probe_reconstruction import (
     allen_ccf_to_estimated_bregma_mm,
+    format_estimated_bregma_report,
     is_allen_ccf_2017,
     normalize_axis_info,
     volume_view_vox_to_source_vox,
@@ -4545,21 +4546,10 @@ class HERBS(QMainWindow, FORM_Main):
         region = self.atlas_view.label_tree.describe(label_id)
         estimated = self._estimated_allen_coordinates(display_vox)
         if estimated is not None:
-            source_vox, estimated_mm = estimated
-            return (
-                "Allen CCF voxel (AP, DV, ML): "
-                "({:.1f}, {:.1f}, {:.1f}); estimated Bregma "
-                "(not ground truth): AP {:+.3f} mm, ML {:+.3f} mm; "
-                "depth from brain surface: {:.3f} mm; affine DV estimate "
-                "{:+.3f} mm (not for targeting). {}"
-            ).format(
-                source_vox[0],
-                source_vox[1],
-                source_vox[2],
-                estimated_mm[0],
-                estimated_mm[2],
-                surface_depth_um / 1000.0,
-                estimated_mm[1],
+            _source_vox, estimated_mm = estimated
+            return format_estimated_bregma_report(
+                estimated_mm,
+                surface_depth_um,
                 region,
             )
 

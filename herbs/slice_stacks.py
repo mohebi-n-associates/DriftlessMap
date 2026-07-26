@@ -68,13 +68,16 @@ class SliceStacks(pg.GraphicsLayoutWidget):
     class SignalProxy(QObject):
         mouseHovered = pyqtSignal(object)  # id
         mouseClicked = pyqtSignal(object)  # id
+        pageStepRequested = pyqtSignal(int)
 
     def __init__(self):
         self._sigprox = SliceStacks.SignalProxy()
         self.sig_mouse_hovered = self._sigprox.mouseHovered
         self.sig_mouse_clicked = self._sigprox.mouseClicked
+        self.sig_page_step_requested = self._sigprox.pageStepRequested
 
         pg.GraphicsLayoutWidget.__init__(self)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.vb = self.addViewBox()
         self.setBackground('k')
         self.vb.setAspectLocked()
@@ -246,4 +249,17 @@ class SliceStacks(pg.GraphicsLayoutWidget):
     def mouse_clicked(self, pos):
         if not image_position_in_bounds(pos, self.img.image):
             return
+        self.setFocus(Qt.FocusReason.MouseFocusReason)
         self.sig_mouse_clicked.emit(pos)
+
+    def keyPressEvent(self, event):
+        if event.modifiers() == Qt.KeyboardModifier.NoModifier:
+            if event.key() == Qt.Key.Key_Left:
+                self.sig_page_step_requested.emit(-1)
+                event.accept()
+                return
+            if event.key() == Qt.Key.Key_Right:
+                self.sig_page_step_requested.emit(1)
+                event.accept()
+                return
+        super().keyPressEvent(event)

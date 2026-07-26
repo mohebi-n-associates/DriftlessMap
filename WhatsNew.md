@@ -12,12 +12,14 @@ atlases and fixes atlas interaction at exact image boundaries.
 
 ### Highlights
 
-- Reports the raw Allen source voxel in `(AP, DV, ML)` order.
-- Reports an explicitly labeled, community-estimated Bregma conversion in
-  millimeters.
-- Uses depth measured from the visible brain surface as the primary depth
-  value; the affine DV estimate is shown separately and marked “not for
-  targeting.”
+- Shows a concise live report with estimated Bregma AP/ML and depth from the
+  visible brain surface.
+- Prefills the Allen downloader with the nearest estimated Bregma voxel for
+  the selected 10, 25, or 50 µm resolution.
+- Keeps the raw Allen voxel and affine DV estimate out of the live status line
+  while preserving them in reconstruction exports.
+- Uses Left and Right Arrow to move one slice backward or forward in the
+  focused coronal, sagittal, or horizontal atlas view.
 - Adds the estimated coordinates and transform metadata to probe
   reconstruction exports without replacing existing coordinate fields.
 - Prevents hover and click events at the right or bottom image edge from
@@ -38,13 +40,38 @@ variance. Allen also explains that the
 [CCF has no single ground-truth Bregma](https://community.brain-map.org/t/why-doesnt-the-3d-mouse-brain-atlas-have-bregma-coordinates/158)
 because it is an ex-cranio average of many fixed brains.
 
-Interactive reports therefore emphasize positive depth measured from the brain
-surface. The affine DV estimate remains visible for reference but is marked
-“not for targeting.” Probe reconstruction exports retain the original HERBS
-and Allen CCF coordinates and add `estimated_stereotaxic_bregma_mm`; the
-transform parameters and targeting caveat are embedded alongside them. Custom
-atlases continue using their configured Bregma without the Allen-specific
-conversion.
+Interactive reports now show only estimated Bregma AP, estimated Bregma ML,
+and positive depth measured from the brain surface. The raw Allen voxel and
+affine DV estimate are omitted from the live status line to keep it readable.
+Probe reconstruction exports retain the original HERBS and Allen CCF
+coordinates, add `estimated_stereotaxic_bregma_mm`, and embed the transform
+parameters and targeting caveat. Custom atlases continue using their configured
+Bregma without the Allen-specific conversion.
+
+### Allen downloader defaults
+
+The downloader labels its three Bregma fields as `(AP, DV, ML)` and fills them
+with the nearest source-atlas voxel to the estimated CCF location:
+
+| Resolution | AP | DV | ML |
+| --- | ---: | ---: | ---: |
+| 10 µm | 540 | 44 | 570 |
+| 25 µm | 216 | 18 | 228 |
+| 50 µm | 108 | 9 | 114 |
+
+Changing the selected resolution updates all three defaults. The 25 and 50 µm
+DV values are rounded to the nearest available voxel.
+
+These defaults establish the coordinate origin in the processed HERBS atlas.
+They do not replace the estimated stereotaxic transform, which additionally
+applies the 5° AP–DV rotation and `0.9434` DV scale.
+
+### Atlas keyboard navigation
+
+After clicking a coronal, sagittal, or horizontal atlas image, press Left Arrow
+for the previous slice or Right Arrow for the next slice. In the four-window
+layout, the shortcut advances only the atlas plane that has focus. Arrow-key
+editing in text and numeric fields is unaffected.
 
 ### Atlas boundary handling
 

@@ -23,6 +23,7 @@ from .atlas_transform import (
     normalize_atlas_volume,
 )
 from .download_utils import download_file
+from .probe_reconstruction import allen_ccf_estimated_bregma_vox
 
 
 def _stream_unique_nrrd_values(filename, progress=None, chunk_size=8 * 1024 * 1024):
@@ -516,7 +517,9 @@ class AllenDownloader(QDialog):
         self.continue_process = True
 
         self.voxel_size = 10
-        self.bregma_coord = [0, 0, 0]
+        self.bregma_coord = (
+            allen_ccf_estimated_bregma_vox(self.voxel_size).tolist()
+        )
         radio_group = QFrame()
         radio_group.setStyleSheet('QFrame{border: 1px solid gray; border-radius: 3px}')
         radio_group_layout = QHBoxLayout(radio_group)
@@ -581,16 +584,22 @@ class AllenDownloader(QDialog):
         b_wrap = QFrame()
         b_layout = QHBoxLayout(b_wrap)
 
-        b_label = QLabel('Bregma Coordinates (voxel): ')
-        self.b_input1 = QLineEdit('0')
+        b_label = QLabel('Estimated Bregma voxel (AP, DV, ML): ')
+        self.b_input1 = QLineEdit(str(self.bregma_coord[0]))
         self.b_input1.setStyleSheet('color: black')
         self.b_input1.setValidator(valid_input)
-        self.b_input2 = QLineEdit('0')
+        self.b_input1.setAccessibleName('AP Bregma voxel')
+        self.b_input1.setToolTip('AP source-atlas voxel')
+        self.b_input2 = QLineEdit(str(self.bregma_coord[1]))
         self.b_input2.setStyleSheet('color: black')
         self.b_input2.setValidator(valid_input)
-        self.b_input3 = QLineEdit('0')
+        self.b_input2.setAccessibleName('DV Bregma voxel')
+        self.b_input2.setToolTip('DV source-atlas voxel')
+        self.b_input3 = QLineEdit(str(self.bregma_coord[2]))
         self.b_input3.setStyleSheet('color: black')
         self.b_input3.setValidator(valid_input)
+        self.b_input3.setAccessibleName('ML Bregma voxel')
+        self.b_input3.setToolTip('ML source-atlas voxel')
 
         b_layout.addWidget(b_label)
         b_layout.addWidget(self.b_input1)
@@ -661,6 +670,14 @@ class AllenDownloader(QDialog):
             return
         self.bregma_coord[2] = int(text)
 
+    def set_default_bregma_coordinates(self):
+        defaults = allen_ccf_estimated_bregma_vox(self.voxel_size).tolist()
+        self.bregma_coord[:] = defaults
+        for line_edit, value in zip(
+            (self.b_input1, self.b_input2, self.b_input3), defaults
+        ):
+            line_edit.setText(str(value))
+
     def voxel_size_radio_clicked(self):
         if self.vs_rabnt1.isChecked():
             self.voxel_size = 10
@@ -680,6 +697,7 @@ class AllenDownloader(QDialog):
             self.segmentation_url = 'https://download.alleninstitute.org/informatics-archive/current-release/mouse_ccf/annotation/ccf_2017/annotation_50.nrrd'
             self.data_local = "average_template_50.nrrd"
             self.segmentation_local = "annotation_50.nrrd"
+        self.set_default_bregma_coordinates()
 
     # Download button event
     def download_start(self):
