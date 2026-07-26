@@ -48,6 +48,10 @@ class ClickableImage(pg.ImageItem):
 
     def mouseClickEvent(self, event):
         pos = (event.pos().x(), event.pos().y())
+        # This item owns background-image clicks. Accept before emitting because
+        # the callback may update or remove plot items that pyqtgraph also found
+        # under the cursor for this same click.
+        event.accept()
         # print(pos)
         # id = self.label_data[int(event.pos().x()), int(event.pos().y())]
         self.mouseClicked.emit(pos)
@@ -351,5 +355,4 @@ class ImageStacks(pg.GraphicsLayoutWidget):
         # elif event.key() == Qt.Key.Key_Enter or event.key() == Qt.Key.Key_Return:
         #     print('enter')
         #     self.sig_key_pressed.emit('enter')
-
 

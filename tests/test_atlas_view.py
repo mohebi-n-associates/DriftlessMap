@@ -7,9 +7,32 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PyQt6.QtCore import QPointF, Qt
 from PyQt6.QtGui import QKeyEvent
 from PyQt6.QtWidgets import QApplication
+from pyqtgraph.GraphicsScene import GraphicsScene
 
 from herbs.atlas_view import AtlasView, PageController
+from herbs.image_stacks import ClickableImage
 from herbs.slice_stacks import SliceStacks, image_position_in_bounds
+from herbs.slice_stacks import ClickableSlice
+
+
+class FakeClickEvent:
+    def __init__(self, x=2.0, y=3.0):
+        self._pos = QPointF(x, y)
+        self._accepted = False
+
+    def pos(self):
+        return self._pos
+
+    def accept(self):
+        self._accepted = True
+
+    def isAccepted(self):
+        return self._accepted
+
+
+class DeletedCurveCandidate:
+    def isVisible(self):
+        raise AssertionError("A stale curve candidate was revisited.")
 
 
 class PageControllerTests(unittest.TestCase):
@@ -88,6 +111,51 @@ class PageControllerTests(unittest.TestCase):
             )
         )
         self.assertEqual(controller.page_slider.value(), 10)
+
+
+class BackgroundClickTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
+    def test_image_click_is_accepted_before_callbacks_change_overlays(self):
+        image = ClickableImage()
+        event = FakeClickEvent()
+        callback_states = []
+        image.mouseClicked.connect(
+            lambda _position: callback_states.append(event.isAccepted())
+        )
+
+        image.mouseClickEvent(event)
+
+        self.assertTrue(event.isAccepted())
+        self.assertEqual(callback_states, [True])
+
+    def test_atlas_click_is_accepted_before_callbacks_change_overlays(self):
+        image = ClickableSlice()
+        event = FakeClickEvent()
+        callback_states = []
+        image.mouseClicked.connect(
+            lambda _position: callback_states.append(event.isAccepted())
+        )
+
+        image.mouseClickEvent(event)
+
+        self.assertTrue(event.isAccepted())
+        self.assertEqual(callback_states, [True])
+
+    def test_scene_stops_before_a_stale_curve_candidate(self):
+        scene = GraphicsScene()
+        image = ClickableImage()
+        event = FakeClickEvent()
+        scene.itemsNearEvent = lambda _event: [
+            image,
+            DeletedCurveCandidate(),
+        ]
+
+        handled = scene.sendClickEvent(event)
+
+        self.assertTrue(handled)
 
 
 class AtlasViewPerformanceTests(unittest.TestCase):

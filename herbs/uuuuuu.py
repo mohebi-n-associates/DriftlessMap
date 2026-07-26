@@ -209,6 +209,7 @@ def calculate_drawing_info(data_list, pieces_names, label_data, label_info, breg
         "object_name": "drawing",
         "pieces_names": pieces_names,
         "data": data_list,
+        "label_id": unique_label,
         "label_name": label_names,
         "label_acronym": label_acronym,
         "label_color": label_color,

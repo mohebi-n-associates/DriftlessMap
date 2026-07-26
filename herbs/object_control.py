@@ -7,6 +7,7 @@ from PyQt6.QtWidgets import *
 from PyQt6.QtGui import *
 from PyQt6.QtCore import *
 from .wtiles import QDoubleButton
+from .roi_analysis import write_roi_csv
 from .uuuuuu import read_qss_file
 from .resources import resource_path
 
@@ -283,6 +284,171 @@ class CellsInfoWindow(QDialog):
 
     def set_probe_color(self, color):
         self.label.setStyleSheet("QLabel {background-color: " + color + ";}")
+
+
+class DrawingInfoWindow(QDialog):
+    def __init__(self, name, data):
+        super().__init__()
+
+        self.object_name = name
+        self.roi_info = data
+        self.setWindowTitle("Drawing ROI Information")
+        self.setMinimumWidth(720)
+
+        layout = QVBoxLayout()
+        title = QLabel(name)
+        title.setStyleSheet("QLabel {font-size: 20px; font-weight: bold;}")
+        layout.addWidget(title)
+
+        summary_group = QGroupBox("ROI summary")
+        summary_layout = QFormLayout(summary_group)
+        mode = str(data["plot_mode"]).capitalize()
+        summary_layout.addRow("Drawing:", QLabel(mode))
+        summary_layout.addRow(
+            "Sampled points:", QLabel("{:,}".format(data["point_count"]))
+        )
+        if data["metric_name"] == "sampled_area_mm2":
+            metric_label = "Sampled area:"
+            metric_text = "{:.4f} mm²".format(data["metric_value"])
+        else:
+            metric_label = "Line length:"
+            metric_text = "{:.3f} mm".format(data["metric_value"])
+        summary_layout.addRow(metric_label, QLabel(metric_text))
+        summary_layout.addRow(
+            "Coordinate basis:", QLabel(data["coordinate_basis"])
+        )
+
+        coordinate_summary = data["coordinate_summary"]
+        centroid_parts = []
+        for axis in ("AP", "ML"):
+            if axis in coordinate_summary:
+                centroid_parts.append(
+                    "{} {:+.3f} mm".format(
+                        axis, coordinate_summary[axis]["centroid"]
+                    )
+                )
+        if data["ground_truth"] is None and "DV" in coordinate_summary:
+            centroid_parts.append(
+                "DV {:+.3f} mm".format(
+                    coordinate_summary["DV"]["centroid"]
+                )
+            )
+        summary_layout.addRow("Centroid:", QLabel(" | ".join(centroid_parts)))
+
+        for axis in ("AP", "ML"):
+            if axis not in coordinate_summary:
+                continue
+            axis_data = coordinate_summary[axis]
+            summary_layout.addRow(
+                "{} range:".format(axis),
+                QLabel(
+                    "{:+.3f} to {:+.3f} mm".format(
+                        axis_data["min"], axis_data["max"]
+                    )
+                ),
+            )
+
+        depth = data.get("surface_depth_summary")
+        if depth is None:
+            depth_text = "Unavailable for this ROI"
+        else:
+            depth_text = (
+                "mean {:.3f} mm | range {:.3f}–{:.3f} mm "
+                "({:,} points)"
+            ).format(
+                depth["mean"], depth["min"], depth["max"], depth["count"]
+            )
+        summary_layout.addRow("Depth from surface:", QLabel(depth_text))
+        layout.addWidget(summary_group)
+
+        note = QLabel()
+        note.setWordWrap(True)
+        if data["ground_truth"] is False:
+            note.setText(
+                "Allen Bregma coordinates are estimates, not ground truth. "
+                "Depth is measured from the local dorsal brain surface. The "
+                "affine DV estimate is included only in the CSV and is marked "
+                "as unsuitable for targeting."
+            )
+        else:
+            note.setText(
+                "AP, ML, and DV are relative to the Bregma voxel configured "
+                "for this atlas. Depth is measured from the local dorsal "
+                "brain surface."
+            )
+        layout.addWidget(note)
+
+        regions = data.get("regions", [])
+        region_group = QGroupBox("Brain-region distribution")
+        region_layout = QVBoxLayout(region_group)
+        self.region_table = QTableWidget(len(regions), 6)
+        self.region_table.setHorizontalHeaderLabels(
+            ["ID", "Region", "Acronym", "Samples", "%", "Color"]
+        )
+        self.region_table.setEditTriggers(
+            QAbstractItemView.EditTrigger.NoEditTriggers
+        )
+        self.region_table.setSelectionBehavior(
+            QAbstractItemView.SelectionBehavior.SelectRows
+        )
+        self.region_table.verticalHeader().setVisible(False)
+        for row_index, region in enumerate(regions):
+            values = (
+                str(region["label_id"]),
+                region["name"],
+                region["acronym"],
+                "{:,}".format(region["count"]),
+                "{:.2f}".format(region["percentage"]),
+            )
+            for column, value in enumerate(values):
+                self.region_table.setItem(
+                    row_index, column, QTableWidgetItem(value)
+                )
+            color_item = QTableWidgetItem()
+            color_item.setBackground(QColor(*region["color"]))
+            self.region_table.setItem(row_index, 5, color_item)
+        self.region_table.horizontalHeader().setSectionResizeMode(
+            1, QHeaderView.ResizeMode.Stretch
+        )
+        self.region_table.resizeColumnsToContents()
+        self.region_table.setMaximumHeight(280)
+        region_layout.addWidget(self.region_table)
+        layout.addWidget(region_group)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
+        self.export_btn = buttons.addButton(
+            "Export coordinates as CSV",
+            QDialogButtonBox.ButtonRole.ActionRole,
+        )
+        self.export_btn.clicked.connect(self.export_coordinates)
+        buttons.accepted.connect(self.accept)
+        layout.addWidget(buttons)
+        self.setLayout(layout)
+
+    def export_coordinates(self):
+        safe_name = "".join(
+            character if character.isalnum() or character in "-_" else "_"
+            for character in self.object_name
+        )
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export drawing ROI coordinates",
+            "{}_coordinates.csv".format(safe_name or "drawing_roi"),
+            "CSV files (*.csv)",
+        )
+        if not file_path:
+            return
+        try:
+            write_roi_csv(file_path, self.roi_info)
+        except OSError as exc:
+            QMessageBox.warning(
+                self,
+                "Export failed",
+                "Could not save the ROI coordinates:\n{}".format(exc),
+            )
+
+    def accept(self) -> None:
+        self.close()
 
 
 class VirusInfoWindow(QDialog):
@@ -849,6 +1015,7 @@ class ObjectControl(QObject):
 
         self.default_size_val = 2
         self.default_opacity_val = 100
+        self.drawing_info_provider = None
 
         self.valid_obj_type = [
             "probe piece",
@@ -1071,7 +1238,10 @@ class ObjectControl(QObject):
         self.delete_objects(self.current_obj_index)
 
     def info_btn_clicked(self):
-        if "merged" in self.obj_type[self.current_obj_index]:
+        if self.current_obj_index is None:
+            return
+        object_type = self.obj_type[self.current_obj_index]
+        if "merged" in object_type or "drawing" in object_type:
             self.obj_info_on_click()
 
     def obj_clicked(self, clicked_id):
@@ -1080,12 +1250,28 @@ class ObjectControl(QObject):
     def obj_info_on_click(self):
         da_data = self.obj_data[self.current_obj_index]
         da_name = self.obj_name[self.current_obj_index]
-        if "probe" in self.obj_type[self.current_obj_index]:
+        object_type = self.obj_type[self.current_obj_index]
+        if "probe" in object_type:
             self.info_window = ProbeInfoWindow(da_name, da_data)
-        elif "virus" in self.obj_type[self.current_obj_index]:
+        elif "virus" in object_type:
             self.info_window = VirusInfoWindow(da_name, da_data)
-        elif "cell" in self.obj_type[self.current_obj_index]:
+        elif "cell" in object_type:
             self.info_window = CellsInfoWindow(da_name, da_data)
+        elif "drawing" in object_type:
+            if self.drawing_info_provider is None:
+                return
+            try:
+                drawing_info = self.drawing_info_provider(
+                    da_data, object_type, da_name
+                )
+            except (KeyError, TypeError, ValueError) as exc:
+                QMessageBox.warning(
+                    None,
+                    "Drawing information unavailable",
+                    "Could not analyze this drawing:\n{}".format(exc),
+                )
+                return
+            self.info_window = DrawingInfoWindow(da_name, drawing_info)
         else:
             return
         self.info_window.exec()

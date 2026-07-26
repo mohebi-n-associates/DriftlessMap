@@ -20,6 +20,10 @@ atlases and fixes atlas interaction at exact image boundaries.
   while preserving them in reconstruction exports.
 - Uses Left and Right Arrow to move one slice backward or forward in the
   focused coronal, sagittal, or horizontal atlas view.
+- Adds an ROI information window and coordinate CSV export for individual and
+  merged drawing objects.
+- Prevents mouse release from accessing a deleted plot curve when a click
+  updates or clears a drawing, trajectory, or triangulation overlay.
 - Adds the estimated coordinates and transform metadata to probe
   reconstruction exports without replacing existing coordinate fields.
 - Prevents hover and click events at the right or bottom image edge from
@@ -72,6 +76,43 @@ After clicking a coronal, sagittal, or horizontal atlas image, press Left Arrow
 for the previous slice or Right Arrow for the next slice. In the four-window
 layout, the shortcut advances only the atlas plane that has focus. Arrow-key
 editing in text and numeric fields is unaffected.
+
+### Drawing ROI information
+
+Select an individual drawing piece or a merged drawing in the Object View
+Controller and click the **Info** (`i`) button. HERBS now reports:
+
+- The ROI centroid and AP/ML coordinate ranges.
+- Mean and range of depth from the local dorsal brain surface.
+- Sampled area for a closed drawing, or line length for an open drawing.
+- The number and percentage of sampled points in each brain region.
+
+For recognized Allen CCFv3 atlases, AP and ML use the same estimated Bregma
+transform as the live atlas report. The dialog labels these values as estimates
+and uses surface depth as the practical depth measurement. Custom atlases use
+their configured Bregma voxel.
+
+The **Export coordinates as CSV** action writes every sampled ROI point with
+its piece and point number, HERBS coordinates, configured-Bregma coordinates,
+surface depth, and structure ID/name/acronym. Allen exports additionally
+include raw CCF voxels, estimated AP/ML, and the affine DV value in a column
+explicitly marked as not for targeting.
+
+### Plot interaction stability
+
+Background clicks in histology and atlas views now claim the pyqtgraph click
+before notifying HERBS. Some click handlers immediately update or remove an
+overlay curve. Previously, pyqtgraph could continue dispatching that same click
+through an already computed list of items and access a curve after Qt had
+deleted it, producing:
+
+```text
+RuntimeError: wrapped C/C++ object of type PlotCurveItem has been deleted
+```
+
+The click now stops after the background image handles it, so deleted overlay
+items are not revisited during mouse release. Temporary console messages from
+drawing clicks and triangulation-point indexes have also been removed.
 
 ### Atlas boundary handling
 

@@ -120,6 +120,7 @@ from .probe_reconstruction import (
     normalize_axis_info,
     volume_view_vox_to_source_vox,
 )
+from .roi_analysis import build_drawing_roi_info
 from .resources import resource_path
 from .user_settings import load_last_atlas_path, save_last_atlas_path
 
@@ -325,6 +326,7 @@ class HERBS(QMainWindow, FORM_Main):
         self.layer_ctrl.sig_blend_mode_changed.connect(self.layers_blend_mode_changed)
 
         self.object_ctrl = ObjectControl()
+        self.object_ctrl.drawing_info_provider = self.build_drawing_object_info
         self.object_ctrl.sig_delete_object.connect(self.gl_object_deleted)
         self.object_ctrl.sig_add_object.connect(self.gl_object_added)
         self.object_ctrl.sig_color_changed.connect(self.obj_color_changed)
@@ -2675,10 +2677,8 @@ class HERBS(QMainWindow, FORM_Main):
                 self.inactive_drawing()
         else:
             if clicked_ind == 0:
-                print("first point clicked")
                 self.inactive_drawing()
             elif clicked_ind == len(self.working_img_data["img-drawing"]) - 1:
-                print("last point clicked")
                 self.is_pencil_allowed = False
                 self.working_img_data["img-drawing"].append([pos.x(), pos.y()])
                 if self.tool_box.is_closed:
@@ -2710,7 +2710,6 @@ class HERBS(QMainWindow, FORM_Main):
                 }
                 self.save_current_action("pencil_btn", "img-drawing", current_data, res)
             else:
-                print("other point clicked")
                 if not self.is_pencil_allowed:
                     self.inactive_drawing()
 
@@ -3700,7 +3699,6 @@ class HERBS(QMainWindow, FORM_Main):
     #
     # ------------------------------------------------------------------
     def update_histo_tri_onside_data(self):
-        print("image_changed")
         self.white_img = np.ones(self.image_view.img_size).astype("uint8")
         if self.image_view.processing_img is not None:
             self.image_view.processing_img = None
@@ -3756,7 +3754,6 @@ class HERBS(QMainWindow, FORM_Main):
                 self.save_current_action("pencil_btn", "img-drawing", current_data, res)
             else:
                 if self.is_pencil_allowed:
-                    print("not click on ")
                     self.working_img_data["img-drawing"].append([x, y])
                     if self.tool_box.is_closed:
                         self.working_img_data["img-drawing"].append(
@@ -6063,6 +6060,42 @@ class HERBS(QMainWindow, FORM_Main):
             )
 
     # drawing related functions
+    def build_drawing_object_info(self, object_data, object_type, object_name):
+        """Analyze a drawing against the currently loaded volume atlas."""
+        if (
+            self.current_atlas != "volume"
+            or self.atlas_view.atlas_label is None
+            or self.atlas_view.origin_3d is None
+        ):
+            raise ValueError(
+                "Load the volume atlas used for this drawing before opening "
+                "its ROI information."
+            )
+
+        if "merged" in object_type:
+            pieces = object_data["data"]
+            piece_names = object_data.get(
+                "pieces_names",
+                [object_name for _ in range(len(pieces))],
+            )
+        else:
+            pieces = [object_data]
+            piece_names = [object_name]
+
+        label_volume = np.transpose(
+            self.atlas_view.atlas_label, (1, 2, 0)
+        )[:, :, ::-1]
+        return build_drawing_roi_info(
+            pieces,
+            piece_names,
+            bregma_herbs_vox=self.atlas_view.origin_3d,
+            voxel_size_um=self.atlas_view.vox_size_um,
+            herbs_shape=label_volume.shape,
+            axis_info=self.volume_atlas_axis_info,
+            label_volume=label_volume,
+            label_info=self.atlas_view.label_info,
+        )
+
     def merge_drawings(self):
         drawing_piece_count = len(
             [

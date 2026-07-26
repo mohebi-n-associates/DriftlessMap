@@ -59,6 +59,9 @@ class ClickableSlice(pg.ImageItem):
 
     def mouseClickEvent(self, event):
         pos = (event.pos().x(), event.pos().y())
+        # Stop GraphicsScene from dispatching this click to stale curve
+        # candidates after the application callback changes the overlay.
+        event.accept()
         # id = self.label_data[int(event.pos().x()), int(event.pos().y())]
         self.mouseClicked.emit(pos)
         # self.mouseClicked.emit([event, id])

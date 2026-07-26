@@ -644,7 +644,6 @@ class AtlasView(QObject):
             da_bregma = atlas_info[3]['Bregma']
         inverse_b2 = self.atlas_size[0] - 1 - da_bregma[2]
         self.Bregma = (inverse_b2, da_bregma[0], da_bregma[1])
-        print(self.Bregma, 'bregma')
         self.rotate_origin_3d = np.array(da_bregma)
         self.origin_3d = np.array(da_bregma)
 
@@ -1428,7 +1427,6 @@ class AtlasView(QObject):
     def clear_atlas(self):
         self.clear_volume_atlas()
         self.clear_slice_atlas()
-
 
 
 

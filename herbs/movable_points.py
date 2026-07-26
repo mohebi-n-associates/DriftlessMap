@@ -147,7 +147,6 @@ class TriangulationPoints(pg.GraphItem):
 
     def onclick(self, ev, point):
         ind = point[0].data()[0]
-        print(ind)
         self.mouseClicked.emit((ev, ind))
 
 
@@ -252,6 +251,4 @@ class TriangulationPointsTest(pg.ScatterPlotItem):
 
     def onclick(self, ev, point):
         ind = point[0].data()[0]
-        print(ind)
         self.mouseClicked.emit((ev, ind))
-
