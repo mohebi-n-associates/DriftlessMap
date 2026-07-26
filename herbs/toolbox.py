@@ -377,6 +377,15 @@ class ToolBox(QObject):
         self.triang_match_bnd = QPushButton()
         self.triang_match_bnd.setIcon(QIcon(resource_path('icons/toolbar/matchbnd.svg')))
         self.triang_match_bnd.setIconSize(QSize(20, 20))
+        self.triang_quality_label = QLabel("Mesh: waiting for paired landmarks")
+        self.triang_quality_label.setToolTip(
+            "Registration mesh quality. Green is healthy, yellow needs review, "
+            "and red is invalid or severely distorted. Folded or collapsed "
+            "triangles block transfer."
+        )
+        self.triang_quality_label.setStyleSheet(
+            "QLabel { color: #9a9a9a; padding: 1px 6px; }"
+        )
 
         self.triang_wrap = QFrame()
         self.triang_wrap.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
@@ -393,6 +402,8 @@ class ToolBox(QObject):
         triang_layout.addSpacing(10)
         triang_layout.addWidget(bound_pnts_num_label)
         triang_layout.addWidget(self.bound_pnts_num)
+        triang_layout.addSpacing(10)
+        triang_layout.addWidget(self.triang_quality_label)
 
         triang_layout.addStretch(1)
 
@@ -546,8 +557,6 @@ class ToolBox(QObject):
             self.multi_shanks = True
         else:
             self.multi_shanks = False
-
-
 
 
 

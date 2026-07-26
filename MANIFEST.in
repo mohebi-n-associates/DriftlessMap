@@ -30,3 +30,5 @@ recursive-include herbs/icons/layers *.svg
 recursive-include herbs/icons/layers *.png
 
 recursive-include herbs/qss *.qss
+
+global-exclude .DS_Store

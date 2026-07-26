@@ -3,6 +3,111 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## HERBS 1.0.4
+
+Release date: 25 July 2026
+
+HERBS 1.0.4 makes manual atlas registration reproducible, easier to inspect,
+and smoother to adjust.
+
+### Highlights
+
+- Uses one atlas-defined Delaunay topology for atlas-to-histology image
+  warping, histology-to-atlas image warping, masks, and transferred objects.
+- Persists that triangle connectivity in projects and triangulation-point
+  files, while continuing to load files created by older HERBS versions.
+- Adds a live mesh-quality indicator to the triangulation toolbar.
+- Colors displayed triangles green when healthy, yellow when they need review,
+  and red when folded, collapsed, or severely distorted.
+- Prevents transfer through folded or collapsed triangles and explains which
+  mesh problem must be corrected.
+- Replaces independent per-triangle image copies with a single dense remap,
+  removing shared-edge seams and transfer-direction diagonal changes.
+- Re-renders landmark-drag previews from the original image so repeated edits
+  do not accumulate blur.
+- Coalesces rapid drag events to keep landmark movement responsive while still
+  rendering the latest position.
+- Deletes corresponding atlas and histology landmarks together and renumbers
+  the remaining pairs.
+- Uses the same validated mesh for contour, probe, drawing, cell, and virus
+  transfer; out-of-mesh points are counted and reported.
+
+### Reproducible shared topology
+
+Earlier versions built an OpenCV Delaunay mesh independently in the destination
+window for each transfer direction. Four or more landmarks can admit more than
+one valid diagonal, so atlas-to-histology and histology-to-atlas operations
+could silently use different triangles. Moving a point could also cause the
+topology to flip.
+
+HERBS now constructs the connectivity once from the atlas landmarks, assigns
+every triangle by landmark index, and reuses those exact indexes in both
+directions. Moving a paired landmark changes its geometry but not its
+connectivity. New projects store the topology in their settings, and
+`.herbstri` files include it when paired landmarks are available. The new
+fields are optional on load, so existing projects and triangulation files
+remain supported.
+
+Boundary-only alignment now also goes through this shared registration engine
+instead of a separate crop-and-resize path.
+
+### Mesh validation and quality feedback
+
+The triangulation toolbar reports whether the mesh is **good**, needs
+**review**, or is **invalid**. Hover over the status for the triangle count,
+fold count, smallest angle, and largest local anisotropy.
+
+When triangle lines are visible:
+
+- Green indicates a well-shaped local transform.
+- Yellow indicates a narrow or highly stretched triangle worth reviewing.
+- Red indicates a folded, collapsed, or severely distorted triangle.
+
+Duplicate or out-of-image landmarks are rejected. Folded and collapsed
+triangles block image and object transfer rather than creating a corrupted
+result. Severe but geometrically valid distortion remains visible for the user
+to review.
+
+### Smoother and cleaner warping
+
+Image registration now creates one inverse coordinate map and applies it with
+OpenCV remapping. Shared triangle edges are assigned once, avoiding the cracks
+and overwrites produced by repeated triangle copies. Histology images use
+cubic interpolation, while atlas labels and virus masks use nearest-neighbor
+interpolation so discrete regions do not acquire blended IDs.
+
+During landmark dragging, HERBS always warps the original overlay rather than
+warping the already transformed preview. Rapid movement events are coalesced
+at a short interval, reducing UI stalls without losing the final landmark
+position.
+
+### Landmark and object safety
+
+The eraser now treats numbered atlas and histology landmarks as pairs: deleting
+one removes its corresponding point in the other window and renumbers the
+remaining landmarks. This prevents an unnoticed index shift from pairing the
+wrong anatomical locations.
+
+Point objects use the same barycentric triangle transform as the image warp.
+HERBS reports how many points fall outside the registration mesh. When cells
+are filtered this way, their size, symbol, layer index, and count metadata are
+filtered with the same mask and remain aligned.
+
+### Upgrade notes
+
+Install or update HERBS from the repository:
+
+```bash
+conda activate HERBS
+git pull
+python -m pip install . --upgrade
+```
+
+Restart HERBS after upgrading. Existing projects and `.herbstri` files do not
+need conversion; connectivity is generated automatically when it is absent.
+
+---
+
 ## HERBS 1.0.3
 
 Release date: 25 July 2026

@@ -1,6 +1,13 @@
 # Update Log
 
 ### 25th July 2026
+##### HERBS 1.0.4
+
+Improves manual atlas registration with one reproducible triangulation mesh,
+live quality feedback, safer landmark editing, and smoother seam-free warping.
+See the cumulative [What’s New in HERBS](WhatsNew.md) history for details.
+
+### 25th July 2026
 ##### HERBS 1.0.3
 
 Adds estimated Allen CCFv3 stereotaxic coordinate reporting and fixes atlas
@@ -60,6 +67,5 @@ The probe will be shown in both Coronal and Sagittal 2D atlas view.
 
 - By clicking **info button**, the information window of the current activated object will pop up. 
 The previous way to read the information by double clicking the object is no longer supported. 
-
 
 

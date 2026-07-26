@@ -49,10 +49,6 @@ from .uuuuuu import (
     color_vis_img,
     get_tri_lines,
     match_sides_points,
-    get_vertex_ind_in_triangle,
-    warp_triangle,
-    warp_points,
-    get_pnts_triangle_ind,
     make_label_rgb_img,
     get_corner_line_from_rect,
     delete_points_inside_eraser,
@@ -80,6 +76,15 @@ from .allen_downloader import AllenDownloader
 from .atlas_processor import AtlasProcessor
 from .atlas_loader import AtlasLoader
 from .atlas_view import AtlasView
+from .triangulation import (
+    TRIANGULATION_SCHEMA_VERSION,
+    TriangulationError,
+    build_piecewise_affine_registration,
+    registration_summary_text,
+    transform_points_piecewise,
+    triangle_colors,
+    warp_image_piecewise,
+)
 
 from .image_reader import (
     HISTOLOGY_IMAGE_FILTER,
@@ -185,6 +190,16 @@ class HERBS(QMainWindow, FORM_Main):
         self.histo_tri_data = []
         self.histo_tri_inside_data = []
         self.histo_tri_onside_data = []
+        self.tri_simplices = None
+        self.triangulation_registration = None
+        self.triangulation_topology_point_count = None
+        self._pending_triangulation_preview = None
+        self.triangulation_preview_timer = QTimer(self)
+        self.triangulation_preview_timer.setSingleShot(True)
+        self.triangulation_preview_timer.setInterval(35)
+        self.triangulation_preview_timer.timeout.connect(
+            self._render_triangulation_preview
+        )
 
         self.drawing_allowed = False
 
@@ -1041,12 +1056,14 @@ class HERBS(QMainWindow, FORM_Main):
             self.update_atlas_tri_lines()
 
     def reset_tri_points_atlas(self):
+        self._invalidate_triangulation(clear_topology=True)
         self.clear_tri_inside()
         self.reset_tri_onside_atlas()
         self.small_atlas_rect = None
         self.small_histo_rect = None
 
     def reset_corners_hist(self):
+        self._invalidate_triangulation(clear_topology=True)
         self.histo_tri_inside_data = []  # renew tri_inside data to empty
         for da_item in self.working_img_text:
             self.image_view.img_stacks.vb.removeItem(da_item)
@@ -1734,6 +1751,10 @@ class HERBS(QMainWindow, FORM_Main):
 
     # save triangle points for the atlas
     def save_triangulation_points(self):
+        if len(self.atlas_tri_data) == len(self.histo_tri_data):
+            self._build_triangulation_registration(
+                strict=False, show_error=False
+            )
         path = QFileDialog.getSaveFileName(
             self,
             "Save Triangulation Points Data",
@@ -1748,6 +1769,8 @@ class HERBS(QMainWindow, FORM_Main):
                 "atlas_tri_inside_data": self.atlas_tri_inside_data,
                 "atlas_tri_onside_data": self.atlas_tri_onside_data,
                 "atlas_display": self.atlas_display,
+                "tri_simplices": self.tri_simplices,
+                "triangulation_schema_version": TRIANGULATION_SCHEMA_VERSION,
             }
             success, error = save_herbs_file(path[0], data, "triangulation")
             if not success:
@@ -1787,6 +1810,18 @@ class HERBS(QMainWindow, FORM_Main):
             self.atlas_tri_data = tri_data["atlas_tri_data"]
             self.atlas_tri_inside_data = tri_data["atlas_tri_inside_data"]
             self.atlas_tri_onside_data = tri_data["atlas_tri_onside_data"]
+            loaded_simplices = tri_data.get("tri_simplices")
+            self.tri_simplices = (
+                None
+                if loaded_simplices is None
+                else np.asarray(loaded_simplices, dtype=np.int32)
+            )
+            self.triangulation_topology_point_count = (
+                len(self.atlas_tri_data)
+                if self.tri_simplices is not None
+                else None
+            )
+            self.triangulation_registration = None
             self.working_atlas_text = []
 
             if tri_data["atlas_display"] == "coronal":
@@ -3029,6 +3064,7 @@ class HERBS(QMainWindow, FORM_Main):
             self.tool_box.bound_pnts_num.setText(str(self.np_onside))
             return
         self.np_onside = int(input_txt)
+        self._invalidate_triangulation(clear_topology=True)
         self.print_message("", self.normal_color)
         if (
             self.atlas_view.atlas_data is not None
@@ -3057,6 +3093,250 @@ class HERBS(QMainWindow, FORM_Main):
             )
             if self.tool_box.triang_vis_btn.isChecked():
                 self.update_histo_tri_lines()
+        if len(self.atlas_tri_data) == len(self.histo_tri_data):
+            self._build_triangulation_registration(
+                strict=False, show_error=False
+            )
+
+    def _set_triangulation_quality(self, registration=None, error=None):
+        label = self.tool_box.triang_quality_label
+        if error is not None:
+            label.setText("Mesh: invalid")
+            label.setToolTip(str(error))
+            label.setStyleSheet(
+                "QLabel { color: #ff6b6b; font-weight: 600; padding: 1px 6px; }"
+            )
+            return
+        if registration is None:
+            label.setText("Mesh: waiting for paired landmarks")
+            label.setToolTip(
+                "Add the same number of atlas and histology landmarks to "
+                "evaluate registration quality."
+            )
+            label.setStyleSheet(
+                "QLabel { color: #9a9a9a; padding: 1px 6px; }"
+            )
+            return
+
+        summary = registration["quality"]["summary"]
+        if registration["errors"]:
+            state = "invalid"
+            color = "#ff6b6b"
+        elif summary["warning_count"] or summary["severe_count"]:
+            state = "review"
+            color = "#f0b41e"
+        else:
+            state = "good"
+            color = "#45c46b"
+        label.setText(
+            "Mesh: {} ({} triangles)".format(
+                state, summary["triangle_count"]
+            )
+        )
+        details = registration_summary_text(registration)
+        if registration["errors"]:
+            details = "{}\n{}".format(
+                details, "\n".join(registration["errors"])
+            )
+        elif registration["warnings"]:
+            details = "{}\n{}".format(
+                details, "\n".join(registration["warnings"])
+            )
+        label.setToolTip(details)
+        label.setStyleSheet(
+            "QLabel {{ color: {}; font-weight: 600; padding: 1px 6px; }}".format(
+                color
+            )
+        )
+
+    def _invalidate_triangulation(self, clear_topology=False):
+        self.triangulation_registration = None
+        if clear_topology:
+            self.tri_simplices = None
+            self.triangulation_topology_point_count = None
+        self._set_triangulation_quality()
+
+    def _build_triangulation_registration(self, strict=True, show_error=True):
+        if (
+            self.atlas_view.slice_size is None
+            or self.image_view.img_size is None
+            or len(self.atlas_tri_data) != len(self.histo_tri_data)
+            or len(self.atlas_tri_data) < 3
+        ):
+            error = TriangulationError(
+                "Atlas and histology need the same number of paired landmarks."
+            )
+            self._set_triangulation_quality(error=error)
+            if show_error:
+                self.print_message(str(error), self.error_message_color)
+            return None
+
+        point_count = len(self.atlas_tri_data)
+        simplices = None
+        if (
+            self.tri_simplices is not None
+            and self.triangulation_topology_point_count == point_count
+        ):
+            simplices = self.tri_simplices
+        try:
+            registration = build_piecewise_affine_registration(
+                self.atlas_tri_data,
+                self.histo_tri_data,
+                atlas_shape=self.atlas_view.slice_size,
+                histology_shape=self.image_view.img_size,
+                simplices=simplices,
+                allow_unsafe=True,
+            )
+        except TriangulationError as error:
+            # A malformed topology from an older or interrupted save should
+            # not make otherwise valid landmarks unusable.
+            if simplices is not None:
+                try:
+                    registration = build_piecewise_affine_registration(
+                        self.atlas_tri_data,
+                        self.histo_tri_data,
+                        atlas_shape=self.atlas_view.slice_size,
+                        histology_shape=self.image_view.img_size,
+                        allow_unsafe=True,
+                    )
+                except TriangulationError as retry_error:
+                    error = retry_error
+                    registration = None
+            else:
+                registration = None
+            if registration is None:
+                self._set_triangulation_quality(error=error)
+                if show_error:
+                    self.print_message(str(error), self.error_message_color)
+                return None
+
+        self.tri_simplices = registration["simplices"].copy()
+        self.triangulation_topology_point_count = point_count
+        self.triangulation_registration = registration
+        self._set_triangulation_quality(registration=registration)
+        if strict and registration["errors"]:
+            error = " ".join(registration["errors"])
+            if show_error:
+                self.print_message(error, self.error_message_color)
+            return None
+        if strict and registration["warnings"] and show_error:
+            self.print_message(
+                "Mesh warning: {}".format(" ".join(registration["warnings"])),
+                self.reminder_color,
+            )
+        return registration
+
+    def _add_quality_mesh(self, view, line_list, points, registration):
+        colors = triangle_colors(registration)
+        points = np.asarray(points, dtype=float)
+        for simplex, color in zip(registration["simplices"], colors):
+            path = points[np.append(simplex, simplex[0])]
+            item = pg.PlotDataItem(
+                pen=pg.mkPen(color=tuple(int(value) for value in color), width=2)
+            )
+            item.setData(path)
+            line_list.append(item)
+            view.vb.addItem(item)
+
+    def _schedule_triangulation_preview(self, direction, registration):
+        if registration is None or registration["errors"]:
+            self._pending_triangulation_preview = None
+            self.triangulation_preview_timer.stop()
+            return
+        self._pending_triangulation_preview = (direction, registration)
+        self.triangulation_preview_timer.start()
+
+    def _render_triangulation_preview(self):
+        pending = self._pending_triangulation_preview
+        self._pending_triangulation_preview = None
+        if pending is None or self.overlay_img is None:
+            return
+        direction, registration = pending
+        if direction == "atlas_to_histology":
+            if not self.a2h_transferred:
+                return
+            interpolation = (
+                cv2.INTER_NEAREST
+                if self.current_atlas == "volume"
+                else cv2.INTER_CUBIC
+            )
+            img_wrap = warp_image_piecewise(
+                self.overlay_img,
+                registration,
+                direction,
+                interpolation=interpolation,
+            )
+            self.working_img_data["img-overlay"] = img_wrap
+            self.image_view.img_stacks.image_dict["img-overlay"].setImage(img_wrap)
+            return
+        if not self.h2a_transferred:
+            return
+        img_wrap = warp_image_piecewise(
+            self.overlay_img,
+            registration,
+            direction,
+            interpolation=cv2.INTER_CUBIC,
+        )
+        self.working_atlas_data["atlas-overlay"] = img_wrap.astype("uint8")
+        self.atlas_view.working_atlas.image_dict["atlas-overlay"].setImage(
+            img_wrap.astype("uint8")
+        )
+
+    def _refresh_triangulation_text(self, target):
+        if target == "atlas":
+            view = self.atlas_view.working_atlas
+            text_items = self.working_atlas_text
+            points = self.atlas_tri_inside_data
+        else:
+            view = self.image_view.img_stacks
+            text_items = self.working_img_text
+            points = self.histo_tri_inside_data
+
+        for item in text_items:
+            view.vb.removeItem(item)
+            item.deleteLater()
+        text_items.clear()
+        visible = self.tool_box.checkable_btn_dict["triang_btn"].isChecked()
+        for index, point in enumerate(points, start=1):
+            item = pg.TextItem(str(index))
+            item.setColor(self.triangle_color)
+            item.setPos(point[0], point[1])
+            item.setVisible(visible)
+            text_items.append(item)
+            view.vb.addItem(item)
+
+    def _delete_paired_triangulation_landmark(self, interior_index):
+        deleted = False
+        if interior_index < len(self.atlas_tri_inside_data):
+            del self.atlas_tri_inside_data[interior_index]
+            self.atlas_tri_data = (
+                self.atlas_tri_onside_data + self.atlas_tri_inside_data
+            )
+            self.atlas_view.working_atlas.image_dict["tri_pnts"].setData(
+                pos=np.asarray(self.atlas_tri_data)
+            )
+            self._refresh_triangulation_text("atlas")
+            deleted = True
+        if interior_index < len(self.histo_tri_inside_data):
+            del self.histo_tri_inside_data[interior_index]
+            self.histo_tri_data = (
+                self.histo_tri_onside_data + self.histo_tri_inside_data
+            )
+            self.image_view.img_stacks.image_dict["tri_pnts"].setData(
+                pos=np.asarray(self.histo_tri_data)
+            )
+            self._refresh_triangulation_text("histology")
+            deleted = True
+        if not deleted:
+            return
+        self._invalidate_triangulation(clear_topology=True)
+        if self.tool_box.triang_vis_btn.isChecked():
+            self.update_atlas_tri_lines()
+            self.update_histo_tri_lines()
+        elif len(self.atlas_tri_data) == len(self.histo_tri_data):
+            self._build_triangulation_registration(
+                strict=False, show_error=False
+            )
 
     def remove_histo_tri_lines(self):
         if self.image_view.img_stacks.tri_lines_list:
@@ -3066,10 +3346,18 @@ class HERBS(QMainWindow, FORM_Main):
 
     def update_histo_tri_lines(self):
         self.remove_histo_tri_lines()
-        point_data = (
-            self.image_view.img_stacks.image_dict["tri_pnts"].data["pos"].copy()
+        registration = self._build_triangulation_registration(
+            strict=False, show_error=False
         )
-        point_data = list(point_data)
+        if registration is not None:
+            self._add_quality_mesh(
+                self.image_view.img_stacks,
+                self.image_view.img_stacks.tri_lines_list,
+                self.histo_tri_data,
+                registration,
+            )
+            return
+
         histo_tri_lines = get_tri_lines(self.histo_rect, self.histo_tri_data)
         for el in histo_tri_lines:
             pt1 = [el[0], el[1]]
@@ -3092,10 +3380,19 @@ class HERBS(QMainWindow, FORM_Main):
 
     def update_atlas_tri_lines(self):
         self.remove_atlas_tri_lines()
-        point_data = (
-            self.atlas_view.working_atlas.image_dict["tri_pnts"].data["pos"].copy()
+        registration = self._build_triangulation_registration(
+            strict=False, show_error=False
         )
-        point_data = list(point_data)
+        if registration is not None:
+            self._add_quality_mesh(
+                self.atlas_view.working_atlas,
+                self.atlas_view.working_atlas.tri_lines_list,
+                self.atlas_tri_data,
+                registration,
+            )
+            return
+
+        point_data = list(self.atlas_tri_data)
         atlas_tri_lines = get_tri_lines(self.atlas_rect, point_data)
         for el in atlas_tri_lines:
             pt1 = [el[0], el[1]]
@@ -3148,6 +3445,7 @@ class HERBS(QMainWindow, FORM_Main):
                 )
                 return
 
+        self._invalidate_triangulation(clear_topology=True)
         slice_size = self.atlas_view.slice_size
         image_size = self.image_view.img_size
 
@@ -3196,6 +3494,10 @@ class HERBS(QMainWindow, FORM_Main):
         if self.tool_box.triang_vis_btn.isChecked():
             self.update_histo_tri_lines()
             self.update_atlas_tri_lines()
+        else:
+            self._build_triangulation_registration(
+                strict=False, show_error=False
+            )
 
     # change color for triangle points and text
     def change_triangle_color(self, ev):
@@ -3262,71 +3564,31 @@ class HERBS(QMainWindow, FORM_Main):
                 self.overlay_img = self.atlas_view.slice_stack.img_layer.image.copy()
 
             input_img = self.overlay_img.copy()
-
-            img_wrap = np.zeros(
-                (self.image_view.img_size[0], self.image_view.img_size[1], 3),
-                np.float32,
+            registration = self._build_triangulation_registration()
+            if registration is None:
+                return
+            interpolation = (
+                cv2.INTER_NEAREST
+                if self.current_atlas == "volume"
+                else cv2.INTER_CUBIC
+            )
+            img_wrap = warp_image_piecewise(
+                input_img,
+                registration,
+                "atlas_to_histology",
+                interpolation=interpolation,
             )
 
             if self.histo_tri_inside_data and self.atlas_tri_inside_data:
-                a_temp = len(self.histo_tri_data)
-                b_temp = len(self.atlas_tri_data)
-                if a_temp != b_temp:
-                    self.print_message(
-                        "Number of points in two windows are not matching.",
-                        self.error_message_color,
-                    )
-                    return
-
-                subdiv = cv2.Subdiv2D(self.histo_rect)
-                for p in self.histo_tri_data:
-                    subdiv.insert(p)
-
-                tri_vet_inds = get_vertex_ind_in_triangle(subdiv)
-                for i in range(len(tri_vet_inds)):
-                    da_inds = tri_vet_inds[i]
-                    t1 = [
-                        self.atlas_tri_data[da_inds[0]],
-                        self.atlas_tri_data[da_inds[1]],
-                        self.atlas_tri_data[da_inds[2]],
-                    ]
-                    t2 = [
-                        self.histo_tri_data[da_inds[0]],
-                        self.histo_tri_data[da_inds[1]],
-                        self.histo_tri_data[da_inds[2]],
-                    ]
-                    t1 = np.reshape(t1, (3, 2))
-                    t2 = np.reshape(t2, (3, 2))
-                    warp_triangle(input_img, img_wrap, t1, t2, True)
                 self.project_method = "match to hist"
                 self.register_method = 2
             else:
                 if self.small_atlas_rect is not None:
-                    atlas_rect = self.small_atlas_rect
-                    histo_rect = self.small_histo_rect
                     self.project_method = "match to hist"
                     self.register_method = 2
                 else:
-                    atlas_rect = self.atlas_rect
-                    histo_rect = self.histo_rect
                     self.project_method = "match to atlas"
                     self.register_method = 1
-                src_xrange = (atlas_rect[0], atlas_rect[0] + atlas_rect[2])
-                src_yrange = (atlas_rect[1], atlas_rect[1] + atlas_rect[3])
-                src_img = input_img[
-                    src_yrange[0] : src_yrange[1], src_xrange[0] : src_xrange[1], :
-                ].copy()
-
-                da_dim = (histo_rect[2], histo_rect[3])
-                resized_des = cv2.resize(
-                    src_img, da_dim, interpolation=cv2.INTER_LINEAR
-                )
-
-                des_xrange = (histo_rect[0], histo_rect[0] + histo_rect[2])
-                des_yrange = (histo_rect[1], histo_rect[1] + histo_rect[3])
-                img_wrap[
-                    des_yrange[0] : des_yrange[1], des_xrange[0] : des_xrange[1]
-                ] = resized_des
 
             self.working_img_data["img-overlay"] = img_wrap
             self.image_view.img_stacks.image_dict["img-overlay"].setImage(img_wrap)
@@ -3381,65 +3643,15 @@ class HERBS(QMainWindow, FORM_Main):
                 )
 
             working_img = self.overlay_img.copy()
-
-            img_wrap = np.zeros(
-                (self.atlas_view.slice_size[0], self.atlas_view.slice_size[1], 3),
-                np.float32,
+            registration = self._build_triangulation_registration()
+            if registration is None:
+                return
+            img_wrap = warp_image_piecewise(
+                working_img,
+                registration,
+                "histology_to_atlas",
+                interpolation=cv2.INTER_CUBIC,
             )
-
-            if self.histo_tri_inside_data and self.atlas_tri_inside_data:
-                a_temp = len(self.histo_tri_data)
-                b_temp = len(self.atlas_tri_data)
-                if a_temp != b_temp:
-                    self.print_message(
-                        "Number of points in two windows are not matching.",
-                        self.error_message_color,
-                    )
-                    return
-                subdiv = cv2.Subdiv2D(self.atlas_rect)
-                for p in self.atlas_tri_data:
-                    subdiv.insert((int(p[0]), int(p[1])))
-
-                tri_vet_inds = get_vertex_ind_in_triangle(subdiv)
-
-                for i in range(len(tri_vet_inds)):
-                    da_inds = tri_vet_inds[i]
-                    t2 = [
-                        self.atlas_tri_data[da_inds[0]],
-                        self.atlas_tri_data[da_inds[1]],
-                        self.atlas_tri_data[da_inds[2]],
-                    ]
-                    t1 = [
-                        self.histo_tri_data[da_inds[0]],
-                        self.histo_tri_data[da_inds[1]],
-                        self.histo_tri_data[da_inds[2]],
-                    ]
-                    t1 = np.reshape(t1, (3, 2))
-                    t2 = np.reshape(t2, (3, 2))
-                    warp_triangle(working_img, img_wrap, t1, t2, True)
-            else:
-                if self.small_atlas_rect is not None:
-                    atlas_rect = self.small_atlas_rect
-                    histo_rect = self.small_histo_rect
-                else:
-                    atlas_rect = self.atlas_rect
-                    histo_rect = self.histo_rect
-                src_xrange = (histo_rect[0], histo_rect[0] + histo_rect[2])
-                src_yrange = (histo_rect[1], histo_rect[1] + histo_rect[3])
-                src_img = working_img[
-                    src_yrange[0] : src_yrange[1], src_xrange[0] : src_xrange[1], :
-                ].copy()
-
-                da_dim = (atlas_rect[2], atlas_rect[3])
-                resized_des = cv2.resize(
-                    src_img, da_dim, interpolation=cv2.INTER_LINEAR
-                )
-
-                des_xrange = (atlas_rect[0], atlas_rect[0] + atlas_rect[2])
-                des_yrange = (atlas_rect[1], atlas_rect[1] + atlas_rect[3])
-                img_wrap[
-                    des_yrange[0] : des_yrange[1], des_xrange[0] : des_xrange[1]
-                ] = resized_des
 
             self.working_atlas_data["atlas-overlay"] = img_wrap.astype("uint8")
             self.atlas_view.working_atlas.image_dict["atlas-overlay"].setImage(
@@ -3473,42 +3685,27 @@ class HERBS(QMainWindow, FORM_Main):
     # ---------------------------
     #          Accept
     # ---------------------------
-    def transfer_pnt(self, pnt, tri_vet_inds):
-        res_pnts = np.zeros((len(pnt), 2))
-        res_pnts[:] = np.nan
-        loc = get_pnts_triangle_ind(
-            tri_vet_inds, self.histo_tri_data, self.image_view.img_size, pnt
+    def transfer_pnt(self, pnt, registration, return_valid=False):
+        res_pnts, valid, _triangle_index = transform_points_piecewise(
+            np.asarray(pnt, dtype=float),
+            registration,
+            "histology_to_atlas",
         )
-        loc = np.ravel(loc)
-        if np.any(np.isnan(loc)):
-            msg = "Some of the selected points are out of triangles, the points are deleted."
-            self.print_message(msg, self.reminder_color)
-        for i in range(len(tri_vet_inds)):
-            da_inds = tri_vet_inds[i]
-            t2 = [
-                self.atlas_tri_data[da_inds[0]],
-                self.atlas_tri_data[da_inds[1]],
-                self.atlas_tri_data[da_inds[2]],
-            ]
-            t1 = [
-                self.histo_tri_data[da_inds[0]],
-                self.histo_tri_data[da_inds[1]],
-                self.histo_tri_data[da_inds[2]],
-            ]
-            t1 = np.reshape(t1, (3, 2))
-            t2 = np.reshape(t2, (3, 2))
-            inds = np.where(loc == i)
-            if len(inds) > 0:
-                pnts_inside = pnt[inds[0]]
-                res = warp_points(pnts_inside, t1, t2)
-                res_pnts[inds[0]] = res
-        res_pnts = res_pnts[~np.isnan(res_pnts[:, 0])]
-        return res_pnts
+        invalid_count = int(np.count_nonzero(~valid))
+        if invalid_count:
+            self.print_message(
+                "{} selected point(s) are outside the registration mesh and "
+                "were not transferred.".format(invalid_count),
+                self.reminder_color,
+            )
+        if return_valid:
+            return res_pnts[valid], valid
+        return res_pnts[valid]
 
-    def transfer_vox_to_pnt(self, img_data, tri_vet_inds):
+    def transfer_vox_to_pnt(self, img_data, registration):
         temp_pnts = np.where(img_data != 0)
         data = np.stack([temp_pnts[1], temp_pnts[0]], axis=1) + 0.5
-        res_pnts = self.transfer_pnt(data, tri_vet_inds)
+        res_pnts = self.transfer_pnt(data, registration)
         return res_pnts
 
     def transform_accept(self):
@@ -3521,19 +3718,17 @@ class HERBS(QMainWindow, FORM_Main):
             "Transform accepted, start transferring...", self.normal_color
         )
         self.sidebar_tab_state(3)
-        subdiv = cv2.Subdiv2D(self.atlas_rect)
         self.atlas_tri_data = list(
             self.atlas_view.working_atlas.image_dict["tri_pnts"].data["pos"]
         )
-        for p in self.atlas_tri_data:
-            subdiv.insert((int(p[0]), int(p[1])))
-
-        tri_vet_inds = get_vertex_ind_in_triangle(subdiv)
+        registration = self._build_triangulation_registration()
+        if registration is None:
+            return
 
         if self.working_img_data["img-contour"]:
             self.print_message("Transferring contour...", self.normal_color)
             res_pnts = self.transfer_pnt(
-                np.asarray(self.working_img_data["img-contour"]), tri_vet_inds
+                np.asarray(self.working_img_data["img-contour"]), registration
             )
             self.working_atlas_data["atlas-contour"] = res_pnts.tolist()
             self.atlas_view.working_atlas.image_dict["atlas-contour"].setData(
@@ -3554,7 +3749,7 @@ class HERBS(QMainWindow, FORM_Main):
 
         if self.working_img_data["img-probe"]:
             res_pnts = self.transfer_pnt(
-                np.asarray(self.working_img_data["img-probe"]), tri_vet_inds
+                np.asarray(self.working_img_data["img-probe"]), registration
             )
             self.working_atlas_data["atlas-probe"] = res_pnts.tolist()
             self.atlas_view.working_atlas.image_dict["atlas-probe"].setData(
@@ -3583,7 +3778,7 @@ class HERBS(QMainWindow, FORM_Main):
 
         if self.working_img_data["img-drawing"]:
             res_pnts = self.transfer_pnt(
-                np.asarray(self.working_img_data["img-drawing"]), tri_vet_inds
+                np.asarray(self.working_img_data["img-drawing"]), registration
             )
             self.working_atlas_data["atlas-drawing"] = res_pnts.tolist()
             if self.tool_box.is_closed:
@@ -3611,25 +3806,30 @@ class HERBS(QMainWindow, FORM_Main):
             self.print_message("Drawing transferred.", self.normal_color)
 
         if self.working_img_data["img-cells"]:
-            res_pnts = self.transfer_pnt(
-                np.asarray(self.working_img_data["img-cells"]), tri_vet_inds
+            res_pnts, valid_cells = self.transfer_pnt(
+                np.asarray(self.working_img_data["img-cells"]),
+                registration,
+                return_valid=True,
             )
+            cell_size = np.asarray(self.working_img_data["cell_size"])[
+                valid_cells
+            ].tolist()
+            cell_symbol = np.asarray(
+                self.working_img_data["cell_symbol"], dtype=object
+            )[valid_cells].tolist()
+            cell_layer_index = np.asarray(
+                self.working_img_data["cell_layer_index"], dtype=int
+            )[valid_cells].tolist()
             self.working_atlas_data["atlas-cells"] = res_pnts.tolist()
-            self.working_atlas_data["cell_count"] = self.working_img_data[
-                "cell_count"
-            ].copy()
-            self.working_atlas_data["cell_size"] = self.working_img_data[
-                "cell_size"
-            ].copy()
-            self.working_atlas_data["cell_symbol"] = self.working_img_data[
-                "cell_symbol"
-            ].copy()
-            self.working_atlas_data["cell_layer_index"] = self.working_img_data[
-                "cell_layer_index"
-            ].copy()
+            self.working_atlas_data["cell_count"] = get_cell_count(
+                cell_layer_index
+            )
+            self.working_atlas_data["cell_size"] = cell_size
+            self.working_atlas_data["cell_symbol"] = cell_symbol
+            self.working_atlas_data["cell_layer_index"] = cell_layer_index
             self.atlas_view.working_atlas.image_dict["atlas-cells"].setData(
                 pos=np.asarray(self.working_atlas_data["atlas-cells"]),
-                symbol=self.working_img_data["cell_symbol"],
+                symbol=cell_symbol,
             )
             vis_img = create_vis_img(
                 self.atlas_view.slice_size, res_pnts, self.cell_color, vis_type="p"
@@ -3650,26 +3850,12 @@ class HERBS(QMainWindow, FORM_Main):
 
         if self.working_img_data["img-virus"] is not None:
             input_virus_img = self.working_img_data["img-virus"].copy()
-            img_wrap = np.zeros(
-                (self.atlas_view.slice_size[0], self.atlas_view.slice_size[1]),
-                np.float32,
+            img_wrap = warp_image_piecewise(
+                input_virus_img,
+                registration,
+                "histology_to_atlas",
+                interpolation=cv2.INTER_NEAREST,
             )
-
-            for i in range(len(tri_vet_inds)):
-                da_inds = tri_vet_inds[i]
-                t2 = [
-                    self.atlas_tri_data[da_inds[0]],
-                    self.atlas_tri_data[da_inds[1]],
-                    self.atlas_tri_data[da_inds[2]],
-                ]
-                t1 = [
-                    self.histo_tri_data[da_inds[0]],
-                    self.histo_tri_data[da_inds[1]],
-                    self.histo_tri_data[da_inds[2]],
-                ]
-                t1 = np.reshape(t1, (3, 2))
-                t2 = np.reshape(t2, (3, 2))
-                warp_triangle(input_virus_img, img_wrap, t1, t2, False)
 
             temp_pnts = np.where(img_wrap != 0)
             res_pnts = np.stack([temp_pnts[1], temp_pnts[0]], axis=1) + 0.5
@@ -4079,6 +4265,7 @@ class HERBS(QMainWindow, FORM_Main):
         elif self.tool_box.checkable_btn_dict["triang_btn"].isChecked():
             if self.a2h_transferred or self.h2a_transferred:
                 return
+            self._invalidate_triangulation(clear_topology=True)
             self.histo_tri_inside_data.append([int(x), int(y)])
             self.histo_tri_data = (
                 self.histo_tri_onside_data + self.histo_tri_inside_data
@@ -4094,6 +4281,10 @@ class HERBS(QMainWindow, FORM_Main):
             self.working_img_text[-1].setPos(x, y)
             if self.tool_box.triang_vis_btn.isChecked():
                 self.update_histo_tri_lines()
+            elif len(self.atlas_tri_data) == len(self.histo_tri_data):
+                self._build_triangulation_registration(
+                    strict=False, show_error=False
+                )
         # ------------------------- loc -- cell
         elif self.tool_box.checkable_btn_dict["loc_btn"].isChecked():
             if self.tool_box.cell_selector_btn.isChecked():
@@ -4329,58 +4520,31 @@ class HERBS(QMainWindow, FORM_Main):
             ].set_thumbnail_data(res)
 
     def hist_window_tri_pnts_moving(self, ev_obj):
-        ev = ev_obj[0]
         ind = ev_obj[1]
         da_num = (self.np_onside - 1) * 4
         if ind < da_num:
             return
-
-        if self.a2h_transferred:
-            old_pnts = self.histo_tri_data.copy()
-            new_pnts = self.histo_tri_data.copy()
-            da_new_pnt = (
-                self.image_view.img_stacks.image_dict["tri_pnts"]
-                .data["pos"][ind]
-                .copy()
-            )
-            new_pnts[ind] = [int(da_new_pnt[0]), int(da_new_pnt[1])]
-
-            img_overlay = self.image_view.img_stacks.image_dict[
-                "img-overlay"
-            ].image.copy()
-            img_wrap = img_overlay.copy()
-
-            img_size = img_wrap.shape[:2]
-            rect = (0, 0, img_size[1], img_size[0])
-
-            subdiv = cv2.Subdiv2D(rect)
-            for p in new_pnts:
-                subdiv.insert(p)
-
-            tri_vet_inds = get_vertex_ind_in_triangle(subdiv)
-            for i in range(len(tri_vet_inds)):
-                da_inds = tri_vet_inds[i]
-                # if ind not in da_inds:
-                #     continue
-                t1 = [old_pnts[da_inds[0]], old_pnts[da_inds[1]], old_pnts[da_inds[2]]]
-                t2 = [new_pnts[da_inds[0]], new_pnts[da_inds[1]], new_pnts[da_inds[2]]]
-                t1 = np.reshape(t1, (3, 2))
-                t2 = np.reshape(t2, (3, 2))
-                warp_triangle(img_overlay, img_wrap, t1, t2, True)
-            self.image_view.img_stacks.image_dict["img-overlay"].setImage(img_wrap)
-            self.histo_tri_data = new_pnts
-        else:
-            da_new_pnt = (
-                self.image_view.img_stacks.image_dict["tri_pnts"]
-                .data["pos"][ind]
-                .copy()
-            )
-            self.histo_tri_data[ind] = [int(da_new_pnt[0]), int(da_new_pnt[1])]
+        da_new_pnt = (
+            self.image_view.img_stacks.image_dict["tri_pnts"]
+            .data["pos"][ind]
+            .copy()
+        )
+        self.histo_tri_data[ind] = [
+            int(da_new_pnt[0]),
+            int(da_new_pnt[1]),
+        ]
         self.histo_tri_inside_data[ind - da_num] = [
             int(da_new_pnt[0]),
             int(da_new_pnt[1]),
         ]
         self.working_img_text[ind - da_num].setPos(da_new_pnt[0], da_new_pnt[1])
+        registration = self._build_triangulation_registration(
+            strict=False, show_error=False
+        )
+        if self.a2h_transferred:
+            self._schedule_triangulation_preview(
+                "atlas_to_histology", registration
+            )
         if self.tool_box.triang_vis_btn.isChecked():
             self.update_histo_tri_lines()
 
@@ -4430,20 +4594,7 @@ class HERBS(QMainWindow, FORM_Main):
         num = (self.np_onside - 1) * 4
         if clicked_ind < num:
             return
-        self.image_view.img_stacks.vb.removeItem(self.working_img_text[-1])
-        del self.working_img_text[-1]
-        del self.histo_tri_data[clicked_ind]
-        del self.histo_tri_inside_data[clicked_ind - num]
-        self.image_view.img_stacks.image_dict["tri_pnts"].setData(
-            pos=np.asarray(self.histo_tri_data)
-        )
-        for i in range(len(self.working_img_text)):
-            pnt_id = i + num
-            self.working_img_text[i].setPos(
-                self.histo_tri_data[pnt_id][0], self.histo_tri_data[pnt_id][1]
-            )
-        if self.tool_box.triang_vis_btn.isChecked():
-            self.update_histo_tri_lines()
+        self._delete_paired_triangulation_landmark(clicked_ind - num)
 
     # ------------------------------------------------------------------
     #
@@ -4896,6 +5047,7 @@ class HERBS(QMainWindow, FORM_Main):
                     self.error_message_color,
                 )
                 return
+            self._invalidate_triangulation(clear_topology=True)
             self.atlas_tri_inside_data.append([int(x), int(y)])
             self.atlas_tri_data = (
                 self.atlas_tri_onside_data + self.atlas_tri_inside_data
@@ -4911,6 +5063,10 @@ class HERBS(QMainWindow, FORM_Main):
             self.atlas_view.working_atlas.vb.addItem(self.working_atlas_text[-1])
             if self.tool_box.triang_vis_btn.isChecked():
                 self.update_atlas_tri_lines()
+            elif len(self.atlas_tri_data) == len(self.histo_tri_data):
+                self._build_triangulation_registration(
+                    strict=False, show_error=False
+                )
         # ------------------------- eraser
         elif self.tool_box.checkable_btn_dict["eraser_btn"].isChecked():
             if (
@@ -5181,86 +5337,31 @@ class HERBS(QMainWindow, FORM_Main):
 
     #
     def atlas_window_tri_pnts_moving(self, ev_obj):
-        ev = ev_obj[0]
         ind = ev_obj[1]
         da_num = (self.np_onside - 1) * 4
         if ind < da_num:
             return
-        if self.h2a_transferred:
-            old_pnts = self.atlas_tri_data.copy()
-            new_pnts = self.atlas_tri_data.copy()
-            da_new_pnt = (
-                self.atlas_view.working_atlas.image_dict["tri_pnts"]
-                .data["pos"][ind]
-                .copy()
-            )
-            new_pnts[ind] = [int(da_new_pnt[0]), int(da_new_pnt[1])]
-            # print(self.atlas_tri_data[ind])
-            # print(da_new_pnt)
-
-            input_img = self.overlay_img.copy()
-            img_wrap = np.zeros(
-                (
-                    self.atlas_view.slice_size[0],
-                    self.atlas_view.slice_size[1],
-                    input_img.shape[2],
-                ),
-                np.float32,
-            )
-
-            subdiv = cv2.Subdiv2D(self.atlas_rect)
-            for p in self.atlas_tri_data:
-                subdiv.insert(p)
-
-            tri_vet_inds = get_vertex_ind_in_triangle(subdiv)
-            for i in range(len(tri_vet_inds)):
-                da_inds = tri_vet_inds[i]
-                t1 = [
-                    self.atlas_tri_data[da_inds[0]],
-                    self.atlas_tri_data[da_inds[1]],
-                    self.atlas_tri_data[da_inds[2]],
-                ]
-                t2 = [new_pnts[da_inds[0]], new_pnts[da_inds[1]], new_pnts[da_inds[2]]]
-                t1 = np.reshape(t1, (3, 2))
-                t2 = np.reshape(t2, (3, 2))
-                warp_triangle(input_img, img_wrap, t1, t2, True)
-
-            #
-
-            # # img_overlay = self.atlas_view.working_atlas.overlay_img.image.copy()
-            # img_wrap = img_overlay.copy()
-            #
-            # img_size = img_wrap.shape[:2]
-            # rect = (0, 0, img_size[1], img_size[0])
-            #
-            # subdiv = cv2.Subdiv2D(rect)
-            # for p in new_pnts:
-            #     subdiv.insert(p)
-            #
-            # tri_vet_inds = get_vertex_ind_in_triangle(subdiv)
-            # for i in range(len(tri_vet_inds)):
-            #     da_inds = tri_vet_inds[i]
-            #     if ind not in da_inds:
-            #         continue
-            #     t1 = [old_pnts[da_inds[0]], old_pnts[da_inds[1]], old_pnts[da_inds[2]]]
-            #     t2 = [new_pnts[da_inds[0]], new_pnts[da_inds[1]], new_pnts[da_inds[2]]]
-            #     t1 = np.reshape(t1, (3, 2))
-            #     t2 = np.reshape(t2, (3, 2))
-            #     warp_triangle(img_overlay, img_wrap,  t1, t2, True)
-            self.atlas_view.working_atlas.image_dict["atlas-overlay"].setImage(img_wrap)
-            # self.atlas_tri_data = new_pnts
-        else:
-            da_new_pnt = (
-                self.atlas_view.working_atlas.image_dict["tri_pnts"]
-                .data["pos"][ind]
-                .copy()
-            )
-            self.atlas_tri_data[ind] = [int(da_new_pnt[0]), int(da_new_pnt[1])]
+        da_new_pnt = (
+            self.atlas_view.working_atlas.image_dict["tri_pnts"]
+            .data["pos"][ind]
+            .copy()
+        )
+        self.atlas_tri_data[ind] = [
+            int(da_new_pnt[0]),
+            int(da_new_pnt[1]),
+        ]
         self.atlas_tri_inside_data[ind - da_num] = [
             int(da_new_pnt[0]),
             int(da_new_pnt[1]),
         ]
         self.working_atlas_text[ind - da_num].setPos(da_new_pnt[0], da_new_pnt[1])
+        registration = self._build_triangulation_registration(
+            strict=False, show_error=False
+        )
+        if self.h2a_transferred:
+            self._schedule_triangulation_preview(
+                "histology_to_atlas", registration
+            )
         if self.tool_box.triang_vis_btn.isChecked():
             self.update_atlas_tri_lines()
 
@@ -5275,20 +5376,7 @@ class HERBS(QMainWindow, FORM_Main):
         num = (self.np_onside - 1) * 4
         if clicked_ind < num:
             return
-        self.atlas_view.working_atlas.vb.removeItem(self.working_atlas_text[-1])
-        del self.working_atlas_text[-1]
-        del self.atlas_tri_inside_data[clicked_ind - num]
-        self.atlas_tri_data = self.atlas_tri_onside_data + self.atlas_tri_inside_data
-        self.atlas_view.working_atlas.image_dict["tri_pnts"].setData(
-            pos=np.asarray(self.atlas_tri_data)
-        )
-        for i in range(len(self.working_atlas_text)):
-            pnt_id = i + num
-            self.working_atlas_text[i].setPos(
-                self.atlas_tri_data[pnt_id][0], self.atlas_tri_data[pnt_id][1]
-            )
-        if self.tool_box.triang_vis_btn.isChecked():
-            self.update_atlas_tri_lines()
+        self._delete_paired_triangulation_landmark(clicked_ind - num)
 
     def atlas_probe_pnts_clicked(self, points, ev):
         if self.num_windows == 4 or not self.working_atlas_data["atlas-probe"]:
@@ -7630,6 +7718,11 @@ class HERBS(QMainWindow, FORM_Main):
             "histo_tri_data": self.histo_tri_data,
             "histo_tri_inside_data": self.histo_tri_inside_data,
             "histo_tri_onside_data": self.histo_tri_onside_data,
+            "tri_simplices": self.tri_simplices,
+            "triangulation_topology_point_count": (
+                self.triangulation_topology_point_count
+            ),
+            "triangulation_schema_version": TRIANGULATION_SCHEMA_VERSION,
             "a2h_transferred": self.a2h_transferred,
             "h2a_transferred": self.h2a_transferred,
             "project_method": self.project_method,
@@ -7652,6 +7745,23 @@ class HERBS(QMainWindow, FORM_Main):
         self.histo_tri_data = setting_data["histo_tri_data"]
         self.histo_tri_inside_data = setting_data["histo_tri_inside_data"]
         self.histo_tri_onside_data = setting_data["histo_tri_onside_data"]
+        loaded_simplices = setting_data.get("tri_simplices")
+        self.tri_simplices = (
+            None
+            if loaded_simplices is None
+            else np.asarray(loaded_simplices, dtype=np.int32)
+        )
+        self.triangulation_topology_point_count = setting_data.get(
+            "triangulation_topology_point_count"
+        )
+        if (
+            self.triangulation_topology_point_count is None
+            and self.tri_simplices is not None
+        ):
+            self.triangulation_topology_point_count = len(
+                self.atlas_tri_data
+            )
+        self.triangulation_registration = None
         self.a2h_transferred = setting_data["a2h_transferred"]
         self.h2a_transferred = setting_data["h2a_transferred"]
         self.project_method = setting_data["project_method"]
@@ -7682,6 +7792,14 @@ class HERBS(QMainWindow, FORM_Main):
                 )
                 self.image_view.img_stacks.vb.addItem(self.working_img_text[-1])
                 self.working_img_text[-1].setVisible(False)
+
+        if (
+            self.current_atlas_path is not None
+            and self.image_view.current_img is not None
+        ):
+            self._build_triangulation_registration(
+                strict=False, show_error=False
+            )
 
     def load_project_called(self):
         if (
