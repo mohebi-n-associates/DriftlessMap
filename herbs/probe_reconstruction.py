@@ -313,6 +313,10 @@ def build_probe_reconstruction(
         "probe_local_um": contact_local_um,
         "distance_from_tip_um": distance_from_tip_um,
         "distance_from_insertion_um": float(probe_length_um) - distance_from_tip_um,
+        "axial_distance_up_from_tip_um": distance_from_tip_um,
+        "axial_depth_from_insertion_um": (
+            float(probe_length_um) - distance_from_tip_um
+        ),
         "herbs_vox": contact_herbs_vox,
         "herbs_vox_index": contact_vox_index_flat,
         "bregma_um": contact_bregma_vox_flat * voxel_size_um,

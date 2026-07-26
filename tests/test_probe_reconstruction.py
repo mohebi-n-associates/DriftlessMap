@@ -176,6 +176,13 @@ class ProbeReconstructionTests(unittest.TestCase):
         np.testing.assert_allclose(
             contacts["distance_from_tip_um"], [185, 225, 205]
         )
+        np.testing.assert_allclose(
+            contacts["axial_distance_up_from_tip_um"], [185, 225, 205]
+        )
+        np.testing.assert_allclose(
+            contacts["axial_depth_from_insertion_um"],
+            [9815, 9775, 9795],
+        )
         self.assertEqual(contacts["structure_acronym"], ["R10", "R11", "R10"])
         np.testing.assert_allclose(
             contacts["allen_ccf_um"], contacts["source_um"]

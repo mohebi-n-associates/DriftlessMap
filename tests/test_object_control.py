@@ -133,7 +133,7 @@ class ProbeInfoWindowTests(unittest.TestCase):
 
         self.assertEqual(
             window.export_btn.text(),
-            "Export trajectory and contacts as CSV",
+            "Export probe CSV files",
         )
         self.assertIn("AP tilt from vertical : ", labels)
         self.assertIn("Vertical depth change : ", labels)
@@ -149,15 +149,27 @@ class ProbeInfoWindowTests(unittest.TestCase):
         with (
             patch(
                 "herbs.object_control.QFileDialog.getSaveFileName",
-                return_value=("/tmp/probe.csv", "CSV files (*.csv)"),
+                return_value=(
+                    "/tmp/probe_export.csv",
+                    "CSV files (*.csv)",
+                ),
             ),
-            patch("herbs.object_control.write_probe_csv") as writer,
+            patch(
+                "herbs.object_control.write_probe_csv_files",
+                return_value={
+                    "contacts": "/tmp/probe_export_contacts.csv",
+                    "trajectory": "/tmp/probe_export_trajectory.csv",
+                    "regions": "/tmp/probe_export_regions.csv",
+                },
+            ) as writer,
+            patch("herbs.object_control.QMessageBox.information") as message,
         ):
             window.export_coordinates()
 
         writer.assert_called_once_with(
-            "/tmp/probe.csv", "probe one", window.probe_data
+            "/tmp/probe_export.csv", "probe one", window.probe_data
         )
+        message.assert_called_once()
 
 
 if __name__ == "__main__":

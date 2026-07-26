@@ -5,7 +5,12 @@ import unittest
 
 import numpy as np
 
-from herbs.probe_csv import iter_probe_csv_rows, write_probe_csv
+from herbs.probe_csv import (
+    iter_probe_contact_rows,
+    iter_probe_region_rows,
+    probe_trajectory_row,
+    write_probe_csv_files,
+)
 from herbs.probe_reconstruction import build_probe_reconstruction
 
 
@@ -62,6 +67,7 @@ def probe_data():
         trajectory_fit=trajectory_fit,
     )
     return {
+        "probe_type_name": "test",
         "ap_angle": 11.67,
         "ap_tilt": "posterior",
         "ml_angle": 2.5,
@@ -79,53 +85,82 @@ def probe_data():
 
 
 class ProbeCsvTests(unittest.TestCase):
-    def test_rows_include_endpoints_contacts_and_region_summary(self):
-        rows = list(iter_probe_csv_rows("probe one", probe_data()))
+    def test_contacts_are_depth_sorted_with_unambiguous_distance_names(self):
+        rows = list(iter_probe_contact_rows("probe one", probe_data()))
 
+        self.assertEqual([row["site_index"] for row in rows], [0, 2, 1])
         self.assertEqual(
-            [row["record_type"] for row in rows],
-            [
-                "insertion",
-                "tip",
-                "contact",
-                "contact",
-                "contact",
-                "region_summary",
-                "region_summary",
-            ],
+            [row["depth_rank_deepest_first"] for row in rows],
+            [0, 1, 2],
         )
-        contact = rows[2]
-        self.assertEqual(contact["site_index"], 0)
-        self.assertEqual(contact["column_index"], 0)
-        self.assertEqual(contact["structure_acronym"], "R10")
-        self.assertEqual(contact["probe_lateral_um"], -8)
-        self.assertEqual(contact["probe_surface_normal_um"], 12)
-        self.assertIn("allen_AP_vox", contact)
-        self.assertEqual(contact["fit_inliers"], 3)
-        self.assertEqual(contact["AP_tilt_direction"], "posterior")
+        self.assertEqual(
+            [row["axial_distance_up_from_tip_um"] for row in rows],
+            [185, 205, 225],
+        )
+        self.assertEqual(
+            [row["axial_depth_from_insertion_um"] for row in rows],
+            [9815, 9795, 9775],
+        )
+        self.assertEqual(rows[0]["structure_acronym"], "R10")
+        self.assertEqual(rows[0]["probe_lateral_um"], -8)
+        self.assertIn("allen_AP_vox", rows[0])
+        self.assertNotIn("record_type", rows[0])
+        self.assertNotIn("distance_from_tip_um", rows[0])
+        self.assertTrue(all(value != "" for row in rows for value in row.values()))
 
-        region = rows[-1]
-        self.assertEqual(region["structure_name"], "Region eleven")
-        self.assertEqual(region["region_contact_count"], 1)
-        self.assertEqual(region["region_path_length_um"], 400)
+    def test_trajectory_and_region_rows_have_dedicated_schemas(self):
+        data = probe_data()
+        trajectory = probe_trajectory_row("probe one", data)
+        regions = list(iter_probe_region_rows("probe one", data))
 
-    def test_writer_creates_a_standard_csv(self):
+        self.assertEqual(trajectory["insertion_to_tip_length_um"], 10000)
+        self.assertEqual(trajectory["fit_inliers"], 3)
+        self.assertIn("insertion_allen_AP_vox", trajectory)
+        self.assertIn("tip_allen_AP_vox", trajectory)
+        self.assertNotIn("structure_id", trajectory)
+        self.assertTrue(all(value != "" for value in trajectory.values()))
+
+        self.assertEqual(len(regions), 2)
+        self.assertEqual(regions[1]["structure_name"], "Region eleven")
+        self.assertEqual(regions[1]["contact_count"], 1)
+        self.assertEqual(regions[1]["path_length_um"], 400)
+        self.assertNotIn("herbs_ML_vox", regions[1])
+        self.assertTrue(
+            all(value != "" for row in regions for value in row.values())
+        )
+
+    def test_writer_creates_three_consistent_csv_files(self):
         with tempfile.TemporaryDirectory() as folder:
-            path = Path(folder) / "probe.csv"
-            write_probe_csv(path, "probe one", probe_data())
+            selected_path = Path(folder) / "probe_export.csv"
+            paths = write_probe_csv_files(
+                selected_path, "probe one", probe_data()
+            )
 
-            with path.open(newline="", encoding="utf-8") as csv_file:
-                rows = list(csv.DictReader(csv_file))
+            self.assertEqual(
+                paths,
+                {
+                    "contacts": Path(folder) / "probe_export_contacts.csv",
+                    "trajectory": (
+                        Path(folder) / "probe_export_trajectory.csv"
+                    ),
+                    "regions": Path(folder) / "probe_export_regions.csv",
+                },
+            )
+            tables = {}
+            for table_name, path in paths.items():
+                with path.open(newline="", encoding="utf-8") as csv_file:
+                    tables[table_name] = list(csv.DictReader(csv_file))
 
-        self.assertEqual(len(rows), 7)
-        self.assertEqual(rows[0]["record_type"], "insertion")
-        self.assertEqual(rows[2]["record_type"], "contact")
-        self.assertEqual(rows[2]["structure_acronym"], "R10")
-        self.assertEqual(rows[-1]["record_type"], "region_summary")
+        self.assertEqual(len(tables["contacts"]), 3)
+        self.assertEqual(len(tables["trajectory"]), 1)
+        self.assertEqual(len(tables["regions"]), 2)
+        self.assertNotIn("record_type", tables["contacts"][0])
+        self.assertNotIn("structure_id", tables["trajectory"][0])
+        self.assertNotIn("herbs_ML_vox", tables["regions"][0])
 
     def test_legacy_probe_requires_reconstruction_before_export(self):
         with self.assertRaisesRegex(ValueError, "Re-merge"):
-            list(iter_probe_csv_rows("legacy probe", {}))
+            list(iter_probe_contact_rows("legacy probe", {}))
 
 
 if __name__ == "__main__":

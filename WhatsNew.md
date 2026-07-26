@@ -21,8 +21,10 @@ ready for contact-level analysis outside HERBS.
 - Clearly distinguishes tilt, insertion-to-tip length, vertical depth change,
   physical contact count, and anatomical path length.
 - Labels the probe schematic with region acronyms and contact counts.
-- Exports insertion, tip, every physical contact, and region traversal to CSV
-  with atlas, anatomical, and fit-quality metadata.
+- Exports separate contact, trajectory, and region CSV files so every row has
+  one consistent meaning and schema.
+- Orders exported contacts from deepest to shallowest and uses explicit axial
+  tip-distance and insertion-depth column names.
 - Correctly summarizes probes whose reconstructed path remains entirely
   within one anatomical region.
 
@@ -55,21 +57,25 @@ The probe schematic labels each region with its acronym and contact count.
 Mapping quality is classified as good, review, or poor relative to the atlas
 voxel size, while the underlying measurements remain visible.
 
-### Probe coordinate CSV export
+### Probe CSV exports
 
-The new **Export trajectory and contacts as CSV** action writes:
+The new **Export probe CSV files** action creates three companion files:
 
-- Insertion and tip coordinates.
-- Every physical contact in explicit column and within-column order.
-- Distance from insertion and tip, plus probe-local lateral and surface-normal
-  offsets.
-- Structure ID, acronym, and name for each contact.
-- Region contact totals and reconstructed path lengths.
-- Trajectory angles, length, fit method, retained-point count, residuals, and
-  surface-correction metadata.
-- Continuous HERBS and source-atlas coordinates.
-- For recognized Allen CCFv3 atlases, raw Allen voxels, estimated Bregma AP/ML,
-  and the affine DV value explicitly marked as unsuitable for targeting.
+- `_contacts.csv` contains only physical contacts and their coordinates and
+  anatomical assignments. Rows are ordered deepest to shallowest. The
+  `axial_distance_up_from_tip_um` value is smallest near the deepest physical
+  tip and increases toward the surface; `axial_depth_from_insertion_um` starts
+  at the insertion surface and increases deeper. The original `site_index`,
+  `column_index`, and `index_in_column` remain available.
+- `_trajectory.csv` contains one row with the insertion, tip, angles, length,
+  fit quality, surface correction, and coordinate-system metadata.
+- `_regions.csv` contains only region IDs, names, acronyms, contact totals, and
+  reconstructed path lengths.
+
+Coordinate columns are included only when meaningful for the loaded atlas.
+For recognized Allen CCFv3 atlases, the contact and trajectory files include
+raw Allen voxels, estimated Bregma AP/ML, and the affine DV value explicitly
+marked as unsuitable for targeting.
 
 ### Upgrade notes
 

@@ -7,7 +7,7 @@ from PyQt6.QtWidgets import *
 from PyQt6.QtGui import *
 from PyQt6.QtCore import *
 from .wtiles import QDoubleButton
-from .probe_csv import write_probe_csv
+from .probe_csv import write_probe_csv_files
 from .roi_analysis import write_roi_csv
 from .uuuuuu import read_qss_file
 from .resources import resource_path
@@ -895,7 +895,7 @@ class ProbeInfoWindow(QDialog):
         # export and close buttons
         ok_btn = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
         self.export_btn = ok_btn.addButton(
-            "Export trajectory and contacts as CSV",
+            "Export probe CSV files",
             QDialogButtonBox.ButtonRole.ActionRole,
         )
         self.export_btn.clicked.connect(self.export_coordinates)
@@ -919,20 +919,30 @@ class ProbeInfoWindow(QDialog):
         )
         file_path, _ = QFileDialog.getSaveFileName(
             self,
-            "Export probe trajectory and contacts",
-            "{}_probe_coordinates.csv".format(safe_name or "probe"),
+            "Choose a base name for the three probe CSV files",
+            "{}_probe_export.csv".format(safe_name or "probe"),
             "CSV files (*.csv)",
         )
         if not file_path:
             return
         try:
-            write_probe_csv(file_path, self.object_name, self.probe_data)
+            paths = write_probe_csv_files(
+                file_path, self.object_name, self.probe_data
+            )
         except (KeyError, OSError, TypeError, ValueError) as exc:
             QMessageBox.warning(
                 self,
                 "Export failed",
                 "Could not export this probe:\n{}".format(exc),
             )
+            return
+        QMessageBox.information(
+            self,
+            "Probe CSV files exported",
+            "Created:\n{}".format(
+                "\n".join(str(path) for path in paths.values())
+            ),
+        )
 
     def accept(self) -> None:
         self.close()
