@@ -64,6 +64,21 @@ class PackagingMetadataTests(unittest.TestCase):
         )
         self.assertEqual(metadata["scripts"]["herbs"], "herbs.run_herbs:run")
 
+    def test_release_history_is_kept_in_one_cumulative_file(self):
+        history_path = REPOSITORY_ROOT / "WhatsNew.md"
+        history = history_path.read_text(encoding="utf-8")
+
+        self.assertEqual(
+            sorted(path.name for path in REPOSITORY_ROOT.glob("WhatsNew*.md")),
+            ["WhatsNew.md"],
+        )
+        for version in ("1.0.3", "1.0.2", "1.0.1", "1.0.0", "0.2.8.1"):
+            self.assertIn("## HERBS {}".format(version), history)
+        self.assertIn(
+            "[What’s New in HERBS](WhatsNew.md)",
+            (REPOSITORY_ROOT / "README.md").read_text(encoding="utf-8"),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

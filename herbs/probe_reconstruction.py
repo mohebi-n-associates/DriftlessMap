@@ -22,6 +22,9 @@ _ALLEN_CCF_2017_SHAPES = {
     50.0: (264, 160, 228),
     100.0: (132, 80, 114),
 }
+ALLEN_CCF_ESTIMATED_BREGMA_UM = np.array([5400.0, 440.0, 5700.0])
+ALLEN_CCF_SAGITTAL_TILT_DEG = 5.0
+ALLEN_CCF_DV_SCALE = 0.9434
 
 
 def normalize_axis_info(axis_info, herbs_shape):
@@ -94,6 +97,51 @@ def herbs_vox_to_source_vox(points, axis_info):
     return source_points
 
 
+def volume_view_vox_to_source_vox(points, view_shape, axis_info):
+    """Convert AtlasView ``(DV, ML, AP-view)`` voxels to source-atlas voxels."""
+    points = np.asarray(points, dtype=float)
+    view_shape = tuple(int(value) for value in view_shape)
+    if points.shape[-1:] != (3,):
+        raise ValueError("Coordinate arrays must end with three values.")
+    if len(view_shape) != 3 or any(value <= 0 for value in view_shape):
+        raise ValueError("Atlas view shape must contain three positive dimensions.")
+
+    herbs_points = np.stack(
+        (
+            points[..., 1],
+            points[..., 2],
+            view_shape[0] - 1 - points[..., 0],
+        ),
+        axis=-1,
+    )
+    herbs_shape = (view_shape[1], view_shape[2], view_shape[0])
+    normalized_axis_info = normalize_axis_info(axis_info, herbs_shape)
+    return herbs_vox_to_source_vox(herbs_points, normalized_axis_info)
+
+
+def allen_ccf_to_estimated_bregma_mm(ccf_um):
+    """Approximate Allen CCF ``(AP, DV, ML)`` µm as stereotaxic millimeters.
+
+    The returned axes are ``(AP, DV, ML)`` with positive AP anterior, positive
+    DV ventral, and positive ML right. This is a community-derived
+    approximation, not a ground-truth targeting transform.
+    """
+    ccf_um = np.asarray(ccf_um, dtype=float)
+    if ccf_um.shape[-1:] != (3,):
+        raise ValueError("Allen CCF coordinates must end with AP, DV, and ML.")
+
+    centered = ccf_um - ALLEN_CCF_ESTIMATED_BREGMA_UM
+    ap = centered[..., 0]
+    dv = centered[..., 1]
+    ml = centered[..., 2]
+    angle = np.deg2rad(ALLEN_CCF_SAGITTAL_TILT_DEG)
+    rotated_ap = ap * np.cos(angle) - dv * np.sin(angle)
+    rotated_dv = (
+        ap * np.sin(angle) + dv * np.cos(angle)
+    ) * ALLEN_CCF_DV_SCALE
+    return np.stack((-rotated_ap, rotated_dv, ml), axis=-1) / 1000.0
+
+
 def _source_axis_metadata(axis_info):
     source_axes = [None, None, None]
     source_directions = [None, None, None]
@@ -106,7 +154,7 @@ def _source_axis_metadata(axis_info):
     return source_axes, source_directions
 
 
-def _is_allen_ccf_2017(axis_info, voxel_size_um):
+def is_allen_ccf_2017(axis_info, voxel_size_um):
     expected_shape = _ALLEN_CCF_2017_SHAPES.get(float(voxel_size_um))
     return (
         expected_shape == tuple(axis_info["size"])
@@ -151,6 +199,9 @@ def _coordinate_record(relative_bregma_vox, bregma_herbs_vox, voxel_size_um,
     if allen_ccf:
         record["allen_ccf_vox"] = record["source_vox"].copy()
         record["allen_ccf_um"] = record["source_um"].copy()
+        record["estimated_stereotaxic_bregma_mm"] = (
+            allen_ccf_to_estimated_bregma_mm(record["allen_ccf_um"])
+        )
     return record
 
 
@@ -190,7 +241,7 @@ def build_probe_reconstruction(
 
     normalized_axis_info = normalize_axis_info(axis_info, herbs_atlas_shape)
     source_axes, source_directions = _source_axis_metadata(normalized_axis_info)
-    allen_ccf = _is_allen_ccf_2017(normalized_axis_info, voxel_size_um)
+    allen_ccf = is_allen_ccf_2017(normalized_axis_info, voxel_size_um)
 
     contact_counts = [len(group) for group in contact_bregma_vox]
     if not (
@@ -247,6 +298,9 @@ def build_probe_reconstruction(
     if allen_ccf:
         contacts["allen_ccf_vox"] = contacts["source_vox"].copy()
         contacts["allen_ccf_um"] = contacts["source_um"].copy()
+        contacts["estimated_stereotaxic_bregma_mm"] = (
+            allen_ccf_to_estimated_bregma_mm(contacts["allen_ccf_um"])
+        )
 
     source_name = "Allen Mouse Common Coordinate Framework"
     source_version = "CCFv3 2017"
@@ -274,6 +328,21 @@ def build_probe_reconstruction(
         "label_lookup": label_info,
     }
     atlas["bregma_source_um"] = atlas["bregma_source_vox"] * voxel_size_um
+    if allen_ccf:
+        atlas["estimated_stereotaxic_transform"] = {
+            "name": "Community-estimated Allen CCF to Bregma",
+            "coordinate_order": ["AP", "DV", "ML"],
+            "units": "mm",
+            "positive_directions": ["anterior", "ventral", "right"],
+            "ccf_bregma_um": ALLEN_CCF_ESTIMATED_BREGMA_UM.copy(),
+            "sagittal_tilt_deg": ALLEN_CCF_SAGITTAL_TILT_DEG,
+            "dv_scale": ALLEN_CCF_DV_SCALE,
+            "ground_truth": False,
+            "targeting_note": (
+                "Approximate only; use measured depth from brain surface for "
+                "surgical targeting rather than transformed DV."
+            ),
+        }
 
     return {
         "schema_version": PROBE_RECONSTRUCTION_SCHEMA_VERSION,

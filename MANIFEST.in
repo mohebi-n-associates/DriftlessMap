@@ -10,6 +10,7 @@ include LICENSE.txt
 include MANIFEST.in
 include pyproject.toml
 include README.md
+include WhatsNew.md
 include setup.py
 include THANKS.txt 
 

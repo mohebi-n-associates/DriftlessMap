@@ -1,10 +1,344 @@
-# What’s New in HERBS 0.2.8.1
+# What’s New in HERBS
+
+This cumulative release history is maintained as a single document. New
+releases are added at the top; earlier release notes remain below them.
+
+## HERBS 1.0.3
+
+Release date: 25 July 2026
+
+HERBS 1.0.3 adds estimated stereotaxic reporting for recognized Allen CCFv3
+atlases and fixes atlas interaction at exact image boundaries.
+
+### Highlights
+
+- Reports the raw Allen source voxel in `(AP, DV, ML)` order.
+- Reports an explicitly labeled, community-estimated Bregma conversion in
+  millimeters.
+- Uses depth measured from the visible brain surface as the primary depth
+  value; the affine DV estimate is shown separately and marked “not for
+  targeting.”
+- Adds the estimated coordinates and transform metadata to probe
+  reconstruction exports without replacing existing coordinate fields.
+- Prevents hover and click events at the right or bottom image edge from
+  producing an out-of-bounds `IndexError`.
+- Corrects horizontal slice index conversion at the volume boundary.
+
+### Estimated Allen stereotaxic coordinates
+
+For recognized Allen CCFv3 2017 volumes, HERBS centers the source coordinates
+at `(5400, 440, 5700)` µm in `(AP, DV, ML)`, applies a 5° AP–DV rotation with
+the anterior CCF tilted ventrally, scales the rotated DV coordinate by
+`0.9434`, and negates AP so positive AP means anterior.
+
+The conversion is deliberately labeled **estimated**. The
+[Allen community discussion](https://community.brain-map.org/t/how-to-transform-ccf-x-y-z-coordinates-into-stereotactic-coordinates/1858)
+states that the Bregma position, tilt, and scale are estimates with biological
+variance. Allen also explains that the
+[CCF has no single ground-truth Bregma](https://community.brain-map.org/t/why-doesnt-the-3d-mouse-brain-atlas-have-bregma-coordinates/158)
+because it is an ex-cranio average of many fixed brains.
+
+Interactive reports therefore emphasize positive depth measured from the brain
+surface. The affine DV estimate remains visible for reference but is marked
+“not for targeting.” Probe reconstruction exports retain the original HERBS
+and Allen CCF coordinates and add `estimated_stereotaxic_bregma_mm`; the
+transform parameters and targeting caveat are embedded alongside them. Custom
+atlases continue using their configured Bregma without the Allen-specific
+conversion.
+
+### Atlas boundary handling
+
+Mouse hover and click positions are checked against the displayed slice before
+HERBS reads atlas intensity or label data. Qt may report the exact right or
+bottom boundary during pointer movement; those coordinates lie outside
+NumPy’s valid zero-based index range and are now ignored.
+
+The horizontal view now consistently uses `size - 1 - index` when translating
+between displayed slices and volume coordinates, avoiding an off-by-one result
+at the edge of the atlas.
+
+### Upgrade notes
+
+Install or update HERBS from the repository:
+
+```bash
+conda activate HERBS
+git pull
+python -m pip install . --upgrade
+```
+
+Restart HERBS after upgrading so the new package version and coordinate
+reporting code are loaded.
+
+---
+
+## HERBS 1.0.2
+
+Release date: 25 July 2026
+
+HERBS 1.0.2 is a maintenance release focused on reliable Allen Mouse Brain
+Atlas setup, particularly for the 10 µm CCFv3 2017 atlas.
+
+### Highlights
+
+- Prevents the 10 µm mesh downloader from appearing frozen while it discovers
+  atlas structure IDs.
+- Scans compressed annotation data in bounded chunks instead of loading and
+  sorting the entire 1.2-billion-voxel volume for label discovery.
+- Reports progress while scanning the annotation and while downloading each
+  mesh.
+- Displays the current processing phase and item counts during mesh conversion,
+  large cache writes, fallback mesh generation, and boundary construction.
+- Resumes mesh setup by preserving and skipping mesh files that were already
+  downloaded successfully.
+- Handles the Allen hierarchy root's intentionally missing parent ID without a
+  NumPy invalid-cast warning.
+- Loads atlas label caches created with pandas 3 string arrays while preserving
+  the restricted legacy-file security boundary.
+- Makes TIFF the default histology image type in the open dialog.
+- Makes Overlay the default composition mode for newly created layers.
+- Adds `herbs.run()` as the primary Python launcher while retaining
+  `herbs.run_herbs()` as a compatibility alias.
+- Makes 10 µm slice navigation responsive by compacting atlas volumes,
+  replacing sparse Allen-ID color tables with a compact display map, and
+  coalescing rapid slider updates.
+
+### Allen mesh downloads
+
+The previous mesh-download worker loaded the complete annotation volume and
+called `numpy.unique` before creating the mesh folder or updating the progress
+bar. At 10 µm resolution, the annotation contains 1,203,840,000 voxels. The
+operation could consume several gigabytes of memory and spend a long time
+sorting while the user interface continued to show 0%.
+
+HERBS now scans the compressed NRRD annotation incrementally. Only a small
+chunk is decompressed and inspected at a time, while the set of discovered
+structure IDs remains in memory. The same bounded scan is used during Allen
+atlas processing to avoid the previous whole-volume sort.
+
+The mesh progress bar now covers both phases:
+
+1. Scanning atlas structure IDs.
+2. Downloading the required structure meshes.
+
+The status area also displays the current mesh number and Allen structure ID.
+If setup is restarted, existing non-empty `.obj` files are retained and
+skipped. Atlas intensity and annotation files do not need to be downloaded
+again.
+
+During processing, the status area now names long-running operations instead of
+leaving the percentage as the only feedback. Mesh conversion and packing show
+item counts, fallback mesh generation reports its internal phase, and sagittal,
+coronal, and horizontal boundary construction report their current slice.
+Large cache writes are identified explicitly because their underlying pickle
+operation does not expose byte-level progress.
+
+### 10 µm atlas performance
+
+The Allen atlas uses sparse structure IDs, including IDs as large as
+614,454,277. The previous label display allocated color tables up to the
+largest ID, even though the atlas contains only about 1,300 described
+structures. Those dense tables could consume more than 11 GB by themselves.
+
+HERBS now maps original Allen IDs to compact display-only indexes. Original
+structure IDs remain unchanged for region descriptions, probe reconstruction,
+and 3D meshes.
+
+Atlas intensities now use `float32`, segmentation IDs use `int32`, and boundary
+data uses one-byte values. Existing caches are converted to these runtime
+formats while they load; newly processed caches are saved in the compact
+formats. The GUI also avoids loading the three full boundary volumes and
+computes the currently displayed boundary only when **Show Boundary** is
+enabled.
+
+While a slice slider is dragged, rapid intermediate positions are coalesced
+over a short interval. The page number follows the pointer immediately and the
+latest requested slice is always rendered when dragging pauses or ends.
+Single-step buttons and programmatic page changes remain immediate.
+
+### Allen label hierarchy
+
+The Allen root structure has no parent, so its `parent_structure_id` field is
+empty in the structure table. HERBS now maps that one missing parent to `0`
+before converting the parent column to integers. This removes the following
+warning without changing the hierarchy:
+
+```text
+RuntimeWarning: invalid value encountered in cast
+```
+
+New Allen and custom-atlas label caches now store label, abbreviation, color,
+and structure-path fields as plain NumPy arrays. This prevents internal pandas
+array implementations from leaking into the cache format.
+
+Atlas label caches already created with pandas 3 may contain serialized
+`StringArray` fields. The restricted legacy loader now recognizes only the
+specific pandas string-array reconstruction records required by those caches,
+maps them to inert local stand-ins, validates their state, and returns plain
+NumPy string arrays. It does not invoke pandas' serialized reconstruction
+function or permit arbitrary pandas globals.
+
+### Interface defaults
+
+The histology image dialog now opens with TIFF (`.tif` and `.tiff`) as its
+default file filter. CZI, JPEG, PNG, and BMP remain available.
+
+New layers now use the **Overlay** composition mode by default. Composition
+modes restored from saved projects remain unchanged.
+
+### Python launcher
+
+The documented Python API is now:
+
+```python
+import herbs
+herbs.run()
+```
+
+The `herbs` terminal command and `python -m herbs` use the same launcher.
+Existing scripts that call `herbs.run_herbs()` continue to work because the old
+name remains an alias.
+
+### Upgrade notes
+
+Install or update HERBS from the repository:
+
+```bash
+conda activate HERBS
+git pull
+python -m pip install . --upgrade
+```
+
+An interrupted atlas setup can reuse its existing folder. Open the Allen atlas
+downloader, choose **Download Meshes**, and select the folder containing
+`average_template_10.nrrd` and `annotation_10.nrrd`. HERBS will scan the
+annotation and continue with any missing meshes.
+
+---
+
+## HERBS 1.0.1
+
+Release date: 25 July 2026
+
+HERBS 1.0.1 is a maintenance release focused on reliable Allen Mouse Brain
+Atlas setup, particularly for the 10 µm CCFv3 2017 atlas.
+
+### Highlights
+
+- Prevents the 10 µm mesh downloader from appearing frozen while it discovers
+  atlas structure IDs.
+- Scans compressed annotation data in bounded chunks instead of loading and
+  sorting the entire 1.2-billion-voxel volume for label discovery.
+- Reports progress while scanning the annotation and while downloading each
+  mesh.
+- Displays the current processing phase and item counts during mesh conversion,
+  large cache writes, fallback mesh generation, and boundary construction.
+- Resumes mesh setup by preserving and skipping mesh files that were already
+  downloaded successfully.
+- Handles the Allen hierarchy root's intentionally missing parent ID without a
+  NumPy invalid-cast warning.
+
+### Allen mesh downloads
+
+The previous mesh-download worker loaded the complete annotation volume and
+called `numpy.unique` before creating the mesh folder or updating the progress
+bar. At 10 µm resolution, the annotation contains 1,203,840,000 voxels. The
+operation could consume several gigabytes of memory and spend a long time
+sorting while the user interface continued to show 0%.
+
+HERBS now scans the compressed NRRD annotation incrementally. Only a small
+chunk is decompressed and inspected at a time, while the set of discovered
+structure IDs remains in memory. The same bounded scan is used during Allen
+atlas processing to avoid the previous whole-volume sort.
+
+The mesh progress bar now covers both phases:
+
+1. Scanning atlas structure IDs.
+2. Downloading the required structure meshes.
+
+The status area also displays the current mesh number and Allen structure ID.
+If setup is restarted, existing non-empty `.obj` files are retained and
+skipped. Atlas intensity and annotation files do not need to be downloaded
+again.
+
+During processing, the status area now names long-running operations instead of
+leaving the percentage as the only feedback. Mesh conversion and packing show
+item counts, fallback mesh generation reports its internal phase, and sagittal,
+coronal, and horizontal boundary construction report their current slice.
+Large cache writes are identified explicitly because their underlying pickle
+operation does not expose byte-level progress.
+
+### Allen label hierarchy
+
+The Allen root structure has no parent, so its `parent_structure_id` field is
+empty in the structure table. HERBS now maps that one missing parent to `0`
+before converting the parent column to integers. This removes the following
+warning without changing the hierarchy:
+
+```text
+RuntimeWarning: invalid value encountered in cast
+```
+
+### Upgrade notes
+
+Install or update HERBS from the repository:
+
+```bash
+conda activate HERBS
+git pull
+python -m pip install . --upgrade
+```
+
+An interrupted atlas setup can reuse its existing folder. Open the Allen atlas
+downloader, choose **Download Meshes**, and select the folder containing
+`average_template_10.nrrd` and `annotation_10.nrrd`. HERBS will scan the
+annotation and continue with any missing meshes.
+
+---
+
+## HERBS 1.0.0
+
+HERBS 1.0 moves the desktop application to the current Python and Qt
+ecosystem.
+
+### Highlights
+
+- Supports Python 3.10 through Python 3.14.
+- Migrates the user interface from PyQt5 to PyQt6.
+- Updates pyqtgraph to 0.14 and supports NumPy 2 and OpenCV 5.
+- Replaces the unmaintained QtRangeSlider package with the Python 3.14-ready
+  `superqt` range slider.
+- Uses modern `pyproject.toml` package metadata and declares a `herbs` command.
+- Keeps application imports lightweight so importing `herbs` does not start or
+  eagerly load the GUI.
+
+### CZI support
+
+Zeiss CZI reading is now an optional installation extra:
+
+```bash
+python -m pip install ".[czi]"
+```
+
+The upstream `aicspylibczi` project currently provides wheels through Python
+3.13. Use Python 3.13 when CZI support is required; the rest of HERBS supports
+Python 3.14.
+
+### Upgrade notes
+
+Create a fresh environment for HERBS 1.0. Environments containing PyQt5 or
+pyqtgraph 0.12 should not be upgraded in place because Qt binding selection can
+be affected by packages already imported into a Python process.
+
+---
+
+## HERBS 0.2.8.1
 
 Release date: 18 July 2026
 
 HERBS 0.2.8.1 is a reliability, security, and maintainability release. It does not intentionally change the core registration workflow. Instead, it corrects coordinate-processing errors, prevents several GUI crashes, makes file and network operations safer, improves installation behavior, and adds automated regression coverage.
 
-## Highlights
+### Highlights
 
 - Correct and consistent atlas, segmentation, boundary, Bregma, and probe coordinates.
 - Self-contained merged-probe exports with complete atlas and contact-coordinate metadata.
@@ -16,7 +350,7 @@ HERBS 0.2.8.1 is a reliability, security, and maintainability release. It does n
 - Package resources and preferences no longer depend on or modify the process working directory.
 - 58 regression tests plus continuous integration across all supported Python versions.
 
-## Atlas and Coordinate Correctness
+### Atlas and Coordinate Correctness
 
 ### Custom-atlas transforms
 
@@ -66,7 +400,7 @@ Custom-atlas mesh downsampling factors must now be integers of at least 2 and mu
 
 A registered slice at `0 mm` from Bregma is now considered valid. The previous readiness check treated zero as missing data, which prevented processing of the anatomically central slice. Width, height, distance, and the two-dimensional Bregma point are now validated independently, with positive dimensions and finite coordinates required.
 
-## Safer HERBS Files
+### Safer HERBS Files
 
 ### New archive format
 
@@ -96,7 +430,7 @@ The safe archive format applies to user-created project, layer, object, slice, a
 
 Invalid, missing, corrupt, or unsupported HERBS files now return the same `(data, error)` result shape. Callers can report a useful error without failing while unpacking a different return type.
 
-## Image Loading
+### Image Loading
 
 Image readers now expose a consistent data and metadata contract:
 
@@ -112,7 +446,7 @@ Image readers now expose a consistent data and metadata contract:
 
 These changes prevent silent channel swaps, incorrect color controls, uninitialized attributes, and failures that depended on filesystem ordering.
 
-## GUI and Tool Fixes
+### GUI and Tool Fixes
 
 ### Labels
 
@@ -142,7 +476,7 @@ The probe eraser now returns its result consistently instead of reaching a path 
 
 Loaded pixel layers must match the current image dimensions and include all required metadata. Negative or out-of-range processing levels and mismatched declared sizes are rejected before display. Invalid layers abort the operation instead of partially modifying the image view.
 
-## Atlas Downloads
+### Atlas Downloads
 
 Atlas downloads now share one hardened implementation:
 
@@ -157,7 +491,7 @@ Atlas downloads now share one hardened implementation:
 
 Downloader worker threads are retained for their full lifetime, errors propagate back to the dialog, and the GUI no longer performs a blocking preliminary `HEAD` request. This prevents partial atlas files, silent background-thread failures, and avoidable interface freezes.
 
-## Installation and Runtime Behavior
+### Installation and Runtime Behavior
 
 ### Supported versions and dependencies
 
@@ -199,7 +533,7 @@ The last selected atlas path is stored atomically in the user configuration dire
 
 `HERBS_CONFIG_DIR` can override the configuration directory. Because the old package-local preference was removed, HERBS may ask you to select the atlas folder once after upgrading.
 
-## Maintainability and Verification
+### Maintainability and Verification
 
 Focused modules were extracted for atlas transforms, coordinate checks, slice and layer validation, persistence, download handling, cell-channel selection, package resources, and user settings. This reduces the amount of safety-critical logic embedded directly in the main GUI controller and makes it independently testable.
 
@@ -212,7 +546,7 @@ Version 0.2.8.1 includes:
 - Wheel-build and package-content verification.
 - GitHub Actions coverage for Python 3.8, 3.9, 3.10, and 3.11.
 
-## Upgrade Notes
+### Upgrade Notes
 
 1. Pull the latest source and reinstall HERBS:
 
@@ -231,7 +565,7 @@ Version 0.2.8.1 includes:
 
 5. Use Python 3.8.10 through 3.11. Python 3.12 and later are not declared supported by this release.
 
-## Implementation References
+### Implementation References
 
 The changes were kept as separate issue-level commits:
 

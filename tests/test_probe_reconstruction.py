@@ -55,6 +55,35 @@ class CoordinateTransformTests(unittest.TestCase):
                 (456, 527, 320),
             )
 
+    def test_volume_view_coordinates_recover_raw_allen_axes(self):
+        axis_info = {
+            "to_HERBS": (2, 0, 1),
+            "from_HERBS": (1, 2, 0),
+            "direction_change": (True, True, False),
+            "size": (1320, 800, 1140),
+        }
+
+        source = reconstruction.volume_view_vox_to_source_vox(
+            np.array([44, 570, 779]),
+            (800, 1140, 1320),
+            axis_info,
+        )
+
+        np.testing.assert_allclose(source, [540, 44, 570])
+
+    def test_community_allen_transform_has_explicit_sign_conventions(self):
+        at_bregma = reconstruction.allen_ccf_to_estimated_bregma_mm(
+            [5400, 440, 5700]
+        )
+        anterior = reconstruction.allen_ccf_to_estimated_bregma_mm(
+            [4400, 440, 6700]
+        )
+
+        np.testing.assert_allclose(at_bregma, [0, 0, 0], atol=1e-12)
+        self.assertGreater(anterior[0], 0)
+        self.assertLess(anterior[1], 0)
+        self.assertEqual(anterior[2], 1)
+
 
 class ProbeReconstructionTests(unittest.TestCase):
     def make_payload(self):
@@ -122,6 +151,15 @@ class ProbeReconstructionTests(unittest.TestCase):
         np.testing.assert_allclose(
             contacts["allen_ccf_um"], contacts["source_um"]
         )
+        np.testing.assert_allclose(
+            contacts["estimated_stereotaxic_bregma_mm"],
+            reconstruction.allen_ccf_to_estimated_bregma_mm(
+                contacts["allen_ccf_um"]
+            ),
+        )
+        transform = atlas["estimated_stereotaxic_transform"]
+        self.assertFalse(transform["ground_truth"])
+        self.assertIn("brain surface", transform["targeting_note"])
 
     def test_payload_round_trips_inside_one_herbs_object(self):
         data = {

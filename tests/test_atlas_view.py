@@ -4,9 +4,11 @@ import unittest
 import numpy as np
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+from PyQt6.QtCore import QPointF
 from PyQt6.QtWidgets import QApplication
 
 from herbs.atlas_view import AtlasView, PageController
+from herbs.slice_stacks import image_position_in_bounds
 
 
 class PageControllerTests(unittest.TestCase):
@@ -83,6 +85,14 @@ class AtlasViewPerformanceTests(unittest.TestCase):
         self.assertEqual(
             view.cimg.boundary.image.shape, view.cimg.label_data.shape
         )
+
+    def test_image_edge_hover_coordinates_are_rejected(self):
+        image = np.zeros((3, 4), dtype=np.uint8)
+
+        self.assertTrue(image_position_in_bounds(QPointF(3.999, 2.999), image))
+        self.assertFalse(image_position_in_bounds(QPointF(4, 2), image))
+        self.assertFalse(image_position_in_bounds(QPointF(3, 3), image))
+        self.assertFalse(image_position_in_bounds(QPointF(-0.01, 1), image))
 
 
 if __name__ == "__main__":

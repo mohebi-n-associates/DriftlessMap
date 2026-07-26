@@ -112,6 +112,13 @@ from .obj_items import (
 from .about_herbs import AboutHERBSWindow
 from .persistence import save_herbs_file
 from .cell_detection import select_detection_channel
+from .coordinate_validation import coordinates_in_bounds
+from .probe_reconstruction import (
+    allen_ccf_to_estimated_bregma_mm,
+    is_allen_ccf_2017,
+    normalize_axis_info,
+    volume_view_vox_to_source_vox,
+)
 from .resources import resource_path
 from .user_settings import load_last_atlas_path, save_last_atlas_path
 
@@ -134,6 +141,7 @@ class HERBS(QMainWindow, FORM_Main):
 
         self.num_windows = 1
         self.volume_atlas_path = None
+        self.volume_atlas_axis_info = None
         self.slice_atlas_path = None
         self.current_atlas_path = None
 
@@ -1489,6 +1497,7 @@ class HERBS(QMainWindow, FORM_Main):
 
         if not wax.continue_process:
             return
+        self.volume_atlas_axis_info = None
 
         atlas_data = np.transpose(wax.worker.atlas_data, [2, 0, 1])[::-1, :, :]
         atlas_info = wax.worker.atlas_info
@@ -1531,6 +1540,10 @@ class HERBS(QMainWindow, FORM_Main):
         aln.exec()
         if not aln.continue_process:
             return
+        self.volume_atlas_path = aln.worker.saving_folder
+        self.current_atlas_path = aln.worker.saving_folder
+        self.current_atlas = "volume"
+        self._set_volume_atlas_axis_info(aln.worker.saving_folder)
 
         atlas_data = np.transpose(aln.worker.atlas_data, [2, 0, 1])[::-1, :, :]
         atlas_info = aln.worker.atlas_info
@@ -4500,6 +4513,75 @@ class HERBS(QMainWindow, FORM_Main):
             )
         self.print_message(msg, self.normal_color)
 
+    def _estimated_allen_coordinates(self, display_vox):
+        axis_info = self.volume_atlas_axis_info
+        if (
+            axis_info is None
+            or self.current_atlas != "volume"
+            or self.atlas_view.atlas_data is None
+        ):
+            return None
+        try:
+            view_shape = tuple(self.atlas_view.atlas_data.shape)
+            herbs_shape = (view_shape[1], view_shape[2], view_shape[0])
+            normalized_axis_info = normalize_axis_info(axis_info, herbs_shape)
+            if not is_allen_ccf_2017(
+                normalized_axis_info, self.atlas_view.vox_size_um
+            ):
+                return None
+            source_vox = volume_view_vox_to_source_vox(
+                display_vox, view_shape, normalized_axis_info
+            )
+        except (KeyError, TypeError, ValueError):
+            return None
+        estimated_mm = allen_ccf_to_estimated_bregma_mm(
+            source_vox * self.atlas_view.vox_size_um
+        )
+        return source_vox, estimated_mm
+
+    def _format_volume_coordinate_report(
+        self, display_vox, label_id, surface_depth_um
+    ):
+        region = self.atlas_view.label_tree.describe(label_id)
+        estimated = self._estimated_allen_coordinates(display_vox)
+        if estimated is not None:
+            source_vox, estimated_mm = estimated
+            return (
+                "Allen CCF voxel (AP, DV, ML): "
+                "({:.1f}, {:.1f}, {:.1f}); estimated Bregma "
+                "(not ground truth): AP {:+.3f} mm, ML {:+.3f} mm; "
+                "depth from brain surface: {:.3f} mm; affine DV estimate "
+                "{:+.3f} mm (not for targeting). {}"
+            ).format(
+                source_vox[0],
+                source_vox[1],
+                source_vox[2],
+                estimated_mm[0],
+                estimated_mm[2],
+                surface_depth_um / 1000.0,
+                estimated_mm[1],
+                region,
+            )
+
+        coords = np.round(
+            (np.asarray(display_vox) - np.ravel(self.atlas_view.Bregma))
+            * self.atlas_view.vox_size_um,
+            2,
+        )
+        return (
+            "Atlas voxel: ({}, {}, {}), ML: {} um, AP: {} um, "
+            "DV: {} um w.r.t. Bregma, depth from surface: {:.2f} um. {}"
+        ).format(
+            int(display_vox[1]),
+            int(display_vox[2]),
+            int(self.atlas_view.atlas_size[0] - display_vox[0]),
+            coords[1],
+            coords[2],
+            -coords[0],
+            surface_depth_um,
+            region,
+        )
+
     def coronal_slice_stacks_hovered(self, pos):
         y = pos.y()
         x = pos.x()
@@ -4537,13 +4619,20 @@ class HERBS(QMainWindow, FORM_Main):
 
         c_id = self.atlas_view.current_coronal_index
         s_id = self.atlas_view.current_sagital_index
-        h_id = self.atlas_view.atlas_size[0] - self.atlas_view.current_horizontal_index
+        h_id = (
+            self.atlas_view.atlas_size[0]
+            - 1
+            - self.atlas_view.current_horizontal_index
+        )
 
         o_rot = np.array([h_id, s_id, c_id])
         da_pnt = np.array([y, x, c_id])
 
         if self.atlas_view.coronal_rotated:
             da_pnt = np.dot(self.atlas_view.c_rotm_2d, (da_pnt - o_rot)) + o_rot
+        if not coordinates_in_bounds(da_pnt, self.atlas_view.atlas_size):
+            self.print_message("", self.normal_color)
+            return
 
         da_label = self.atlas_view.cimg.label_data
         da_id = da_label[int(y), int(x)]
@@ -4551,26 +4640,16 @@ class HERBS(QMainWindow, FORM_Main):
         vox_val = self.atlas_view.cimg.img.image[int(y), int(x)]
 
         if vox_val != 0:
-            coords = np.round(
-                (da_pnt - np.ravel(self.atlas_view.Bregma))
-                * self.atlas_view.vox_size_um,
-                2,
-            )
-            da_vec = self.atlas_view.cimg.img.image[:, int(da_pnt[1])]
+            da_vec = self.atlas_view.cimg.img.image[:, int(x)]
             valid_inds = np.where(da_vec != 0)[0]
-            # self.atlas_view.cimg.image_dict['atlas-probe'].setData(pos=[[x, valid_inds[0]]])
-            dv_val = np.round(
-                (valid_inds[0] - da_pnt[0]) * self.atlas_view.vox_size_um, 2
-            )
-            pstr = "Atlas voxel:({}, {}, {}), ML:{}um, AP:{}um, DV:{}um w.r.t Bregma, DV:{}um w.r.t Surface: {} ".format(
-                int(da_pnt[1]),
-                int(da_pnt[2]),
-                int(self.atlas_view.atlas_size[0] - da_pnt[0]),
-                coords[1],
-                coords[2],
-                -coords[0],
-                dv_val,
-                self.atlas_view.label_tree.describe(da_id),
+            if len(valid_inds) == 0:
+                self.print_message("", self.normal_color)
+                return
+            surface_depth_um = (
+                y - valid_inds[0]
+            ) * self.atlas_view.vox_size_um
+            pstr = self._format_volume_coordinate_report(
+                da_pnt, da_id, surface_depth_um
             )
             self.print_message(pstr, self.normal_color)
 
@@ -4584,7 +4663,7 @@ class HERBS(QMainWindow, FORM_Main):
 
                 self.atlas_view.spage_ctrl.set_val(x)
                 self.atlas_view.hpage_ctrl.set_val(
-                    self.atlas_view.atlas_size[0] - int(y)
+                    self.atlas_view.atlas_size[0] - 1 - int(y)
                 )
         else:
             self.print_message("", self.normal_color)
@@ -4623,13 +4702,20 @@ class HERBS(QMainWindow, FORM_Main):
 
         c_id = self.atlas_view.current_coronal_index
         s_id = self.atlas_view.current_sagital_index
-        h_id = self.atlas_view.atlas_size[0] - self.atlas_view.current_horizontal_index
+        h_id = (
+            self.atlas_view.atlas_size[0]
+            - 1
+            - self.atlas_view.current_horizontal_index
+        )
 
         o_rot = np.array([h_id, s_id, c_id])
         da_pnt = np.array([y, s_id, x])
 
         if self.atlas_view.sagittal_rotated:
             da_pnt = o_rot + np.dot(self.atlas_view.s_rotm_2d, (da_pnt - o_rot))
+        if not coordinates_in_bounds(da_pnt, self.atlas_view.atlas_size):
+            self.print_message("", self.normal_color)
+            return
 
         da_label = self.atlas_view.simg.label_data
         da_id = da_label[int(y), int(x)]
@@ -4637,26 +4723,16 @@ class HERBS(QMainWindow, FORM_Main):
         vox_val = self.atlas_view.simg.img.image[int(y), int(x)]
 
         if vox_val != 0:
-            coords = np.round(
-                (da_pnt - np.ravel(self.atlas_view.Bregma))
-                * self.atlas_view.vox_size_um,
-                2,
-            )
-            da_vec = self.atlas_view.simg.img.image[:, int(da_pnt[2])]
+            da_vec = self.atlas_view.simg.img.image[:, int(x)]
             valid_inds = np.where(da_vec != 0)[0]
-            # self.atlas_view.simg.image_dict['atlas-probe'].setData(pos=[[x, valid_inds[0]]])
-            dv_val = np.round(
-                (valid_inds[0] - da_pnt[0]) * self.atlas_view.vox_size_um, 2
-            )
-            pstr = "Atlas voxel:({}, {}, {}), ML:{}um, AP:{}um, DV:{}um w.r.t Bregma, DV:{}um w.r.t Surface: {} ".format(
-                int(da_pnt[1]),
-                int(da_pnt[2]),
-                int(self.atlas_view.atlas_size[0] - da_pnt[0]),
-                coords[1],
-                coords[2],
-                -coords[0],
-                dv_val,
-                self.atlas_view.label_tree.describe(da_id),
+            if len(valid_inds) == 0:
+                self.print_message("", self.normal_color)
+                return
+            surface_depth_um = (
+                y - valid_inds[0]
+            ) * self.atlas_view.vox_size_um
+            pstr = self._format_volume_coordinate_report(
+                da_pnt, da_id, surface_depth_um
             )
             self.print_message(pstr, self.normal_color)
 
@@ -4670,7 +4746,7 @@ class HERBS(QMainWindow, FORM_Main):
 
                 self.atlas_view.cpage_ctrl.set_val(x)
                 self.atlas_view.hpage_ctrl.set_val(
-                    self.atlas_view.atlas_size[0] - int(y)
+                    self.atlas_view.atlas_size[0] - 1 - int(y)
                 )
         else:
             self.print_message("", self.normal_color)
@@ -4708,13 +4784,20 @@ class HERBS(QMainWindow, FORM_Main):
 
         c_id = self.atlas_view.current_coronal_index
         s_id = self.atlas_view.current_sagital_index
-        h_id = self.atlas_view.atlas_size[0] - self.atlas_view.current_horizontal_index
+        h_id = (
+            self.atlas_view.atlas_size[0]
+            - 1
+            - self.atlas_view.current_horizontal_index
+        )
 
         o_rot = np.array([h_id, s_id, c_id])
         da_pnt = np.array([h_id, y, x])
 
         if self.atlas_view.horizontal_rotated:
             da_pnt = o_rot + np.dot(self.atlas_view.h_rotm_2d, (da_pnt - o_rot))
+        if not coordinates_in_bounds(da_pnt, self.atlas_view.atlas_size):
+            self.print_message("", self.normal_color)
+            return
 
         da_label = self.atlas_view.himg.label_data
         da_id = da_label[int(y), int(x)]
@@ -4722,25 +4805,16 @@ class HERBS(QMainWindow, FORM_Main):
         vox_val = self.atlas_view.himg.img.image[int(y), int(x)]
 
         if vox_val != 0:
-            coords = np.round(
-                (da_pnt - np.ravel(self.atlas_view.Bregma))
-                * self.atlas_view.vox_size_um,
-                2,
-            )
             da_vec = self.atlas_view.atlas_data[:, int(da_pnt[1]), int(da_pnt[2])]
             valid_inds = np.where(da_vec != 0)[0]
-            # self.atlas_view.cimg.image_dict['atlas-probe'].setData(pos=[[int(y), valid_inds[0]]])
-            # self.atlas_view.simg.image_dict['atlas-probe'].setData(pos=[[int(x), valid_inds[0]]])
-            dv_val = np.round((valid_inds[0] - h_id) * self.atlas_view.vox_size_um, 2)
-            pstr = "Atlas voxel:({}, {}, {}), ML:{}um, AP:{}um, DV:{}um w.r.t. Bregma, DV:{}um w.r.t Surface: {} ".format(
-                int(da_pnt[1]),
-                int(da_pnt[2]),
-                int(self.atlas_view.atlas_size[0] - da_pnt[0]),
-                coords[1],
-                coords[2],
-                -coords[0],
-                dv_val,
-                self.atlas_view.label_tree.describe(da_id),
+            if len(valid_inds) == 0:
+                self.print_message("", self.normal_color)
+                return
+            surface_depth_um = (
+                da_pnt[0] - valid_inds[0]
+            ) * self.atlas_view.vox_size_um
+            pstr = self._format_volume_coordinate_report(
+                da_pnt, da_id, surface_depth_um
             )
             self.print_message(pstr, self.normal_color)
 
@@ -6420,10 +6494,22 @@ class HERBS(QMainWindow, FORM_Main):
             self.normal_color,
         )
 
+    def _set_volume_atlas_axis_info(self, atlas_folder):
+        self.volume_atlas_axis_info = None
+        if not atlas_folder:
+            return
+        axis_path = os.path.join(atlas_folder, "atlas_axis_info.pkl")
+        if not os.path.exists(axis_path):
+            return
+        axis_info, error = check_loading_pickle_file(axis_path)
+        if error is None and isinstance(axis_info, dict):
+            self.volume_atlas_axis_info = axis_info
+
     # load volume atlas
     def load_volume_atlas(self, atlas_folder):
         self.volume_atlas_path = atlas_folder
         self.current_atlas_path = atlas_folder
+        self._set_volume_atlas_axis_info(atlas_folder)
         self.atlascontrolpanel.setEnabled(True)
         self.treeviewpanel.setEnabled(True)
         self.actionSwitch_Atlas.setText("Switch Atlas: Volume")

@@ -5,7 +5,22 @@ import pyqtgraph as pg
 from PyQt6.QtCore import *
 from PyQt6.QtGui import *
 
+from .coordinate_validation import coordinates_in_bounds
 from .movable_points import TriangulationPoints
+
+
+def image_position_in_bounds(position, image):
+    """Return whether a Qt/tuple image position can be indexed safely."""
+    if image is None:
+        return False
+    try:
+        if hasattr(position, "x") and hasattr(position, "y"):
+            x, y = position.x(), position.y()
+        else:
+            x, y = position
+    except (TypeError, ValueError, AttributeError):
+        return False
+    return coordinates_in_bounds((y, x), np.shape(image)[:2])
 
 
 class ClickableSlice(pg.ImageItem):
@@ -224,7 +239,11 @@ class SliceStacks(pg.GraphicsLayoutWidget):
             pos = (event.pos())
         except (IndexError, AttributeError):
             return
+        if not image_position_in_bounds(pos, self.img.image):
+            return
         self.sig_mouse_hovered.emit(pos)
 
     def mouse_clicked(self, pos):
+        if not image_position_in_bounds(pos, self.img.image):
+            return
         self.sig_mouse_clicked.emit(pos)
