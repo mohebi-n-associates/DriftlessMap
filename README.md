@@ -43,10 +43,18 @@ See [CITATION.cff](CITATION.cff) for machine-readable citation metadata.
 - Safe, versioned project and object archives.
 - Support for custom compatible atlases.
 
-## Install
+## Install from PyPI
 
 DriftlessMap 1.1.0 supports Python 3.10–3.14 and Qt 6 through PyQt6. Python
 3.14 in a dedicated environment is recommended for new installations.
+
+Install the latest stable release:
+
+```bash
+python -m pip install driftlessmap
+```
+
+For a dedicated Conda environment:
 
 ```bash
 conda create --name DriftlessMap python=3.14 -y
