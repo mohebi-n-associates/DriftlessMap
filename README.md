@@ -96,7 +96,10 @@ After running the above scripts, a GUI window will pop up. Users can download at
 
 <img src="./herbs/herbs.png" width="800px"></img>
 
-For more information, please read HERBS CookBook (on going) or check the Tutorial folder for corresponding functionalities.
+For complete installation, atlas, image-registration, object-reconstruction,
+coordinate, persistence, export, and troubleshooting guidance, read the
+[HERBS User Manual](MANUAL.md). The illustrated [HERBS Cookbook](CookBook.pdf)
+and the [Tutorial](Tutorial) folder provide additional workflow examples.
 
 ## Atlas Storage
 
