@@ -1,24 +1,33 @@
 # Update Log
 
+### 27th July 2026
+##### DriftlessMap 1.1.0
+
+Establishes DriftlessMap as an independently maintained continuation of HERBS,
+with complete upstream attribution, a distinct package and application identity,
+new DriftlessMap archive extensions, and compatibility for existing HERBS data
+and scripts. See the cumulative
+[What’s New in DriftlessMap](WhatsNew.md) history for details.
+
 ### 25th July 2026
 ##### HERBS 1.0.4
 
 Improves manual atlas registration with one reproducible triangulation mesh,
 live quality feedback, safer landmark editing, and smoother seam-free warping.
-See the cumulative [What’s New in HERBS](WhatsNew.md) history for details.
+See the cumulative [What’s New in DriftlessMap](WhatsNew.md) history for details.
 
 ### 25th July 2026
 ##### HERBS 1.0.3
 
 Adds estimated Allen CCFv3 stereotaxic coordinate reporting and fixes atlas
 hover handling at image boundaries. See the cumulative
-[What’s New in HERBS](WhatsNew.md) history for details.
+[What’s New in DriftlessMap](WhatsNew.md) history for details.
 
 ### 18th July 2026
 ##### HERBS 0.2.8.1
 
 Reliability, security, packaging, and maintainability release. See the
-cumulative [What’s New in HERBS](WhatsNew.md) history for the complete change
+cumulative [What’s New in DriftlessMap](WhatsNew.md) history for the complete change
 details, reasons, compatibility notes, and upgrade instructions.
 
 ### 1st May 2023
@@ -67,5 +76,4 @@ The probe will be shown in both Coronal and Sagittal 2D atlas view.
 
 - By clicking **info button**, the information window of the current activated object will pop up. 
 The previous way to read the information by double clicking the object is no longer supported. 
-
 

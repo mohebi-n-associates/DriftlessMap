@@ -114,8 +114,8 @@ from .obj_items import (
     render_small_volume,
     make_3d_gl_widget,
 )
-from .about_herbs import AboutHERBSWindow
-from .persistence import save_herbs_file
+from .about_herbs import AboutDriftlessMapWindow
+from .persistence import save_driftlessmap_file
 from .cell_detection import select_detection_channel
 from .coordinate_validation import coordinates_in_bounds
 from .probe_reconstruction import (
@@ -134,13 +134,13 @@ script_dir = dirname(realpath(__file__))
 FORM_Main, _ = loadUiType((join(dirname(__file__), "main_window.ui")))
 
 
-class HERBS(QMainWindow, FORM_Main):
+class DriftlessMap(QMainWindow, FORM_Main):
     def __init__(self, parent=FORM_Main):
-        super(HERBS, self).__init__()
+        super(DriftlessMap, self).__init__()
         QMainWindow.__init__(self)
         self.setupUi(self)
         self.setWindowTitle(
-            "HERBS - A toolkit for Histological E-data Registration in Brain Space"
+            "DriftlessMap - Interactive Histology Registration and Brain-Atlas Mapping"
         )
 
         self.home_path = str(os.path.expanduser("~"))
@@ -591,7 +591,7 @@ class HERBS(QMainWindow, FORM_Main):
         )
 
         # about menu related
-        self.actionAbout_HERBS.triggered.connect(self.about_herbs_info)
+        self.actionAbout_HERBS.triggered.connect(self.about_driftlessmap_info)
 
         self.init_tool_bar()
         self.init_side_bar()
@@ -1595,8 +1595,9 @@ class HERBS(QMainWindow, FORM_Main):
         self.print_message(msg, self.normal_color)
         file_title = "Select Atlas Slice File"
         file_filter = (
-            "JPEG (*.jpg);;PNG (*.png);;HERBS Slice (*.herbsslice);;"
-            "Legacy HERBS Slice (*.pkl)"
+            "JPEG (*.jpg);;PNG (*.png);;"
+            "DriftlessMap Slice (*.dmapslice);;"
+            "Legacy HERBS Slice (*.herbsslice *.pkl)"
         )
         if self.atlas_img_path is None:
             file_path = self.home_path
@@ -1698,11 +1699,14 @@ class HERBS(QMainWindow, FORM_Main):
             )
             return
         path = QFileDialog.getSaveFileName(
-            self, "Save Processed Slice", self.home_path, "HERBS Slice (*.herbsslice)"
+            self,
+            "Save Processed Slice",
+            self.home_path,
+            "DriftlessMap Slice (*.dmapslice)",
         )
         if path[0] != "":
             data = self.atlas_view.save_slice_data_and_info()
-            success, error = save_herbs_file(path[0], data, "slice")
+            success, error = save_driftlessmap_file(path[0], data, "slice")
             if not success:
                 self.print_message(error, self.error_message_color)
                 return
@@ -1759,7 +1763,7 @@ class HERBS(QMainWindow, FORM_Main):
             self,
             "Save Triangulation Points Data",
             self.home_path,
-            "HERBS Triangulation (*.herbstri)",
+            "DriftlessMap Triangulation (*.dmaptri)",
         )
         if path[0] != "":
             data = {
@@ -1772,7 +1776,7 @@ class HERBS(QMainWindow, FORM_Main):
                 "tri_simplices": self.tri_simplices,
                 "triangulation_schema_version": TRIANGULATION_SCHEMA_VERSION,
             }
-            success, error = save_herbs_file(path[0], data, "triangulation")
+            success, error = save_driftlessmap_file(path[0], data, "triangulation")
             if not success:
                 self.print_message(error, self.error_message_color)
 
@@ -1781,7 +1785,10 @@ class HERBS(QMainWindow, FORM_Main):
         if self.atlas_view.atlas_data is None:
             self.print_message("Atlas need to be loaded first.", self.reminder_color)
             return
-        filter = "HERBS Triangulation (*.herbstri);;Legacy HERBS File (*.pkl)"
+        filter = (
+            "DriftlessMap Triangulation (*.dmaptri);;"
+            "Legacy HERBS Triangulation (*.herbstri *.pkl)"
+        )
         dlg = QFileDialog()
         dlg.setFileMode(QFileDialog.FileMode.ExistingFiles)
         pnt_path = dlg.getOpenFileName(
@@ -6337,7 +6344,7 @@ class HERBS(QMainWindow, FORM_Main):
                 except ImportError:
                     self.print_message(
                         "CZI support is not installed. Use Python 3.10–3.13 "
-                        "and install HERBS with the 'czi' extra.",
+                        "and install DriftlessMap with the 'czi' extra.",
                         self.error_message_color,
                     )
                     return False
@@ -6824,8 +6831,8 @@ class HERBS(QMainWindow, FORM_Main):
                     "name": self.object_ctrl.obj_name[da_ind],
                 }
                 s_path = os.path.join(save_path, self.object_ctrl.obj_name[da_ind])
-                success, error = save_herbs_file(
-                    "{}.herbsobj".format(s_path), data, "object"
+                success, error = save_driftlessmap_file(
+                    "{}.dmapobj".format(s_path), data, "object"
                 )
                 if not success:
                     self.print_message(error, self.error_message_color)
@@ -6852,7 +6859,7 @@ class HERBS(QMainWindow, FORM_Main):
             self,
             "Save Current Object File",
             self.current_img_path,
-            "HERBS Object (*.herbsobj)",
+            "DriftlessMap Object (*.dmapobj)",
         )
         if file_name[0] != "":
             da_data = {
@@ -6860,7 +6867,7 @@ class HERBS(QMainWindow, FORM_Main):
                 "data": self.object_ctrl.obj_data[self.object_ctrl.current_obj_index],
                 "name": self.object_ctrl.obj_name[self.object_ctrl.current_obj_index],
             }
-            success, error = save_herbs_file(file_name[0], da_data, "object")
+            success, error = save_driftlessmap_file(file_name[0], da_data, "object")
             if not success:
                 self.print_message(error, self.error_message_color)
                 return
@@ -6894,7 +6901,8 @@ class HERBS(QMainWindow, FORM_Main):
             self,
             "Load Object Files",
             self.home_path,
-            "HERBS Object (*.herbsobj);;Legacy HERBS Object (*.pkl)",
+            "DriftlessMap Object (*.dmapobj);;"
+            "Legacy HERBS Object (*.herbsobj *.pkl)",
             options=file_options,
         )
 
@@ -6953,7 +6961,7 @@ class HERBS(QMainWindow, FORM_Main):
             self,
             "Save current layer",
             self.current_img_path,
-            "HERBS Layer (*.herbslayer)",
+            "DriftlessMap Layer (*.dmaplayer)",
         )
         if path[0] != "":
             da_link = self.layer_ctrl.layer_link[self.layer_ctrl.current_layer_index[0]]
@@ -6977,7 +6985,10 @@ class HERBS(QMainWindow, FORM_Main):
             return
         self.print_message("Save all layers...", self.normal_color)
         path = QFileDialog.getSaveFileName(
-            self, "Save all layer", self.current_img_path, "HERBS Layer (*.herbslayer)"
+            self,
+            "Save all layer",
+            self.current_img_path,
+            "DriftlessMap Layer (*.dmaplayer)",
         )
         if path[0] != "":
             for da_link in self.layer_ctrl.layer_link:
@@ -7040,8 +7051,8 @@ class HERBS(QMainWindow, FORM_Main):
         fdata["color"] = color
         fdata["thumbnail"] = thumbnail
 
-        fpath = "{}_{}.herbslayer".format(path, layer_link)
-        success, error = save_herbs_file(fpath, fdata, "layer")
+        fpath = "{}_{}.dmaplayer".format(path, layer_link)
+        success, error = save_driftlessmap_file(fpath, fdata, "layer")
         if not success:
             self.print_message(error, self.error_message_color)
             return False
@@ -7114,8 +7125,8 @@ class HERBS(QMainWindow, FORM_Main):
         fdata["color"] = color
         fdata["thumbnail"] = thumbnail
 
-        fpath = "{}_{}.herbslayer".format(path, layer_link)
-        success, error = save_herbs_file(fpath, fdata, "layer")
+        fpath = "{}_{}.dmaplayer".format(path, layer_link)
+        success, error = save_driftlessmap_file(fpath, fdata, "layer")
         if not success:
             self.print_message(error, self.error_message_color)
             return False
@@ -7364,7 +7375,8 @@ class HERBS(QMainWindow, FORM_Main):
             self,
             "Load Layer Files",
             self.home_path,
-            "HERBS Layer (*.herbslayer);;Legacy HERBS Layer (*.pkl)",
+            "DriftlessMap Layer (*.dmaplayer);;"
+            "Legacy HERBS Layer (*.herbslayer *.pkl)",
             options=file_options,
         )
 
@@ -7381,7 +7393,7 @@ class HERBS(QMainWindow, FORM_Main):
 
                 if not isinstance(layer_dict, dict) or "layer_link" not in layer_dict:
                     self.print_message(
-                        "The selected file is not a valid HERBS layer.",
+                        "The selected file is not a valid DriftlessMap layer.",
                         self.error_message_color,
                     )
                     return
@@ -7441,7 +7453,10 @@ class HERBS(QMainWindow, FORM_Main):
             self.print_message("No project can be saved.", self.reminder_color)
             return
         file_name = QFileDialog.getSaveFileName(
-            self, "Save Project", self.save_path, "HERBS Project (*.herbs)"
+            self,
+            "Save Project",
+            self.save_path,
+            "DriftlessMap Project (*.dmap)",
         )
         if file_name[0] != "":
             if self.current_atlas == "slice":
@@ -7519,7 +7534,7 @@ class HERBS(QMainWindow, FORM_Main):
                 "object_data": object_data,
             }
 
-            success, error = save_herbs_file(file_name[0], project_data, "project")
+            success, error = save_driftlessmap_file(file_name[0], project_data, "project")
             if not success:
                 self.print_message(error, self.error_message_color)
                 return
@@ -7829,7 +7844,8 @@ class HERBS(QMainWindow, FORM_Main):
             self,
             "Load Project",
             self.home_path,
-            "HERBS Project (*.herbs);;Legacy HERBS Project (*.pkl)",
+            "DriftlessMap Project (*.dmap);;"
+            "Legacy HERBS Project (*.herbs *.pkl)",
             options=file_options,
         )
 
@@ -7845,7 +7861,8 @@ class HERBS(QMainWindow, FORM_Main):
                 return
             if not check_loaded_project(p_dict):
                 self.print_message(
-                    "The selected file does not contain a complete HERBS project.",
+                    "The selected file does not contain a complete "
+                    "DriftlessMap project.",
                     self.error_message_color,
                 )
                 return
@@ -8045,9 +8062,9 @@ class HERBS(QMainWindow, FORM_Main):
         self.statusbar.setStyleSheet(get_statusbar_style(col))
         self.statusbar.showMessage("  " + msg)
 
-    # about herbs
-    def about_herbs_info(self):
-        dlg = AboutHERBSWindow()
+    # about DriftlessMap
+    def about_driftlessmap_info(self):
+        dlg = AboutDriftlessMapWindow()
         dlg.exec()
 
 
@@ -8063,6 +8080,10 @@ def main():
     # print(hasattr(QtCore, 'PYQT_VERSION')) # true
     # if (sys.flags.interactive != 1) or not hasattr(QtCore, 'PYQT_VERSION'):
     #     app.instance().exec()
-    window = HERBS()
+    window = DriftlessMap()
     window.show()
     return app.exec()
+
+
+# Backward compatibility for integrations that imported the old window class.
+HERBS = DriftlessMap

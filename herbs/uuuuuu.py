@@ -10,7 +10,7 @@ import pyqtgraph.opengl as gl
 import scipy.ndimage as ndi
 from scipy.interpolate import interp1d, splprep, splev
 from .coordinate_validation import coordinates_in_bounds
-from .persistence import load_herbs_file
+from .persistence import load_driftlessmap_file
 from .resources import resource_path, resolve_qss_resource_urls
 
 
@@ -20,7 +20,7 @@ def read_qss_file(qss_file_name):
 
 
 def check_loading_pickle_file(file_path, expected_kind=None):
-    return load_herbs_file(file_path, expected_kind=expected_kind)
+    return load_driftlessmap_file(file_path, expected_kind=expected_kind)
 
 
 def read_excel_file(file_path):
@@ -1137,7 +1137,7 @@ def load_point_data(data_file_path):
         if file_ext == ".npy":
             data = np.load(data_file_path, allow_pickle=False)
         elif file_ext == ".pkl":
-            data, msg = load_herbs_file(data_file_path)
+            data, msg = load_driftlessmap_file(data_file_path)
             if msg is not None:
                 return data, msg
     except (

@@ -10,7 +10,7 @@ QSS_URL_PATTERN = re.compile(
 
 
 def resource_path(relative_path):
-    """Return an absolute path to a resource shipped inside the HERBS package."""
+    """Return an absolute path to a resource shipped with DriftlessMap."""
     path = Path(relative_path)
     if path.is_absolute():
         return str(path)

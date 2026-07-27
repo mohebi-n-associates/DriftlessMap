@@ -766,7 +766,7 @@ selection-background-color: rgb(50, 50, 50);</string>
   </action>
   <action name="actionAbout_HERBS">
    <property name="text">
-    <string>About HERBS</string>
+    <string>About DriftlessMap</string>
    </property>
   </action>
   <action name="actionCoronal_Window">

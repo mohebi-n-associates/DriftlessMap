@@ -5,7 +5,7 @@ import numpy as np
 
 
 def select_detection_channel(image, is_rgb, channel_visible):
-    """Return an 8-bit detection plane and its HERBS cell-layer index."""
+    """Return an 8-bit detection plane and its DriftlessMap cell-layer index."""
     image = np.asarray(image)
     if image.ndim != 3:
         raise ValueError("Cell detection requires a channel-last image.")

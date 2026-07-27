@@ -1,4 +1,4 @@
-"""Versioned, non-executable persistence for HERBS user data."""
+"""Versioned, non-executable persistence for DriftlessMap user data."""
 
 import io
 import importlib
@@ -12,7 +12,9 @@ import zipfile
 import numpy as np
 
 
-FORMAT_NAME = "HERBS"
+FORMAT_NAME = "DriftlessMap"
+LEGACY_FORMAT_NAMES = frozenset({"HERBS"})
+SUPPORTED_FORMAT_NAMES = LEGACY_FORMAT_NAMES | {FORMAT_NAME}
 FORMAT_VERSION = 1
 MANIFEST_NAME = "manifest.json"
 MAX_MANIFEST_BYTES = 16 * 1024 * 1024
@@ -111,9 +113,10 @@ class _LegacyPandasStringArray:
     def __setstate__(self, state):
         if (
             not isinstance(state, tuple)
-            or len(state) != 2
+            or len(state) not in (2, 3)
             or not isinstance(state[0], _LegacyPandasStringDtype)
             or not isinstance(state[1], np.ndarray)
+            or (len(state) == 3 and state[2] != {})
         ):
             raise pickle.UnpicklingError("Invalid legacy pandas string-array state.")
         self.values = state[1]
@@ -175,8 +178,11 @@ class RestrictedUnpickler(pickle.Unpickler):
             "__pyx_unpickle_NDArrayBacked",
         ): _reconstruct_legacy_pandas_string_array,
         ("pandas.arrays", "StringArray"): _LegacyPandasStringArray,
+        ("pandas.core.arrays.string_", "StringArray"): _LegacyPandasStringArray,
+        ("pandas.core.arrays.string_", "StringDtype"): _LegacyPandasStringDtype,
         ("pandas", "StringDtype"): _LegacyPandasStringDtype,
         ("pandas", "NA"): _LEGACY_PANDAS_NA,
+        ("pandas._libs.missing", "NA"): _LEGACY_PANDAS_NA,
         **_numpy_pickle_globals(),
     }
 
@@ -238,7 +244,9 @@ def _encode(value, arrays):
         return {"__type__": "path", "value": str(value)}
     if value.__class__.__name__ == "QColor" and hasattr(value, "getRgb"):
         return {"__type__": "color", "rgba": list(value.getRgb())}
-    raise TypeError("Unsupported HERBS data type: {}".format(type(value).__name__))
+    raise TypeError(
+        "Unsupported DriftlessMap data type: {}".format(type(value).__name__)
+    )
 
 
 def _decode(value, archive):
@@ -268,11 +276,13 @@ def _decode(value, archive):
         return Path(value["value"])
     if value_type == "color":
         return tuple(value["rgba"])
-    raise ValueError("Unknown HERBS archive value type: {}".format(value_type))
+    raise ValueError(
+        "Unknown DriftlessMap archive value type: {}".format(value_type)
+    )
 
 
-def save_herbs_file(file_path, data, kind):
-    """Atomically save data in the versioned HERBS archive format."""
+def save_driftlessmap_file(file_path, data, kind):
+    """Atomically save data in the versioned DriftlessMap archive format."""
     destination = Path(file_path)
     arrays = []
     try:
@@ -290,7 +300,10 @@ def save_herbs_file(file_path, data, kind):
         ).encode("utf-8")
         destination.parent.mkdir(parents=True, exist_ok=True)
         with tempfile.NamedTemporaryFile(
-            dir=str(destination.parent), prefix=".herbs-", suffix=".tmp", delete=False
+            dir=str(destination.parent),
+            prefix=".driftlessmap-",
+            suffix=".tmp",
+            delete=False,
         ) as temporary:
             temporary_path = Path(temporary.name)
         try:
@@ -306,12 +319,12 @@ def save_herbs_file(file_path, data, kind):
             temporary_path.unlink(missing_ok=True)
             raise
     except Exception as exc:
-        return False, "Unable to save HERBS file: {}".format(exc)
+        return False, "Unable to save DriftlessMap file: {}".format(exc)
     return True, None
 
 
-def load_herbs_file(file_path, expected_kind=None):
-    """Load a safe HERBS archive, falling back to restricted legacy data."""
+def load_driftlessmap_file(file_path, expected_kind=None):
+    """Load a DriftlessMap or legacy HERBS archive safely."""
     try:
         if not zipfile.is_zipfile(file_path):
             data, error = load_legacy_pickle(file_path)
@@ -319,7 +332,7 @@ def load_herbs_file(file_path, expected_kind=None):
                 try:
                     return _validate_payload(data, expected_kind), None
                 except ValueError as exc:
-                    return None, "Invalid HERBS file: {}".format(exc)
+                    return None, "Invalid DriftlessMap file: {}".format(exc)
             return data, error
 
         with zipfile.ZipFile(file_path, "r") as archive:
@@ -331,16 +344,16 @@ def load_herbs_file(file_path, expected_kind=None):
             if total_size > MAX_ARCHIVE_BYTES:
                 raise ValueError("Archive expands beyond the supported size limit.")
             if MANIFEST_NAME not in names:
-                raise ValueError("Archive has no HERBS manifest.")
+                raise ValueError("Archive has no DriftlessMap manifest.")
             manifest_info = archive.getinfo(MANIFEST_NAME)
             if manifest_info.file_size > MAX_MANIFEST_BYTES:
-                raise ValueError("HERBS manifest is too large.")
+                raise ValueError("DriftlessMap manifest is too large.")
             manifest = json.loads(archive.read(MANIFEST_NAME).decode("utf-8"))
-            if manifest.get("format") != FORMAT_NAME:
-                raise ValueError("File is not a HERBS archive.")
+            if manifest.get("format") not in SUPPORTED_FORMAT_NAMES:
+                raise ValueError("File is not a DriftlessMap or HERBS archive.")
             if manifest.get("version") != FORMAT_VERSION:
                 raise ValueError(
-                    "Unsupported HERBS archive version: {}".format(
+                    "Unsupported DriftlessMap archive version: {}".format(
                         manifest.get("version")
                     )
                 )
@@ -355,4 +368,9 @@ def load_herbs_file(file_path, expected_kind=None):
                 data = _validate_payload(data, expected_kind)
             return data, None
     except Exception as exc:
-        return None, "Invalid HERBS file: {}".format(exc)
+        return None, "Invalid DriftlessMap file: {}".format(exc)
+
+
+# Backward compatibility for the public helper names used by HERBS scripts.
+save_herbs_file = save_driftlessmap_file
+load_herbs_file = load_driftlessmap_file

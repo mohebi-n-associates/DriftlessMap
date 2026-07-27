@@ -1,7 +1,58 @@
-# What’s New in HERBS
+# What’s New in DriftlessMap
 
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
+
+## DriftlessMap 1.1.0
+
+Release date: 27 July 2026
+
+This release establishes DriftlessMap as an independently maintained
+continuation of HERBS while preserving the original project's license,
+authorship, publication credit, Git history, and user compatibility.
+
+### Project identity and attribution
+
+- Renames the product and installable Python distribution to `driftlessmap`.
+- Adds the `driftlessmap` command, `python -m driftlessmap`, and
+  `import driftlessmap` public API.
+- Preserves the original HERBS copyright notice and adds a separate notice for
+  subsequent DriftlessMap modifications.
+- Adds a detailed project-lineage statement in `ORIGINS.md` and
+  machine-readable citation metadata in `CITATION.cff`.
+- Credits Mohebi & Associates as the maintaining organization and links the
+  organization and project lead in contributor and package metadata.
+- Credits and links the original HERBS repository and eLife publication
+  throughout the public documentation and About dialog.
+- States explicitly that DriftlessMap is independently maintained and is not
+  affiliated with or endorsed by the original HERBS developers.
+
+### Compatibility
+
+- Continues to support `import herbs`, the `herbs` command, and
+  `HERBS_CONFIG_DIR` for existing scripts and environments.
+- Reads legacy HERBS projects, layers, objects, slices, triangulation files,
+  restricted legacy pickle files, and existing atlas preferences.
+- Writes newly branded `.dmap`, `.dmaplayer`, `.dmapobj`, `.dmapslice`, and
+  `.dmaptri` files with a `DriftlessMap` archive manifest.
+- Retains legacy persisted coordinate field names where renaming them would
+  break research datasets or downstream analysis.
+
+### Upgrade
+
+Create or activate the DriftlessMap environment, then reinstall:
+
+```bash
+conda activate DriftlessMap
+python -m pip install . --upgrade
+driftlessmap
+```
+
+Back up important research projects before saving them in the new DriftlessMap
+format. DriftlessMap can read HERBS files, but the original HERBS application
+may not be able to open files newly written by DriftlessMap.
+
+---
 
 ## HERBS 1.0.5
 

@@ -21,7 +21,7 @@ def _reconstruction(probe_data):
     if not isinstance(reconstruction, dict):
         raise ValueError(
             "This legacy probe has no coordinate reconstruction. Re-merge the "
-            "probe with the current HERBS version before exporting it."
+            "probe with the current DriftlessMap version before exporting it."
         )
     return reconstruction
 

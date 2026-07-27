@@ -1,4 +1,4 @@
-"""Validation helpers for persisted HERBS layer data."""
+"""Validation helpers for persisted DriftlessMap layer data."""
 
 import numpy as np
 

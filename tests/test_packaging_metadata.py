@@ -54,15 +54,55 @@ class PackagingMetadataTests(unittest.TestCase):
     def test_project_links_and_entry_point_use_the_current_repository(self):
         metadata = project_metadata()
 
+        self.assertEqual(metadata["name"], "driftlessmap")
         self.assertEqual(
             metadata["urls"]["Homepage"],
-            "https://github.com/mohebi-n-associates/HERBS",
+            "https://github.com/mohebi-n-associates/DriftlessMap",
         )
         self.assertEqual(
             metadata["urls"]["Bug Tracker"],
-            "https://github.com/mohebi-n-associates/HERBS/issues",
+            "https://github.com/mohebi-n-associates/DriftlessMap/issues",
+        )
+        self.assertEqual(
+            metadata["scripts"]["driftlessmap"], "driftlessmap:run"
         )
         self.assertEqual(metadata["scripts"]["herbs"], "herbs.run_herbs:run")
+        author_names = {author["name"] for author in metadata["authors"]}
+        self.assertTrue(
+            {
+                "Jingyi Guo Fuglstad",
+                "Pearl Saldanha",
+                "Jacopo Paglia",
+                "Jonathan R. Whitlock",
+                "Mohebi & Associates",
+                "Ali Mohebi",
+            }.issubset(author_names)
+        )
+        self.assertEqual(
+            metadata["urls"]["Maintaining Organization"],
+            "https://www.mohebi-associates.org/",
+        )
+        self.assertEqual(
+            metadata["urls"]["Lead Maintainer"],
+            "https://www.mohebial.com/",
+        )
+
+    def test_license_and_origin_attribution_are_preserved(self):
+        license_text = (REPOSITORY_ROOT / "LICENSE.txt").read_text(
+            encoding="utf-8"
+        )
+        origins = (REPOSITORY_ROOT / "ORIGINS.md").read_text(encoding="utf-8")
+
+        self.assertIn("Copyright (c) 2022 HERBS Developers.", license_text)
+        self.assertIn(
+            "Copyright (c) 2026 Ali Mohebi and DriftlessMap contributors.",
+            license_text,
+        )
+        self.assertIn("https://github.com/Whitlock-Group/HERBS", origins)
+        self.assertIn("10.7554/eLife.83496", origins)
+        self.assertIn("not affiliated with or endorsed", origins)
+        self.assertIn("https://www.mohebi-associates.org/", origins)
+        self.assertIn("https://www.mohebial.com/", origins)
 
     def test_release_history_is_kept_in_one_cumulative_file(self):
         history_path = REPOSITORY_ROOT / "WhatsNew.md"
@@ -72,6 +112,7 @@ class PackagingMetadataTests(unittest.TestCase):
             sorted(path.name for path in REPOSITORY_ROOT.glob("WhatsNew*.md")),
             ["WhatsNew.md"],
         )
+        self.assertIn("## DriftlessMap 1.1.0", history)
         for version in (
             "1.0.5",
             "1.0.4",
@@ -83,7 +124,7 @@ class PackagingMetadataTests(unittest.TestCase):
         ):
             self.assertIn("## HERBS {}".format(version), history)
         self.assertIn(
-            "[What’s New in HERBS](WhatsNew.md)",
+            "[What’s New in DriftlessMap](WhatsNew.md)",
             (REPOSITORY_ROOT / "README.md").read_text(encoding="utf-8"),
         )
 

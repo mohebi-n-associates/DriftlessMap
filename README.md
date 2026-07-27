@@ -1,157 +1,131 @@
-# HERBS
-A Python-based GUI for Histological E-data Registration in Brain Space
+# DriftlessMap
 
+Interactive histology registration and brain-atlas mapping.
 
-HERBS is an open source, extensible, intuitive and interactive software platform for image visualisation and image registration. Where the image registration is the process of identifying a spatial transformation that maps images to a template such that corresponding anatomical structures are optimally aligned, or in other words, a voxel-wise ‘correspondence’ is established between the images and template.
+DriftlessMap is an open-source desktop application for registering histological
+images to reference brain atlases, reconstructing probes and other anatomical
+objects, and visualizing data in 2D and 3D. The name refers to Wisconsin's
+Driftless Area and to the project's focus on dependable spatial mapping.
 
-HERBS 1.0.5 supports Python 3.10–3.14 and uses Qt 6 through PyQt6. Python
-3.14 in a dedicated environment is recommended for new installations. For
-details, see the HERBS CookBook or the latest tutorials.
+## Origin and independence
 
-HERBS provides users:
+DriftlessMap began as a fork of
+[HERBS](https://github.com/Whitlock-Group/HERBS) — Histological E-data
+Registration in rodent Brain Spaces — originally created by Jingyi Guo
+Fuglstad, Pearl Saldanha, Jacopo Paglia, Jonathan R. Whitlock, and HERBS
+contributors.
 
-- 2D and 3D visualisation of brain atlas volume data and arbitrary slicing.
-- Image registration with interactive local elastic deformation methods in current version.
-- 2D and 3D visualisation of user defined data.
+DriftlessMap is independently maintained. It is not affiliated with or endorsed
+by the original HERBS developers. Their foundational work remains credited in
+the Git history, [license](LICENSE.txt), [project history](ORIGINS.md),
+[contributors](CONTRIBUTORS.md), [authors](AUTHOR.txt), and
+[acknowledgements](THANKS.txt).
+
+Current development is led by
+[Mohebi & Associates](https://www.mohebi-associates.org/), with
+[Ali Mohebi](https://www.mohebial.com/) as project lead and maintainer.
+
+If DriftlessMap contributes to published research, please cite both the software
+version used and the original HERBS paper:
+
+> Fuglstad, J. G., Saldanha, P., Paglia, J., & Whitlock, J. R. (2023).
+> Histological E-data Registration in rodent Brain Spaces. *eLife*, 12,
+> e83496. https://doi.org/10.7554/eLife.83496
+
+See [CITATION.cff](CITATION.cff) for machine-readable citation metadata.
+
+## Features
+
+- 2D and 3D visualization of volumetric brain atlases and arbitrary slices.
+- Interactive histology-to-atlas registration with local elastic deformation.
+- Probe planning, reconstruction, contact mapping, and CSV export.
+- Drawing, cell, virus-expression, and user-defined object workflows.
+- Safe, versioned project and object archives.
+- Support for custom compatible atlases.
 
 ## Install
 
-> **Note:** Until HERBS 1.0 is published to PyPI, install it from this source
-> repository as shown below.
-
-Install [Miniconda or Anaconda](https://docs.conda.io/projects/conda/en/latest/user-guide/install/index.html), then create a dedicated environment named `HERBS` with Python 3.14:
+DriftlessMap 1.1.0 supports Python 3.10–3.14 and Qt 6 through PyQt6. Python
+3.14 in a dedicated environment is recommended for new installations.
 
 ```bash
-conda create --name HERBS python=3.14 -y
-conda activate HERBS
-python --version
+conda create --name DriftlessMap python=3.14 -y
+conda activate DriftlessMap
 python -m pip install --upgrade pip
-```
-
-The version check should report Python 3.14. Clone this repository and install
-HERBS while the `HERBS` environment is active:
-
-```bash
-git clone https://github.com/mohebi-n-associates/HERBS.git
-cd HERBS
+git clone https://github.com/mohebi-n-associates/DriftlessMap.git
+cd DriftlessMap
 python -m pip install .
 ```
 
-### Zeiss CZI files
-
-CZI support uses the optional `aicspylibczi` package. Its prebuilt packages
-currently support Python through 3.13, so use a Python 3.13 environment and
-install the `czi` extra when you need to open CZI files:
+Launch the application with any of:
 
 ```bash
-conda create --name HERBS-CZI python=3.13 -y
-conda activate HERBS-CZI
+driftlessmap
+python -m driftlessmap
+```
+
+```python
+import driftlessmap
+
+driftlessmap.run()
+```
+
+For an editable development install, use `python -m pip install -e .`.
+
+### Zeiss CZI files
+
+CZI support uses the optional `aicspylibczi` package, whose prebuilt packages
+currently support Python through 3.13:
+
+```bash
+conda create --name DriftlessMap-CZI python=3.13 -y
+conda activate DriftlessMap-CZI
 python -m pip install --upgrade pip
 python -m pip install ".[czi]"
 ```
 
-All other HERBS features work on Python 3.14 without this optional dependency.
+## Compatibility with HERBS
 
-Run `conda activate HERBS` again whenever you open a new terminal before launching or updating HERBS.
+The rebrand is designed not to strand existing research data:
 
-If you would like to modify the source code and have your changes take effect immediately (without reinstalling), use an editable install instead:
+- DriftlessMap reads legacy `.herbs`, `.herbslayer`, `.herbsobj`,
+  `.herbsslice`, and `.herbstri` files.
+- New files use `.dmap`, `.dmaplayer`, `.dmapobj`, `.dmapslice`, and
+  `.dmaptri`.
+- Existing `import herbs` code and the `herbs` command remain available as
+  compatibility aliases. New code should use `import driftlessmap`.
+- Existing `HERBS_CONFIG_DIR` overrides remain supported. New configurations
+  should use `DRIFTLESSMAP_CONFIG_DIR`.
+- Some persisted coordinate field names retain `herbs` because changing them
+  would break existing datasets and downstream analysis scripts.
 
-```bash
-python -m pip install -e .
-```
+The original HERBS application may not be able to open files newly written by
+DriftlessMap. Keep backups before converting important projects.
 
-To upgrade to the newest version later, activate the same environment, pull the latest changes, and reinstall:
+## Documentation
 
-```bash
-conda activate HERBS
-git pull
-python -m pip install . --upgrade
-```
+Read the [DriftlessMap User Manual](MANUAL.md) for installation, atlas,
+registration, reconstruction, persistence, export, and troubleshooting
+guidance. The original [HERBS Cookbook](CookBook.pdf) and [tutorials](Tutorial)
+remain useful for workflows whose interface has not changed.
 
-Please always use the newest version of HERBS.
+The screenshot below is retained from HERBS for historical workflow reference;
+its title bar predates the DriftlessMap rebrand.
 
-See the cumulative [What’s New in HERBS](WhatsNew.md) history for release
-details and upgrade notes.
+<img src="./herbs/herbs.png" width="800px" alt="Historical HERBS interface used as the basis for DriftlessMap">
 
-<details>
-<summary>Downloaded a ZIP instead of cloning?</summary>
+Do not store downloaded atlases inside the source or installed package
+directory. Keep each atlas in its own external folder.
 
-Download the repository from GitHub (**Code → Download ZIP**), unzip it, then from a terminal:
+See [What’s New in DriftlessMap](WhatsNew.md) for release history and migration
+notes.
 
-```bash
-conda activate HERBS
-cd path/to/HERBS       # the unzipped folder containing setup.py
-python -m pip install .
-```
-</details>
+## License
 
-## Usage
+DriftlessMap is distributed under the MIT License. The original HERBS copyright
+and permission notice are preserved, and a separate copyright notice covers
+subsequent DriftlessMap modifications. See [LICENSE.txt](LICENSE.txt) and
+[ORIGINS.md](ORIGINS.md).
 
-```python
-import herbs
-herbs.run()
-```
-
-After running the above scripts, a GUI window will pop up. Users can download atlas and upload images for further process,
-
-<img src="./herbs/herbs.png" width="800px"></img>
-
-For complete installation, atlas, image-registration, object-reconstruction,
-coordinate, persistence, export, and troubleshooting guidance, read the
-[HERBS User Manual](MANUAL.md). The illustrated [HERBS Cookbook](CookBook.pdf)
-and the [Tutorial](Tutorial) folder provide additional workflow examples.
-
-## Atlas Storage
-
-- <span style="font-weight:700;font-size:18px">
-    Do not store Atlases inside HERBS folder. 
-</span>
-When downloading Atlases, HERBS asks users to select the folder to store the atlas. Please choose a folder other than HERBS folder.
-
-- <span style="font-weight:700;font-size:18px">
-    Save different Atlas in different folders. 
-</span>
-When downloading an atlas other than the one you already have, please store it in another folder.
-
-
-## Some Pre-Requirement Issues
-
-- In order to run HERBS properly, 64 bit operating systems and 64 bit Python are required.
-
-- 3D visualisation in HERBS depends on OpenGL, if you face to the problem that no OpenGL is installed on your machine, please see (https://www.opengl.org) to download and install accordingly. 
-
-- If you use MacOS and face to the problem of ImportError states that "Unable to load OpenGL package". Please try to find the OpenGL package folder from where you install all python packages in your enviroment, and go to OpenGL's child-folder "platform", open "ctypesloader.py", and change line 
-
-```python
-fullName = util.find_library( name )
-```
-
-to
-
-```python
-fullName = '/System/Library/Frameworks/OpenGL.framework/OpenGL'
-```
-
-
-- The recommended Conda command in the installation section installs the correct Python version inside the `HERBS` environment; a separate system-wide Python installation is not required.
-
-- Conda includes **pip** in the environment. Use `python -m pip` as shown above so packages are installed into the active `HERBS` environment rather than another Python installation. You can confirm its location with `python -m pip --version`.
-
-- Install and run HERBS in the dedicated Conda environment named `HERBS` described above to prevent dependency conflicts with other Python programs.
-
-## Dependency issues
-
-Use a fresh environment and let `python -m pip install .` resolve the compatible
-NumPy, Numba, OpenCV, PyQt6, and pyqtgraph versions. Do not install PyQt5 into
-the same environment: HERBS 1.0 is a Qt 6 application.
-
-### 
-Please report your issues: https://github.com/mohebi-n-associates/HERBS/issues. Please have a good description (maybe a screenshot or an error message). Any feedback welcome!
-
-Please feel free to start any discussion: https://github.com/mohebi-n-associates/HERBS/discussions.
-
-## Finally
-HERBS is 'always' in development, please check updates every time before you use it.
-
-
-Hope this tool makes your amazing research life more tasty :-)
+Please report issues or start discussions at
+<https://github.com/mohebi-n-associates/DriftlessMap>.

@@ -1,3 +1,7 @@
+DriftlessMap gratefully acknowledges everyone who created, tested, documented,
+and supported the original HERBS project. The original acknowledgements are
+preserved below.
+
 Dr. Menno P. Witter for providing anatomical support.
 
 Dr. Grethe M. Olsen for histological image data sharing and data registration confirmation anatomically contributions.
@@ -21,5 +25,4 @@ Dr. Jonathan R. Whitlock for administration and coordination.
 
 Institutions
 ------------
-
 

@@ -2,24 +2,27 @@ from PyQt6.QtWidgets import *
 from .version import __version__
 
 
-class AboutHERBSWindow(QMessageBox):
+class AboutDriftlessMapWindow(QMessageBox):
     def __init__(self):
         super().__init__()
 
         self.setIcon(QMessageBox.Icon.NoIcon)
-        self.setWindowTitle("About HERBS")
-        self.setText("HERBS {}\n\n".format(__version__) +
-                     "HERBS is aiming to provide a pleasant platform "
-                     "for histological image registration in neuroscience. \n"
-                     "\n"
-                     "If you have any requests or questions ---- \n"
-                     "\n"
-                     "Please contact maintainers: \n"
-                     "jingyi.g.fuglstad@gmail.com \n"
-                     "\n"
-                     "Or leave an issue/discussion on HERBS GitHub: \n"
-                     "https://github.com/mohebi-n-associates/HERBS \n"
-                     "\n"
-                     "Please always read the Update Log after updating: \n"
-                     "https://github.com/mohebi-n-associates/HERBS/blob/main/UpdateLog.md")
+        self.setWindowTitle("About DriftlessMap")
+        self.setText(
+            "DriftlessMap {}\n\n".format(__version__)
+            + "Interactive histology registration and brain-atlas mapping.\n\n"
+            + "DriftlessMap is independently maintained and began as a fork "
+            + "of HERBS, created by Jingyi Guo Fuglstad, Pearl Saldanha, "
+            + "Jacopo Paglia, Jonathan R. Whitlock, and contributors.\n\n"
+            + "Original HERBS project:\n"
+            + "https://github.com/Whitlock-Group/HERBS\n\n"
+            + "DriftlessMap issues and discussions:\n"
+            + "https://github.com/mohebi-n-associates/DriftlessMap\n\n"
+            + "Licensed under the MIT License. DriftlessMap is not affiliated "
+            + "with or endorsed by the original HERBS developers."
+        )
         self.setStandardButtons(QMessageBox.StandardButton.Close)
+
+
+# Backward compatibility for code importing the old dialog class.
+AboutHERBSWindow = AboutDriftlessMapWindow

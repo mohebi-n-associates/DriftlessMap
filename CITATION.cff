@@ -1,0 +1,35 @@
+cff-version: 1.2.0
+message: >-
+  If you use DriftlessMap, cite the software version you used and the original
+  HERBS paper listed under references.
+title: DriftlessMap
+type: software
+version: 1.1.0
+authors:
+  - name: Mohebi & Associates
+    website: https://www.mohebi-associates.org/
+  - family-names: Mohebi
+    given-names: Ali
+    website: https://www.mohebial.com/
+repository-code: https://github.com/mohebi-n-associates/DriftlessMap
+url: https://github.com/mohebi-n-associates/DriftlessMap
+license: MIT
+abstract: >-
+  An interactive desktop application for histological image registration,
+  brain-atlas mapping, probe reconstruction, and anatomical data visualization.
+references:
+  - type: article
+    title: Histological E-data Registration in rodent Brain Spaces
+    authors:
+      - family-names: Fuglstad
+        given-names: Jingyi Guo
+      - family-names: Saldanha
+        given-names: Pearl
+      - family-names: Paglia
+        given-names: Jacopo
+      - family-names: Whitlock
+        given-names: Jonathan R.
+    journal: eLife
+    volume: 12
+    year: 2023
+    doi: 10.7554/eLife.83496

@@ -149,7 +149,9 @@ class SliceStack(pg.GraphicsLayoutWidget):
             raise ValueError('Image data must have shape (height, width, channels).')
         if data.shape[2] > len(self.image_list):
             raise ValueError(
-                'HERBS supports at most {} image channels.'.format(len(self.image_list))
+                'DriftlessMap supports at most {} image channels.'.format(
+                    len(self.image_list)
+                )
             )
         self.data = data
         if scale is not None:
@@ -355,4 +357,3 @@ class ImageStacks(pg.GraphicsLayoutWidget):
         # elif event.key() == Qt.Key.Key_Enter or event.key() == Qt.Key.Key_Return:
         #     print('enter')
         #     self.sig_key_pressed.emit('enter')
-

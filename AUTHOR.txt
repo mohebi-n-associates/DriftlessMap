@@ -1,8 +1,18 @@
-HERBS design and develop: @ Jingyi GF (Jingyi.g.fuglstad@gmail.com)
-HERBS CookBook: @ Jingyi GF 
+DriftlessMap maintenance and development:
+- Mohebi & Associates: https://www.mohebi-associates.org/
+- Ali Mohebi: https://www.mohebial.com/
+
+Original HERBS authors:
+- Jingyi Guo Fuglstad
+- Pearl Saldanha
+- Jacopo Paglia
+- Jonathan R. Whitlock
+
+Original HERBS design, development, and CookBook: Jingyi Guo Fuglstad
+
+DriftlessMap is an independent continuation of HERBS. See ORIGINS.md for the
+complete project lineage, original publication, and contributor credits.
 
 
 Institutions
 ------------
-
-

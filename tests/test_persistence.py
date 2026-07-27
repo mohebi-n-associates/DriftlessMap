@@ -125,6 +125,11 @@ class SafeArchiveTests(unittest.TestCase):
             success, error = persistence.save_herbs_file(path, data, "test")
             self.assertTrue(success, error)
             self.assertTrue(persistence.zipfile.is_zipfile(path))
+            with persistence.zipfile.ZipFile(path) as archive:
+                manifest = persistence.json.loads(
+                    archive.read(persistence.MANIFEST_NAME)
+                )
+            self.assertEqual(manifest["format"], "DriftlessMap")
 
             loaded, error = persistence.load_herbs_file(path, "test")
             self.assertIsNone(error)
@@ -150,6 +155,36 @@ class SafeArchiveTests(unittest.TestCase):
             loaded, error = persistence.load_herbs_file(path, "project")
             self.assertIsNone(loaded)
             self.assertIn("Expected a project file", error)
+
+    def test_legacy_herbs_manifest_remains_readable(self):
+        data = {"answer": 42}
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "legacy.herbs"
+            success, error = persistence.save_driftlessmap_file(
+                path, data, "test"
+            )
+            self.assertTrue(success, error)
+            with persistence.zipfile.ZipFile(path, "r") as source:
+                entries = {
+                    name: source.read(name) for name in source.namelist()
+                }
+            manifest = persistence.json.loads(
+                entries[persistence.MANIFEST_NAME]
+            )
+            manifest["format"] = "HERBS"
+            entries[persistence.MANIFEST_NAME] = persistence.json.dumps(
+                manifest, separators=(",", ":")
+            ).encode("utf-8")
+            with persistence.zipfile.ZipFile(
+                path, "w", compression=persistence.zipfile.ZIP_DEFLATED
+            ) as archive:
+                for name, payload in entries.items():
+                    archive.writestr(name, payload)
+
+            loaded, error = persistence.load_driftlessmap_file(path, "test")
+
+        self.assertIsNone(error)
+        self.assertEqual(loaded, data)
 
 
 if __name__ == "__main__":

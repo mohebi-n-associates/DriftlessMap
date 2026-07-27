@@ -1,4 +1,4 @@
-"""Validated, reproducible piecewise-affine registration for HERBS."""
+"""Validated, reproducible piecewise-affine registration for DriftlessMap."""
 
 from __future__ import annotations
 

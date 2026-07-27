@@ -3,15 +3,24 @@ requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "herbs"
+name = "driftlessmap"
 dynamic = ["version"]
-description = "A GUI for Histological E-data Registration in Brain Space"
+description = "Interactive histology registration and brain-atlas mapping"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
 license-files = ["LICENSE.txt"]
 authors = [
-    { name = "Jingyi GF", email = "jingyi.g.fuglstad@gmail.com" },
+    { name = "Jingyi Guo Fuglstad", email = "jingyi.g.fuglstad@gmail.com" },
+    { name = "Pearl Saldanha" },
+    { name = "Jacopo Paglia" },
+    { name = "Jonathan R. Whitlock" },
+    { name = "Mohebi & Associates" },
+    { name = "Ali Mohebi" },
+]
+maintainers = [
+    { name = "Mohebi & Associates" },
+    { name = "Ali Mohebi" },
 ]
 keywords = [
     "brain atlas",
@@ -64,18 +73,21 @@ test = [
 ]
 
 [project.scripts]
+driftlessmap = "driftlessmap:run"
 herbs = "herbs.run_herbs:run"
 
 [project.urls]
-Homepage = "https://github.com/mohebi-n-associates/HERBS"
-"Bug Tracker" = "https://github.com/mohebi-n-associates/HERBS/issues"
-Documentation = "https://github.com/mohebi-n-associates/HERBS#readme"
+Homepage = "https://github.com/mohebi-n-associates/DriftlessMap"
+"Bug Tracker" = "https://github.com/mohebi-n-associates/DriftlessMap/issues"
+Documentation = "https://github.com/mohebi-n-associates/DriftlessMap#readme"
+"Maintaining Organization" = "https://www.mohebi-associates.org/"
+"Lead Maintainer" = "https://www.mohebial.com/"
 
 [tool.setuptools.dynamic]
-version = { attr = "herbs.version.__version__" }
+version = { attr = "driftlessmap.version.__version__" }
 
 [tool.setuptools.packages.find]
-include = ["herbs*"]
+include = ["driftlessmap*", "herbs*"]
 
 [tool.setuptools.package-data]
 herbs = [

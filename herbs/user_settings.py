@@ -8,28 +8,54 @@ import tempfile
 SETTINGS_SCHEMA_VERSION = 1
 
 
+def _platform_config_root():
+    if sys.platform == "win32":
+        return Path(
+            os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming")
+        )
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support"
+    return Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+
+
 def user_config_directory():
-    override = os.environ.get("HERBS_CONFIG_DIR")
+    override = os.environ.get("DRIFTLESSMAP_CONFIG_DIR")
     if override:
         return Path(override).expanduser()
-    if sys.platform == "win32":
-        base = Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming"))
-    elif sys.platform == "darwin":
-        base = Path.home() / "Library" / "Application Support"
-    else:
-        base = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
-    return base / "HERBS"
+    legacy_override = os.environ.get("HERBS_CONFIG_DIR")
+    if legacy_override:
+        return Path(legacy_override).expanduser()
+    return _platform_config_root() / "DriftlessMap"
 
 
 def settings_path():
     return user_config_directory() / "settings.json"
 
 
+def _legacy_settings_path():
+    if os.environ.get("DRIFTLESSMAP_CONFIG_DIR") or os.environ.get(
+        "HERBS_CONFIG_DIR"
+    ):
+        return None
+    return _platform_config_root() / "HERBS" / "settings.json"
+
+
 def load_last_atlas_path():
-    try:
-        with settings_path().open(encoding="utf-8") as handle:
-            settings = json.load(handle)
-    except (OSError, ValueError, TypeError):
+    current_path = settings_path()
+    candidates = [current_path]
+    legacy_path = _legacy_settings_path()
+    if not current_path.exists() and legacy_path is not None:
+        candidates.append(legacy_path)
+
+    settings = None
+    for candidate in candidates:
+        try:
+            with candidate.open(encoding="utf-8") as handle:
+                settings = json.load(handle)
+            break
+        except (OSError, ValueError, TypeError):
+            continue
+    if settings is None:
         return None
     if settings.get("schema_version") != SETTINGS_SCHEMA_VERSION:
         return None

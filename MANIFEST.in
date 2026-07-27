@@ -6,8 +6,11 @@
 #
 # Files in top-level directory:
 include AUTHOR.txt
+include CITATION.cff
+include CONTRIBUTORS.md
 include LICENSE.txt
 include MANIFEST.in
+include ORIGINS.md
 include pyproject.toml
 include README.md
 include WhatsNew.md

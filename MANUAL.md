@@ -1,8 +1,8 @@
-# HERBS User Manual
+# DriftlessMap User Manual
 
-This manual applies to **HERBS 1.0.5**.
+This manual applies to **DriftlessMap 1.1.0**.
 
-HERBS - Histological E-data Registration in Brain Space - is a desktop
+DriftlessMap - Histological E-data Registration in Brain Space - is a desktop
 application for aligning rodent histology with a reference atlas, reconstructing
 experimental objects in atlas space, and inspecting the result in two and three
 dimensions. It supports pre-surgical probe planning, post-surgical probe
@@ -14,14 +14,17 @@ introduction. This manual follows its task-oriented approach but describes the
 current Python 3.10-3.14, PyQt6, safe-file, mesh-validation, coordinate-reporting,
 and CSV-export behavior.
 
-![HERBS main window](herbs/herbs.png)
+The following historical interface image predates the DriftlessMap rebrand;
+the workflows shown remain recognizable.
+
+![Historical HERBS main window](herbs/herbs.png)
 
 ## Contents
 
-1. [What HERBS does](#1-what-herbs-does)
+1. [What DriftlessMap does](#1-what-driftlessmap-does)
 2. [Installation and launching](#2-installation-and-launching)
 3. [Concepts and coordinate systems](#3-concepts-and-coordinate-systems)
-4. [The HERBS interface](#4-the-herbs-interface)
+4. [The DriftlessMap interface](#4-the-driftlessmap-interface)
 5. [Downloading, processing, and loading atlases](#5-downloading-processing-and-loading-atlases)
 6. [Processing a custom volume atlas](#6-processing-a-custom-volume-atlas)
 7. [Loading and preparing histological images](#7-loading-and-preparing-histological-images)
@@ -41,9 +44,9 @@ and CSV-export behavior.
 21. [Python API and development](#21-python-api-and-development)
 22. [Reproducibility checklist](#22-reproducibility-checklist)
 
-## 1. What HERBS does
+## 1. What DriftlessMap does
 
-HERBS combines four related activities in one application:
+DriftlessMap combines four related activities in one application:
 
 - **Plan:** select a target in a volume atlas and calculate a prospective probe
   trajectory before surgery.
@@ -54,7 +57,7 @@ HERBS combines four related activities in one application:
 - **Analyze and visualize:** convert annotations into three-dimensional objects,
   assign atlas regions, inspect measurements, compare probes, and export data.
 
-HERBS includes workflows for the Waxholm Space Sprague Dawley rat atlas and
+DriftlessMap includes workflows for the Waxholm Space Sprague Dawley rat atlas and
 Allen Mouse CCFv3 2017. It can also process another three-dimensional atlas when
 the user supplies an intensity volume, matching segmentation volume, label
 table, voxel size, and source-axis directions.
@@ -68,7 +71,7 @@ and object analysis.
 
 A **slice atlas** is a calibrated image of one atlas plate. It is useful when a
 volume atlas is unavailable, but it does not contain a three-dimensional label
-volume. HERBS can register a histological image to it and use its physical
+volume. DriftlessMap can register a histological image to it and use its physical
 scale, Bregma point, and ruler measurements. Volumetric object reconstruction
 and region-aware probe merging are not available in this mode.
 
@@ -80,13 +83,13 @@ The practical distinction is:
   creates a **pre-surgical plan**. A planned trajectory must contain exactly two
   points.
 - With both a volume atlas and histological image loaded, probe points represent
-  an observed track. After registration and transfer, HERBS performs a
+  an observed track. After registration and transfer, DriftlessMap performs a
   **post-surgical reconstruction** from two or more points, potentially collected
   across several sections.
 
 ### 1.3 Layers versus objects
 
-This distinction is central to HERBS:
+This distinction is central to DriftlessMap:
 
 - A **layer** is editable two-dimensional working data in an atlas or histology
   window. Examples are `img-mask`, `img-probe`, `atlas-cells`, and
@@ -104,7 +107,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-HERBS 1.0.5 requires:
+DriftlessMap 1.1.0 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -118,27 +121,27 @@ needed.
 
 ### 2.2 Recommended Conda installation
 
-HERBS is currently installed from this repository rather than PyPI. Create an
+DriftlessMap is currently installed from this repository rather than PyPI. Create an
 isolated environment so Qt, NumPy, OpenCV, and OpenGL packages do not conflict
 with unrelated software:
 
 ```bash
-conda create --name HERBS python=3.14 -y
-conda activate HERBS
+conda create --name DriftlessMap python=3.14 -y
+conda activate DriftlessMap
 python -m pip install --upgrade pip
-git clone https://github.com/mohebi-n-associates/HERBS.git
-cd HERBS
+git clone https://github.com/mohebi-n-associates/DriftlessMap.git
+cd DriftlessMap
 python -m pip install .
 ```
 
 Use the following environment instead when opening CZI files is required:
 
 ```bash
-conda create --name HERBS-CZI python=3.13 -y
-conda activate HERBS-CZI
+conda create --name DriftlessMap-CZI python=3.13 -y
+conda activate DriftlessMap-CZI
 python -m pip install --upgrade pip
-git clone https://github.com/mohebi-n-associates/HERBS.git
-cd HERBS
+git clone https://github.com/mohebi-n-associates/DriftlessMap.git
+cd DriftlessMap
 python -m pip install ".[czi]"
 ```
 
@@ -154,56 +157,56 @@ python -m pip install -e ".[test]"
 
 ### 2.3 Confirming the installation
 
-Check that the selected Python and installed HERBS refer to the intended
+Check that the selected Python and installed DriftlessMap refer to the intended
 environment:
 
 ```bash
 python --version
 python -m pip --version
-python -c "import herbs; print(herbs.__version__)"
+python -c "import driftlessmap; print(driftlessmap.__version__)"
 ```
 
-The final command should print `1.0.5`.
+The final command should print `1.1.0`.
 
-### 2.4 Launching HERBS
+### 2.4 Launching DriftlessMap
 
 Any of the following launches the same GUI:
 
 ```bash
-herbs
+driftlessmap
 ```
 
 ```bash
-python -m herbs
+python -m driftlessmap
 ```
 
 ```python
-import herbs
+import driftlessmap
 
-herbs.run()
+driftlessmap.run()
 ```
 
-`herbs.run_herbs()` is retained as an alias for `herbs.run()`.
+`driftlessmap.run_driftlessmap()` is retained as an alias for `driftlessmap.run()`.
 
 Activate the environment again in each new terminal:
 
 ```bash
-conda activate HERBS
+conda activate DriftlessMap
 ```
 
-Use `HERBS-CZI` instead if that is the environment you created.
+Use `DriftlessMap-CZI` instead if that is the environment you created.
 
 ### 2.5 Updating
 
 From the cloned repository:
 
 ```bash
-conda activate HERBS
+conda activate DriftlessMap
 git pull
 python -m pip install . --upgrade
 ```
 
-Restart HERBS after updating. Read [What’s New in HERBS](WhatsNew.md) before
+Restart DriftlessMap after updating. Read [What’s New in DriftlessMap](WhatsNew.md) before
 resuming an important project, particularly when probe reconstruction or
 registration behavior has changed.
 
@@ -217,12 +220,12 @@ registration behavior has changed.
   using the atlas voxel size or the calibrated slice dimensions.
 
 Histology clicks begin as pixels. Landmark registration maps them to an atlas
-slice, and HERBS then converts the registered two-dimensional location into a
+slice, and DriftlessMap then converts the registered two-dimensional location into a
 three-dimensional atlas voxel.
 
-### 3.2 HERBS internal axes
+### 3.2 DriftlessMap internal axes
 
-HERBS stores atlas-space points using these internal axes:
+DriftlessMap stores atlas-space points using these internal axes:
 
 | Position | Axis | Positive direction |
 | --- | --- | --- |
@@ -245,7 +248,7 @@ display-window `(x, y)` coordinate as a native-atlas coordinate.
 Every processed volume atlas includes `atlas_axis_info.pkl`, which describes:
 
 - The source volume shape.
-- The transpose from source axes into HERBS axes.
+- The transpose from source axes into DriftlessMap axes.
 - Which source axes were reversed.
 - The inverse transformation back to source-atlas voxels.
 
@@ -255,7 +258,7 @@ do not guess a conversion.
 
 ### 3.4 Allen CCFv3 coordinates and estimated Bregma
 
-Allen CCFv3 source voxels use `(AP, DV, ML)` order. HERBS recognizes the
+Allen CCFv3 source voxels use `(AP, DV, ML)` order. DriftlessMap recognizes the
 standard 10, 25, and 50 um CCFv3 2017 volumes from their shape, voxel size, and
 axis transform. For recognized volumes, information windows and CSV exports
 include:
@@ -284,16 +287,16 @@ the values used with the experiment.
 
 ### 3.5 Configured Bregma and brain-surface depth
 
-For a non-Allen atlas, HERBS reports coordinates relative to the Bregma voxel
+For a non-Allen atlas, DriftlessMap reports coordinates relative to the Bregma voxel
 stored during atlas processing. In the custom atlas processor, a zero in a
-Bregma coordinate means “unspecified for this axis”; HERBS substitutes the
+Bregma coordinate means “unspecified for this axis”; DriftlessMap substitutes the
 midpoint of that source axis before applying flips and transposition.
 
 Brain-surface depth is calculated locally from the atlas annotation mask. It is
 different from the DV displacement relative to Bregma and from the total length
 of an oblique probe.
 
-## 4. The HERBS interface
+## 4. The DriftlessMap interface
 
 The application has five main areas:
 
@@ -421,7 +424,7 @@ Use one dedicated folder per processed atlas.
 
 Do not:
 
-- Store an atlas inside the HERBS source or installed package directory.
+- Store an atlas inside the DriftlessMap source or installed package directory.
 - Put two atlas resolutions or species in the same folder.
 - Move, rename, or partially copy a processed atlas folder during a project.
 - Edit the generated `.pkl` caches manually.
@@ -435,7 +438,7 @@ entire folder.
 1. Select **Atlas > Download Waxholm Rat Atlas**.
 2. Click **Download** and choose an empty destination folder.
 3. Wait for the label, T2* volume, mask, and annotation downloads to finish.
-4. Click **Process**. If HERBS was restarted after downloading, select the
+4. Click **Process**. If DriftlessMap was restarted after downloading, select the
    folder when prompted.
 5. Leave the dialog open until processing completes.
 6. Load the folder with **File > Load Atlas**.
@@ -472,7 +475,7 @@ annotation with a 10 um template or meshes from another folder.
 
 Use **File > Load Atlas** and select the folder, not an individual file. The
 toolbar’s atlas icon loads the previously selected folder from user
-preferences. If that folder was moved, HERBS asks for a new location.
+preferences. If that folder was moved, DriftlessMap asks for a new location.
 
 After loading:
 
@@ -501,10 +504,10 @@ A complete folder normally contains at least:
 | `atlas_labels.pkl` | Region IDs, names, acronyms, hierarchy, and colors. |
 | `atlas_meshdata.pkl` | Whole-brain mesh. |
 | `atlas_small_meshdata.pkl` | Per-region meshes. |
-| `atlas_axis_info.pkl` | Invertible source-to-HERBS axis transform. |
+| `atlas_axis_info.pkl` | Invertible source-to-DriftlessMap axis transform. |
 
 Processed atlases may also contain orientation-specific boundary caches and
-raw source files. HERBS can load the core volumes without eagerly loading the
+raw source files. DriftlessMap can load the core volumes without eagerly loading the
 large boundary caches, but meshes are required for the normal 3D workflow.
 
 ## 6. Processing a custom volume atlas
@@ -537,7 +540,7 @@ Column names are case-insensitive. These columns are required:
 | `parent_id` | Parent structure ID; use a negative value for a root. |
 | `structure_id_path` | Slash-delimited hierarchy such as `/997/8/567/`. |
 
-`color_hex_triplet` is optional. If it is absent, HERBS assigns random colors.
+`color_hex_triplet` is optional. If it is absent, DriftlessMap assigns random colors.
 For reproducibility, provide six-digit hexadecimal colors and keep the label
 table with the source atlas.
 
@@ -546,7 +549,7 @@ row. Label `0` is conventionally background.
 
 ### 6.3 Bregma, axis directions, and mesh factor
 
-Enter Bregma as three **source-volume voxel coordinates** before any HERBS axis
+Enter Bregma as three **source-volume voxel coordinates** before any DriftlessMap axis
 conversion. A zero component is treated as unspecified and replaced by that
 source axis’s midpoint.
 
@@ -559,7 +562,7 @@ For each source dimension, choose one of:
 - Superior to inferior.
 - Inferior to superior.
 
-Each anatomical axis group must be used exactly once. HERBS applies the same
+Each anatomical axis group must be used exactly once. DriftlessMap applies the same
 flips and transpose to intensity data, segmentation, and Bregma, then writes
 the inverse mapping to `atlas_axis_info.pkl`.
 
@@ -599,7 +602,7 @@ Use **File > Load Image** or the histology-image toolbar button.
 | PNG `.png` | Loaded as 8-bit RGB. |
 | BMP `.bmp` | Loaded as 8-bit RGB. |
 
-HERBS supports at most four non-RGB image channels. An RGB image has three
+DriftlessMap supports at most four non-RGB image channels. An RGB image has three
 display channels but is treated as one RGB cell-count category.
 
 ### 7.2 CZI scenes and scale
@@ -609,7 +612,7 @@ Before loading a CZI file:
 - Set **Scale** to the percentage needed for registration.
 - Enable **Load ALL Scenes** only if all scenes are required immediately.
 
-If all scenes are not loaded, use the Scene slider later; HERBS reads a scene
+If all scenes are not loaded, use the Scene slider later; DriftlessMap reads a scene
 when first selected. Changing the scale rereads the current CZI scene. Begin
 with a modest scale for landmark placement, then increase it if cell or boundary
 work needs more detail. Higher scale increases time and memory use.
@@ -768,7 +771,7 @@ To overlay histology onto the atlas:
 To overlay atlas data onto histology, use **Transform to Histological Image
 Window** instead. Only one transform direction is active at a time.
 
-During landmark dragging, HERBS rewarps the original overlay instead of
+During landmark dragging, DriftlessMap rewarps the original overlay instead of
 repeatedly warping an already transformed preview, preventing accumulated blur.
 Atlas labels and masks use nearest-neighbor mapping where discrete values must
 be preserved; histology display uses smooth interpolation.
@@ -785,14 +788,14 @@ Once the registration is accepted:
 5. Add the atlas-layer data as an object piece in the Object View Controller.
 
 Points outside the registration mesh cannot be assigned a valid atlas
-coordinate. HERBS preserves or rejects them according to the data type and
+coordinate. DriftlessMap preserves or rejects them according to the data type and
 reports the count; do not silently treat them as registered.
 
 ### 8.7 Save registration landmarks
 
 Use:
 
-- **Atlas > Save Triangulation Points** to write `.herbstri`.
+- **Atlas > Save Triangulation Points** to write `.dmaptri`.
 - **Atlas > Load Triangulation Points** to restore them.
 
 Current files include paired landmarks and shared triangle connectivity.
@@ -820,7 +823,7 @@ Not every layer has a useful counterpart in every workflow.
 ### 9.2 Selecting and editing
 
 Click a layer to make it current. Some operations require exactly one selected
-layer; HERBS reports an error when none or multiple are selected.
+layer; DriftlessMap reports an error when none or multiple are selected.
 
 Use the eye to toggle display and the trash icon to delete. Deleting a
 scientific layer clears the associated working data. Deleting an overlay also
@@ -836,7 +839,7 @@ The Edit menu can translate or rotate compatible selected layers:
 4. Use Clockwise or Counter Clockwise.
 
 Transformations are applied only to valid layer types and are recorded in the
-recent undo history. HERBS retains a bounded history of the six most recent
+recent undo history. DriftlessMap retains a bounded history of the six most recent
 recorded actions, so project saves are the durable recovery mechanism.
 
 Shortcuts:
@@ -867,7 +870,7 @@ After registered data appear in an atlas layer:
 
 1. Open the Object View Controller (`Ctrl+5`).
 2. Click **Add Object Piece**.
-3. HERBS converts all eligible current atlas annotations into one or more
+3. DriftlessMap converts all eligible current atlas annotations into one or more
    three-dimensional pieces and clears their temporary atlas-layer data.
 
 The four-window layout cannot create or merge pieces. Switch to a single atlas
@@ -875,7 +878,7 @@ slice or atlas-plus-histology layout first.
 
 ### 10.2 Naming and grouping
 
-HERBS groups pieces during merge using the text before the first hyphen. The
+DriftlessMap groups pieces during merge using the text before the first hyphen. The
 default name `probe - piece`, for example, belongs to the group `probe`.
 
 To keep two experiments separate, rename their pieces before merging:
@@ -935,7 +938,7 @@ comparisons are not currently implemented.
     regions, contacts, and mapping quality.
 
 A pre-surgical planned probe must be one two-point piece. If a group contains
-multiple pieces, HERBS refuses to merge it as a plan.
+multiple pieces, DriftlessMap refuses to merge it as a plan.
 
 ### 11.2 Neuropixels 2.0 four-shank plan
 
@@ -1042,7 +1045,7 @@ Merging creates one reconstructed probe per unique prefix.
 
 ### 12.4 Robust fit and mapping diagnostics
 
-HERBS uses an outlier-resistant orthogonal 3D line fit. It reports:
+DriftlessMap uses an outlier-resistant orthogonal 3D line fit. It reports:
 
 - Total and retained point count.
 - RMS deviation of retained points.
@@ -1064,7 +1067,7 @@ curvature. Review the reconstructed track in all views.
 
 Contacts are physical modeled recording sites, not acquisition-channel IDs.
 The embedded contact table is column-major; within each column, index zero is
-nearest the geometric tip in the HERBS model.
+nearest the geometric tip in the DriftlessMap model.
 
 `Merge sites` changes the schematic display of contacts at the same depth. It
 does not remove contacts from the self-contained reconstruction table.
@@ -1094,7 +1097,7 @@ Important contact columns:
 
 Probe objects created by older versions may lack the `reconstruction` block.
 Load their original project with the same atlas, unmerge/re-merge the probe,
-and save a new `.herbsobj` before exporting CSV.
+and save a new `.dmapobj` before exporting CSV.
 
 ## 13. Virus, tracer, lesion, and expression registration
 
@@ -1143,7 +1146,7 @@ category for each selected channel.
 
 ### 14.2 Similar-cell blob detection
 
-HERBS includes an interactive detector seeded from a representative cell:
+DriftlessMap includes an interactive detector seeded from a representative cell:
 
 1. Activate Cell Selector.
 2. For multichannel data, leave exactly one channel visible.
@@ -1196,7 +1199,7 @@ loaded volume atlas, the report includes:
 - Distribution across atlas structures.
 
 Click **Export coordinates as CSV** for one row per sampled coordinate. The
-file includes piece and point indexes, Bregma-relative HERBS voxels, configured
+file includes piece and point indexes, Bregma-relative DriftlessMap voxels, configured
 coordinates, surface depth, and anatomical assignment. Recognized Allen CCFv3
 adds source voxels, estimated AP/ML, and clearly labeled non-targeting affine
 DV.
@@ -1239,10 +1242,10 @@ Requirements:
 - The file must be `.npy`; legacy inert `.pkl` is also accepted.
 - The payload must be a non-empty numeric NumPy array with shape `(N, 3)`.
 - Coordinates must be in the **source atlas’s native voxel order and
-  directions**, not HERBS display-window coordinates.
+  directions**, not DriftlessMap display-window coordinates.
 - Values should fall within the source atlas shape.
 
-HERBS applies the saved flips and transpose, subtracts configured Bregma, and
+DriftlessMap applies the saved flips and transpose, subtracts configured Bregma, and
 adds the data as a `cells piece` named `loaded point data`. Rename and merge it
 as needed.
 
@@ -1256,7 +1259,7 @@ Use this workflow only when you have the right to use the atlas image.
 ### 17.1 Load and register the plate
 
 1. Choose **Atlas > Load Slice**.
-2. Select JPEG, PNG, `.herbsslice`, or a legacy slice `.pkl`.
+2. Select JPEG, PNG, `.dmapslice`, or a legacy slice `.pkl`.
 3. For a raw image, choose **Atlas > Register Slice Info**.
 4. Enter:
    - Plane: coronal, sagittal, or horizontal.
@@ -1291,27 +1294,32 @@ changes the active atlas type.
 
 ## 18. Saving, loading, and exporting
 
-### 18.1 HERBS file formats
+### 18.1 DriftlessMap file formats
 
 | Extension | Payload | Portability and dependencies |
 | --- | --- | --- |
-| `.herbs` | Complete working project state. | Stores atlas and source-image paths; keep those resources at their original locations. |
-| `.herbslayer` | One 2D layer. | Must match the target image dimensions and required layer metadata. |
-| `.herbsobj` | One object or merged object. | Load an appropriate atlas first. Current merged probes embed self-contained reconstruction metadata. |
-| `.herbsslice` | Calibrated 2D atlas slice. | Contains image, plane, physical dimensions, distance, and Bregma point. |
-| `.herbstri` | Paired registration landmarks and topology. | Reuse only with matching atlas slice and histology geometry. |
+| `.dmap` | Complete working project state. | Stores atlas and source-image paths; keep those resources at their original locations. |
+| `.dmaplayer` | One 2D layer. | Must match the target image dimensions and required layer metadata. |
+| `.dmapobj` | One object or merged object. | Load an appropriate atlas first. Current merged probes embed self-contained reconstruction metadata. |
+| `.dmapslice` | Calibrated 2D atlas slice. | Contains image, plane, physical dimensions, distance, and Bregma point. |
+| `.dmaptri` | Paired registration landmarks and topology. | Reuse only with matching atlas slice and histology geometry. |
 
-These are versioned ZIP-based HERBS archives containing a JSON manifest and
-NumPy arrays written with pickling disabled. Saves are atomic: HERBS writes a
+These are versioned ZIP-based DriftlessMap archives containing a JSON manifest and
+NumPy arrays written with pickling disabled. Saves are atomic: DriftlessMap writes a
 temporary archive and replaces the destination only after a complete save.
 
 Legacy `.pkl` files are read with a restricted unpickler that accepts the inert
 built-in and NumPy structures used by older HERBS releases and rejects
 executable or unsupported globals. After opening an important legacy file,
-save it in the current HERBS format.
+save it in the current DriftlessMap format.
+
+DriftlessMap also reads the safe HERBS extensions `.herbs`, `.herbslayer`,
+`.herbsobj`, `.herbsslice`, and `.herbstri`. New saves use the DriftlessMap
+extensions in the table above and identify their manifest format as
+`DriftlessMap`.
 
 Internal processed-atlas `.pkl` files are a separate implementation detail.
-Only use caches created by HERBS or obtained from a trusted atlas source.
+Only use caches created by DriftlessMap or obtained from a trusted atlas source.
 
 ### 18.2 Saving and loading a project
 
@@ -1327,20 +1335,20 @@ Use **File > Save Project** frequently. A project records:
 - Object pieces and merged objects.
 - Current layout and related state.
 
-Projects are not fully self-contained datasets. On load, HERBS reloads the
+Projects are not fully self-contained datasets. On load, DriftlessMap reloads the
 atlas folder and source histological image from the recorded paths. Moving or
 renaming them can prevent restoration. Preserve a stable project directory or
 document any relocation.
 
-When loading another project over active work, HERBS asks whether to save the
+When loading another project over active work, DriftlessMap asks whether to save the
 current project first.
 
 ### 18.3 Saving and loading layers
 
 Use **File > Save Layer > Current Layer** when exactly one layer is selected, or
-**All Layers** to write every layer using a chosen base name. HERBS appends the
-layer name to create separate `.herbslayer` files. Some pixel layers also
-produce a JPEG preview/export beside the HERBS file.
+**All Layers** to write every layer using a chosen base name. DriftlessMap appends the
+layer name to create separate `.dmaplayer` files. Some pixel layers also
+produce a JPEG preview/export beside the DriftlessMap file.
 
 Use **File > Load Layers** after loading the matching image or atlas. Pixel
 layers must match the current dimensions; process layers also require valid
@@ -1354,9 +1362,9 @@ Use:
 - **File > Save Object > Current** for the selected entry.
 - A type-specific Save Object command to save every merged object of that type
   into a selected folder.
-- **File > Load Objects** to select one or more `.herbsobj` files.
+- **File > Load Objects** to select one or more `.dmapobj` files.
 
-Load the intended atlas first and use a single atlas-slice layout. HERBS checks
+Load the intended atlas first and use a single atlas-slice layout. DriftlessMap checks
 that object coordinates fit the loaded atlas. A file from another atlas or
 resolution can be rejected as nonmatching.
 
@@ -1375,13 +1383,16 @@ windows.
 
 The last atlas folder is stored in:
 
-- Windows: `%APPDATA%\HERBS\settings.json`
-- macOS: `~/Library/Application Support/HERBS/settings.json`
-- Linux: `${XDG_CONFIG_HOME:-~/.config}/HERBS/settings.json`
+- Windows: `%APPDATA%\DriftlessMap\settings.json`
+- macOS: `~/Library/Application Support/DriftlessMap/settings.json`
+- Linux: `${XDG_CONFIG_HOME:-~/.config}/DriftlessMap/settings.json`
 
-Set `HERBS_CONFIG_DIR` before launching to use another configuration directory.
-The preference file is written atomically. If it is corrupt, HERBS ignores it
+Set `DRIFTLESSMAP_CONFIG_DIR` before launching to use another configuration directory.
+The preference file is written atomically. If it is corrupt, DriftlessMap ignores it
 and asks for an atlas folder.
+
+For compatibility, `HERBS_CONFIG_DIR` and an existing HERBS settings file are
+still read when a DriftlessMap setting has not been created.
 
 ## 19. Menu and shortcut reference
 
@@ -1391,9 +1402,9 @@ and asks for an atlas folder.
 | --- | --- |
 | Load Atlas | Select a processed volume-atlas folder. |
 | Load Image | Select a supported histological image. |
-| Save Project / Load Project | Write or restore `.herbs` project state. |
-| Save Layer > Current Layer / All Layers | Write `.herbslayer` files. |
-| Save Object > Current | Write the selected `.herbsobj`. |
+| Save Project / Load Project | Write or restore `.dmap` project state. |
+| Save Layer > Current Layer / All Layers | Write `.dmaplayer` files. |
+| Save Object > Current | Write the selected `.dmapobj`. |
 | Save Object > Probes/Virus/Cells/Contours/Drawings | Save all merged objects of that type to a folder. |
 | Load Layers / Load Objects | Restore matching saved layers or objects. |
 | Load External Data > Cells | Import source-atlas `(N, 3)` point data. |
@@ -1428,13 +1439,13 @@ and asks for an atlas folder.
 | Download Waxholm Rat Atlas | Download/process standard rat atlas. |
 | Download Allen Mice Atlas | Download/process Allen 10, 25, or 50 um atlas. |
 | Atlas Processor | Process a custom volume atlas. |
-| Save/Load Triangulation Points | Write/read `.herbstri`. |
+| Save/Load Triangulation Points | Write/read `.dmaptri`. |
 | Load Slice | Load a raw or processed 2D atlas plate. |
 | Register Slice Info | Set plane, dimensions, and Bregma distance. |
 | Create Slice Layer | Make the calibrated plate active. |
 | Crop | Crop the slice atlas with a lasso. |
 | Bregma Picker | Select the 2D Bregma point. |
-| Save Processed Slice | Write `.herbsslice`. |
+| Save Processed Slice | Write `.dmapslice`. |
 | Merge Slices | Disabled in the current release. |
 | Switch Atlas | Switch between loaded volume and slice atlases. |
 
@@ -1455,7 +1466,7 @@ The menu text changes to show the resulting on/off state.
 
 ### 19.7 Help
 
-**About HERBS** displays the current version and project information.
+**About DriftlessMap** displays the current version and project information.
 
 ### 19.8 Keyboard and mouse reference
 
@@ -1472,15 +1483,15 @@ The menu text changes to show the resulting on/off state.
 
 ## 20. Troubleshooting
 
-### HERBS imports in one terminal but not another
+### DriftlessMap imports in one terminal but not another
 
 Activate the same Conda environment and verify:
 
 ```bash
-conda activate HERBS
+conda activate DriftlessMap
 which python
 python -m pip --version
-python -c "import herbs; print(herbs.__version__)"
+python -c "import driftlessmap; print(driftlessmap.__version__)"
 ```
 
 On Windows use `where python` instead of `which python`.
@@ -1493,7 +1504,7 @@ Use Python 3.13 or earlier and install the optional extra:
 python -m pip install ".[czi]"
 ```
 
-Do not add PyQt5 to the environment; HERBS 1.0 is a PyQt6 application.
+Do not add PyQt5 to the environment; DriftlessMap is a PyQt6 application.
 
 ### The application starts but the 3D window is blank or OpenGL fails
 
@@ -1512,7 +1523,7 @@ rerun the correct downloader’s Process step or the custom Atlas Processor.
 
 ### The wrong atlas loads from the toolbar
 
-Use **File > Load Atlas** and select the correct folder. HERBS updates the
+Use **File > Load Atlas** and select the correct folder. DriftlessMap updates the
 remembered path. Delete or relocate the user `settings.json` only if the
 preference itself is corrupt.
 
@@ -1580,7 +1591,7 @@ Check:
 ### Probe CSV export says to re-merge
 
 The object predates self-contained reconstruction metadata. Load the original
-project with the same atlas, unmerge and re-merge it in HERBS 1.0.5, then save a
+project with the same atlas, unmerge and re-merge it in DriftlessMap 1.1.0, then save a
 new object.
 
 ### A project cannot find its image or atlas
@@ -1593,15 +1604,15 @@ folder.
 ### A saved layer or object does not match
 
 Load the same source image dimensions and atlas/resolution used when it was
-created. HERBS intentionally rejects out-of-range objects and incompatible
+created. DriftlessMap intentionally rejects out-of-range objects and incompatible
 pixel layers.
 
 ### Reporting a problem
 
 Open an issue at
-<https://github.com/mohebi-n-associates/HERBS/issues> and include:
+<https://github.com/mohebi-n-associates/DriftlessMap/issues> and include:
 
-- HERBS version.
+- DriftlessMap version.
 - Python version and operating system.
 - Installation command.
 - Atlas species and resolution.
@@ -1617,29 +1628,30 @@ to share.
 
 ### 21.1 Supported public package surface
 
-HERBS is primarily a GUI application. The small public package surface is:
+DriftlessMap is primarily a GUI application. The small public package surface is:
 
 ```python
-import herbs
+import driftlessmap
 
-print(herbs.__version__)
-herbs.run()
-herbs.run_herbs()  # alias
+print(driftlessmap.__version__)
+driftlessmap.run()
+driftlessmap.run_driftlessmap()  # alias
 ```
 
 `CZIReader` is lazily available when the CZI extra is installed:
 
 ```python
-from herbs import CZIReader
+from driftlessmap import CZIReader
 
 reader = CZIReader("section.czi")
 reader.read_data(scale=0.1, scene_index=0)
 ```
 
-Importing `herbs` does not eagerly import the complete GUI or optional CZI
-stack. Internal modules provide testable atlas, triangulation, persistence,
-probe, and ROI helpers, but they are not currently declared as a stable public
-API. Pin a HERBS version if external code imports them.
+Importing `driftlessmap` does not eagerly import the complete GUI or optional
+CZI stack. The legacy `herbs` package remains available for existing scripts.
+Internal modules provide testable atlas, triangulation, persistence, probe, and
+ROI helpers, but they are not currently declared as a stable public API. Pin a
+DriftlessMap version if external code imports them.
 
 ### 21.2 Running the test suite
 
@@ -1657,7 +1669,7 @@ drawing ROI analysis.
 
 ### 21.3 Package resources and working directory
 
-HERBS resolves icons, UI files, QSS styles, and packaged label data relative to
+DriftlessMap resolves icons, UI files, QSS styles, and packaged label data relative to
 the installed package. Launching it does not change the process working
 directory. This matters when embedding the launcher in a notebook or another
 Python program.
@@ -1666,7 +1678,7 @@ Python program.
 
 Before acquiring or analyzing experimental data:
 
-- Record HERBS and Python versions.
+- Record DriftlessMap and Python versions.
 - Record atlas name, release, resolution, folder, and source files.
 - Record Bregma source voxel and axis directions.
 - Keep `atlas_axis_info.pkl` with the processed atlas.

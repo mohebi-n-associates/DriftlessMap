@@ -8,6 +8,7 @@ import types
 from unittest import mock
 import unittest
 
+import driftlessmap
 import herbs
 from herbs.resources import resource_path
 from herbs.run_herbs import run
@@ -17,6 +18,9 @@ from herbs.uuuuuu import read_qss_file
 
 class RuntimePathTests(unittest.TestCase):
     def test_package_import_does_not_eagerly_import_the_gui(self):
+        self.assertTrue(callable(driftlessmap.run))
+        self.assertTrue(callable(driftlessmap.run_driftlessmap))
+        self.assertIs(driftlessmap.run_driftlessmap, driftlessmap.run)
         self.assertTrue(callable(herbs.run))
         self.assertTrue(callable(herbs.run_herbs))
         self.assertIs(herbs.run_herbs, herbs.run)
@@ -77,7 +81,9 @@ class RuntimePathTests(unittest.TestCase):
     def test_atlas_preference_uses_an_atomic_user_config_file(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             with mock.patch.dict(
-                os.environ, {"HERBS_CONFIG_DIR": temporary_directory}, clear=False
+                os.environ,
+                {"DRIFTLESSMAP_CONFIG_DIR": temporary_directory},
+                clear=False,
             ):
                 self.assertIsNone(load_last_atlas_path())
                 save_last_atlas_path("/example/atlas")
@@ -91,10 +97,26 @@ class RuntimePathTests(unittest.TestCase):
     def test_corrupt_preferences_are_ignored(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             with mock.patch.dict(
-                os.environ, {"HERBS_CONFIG_DIR": temporary_directory}, clear=False
+                os.environ,
+                {"DRIFTLESSMAP_CONFIG_DIR": temporary_directory},
+                clear=False,
             ):
                 settings_path().write_text("not json", encoding="utf-8")
                 self.assertIsNone(load_last_atlas_path())
+
+    def test_legacy_config_override_remains_supported(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "DRIFTLESSMAP_CONFIG_DIR": "",
+                    "HERBS_CONFIG_DIR": temporary_directory,
+                },
+                clear=False,
+            ):
+                save_last_atlas_path("/legacy/atlas")
+                self.assertEqual(load_last_atlas_path(), "/legacy/atlas")
+                self.assertEqual(settings_path().parent, Path(temporary_directory))
 
 
 if __name__ == "__main__":

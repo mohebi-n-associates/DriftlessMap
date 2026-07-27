@@ -1,27 +1,7 @@
-"""
-``HERBS Code``
-================
+"""Legacy HERBS compatibility API for DriftlessMap.
 
-Functions present in herbs are listed below.
-
-
-For Image Processing
---------------------------
-
-   ...
-   ...
-
-For Atlas
---------------
-
-   ...
-
-For Others
-------------------
-
-   ...
-
-
+New integrations should use ``import driftlessmap``. The old import remains
+available so existing HERBS scripts continue to run during the transition.
 """
 
 from .run_herbs import run, run_herbs

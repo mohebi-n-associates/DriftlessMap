@@ -379,7 +379,7 @@ def build_probe_reconstruction(
 
     return {
         "schema_version": PROBE_RECONSTRUCTION_SCHEMA_VERSION,
-        "software": {"name": "HERBS", "version": software_version},
+        "software": {"name": "DriftlessMap", "version": software_version},
         "atlas": atlas,
         "probe": {
             "settings": probe_settings,
