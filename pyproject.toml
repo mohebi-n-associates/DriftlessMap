@@ -74,7 +74,6 @@ test = [
 
 [project.scripts]
 driftlessmap = "driftlessmap:run"
-herbs = "herbs.run_herbs:run"
 
 [project.urls]
 Homepage = "https://github.com/mohebi-n-associates/DriftlessMap"
@@ -87,10 +86,10 @@ Documentation = "https://github.com/mohebi-n-associates/DriftlessMap#readme"
 version = { attr = "driftlessmap.version.__version__" }
 
 [tool.setuptools.packages.find]
-include = ["driftlessmap*", "herbs*"]
+include = ["driftlessmap*"]
 
 [tool.setuptools.package-data]
-herbs = [
+driftlessmap = [
     "main_window.ui",
     "data/*.csv",
     "data/*.pkl",

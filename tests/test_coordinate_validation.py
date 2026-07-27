@@ -5,7 +5,7 @@ import unittest
 import numpy as np
 
 
-MODULE_PATH = Path(__file__).parents[1] / "herbs" / "coordinate_validation.py"
+MODULE_PATH = Path(__file__).parents[1] / "driftlessmap" / "coordinate_validation.py"
 SPEC = importlib.util.spec_from_file_location("coordinate_validation", MODULE_PATH)
 coordinate_validation = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(coordinate_validation)

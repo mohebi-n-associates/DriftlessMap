@@ -5,7 +5,7 @@ import unittest
 import numpy as np
 
 
-MODULE_PATH = Path(__file__).parents[1] / "herbs" / "atlas_transform.py"
+MODULE_PATH = Path(__file__).parents[1] / "driftlessmap" / "atlas_transform.py"
 SPEC = importlib.util.spec_from_file_location("atlas_transform", MODULE_PATH)
 atlas_transform = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(atlas_transform)

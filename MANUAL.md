@@ -17,7 +17,7 @@ and CSV-export behavior.
 The following historical interface image predates the DriftlessMap rebrand;
 the workflows shown remain recognizable.
 
-![Historical HERBS main window](herbs/herbs.png)
+![Historical HERBS main window](driftlessmap/herbs.png)
 
 ## Contents
 
@@ -121,17 +121,14 @@ needed.
 
 ### 2.2 Recommended Conda installation
 
-DriftlessMap is currently installed from this repository rather than PyPI. Create an
-isolated environment so Qt, NumPy, OpenCV, and OpenGL packages do not conflict
-with unrelated software:
+Create an isolated environment so Qt, NumPy, OpenCV, and OpenGL packages do not
+conflict with unrelated software:
 
 ```bash
 conda create --name DriftlessMap python=3.14 -y
 conda activate DriftlessMap
 python -m pip install --upgrade pip
-git clone https://github.com/mohebi-n-associates/DriftlessMap.git
-cd DriftlessMap
-python -m pip install .
+python -m pip install driftlessmap
 ```
 
 Use the following environment instead when opening CZI files is required:
@@ -140,20 +137,20 @@ Use the following environment instead when opening CZI files is required:
 conda create --name DriftlessMap-CZI python=3.13 -y
 conda activate DriftlessMap-CZI
 python -m pip install --upgrade pip
-git clone https://github.com/mohebi-n-associates/DriftlessMap.git
-cd DriftlessMap
-python -m pip install ".[czi]"
+python -m pip install "driftlessmap[czi]"
 ```
 
-If the repository was downloaded as a ZIP file, unzip it, open a terminal in
-the directory containing `pyproject.toml`, and run the same `python -m pip
-install .` command.
-
-For source development, use an editable installation:
+For source development, clone the repository and use an editable installation:
 
 ```bash
+git clone https://github.com/mohebi-n-associates/DriftlessMap.git
+cd DriftlessMap
 python -m pip install -e ".[test]"
 ```
+
+DriftlessMap installs no top-level `herbs` package or `herbs` command. It can
+therefore be installed alongside the original HERBS distribution without
+overwriting HERBS-owned files.
 
 ### 2.3 Confirming the installation
 
@@ -198,17 +195,17 @@ Use `DriftlessMap-CZI` instead if that is the environment you created.
 
 ### 2.5 Updating
 
-From the cloned repository:
+Update a PyPI installation with:
 
 ```bash
 conda activate DriftlessMap
-git pull
-python -m pip install . --upgrade
+python -m pip install --upgrade driftlessmap
 ```
 
-Restart DriftlessMap after updating. Read [What’s New in DriftlessMap](WhatsNew.md) before
-resuming an important project, particularly when probe reconstruction or
-registration behavior has changed.
+For a development checkout, run `git pull` before reinstalling the editable
+package. Restart DriftlessMap after updating. Read
+[What’s New in DriftlessMap](WhatsNew.md) before resuming an important project,
+particularly when probe reconstruction or registration behavior has changed.
 
 ## 3. Concepts and coordinate systems
 
@@ -1501,7 +1498,7 @@ On Windows use `where python` instead of `which python`.
 Use Python 3.13 or earlier and install the optional extra:
 
 ```bash
-python -m pip install ".[czi]"
+python -m pip install "driftlessmap[czi]"
 ```
 
 Do not add PyQt5 to the environment; DriftlessMap is a PyQt6 application.
@@ -1648,10 +1645,11 @@ reader.read_data(scale=0.1, scene_index=0)
 ```
 
 Importing `driftlessmap` does not eagerly import the complete GUI or optional
-CZI stack. The legacy `herbs` package remains available for existing scripts.
-Internal modules provide testable atlas, triangulation, persistence, probe, and
-ROI helpers, but they are not currently declared as a stable public API. Pin a
-DriftlessMap version if external code imports them.
+CZI stack. DriftlessMap intentionally does not provide the legacy `herbs`
+Python namespace or command. Internal modules provide testable atlas,
+triangulation, persistence, probe, and ROI helpers, but they are not currently
+declared as a stable public API. Pin a DriftlessMap version if external code
+imports them.
 
 ### 21.2 Running the test suite
 

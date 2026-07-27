@@ -29,8 +29,10 @@ authorship, publication credit, Git history, and user compatibility.
 
 ### Compatibility
 
-- Continues to support `import herbs`, the `herbs` command, and
-  `HERBS_CONFIG_DIR` for existing scripts and environments.
+- Uses only the `driftlessmap` Python package and command, avoiding file and
+  executable collisions when original HERBS is installed in the same
+  environment.
+- Continues to support `HERBS_CONFIG_DIR` for existing configurations.
 - Reads legacy HERBS projects, layers, objects, slices, triangulation files,
   restricted legacy pickle files, and existing atlas preferences.
 - Writes newly branded `.dmap`, `.dmaplayer`, `.dmapobj`, `.dmapslice`, and

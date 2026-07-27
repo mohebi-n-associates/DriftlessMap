@@ -3,7 +3,7 @@ import unittest
 import cv2
 import numpy as np
 
-from herbs.triangulation import (
+from driftlessmap.triangulation import (
     TriangulationError,
     build_piecewise_affine_registration,
     dense_inverse_map,

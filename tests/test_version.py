@@ -6,9 +6,8 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PyQt6.QtWidgets import QApplication
 
 import driftlessmap
-import herbs
-from herbs.about_herbs import AboutDriftlessMapWindow
-from herbs.version import __version__
+from driftlessmap.about import AboutDriftlessMapWindow
+from driftlessmap.version import __version__
 
 
 class VersionTests(unittest.TestCase):
@@ -19,7 +18,6 @@ class VersionTests(unittest.TestCase):
     def test_public_package_version_uses_the_canonical_value(self):
         self.assertEqual(__version__, "1.1.0")
         self.assertEqual(driftlessmap.__version__, __version__)
-        self.assertEqual(herbs.__version__, __version__)
 
     def test_about_dialog_reports_version_and_current_repository(self):
         dialog = AboutDriftlessMapWindow()

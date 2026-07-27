@@ -52,9 +52,7 @@ DriftlessMap 1.1.0 supports Python 3.10–3.14 and Qt 6 through PyQt6. Python
 conda create --name DriftlessMap python=3.14 -y
 conda activate DriftlessMap
 python -m pip install --upgrade pip
-git clone https://github.com/mohebi-n-associates/DriftlessMap.git
-cd DriftlessMap
-python -m pip install .
+python -m pip install driftlessmap
 ```
 
 Launch the application with any of:
@@ -70,7 +68,8 @@ import driftlessmap
 driftlessmap.run()
 ```
 
-For an editable development install, use `python -m pip install -e .`.
+For an editable development install, clone the repository and use
+`python -m pip install -e .`.
 
 ### Zeiss CZI files
 
@@ -81,7 +80,7 @@ currently support Python through 3.13:
 conda create --name DriftlessMap-CZI python=3.13 -y
 conda activate DriftlessMap-CZI
 python -m pip install --upgrade pip
-python -m pip install ".[czi]"
+python -m pip install "driftlessmap[czi]"
 ```
 
 ## Compatibility with HERBS
@@ -92,8 +91,9 @@ The rebrand is designed not to strand existing research data:
   `.herbsslice`, and `.herbstri` files.
 - New files use `.dmap`, `.dmaplayer`, `.dmapobj`, `.dmapslice`, and
   `.dmaptri`.
-- Existing `import herbs` code and the `herbs` command remain available as
-  compatibility aliases. New code should use `import driftlessmap`.
+- DriftlessMap installs only the `driftlessmap` Python package and command. It
+  does not overwrite the original HERBS package, so both distributions can be
+  installed in the same environment. New code should use `import driftlessmap`.
 - Existing `HERBS_CONFIG_DIR` overrides remain supported. New configurations
   should use `DRIFTLESSMAP_CONFIG_DIR`.
 - Some persisted coordinate field names retain `herbs` because changing them
@@ -112,7 +112,7 @@ remain useful for workflows whose interface has not changed.
 The screenshot below is retained from HERBS for historical workflow reference;
 its title bar predates the DriftlessMap rebrand.
 
-<img src="./herbs/herbs.png" width="800px" alt="Historical HERBS interface used as the basis for DriftlessMap">
+<img src="./driftlessmap/herbs.png" width="800px" alt="Historical HERBS interface used as the basis for DriftlessMap">
 
 Do not store downloaded atlases inside the source or installed package
 directory. Keep each atlas in its own external folder.

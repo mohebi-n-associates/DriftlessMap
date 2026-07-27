@@ -64,7 +64,8 @@ When redistributing DriftlessMap or a substantial portion of its source, retain
 
 ## Compatibility names
 
-Names such as the `herbs` Python package, `.herbs*` legacy file extensions,
-`HERBS_CONFIG_DIR`, and persisted `herbs_vox` coordinate fields are retained
-only where needed for compatibility. Their presence does not indicate
-affiliation with or endorsement by the original HERBS developers.
+Names such as `.herbs*` legacy file extensions, `HERBS_CONFIG_DIR`, and
+persisted `herbs_vox` coordinate fields are retained only where needed for data
+compatibility. DriftlessMap does not install a top-level `herbs` Python package
+or a `herbs` command. These compatibility names do not indicate affiliation
+with or endorsement by the original HERBS developers.

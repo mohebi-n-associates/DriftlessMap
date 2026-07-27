@@ -17,9 +17,9 @@ def load_module(name, path):
 
 
 reconstruction = load_module(
-    "probe_reconstruction", ROOT / "herbs" / "probe_reconstruction.py"
+    "probe_reconstruction", ROOT / "driftlessmap" / "probe_reconstruction.py"
 )
-persistence = load_module("persistence", ROOT / "herbs" / "persistence.py")
+persistence = load_module("persistence", ROOT / "driftlessmap" / "persistence.py")
 
 
 class CoordinateTransformTests(unittest.TestCase):

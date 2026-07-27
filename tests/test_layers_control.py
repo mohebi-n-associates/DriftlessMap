@@ -12,7 +12,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PyQt6.QtWidgets import QApplication
 
 
-PACKAGE_PATH = Path(__file__).parents[1] / "herbs"
+PACKAGE_PATH = Path(__file__).parents[1] / "driftlessmap"
 PACKAGE_NAME = "_herbs_layers_control_test"
 package = types.ModuleType(PACKAGE_NAME)
 package.__path__ = [str(PACKAGE_PATH)]

@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 
 
-MODULE_PATH = Path(__file__).parents[1] / "herbs" / "persistence.py"
+MODULE_PATH = Path(__file__).parents[1] / "driftlessmap" / "persistence.py"
 SPEC = importlib.util.spec_from_file_location("persistence", MODULE_PATH)
 persistence = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(persistence)

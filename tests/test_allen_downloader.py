@@ -9,8 +9,8 @@ import numpy as np
 import nrrd
 from PyQt6.QtWidgets import QApplication
 
-from herbs.allen_downloader import AllenDownloader, _stream_unique_nrrd_values
-from herbs.obj_items import render_small_volume
+from driftlessmap.allen_downloader import AllenDownloader, _stream_unique_nrrd_values
+from driftlessmap.obj_items import render_small_volume
 
 
 class AllenDownloaderTests(unittest.TestCase):

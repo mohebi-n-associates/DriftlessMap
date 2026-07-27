@@ -8,7 +8,7 @@ import numpy as np
 import tifffile
 
 
-MODULE_PATH = Path(__file__).parents[1] / "herbs" / "image_reader.py"
+MODULE_PATH = Path(__file__).parents[1] / "driftlessmap" / "image_reader.py"
 SPEC = importlib.util.spec_from_file_location("image_reader", MODULE_PATH)
 image_reader = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(image_reader)

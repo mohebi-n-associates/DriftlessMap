@@ -9,7 +9,7 @@ import unittest
 import numpy as np
 
 
-PACKAGE_PATH = Path(__file__).parents[1] / "herbs"
+PACKAGE_PATH = Path(__file__).parents[1] / "driftlessmap"
 PACKAGE_NAME = "_herbs_atlas_loader_test"
 package = types.ModuleType(PACKAGE_NAME)
 package.__path__ = [str(PACKAGE_PATH)]

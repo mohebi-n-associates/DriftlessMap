@@ -5,13 +5,13 @@ import unittest
 
 import numpy as np
 
-from herbs.probe_csv import (
+from driftlessmap.probe_csv import (
     iter_probe_contact_rows,
     iter_probe_region_rows,
     probe_trajectory_row,
     write_probe_csv_files,
 )
-from herbs.probe_reconstruction import build_probe_reconstruction
+from driftlessmap.probe_reconstruction import build_probe_reconstruction
 
 
 def probe_data():

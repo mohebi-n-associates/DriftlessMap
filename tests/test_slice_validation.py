@@ -5,7 +5,7 @@ import unittest
 import numpy as np
 
 
-MODULE_PATH = Path(__file__).parents[1] / "herbs" / "slice_validation.py"
+MODULE_PATH = Path(__file__).parents[1] / "driftlessmap" / "slice_validation.py"
 SPEC = importlib.util.spec_from_file_location("herbs_slice_validation_test", MODULE_PATH)
 slice_validation = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(slice_validation)

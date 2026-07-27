@@ -9,11 +9,10 @@ from unittest import mock
 import unittest
 
 import driftlessmap
-import herbs
-from herbs.resources import resource_path
-from herbs.run_herbs import run
-from herbs.user_settings import load_last_atlas_path, save_last_atlas_path, settings_path
-from herbs.uuuuuu import read_qss_file
+from driftlessmap.resources import resource_path
+from driftlessmap.run_driftlessmap import run
+from driftlessmap.user_settings import load_last_atlas_path, save_last_atlas_path, settings_path
+from driftlessmap.uuuuuu import read_qss_file
 
 
 class RuntimePathTests(unittest.TestCase):
@@ -21,10 +20,7 @@ class RuntimePathTests(unittest.TestCase):
         self.assertTrue(callable(driftlessmap.run))
         self.assertTrue(callable(driftlessmap.run_driftlessmap))
         self.assertIs(driftlessmap.run_driftlessmap, driftlessmap.run)
-        self.assertTrue(callable(herbs.run))
-        self.assertTrue(callable(herbs.run_herbs))
-        self.assertIs(herbs.run_herbs, herbs.run)
-        self.assertNotIn("herbs.herbsgui", sys.modules)
+        self.assertNotIn("driftlessmap.app", sys.modules)
 
     def test_resources_resolve_outside_the_package_working_directory(self):
         previous_directory = os.getcwd()
@@ -63,7 +59,7 @@ class RuntimePathTests(unittest.TestCase):
 
     def test_launcher_does_not_change_the_process_working_directory(self):
         observed_directories = []
-        fake_gui = types.ModuleType("herbs.herbsgui")
+        fake_gui = types.ModuleType("driftlessmap.app")
 
         def fake_main():
             observed_directories.append(os.getcwd())
@@ -71,7 +67,7 @@ class RuntimePathTests(unittest.TestCase):
 
         fake_gui.main = fake_main
         original_directory = os.getcwd()
-        with mock.patch.dict(sys.modules, {"herbs.herbsgui": fake_gui}):
+        with mock.patch.dict(sys.modules, {"driftlessmap.app": fake_gui}):
             result = run()
 
         self.assertEqual(result, 17)

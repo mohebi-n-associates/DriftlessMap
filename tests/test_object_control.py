@@ -8,12 +8,12 @@ import numpy as np
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PyQt6.QtWidgets import QApplication
 
-from herbs.object_control import (
+from driftlessmap.object_control import (
     DrawingInfoWindow,
     ObjectControl,
     ProbeInfoWindow,
 )
-from herbs.roi_analysis import build_drawing_roi_info
+from driftlessmap.roi_analysis import build_drawing_roi_info
 
 
 def drawing_info():
@@ -148,21 +148,21 @@ class ProbeInfoWindowTests(unittest.TestCase):
 
         with (
             patch(
-                "herbs.object_control.QFileDialog.getSaveFileName",
+                "driftlessmap.object_control.QFileDialog.getSaveFileName",
                 return_value=(
                     "/tmp/probe_export.csv",
                     "CSV files (*.csv)",
                 ),
             ),
             patch(
-                "herbs.object_control.write_probe_csv_files",
+                "driftlessmap.object_control.write_probe_csv_files",
                 return_value={
                     "contacts": "/tmp/probe_export_contacts.csv",
                     "trajectory": "/tmp/probe_export_trajectory.csv",
                     "regions": "/tmp/probe_export_regions.csv",
                 },
             ) as writer,
-            patch("herbs.object_control.QMessageBox.information") as message,
+            patch("driftlessmap.object_control.QMessageBox.information") as message,
         ):
             window.export_coordinates()
 

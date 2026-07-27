@@ -9,10 +9,10 @@ from PyQt6.QtGui import QKeyEvent
 from PyQt6.QtWidgets import QApplication
 from pyqtgraph.GraphicsScene import GraphicsScene
 
-from herbs.atlas_view import AtlasView, PageController
-from herbs.image_stacks import ClickableImage
-from herbs.slice_stacks import SliceStacks, image_position_in_bounds
-from herbs.slice_stacks import ClickableSlice
+from driftlessmap.atlas_view import AtlasView, PageController
+from driftlessmap.image_stacks import ClickableImage
+from driftlessmap.slice_stacks import SliceStacks, image_position_in_bounds
+from driftlessmap.slice_stacks import ClickableSlice
 
 
 class FakeClickEvent:

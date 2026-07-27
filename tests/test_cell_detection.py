@@ -5,7 +5,7 @@ import unittest
 import numpy as np
 
 
-MODULE_PATH = Path(__file__).parents[1] / "herbs" / "cell_detection.py"
+MODULE_PATH = Path(__file__).parents[1] / "driftlessmap" / "cell_detection.py"
 SPEC = importlib.util.spec_from_file_location("cell_detection", MODULE_PATH)
 cell_detection = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(cell_detection)

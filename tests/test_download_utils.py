@@ -5,7 +5,7 @@ import tempfile
 import unittest
 
 
-MODULE_PATH = Path(__file__).parents[1] / "herbs" / "download_utils.py"
+MODULE_PATH = Path(__file__).parents[1] / "driftlessmap" / "download_utils.py"
 SPEC = importlib.util.spec_from_file_location("download_utils", MODULE_PATH)
 download_utils = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(download_utils)

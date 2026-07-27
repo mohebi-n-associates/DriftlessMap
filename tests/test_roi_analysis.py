@@ -5,7 +5,7 @@ from pathlib import Path
 
 import numpy as np
 
-from herbs.roi_analysis import (
+from driftlessmap.roi_analysis import (
     build_drawing_roi_info,
     iter_roi_csv_rows,
     write_roi_csv,

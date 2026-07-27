@@ -22,7 +22,3 @@ class AboutDriftlessMapWindow(QMessageBox):
             + "with or endorsed by the original HERBS developers."
         )
         self.setStandardButtons(QMessageBox.StandardButton.Close)
-
-
-# Backward compatibility for code importing the old dialog class.
-AboutHERBSWindow = AboutDriftlessMapWindow

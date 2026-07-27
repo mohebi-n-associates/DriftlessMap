@@ -2,7 +2,7 @@ import unittest
 
 import numpy as np
 
-from herbs.probe_utiles import (
+from driftlessmap.probe_utiles import (
     calculate_probe_info,
     find_probe_surface_entry,
     line_fit_2d,

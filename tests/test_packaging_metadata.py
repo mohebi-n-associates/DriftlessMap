@@ -66,7 +66,8 @@ class PackagingMetadataTests(unittest.TestCase):
         self.assertEqual(
             metadata["scripts"]["driftlessmap"], "driftlessmap:run"
         )
-        self.assertEqual(metadata["scripts"]["herbs"], "herbs.run_herbs:run")
+        self.assertNotIn("herbs", metadata["scripts"])
+        self.assertFalse((REPOSITORY_ROOT / "herbs").exists())
         author_names = {author["name"] for author in metadata["authors"]}
         self.assertTrue(
             {

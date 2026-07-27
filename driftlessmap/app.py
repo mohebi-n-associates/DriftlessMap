@@ -114,7 +114,7 @@ from .obj_items import (
     render_small_volume,
     make_3d_gl_widget,
 )
-from .about_herbs import AboutDriftlessMapWindow
+from .about import AboutDriftlessMapWindow
 from .persistence import save_driftlessmap_file
 from .cell_detection import select_detection_channel
 from .coordinate_validation import coordinates_in_bounds
@@ -8083,7 +8083,3 @@ def main():
     window = DriftlessMap()
     window.show()
     return app.exec()
-
-
-# Backward compatibility for integrations that imported the old window class.
-HERBS = DriftlessMap
