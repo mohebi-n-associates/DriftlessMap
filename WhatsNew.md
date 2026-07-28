@@ -3,6 +3,44 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.2.0
+
+Release date: 27 July 2026
+
+This release adds a versioned probe-localization export designed for
+downstream electrophysiology and NWB workflows.
+
+### Probe-localization export schema 2
+
+The **Export probe localization files** action now creates four companion
+files:
+
+- `_contacts.csv` contains physical probe contacts, ordered deepest to
+  shallowest, with atlas coordinates and anatomical assignments.
+- `_track.csv` contains labeled samples along the fitted centerline, ordered
+  from insertion to tip and spaced no farther apart than one atlas voxel. This
+  is the appropriate input for localizing continuously estimated unit depths.
+- `_trajectory.csv` records insertion, tip, angles, fit quality, atlas and
+  coordinate-system metadata, export schema, software version, and the
+  probe-model tip-to-contact offset.
+- `_regions.csv` summarizes region IDs, names, acronyms, contact totals, and
+  reconstructed path lengths.
+
+Track samples include distance from insertion and tip, atlas-space
+coordinates, and the structure ID, acronym, and name at each point. For
+recognized Allen CCFv3 atlases, the export includes Allen voxel coordinates
+and physical coordinates alongside the existing explicitly qualified
+estimated Bregma values.
+
+### Upgrade notes
+
+Downstream tools that assign unit locations should require schema 2 and use
+the track table rather than inferring region boundaries from the contact or
+region summaries. Re-merge probes saved by older versions to generate the
+complete reconstruction and export metadata.
+
+---
+
 ## DriftlessMap 1.1.0
 
 Release date: 27 July 2026

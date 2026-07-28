@@ -895,7 +895,7 @@ class ProbeInfoWindow(QDialog):
         # export and close buttons
         ok_btn = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
         self.export_btn = ok_btn.addButton(
-            "Export probe CSV files",
+            "Export probe localization files",
             QDialogButtonBox.ButtonRole.ActionRole,
         )
         self.export_btn.clicked.connect(self.export_coordinates)
@@ -919,7 +919,7 @@ class ProbeInfoWindow(QDialog):
         )
         file_path, _ = QFileDialog.getSaveFileName(
             self,
-            "Choose a base name for the three probe CSV files",
+            "Choose a base name for the probe localization CSV files",
             "{}_probe_export.csv".format(safe_name or "probe"),
             "CSV files (*.csv)",
         )
@@ -938,7 +938,7 @@ class ProbeInfoWindow(QDialog):
             return
         QMessageBox.information(
             self,
-            "Probe CSV files exported",
+            "Probe localization files exported",
             "Created:\n{}".format(
                 "\n".join(str(path) for path in paths.values())
             ),

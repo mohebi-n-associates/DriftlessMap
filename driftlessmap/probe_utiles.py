@@ -1050,6 +1050,30 @@ def calculate_probe_info(
         "trajectory_fit": trajectory_fit,
     }
 
+    # Sample the fitted centerline at no more than one atlas voxel between
+    # points. The resulting labeled track is persisted with the reconstruction
+    # so downstream tools can assign continuous unit depths to atlas regions
+    # without reopening DriftlessMap's processed annotation volume.
+    track_vector = np.asarray(pc_ep, dtype=float) - np.asarray(pc_sp, dtype=float)
+    track_length_vox = float(np.linalg.norm(track_vector))
+    if track_length_vox <= np.finfo(float).eps:
+        return None, PROBE_COORDINATES_OUTSIDE_ATLAS
+    track_direction = track_vector / track_length_vox
+    track_count = max(2, int(np.ceil(probe_length_with_tip_um / vxsize_um)) + 1)
+    track_depth_um = np.linspace(
+        0.0, float(probe_length_with_tip_um), track_count
+    )
+    track_pnt = (
+        np.asarray(pc_sp, dtype=float)
+        + (track_depth_um / vxsize_um)[:, None] * track_direction
+    )
+    track_vox = (track_pnt + np.asarray(bregma, dtype=float)).astype(int)
+    if not coordinates_in_bounds(track_vox, label_data.shape):
+        return None, PROBE_COORDINATES_OUTSIDE_ATLAS
+    track_labels = label_data[
+        track_vox[:, 0], track_vox[:, 1], track_vox[:, 2]
+    ]
+
     atlas_metadata = atlas_metadata or {}
     data_dict["reconstruction"] = build_probe_reconstruction(
         insertion_bregma_vox=pc_sp,
@@ -1060,6 +1084,10 @@ def calculate_probe_info(
         contact_vox_index=contact_vox,
         contact_structure_ids=contact_labels,
         contact_local_from_tip_base_um=sites_loc_to_base_temp,
+        track_bregma_vox=track_pnt,
+        track_vox_index=track_vox,
+        track_structure_ids=track_labels,
+        track_axial_depth_from_insertion_um=track_depth_um,
         probe_length_um=probe_length_with_tip_um,
         probe_settings=probe_settings,
         site_face=site_face,

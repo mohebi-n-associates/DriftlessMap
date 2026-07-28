@@ -133,7 +133,7 @@ class ProbeInfoWindowTests(unittest.TestCase):
 
         self.assertEqual(
             window.export_btn.text(),
-            "Export probe CSV files",
+            "Export probe localization files",
         )
         self.assertIn("AP tilt from vertical : ", labels)
         self.assertIn("Vertical depth change : ", labels)
@@ -158,6 +158,7 @@ class ProbeInfoWindowTests(unittest.TestCase):
                 "driftlessmap.object_control.write_probe_csv_files",
                 return_value={
                     "contacts": "/tmp/probe_export_contacts.csv",
+                    "track": "/tmp/probe_export_track.csv",
                     "trajectory": "/tmp/probe_export_trajectory.csv",
                     "regions": "/tmp/probe_export_regions.csv",
                 },

@@ -1,4 +1,4 @@
-"""CSV exports for probe contacts, trajectory metadata, and regions."""
+"""CSV exports for probe contacts, labeled track, trajectory, and regions."""
 
 import csv
 from pathlib import Path
@@ -159,6 +159,54 @@ def iter_probe_contact_rows(probe_name, probe_data):
         yield row
 
 
+def iter_probe_track_rows(probe_name, probe_data):
+    """Yield labeled centerline samples ordered from insertion to tip."""
+    reconstruction = _reconstruction(probe_data)
+    coordinates = reconstruction["coordinates"]
+    if "track" not in coordinates:
+        raise ValueError(
+            "This probe has no labeled centerline. Re-merge the probe with the "
+            "current DriftlessMap version before exporting it."
+        )
+    track = coordinates["track"]
+    source_axes = reconstruction["atlas"]["source_axes"]
+    count = int(track["count"])
+    sample_indexes = np.asarray(track["sample_index"], dtype=int)
+    depth_from_insertion = np.asarray(
+        track["axial_depth_from_insertion_um"], dtype=float
+    )
+    distance_from_tip = np.asarray(
+        track["axial_distance_up_from_tip_um"], dtype=float
+    )
+    structure_ids = np.asarray(track["structure_id"], dtype=int)
+    structure_acronyms = np.asarray(
+        track["structure_acronym"], dtype=object
+    )
+    structure_names = np.asarray(track["structure_name"], dtype=object)
+
+    for index in range(count):
+        coordinate = _indexed_coordinate_record(track, index)
+        row = {
+            "probe_name": probe_name,
+            "track_sample_index": int(sample_indexes[index]),
+            "axial_depth_from_insertion_um": float(
+                depth_from_insertion[index]
+            ),
+            "axial_distance_up_from_tip_um": float(
+                distance_from_tip[index]
+            ),
+        }
+        row.update(_coordinate_columns(coordinate, source_axes))
+        row.update(
+            {
+                "structure_id": int(structure_ids[index]),
+                "structure_acronym": str(structure_acronyms[index]),
+                "structure_name": str(structure_names[index]),
+            }
+        )
+        yield row
+
+
 def probe_trajectory_row(probe_name, probe_data):
     """Return one complete trajectory-summary row."""
     reconstruction = _reconstruction(probe_data)
@@ -167,8 +215,14 @@ def probe_trajectory_row(probe_name, probe_data):
     coordinates = reconstruction["coordinates"]
     source_axes = atlas["source_axes"]
     settings = probe.get("settings") or {}
+    software = reconstruction.get("software") or {}
+    contacts = coordinates["contacts"]
+    track = coordinates.get("track") or {}
     row = {
         "probe_name": probe_name,
+        "reconstruction_schema_version": int(reconstruction["schema_version"]),
+        "software_name": software.get("name", "DriftlessMap"),
+        "software_version": software.get("version") or "unknown",
         "probe_type": settings.get(
             "probe_type_name", probe_data.get("probe_type_name", "unspecified")
         ),
@@ -183,7 +237,14 @@ def probe_trajectory_row(probe_name, probe_data):
         "ML_tilt_direction": probe_data.get("ml_tilt", "unspecified"),
         "insertion_to_tip_length_um": float(probe_data["probe_length"]),
         "vertical_depth_change_um": float(probe_data["dv"]),
+        "tip_to_lowest_contact_center_um": float(
+            np.min(contacts["axial_distance_up_from_tip_um"])
+        ),
     }
+    if track:
+        row["track_sampling_interval_um"] = float(
+            track["sampling_interval_um"]
+        )
     if atlas.get("source_version"):
         row["atlas_version"] = atlas["source_version"]
     if atlas.get("identifier"):
@@ -293,22 +354,36 @@ def write_probe_csv(path, probe_name, probe_data):
 def _export_paths(path):
     path = Path(path)
     base_name = path.stem if path.suffix else path.name
-    for suffix in ("_contacts", "_trajectory", "_regions"):
+    for suffix in ("_contacts", "_track", "_trajectory", "_regions"):
         if base_name.endswith(suffix):
             base_name = base_name[: -len(suffix)]
             break
     parent = path.parent
     return {
         "contacts": parent / "{}_contacts.csv".format(base_name),
+        "track": parent / "{}_track.csv".format(base_name),
         "trajectory": parent / "{}_trajectory.csv".format(base_name),
         "regions": parent / "{}_regions.csv".format(base_name),
     }
 
 
 def write_probe_csv_files(path, probe_name, probe_data):
-    """Write separate contact, trajectory, and region CSV files."""
+    """Write contacts, labeled track, trajectory, and region CSV files."""
     paths = _export_paths(path)
     write_probe_csv(paths["contacts"], probe_name, probe_data)
+    _write_rows(
+        paths["track"],
+        iter_probe_track_rows(probe_name, probe_data),
+        (
+            "probe_name",
+            "track_sample_index",
+            "axial_depth_from_insertion_um",
+            "axial_distance_up_from_tip_um",
+            "structure_id",
+            "structure_acronym",
+            "structure_name",
+        ),
+    )
     trajectory = probe_trajectory_row(probe_name, probe_data)
     _write_rows(paths["trajectory"], [trajectory], tuple(trajectory))
     _write_rows(

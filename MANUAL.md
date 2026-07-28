@@ -1,6 +1,6 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 1.1.0**.
+This manual applies to **DriftlessMap 1.2.0**.
 
 DriftlessMap - Histological E-data Registration in Brain Space - is a desktop
 application for aligning rodent histology with a reference atlas, reconstructing
@@ -107,7 +107,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-DriftlessMap 1.1.0 requires:
+DriftlessMap 1.2.0 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -163,7 +163,7 @@ python -m pip --version
 python -c "import driftlessmap; print(driftlessmap.__version__)"
 ```
 
-The final command should print `1.1.0`.
+The final command should print `1.2.0`.
 
 ### 2.4 Launching DriftlessMap
 
@@ -1076,10 +1076,12 @@ Region summaries distinguish:
 
 ### 12.6 Probe CSV export
 
-Open a merged probe’s information window and click **Export probe CSV files**.
+Open a merged probe’s information window and click
+**Export probe localization files**.
 Choosing one base name creates:
 
 - `*_contacts.csv`: one row per physical contact, deepest first.
+- `*_track.csv`: labeled centerline samples ordered from insertion to tip.
 - `*_trajectory.csv`: one row containing insertion, tip, angles, length, fit
   quality, atlas identity, and coordinate-system metadata.
 - `*_regions.csv`: one row per traversed region with contact count and path
@@ -1091,6 +1093,11 @@ Important contact columns:
   increases toward the surface.
 - `axial_depth_from_insertion_um`: increases from insertion toward the tip.
 - `site_index`, `column_index`, `index_in_column`: stable model indexes.
+
+The track table is the appropriate input for downstream per-unit localization.
+It records distance from insertion and tip, atlas coordinates, and the atlas
+structure assigned at each centerline sample. Samples are spaced no farther
+apart than one atlas voxel.
 
 Probe objects created by older versions may lack the `reconstruction` block.
 Load their original project with the same atlas, unmerge/re-merge the probe,
@@ -1588,8 +1595,8 @@ Check:
 ### Probe CSV export says to re-merge
 
 The object predates self-contained reconstruction metadata. Load the original
-project with the same atlas, unmerge and re-merge it in DriftlessMap 1.1.0, then save a
-new object.
+project with the same atlas, unmerge and re-merge it in DriftlessMap 1.2.0,
+then save a new object.
 
 ### A project cannot find its image or atlas
 

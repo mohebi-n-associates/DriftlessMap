@@ -45,7 +45,7 @@ See [CITATION.cff](CITATION.cff) for machine-readable citation metadata.
 
 ## Install from PyPI
 
-DriftlessMap 1.1.0 supports Python 3.10–3.14 and Qt 6 through PyQt6. Python
+DriftlessMap 1.2.0 supports Python 3.10–3.14 and Qt 6 through PyQt6. Python
 3.14 in a dedicated environment is recommended for new installations.
 
 Install the latest stable release:

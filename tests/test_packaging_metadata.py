@@ -113,6 +113,7 @@ class PackagingMetadataTests(unittest.TestCase):
             sorted(path.name for path in REPOSITORY_ROOT.glob("WhatsNew*.md")),
             ["WhatsNew.md"],
         )
+        self.assertIn("## DriftlessMap 1.2.0", history)
         self.assertIn("## DriftlessMap 1.1.0", history)
         for version in (
             "1.0.5",

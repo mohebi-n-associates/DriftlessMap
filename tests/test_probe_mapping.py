@@ -127,6 +127,15 @@ class ProbeMappingTests(unittest.TestCase):
             ],
             "3D fitted-line intersection with atlas brain mask",
         )
+        track = info["reconstruction"]["coordinates"]["track"]
+        self.assertGreaterEqual(track["count"], 2)
+        self.assertEqual(track["ordering"], "insertion-to-tip")
+        self.assertTrue(
+            np.all(np.diff(track["axial_depth_from_insertion_um"]) >= 0)
+        )
+        self.assertEqual(
+            track["structure_acronym"], ["TR"] * track["count"]
+        )
 
 
 if __name__ == "__main__":

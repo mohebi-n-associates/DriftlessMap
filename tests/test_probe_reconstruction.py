@@ -135,6 +135,14 @@ class ProbeReconstructionTests(unittest.TestCase):
                 np.array([[10.0, -8.0, 12.0], [50.0, -8.0, 12.0]]),
                 np.array([[30.0, 16.0, 12.0]]),
             ],
+            track_bregma_vox=np.array(
+                [[0.0, 0.0, value] for value in np.linspace(1.0, -4.0, 6)]
+            ),
+            track_vox_index=np.array(
+                [[228, 263, value] for value in range(160, 154, -1)]
+            ),
+            track_structure_ids=np.array([10, 10, 10, 11, 11, 11]),
+            track_axial_depth_from_insertion_um=np.linspace(0, 10000, 6),
             probe_length_um=10000,
             probe_settings={"probe_type_name": "test", "tip_length": 175},
             site_face="Front",
@@ -165,7 +173,7 @@ class ProbeReconstructionTests(unittest.TestCase):
         atlas = payload["atlas"]
         contacts = payload["coordinates"]["contacts"]
 
-        self.assertEqual(payload["schema_version"], 1)
+        self.assertEqual(payload["schema_version"], 2)
         self.assertEqual(atlas["source_version"], "CCFv3 2017")
         self.assertEqual(atlas["source_axes"], ["AP", "DV", "LR"])
         self.assertEqual(tuple(atlas["source_shape_vox"]), (528, 320, 456))
@@ -196,6 +204,14 @@ class ProbeReconstructionTests(unittest.TestCase):
         transform = atlas["estimated_stereotaxic_transform"]
         self.assertFalse(transform["ground_truth"])
         self.assertIn("brain surface", transform["targeting_note"])
+        track = payload["coordinates"]["track"]
+        self.assertEqual(track["ordering"], "insertion-to-tip")
+        self.assertEqual(track["count"], 6)
+        np.testing.assert_allclose(
+            track["axial_distance_up_from_tip_um"],
+            [10000, 8000, 6000, 4000, 2000, 0],
+        )
+        self.assertEqual(track["structure_acronym"], ["R10"] * 3 + ["R11"] * 3)
 
     def test_payload_round_trips_inside_one_herbs_object(self):
         data = {

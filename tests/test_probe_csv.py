@@ -8,6 +8,7 @@ import numpy as np
 from driftlessmap.probe_csv import (
     iter_probe_contact_rows,
     iter_probe_region_rows,
+    iter_probe_track_rows,
     probe_trajectory_row,
     write_probe_csv_files,
 )
@@ -43,6 +44,14 @@ def probe_data():
             np.array([[10.0, -8.0, 12.0], [50.0, -8.0, 12.0]]),
             np.array([[30.0, 16.0, 12.0]]),
         ],
+        track_bregma_vox=np.array(
+            [[0.0, 0.0, value] for value in np.linspace(1.0, -4.0, 6)]
+        ),
+        track_vox_index=np.array(
+            [[228, 263, value] for value in range(160, 154, -1)]
+        ),
+        track_structure_ids=np.array([10, 10, 10, 11, 11, 11]),
+        track_axial_depth_from_insertion_um=np.linspace(0, 10000, 6),
         probe_length_um=10000,
         probe_settings={"probe_type_name": "test", "tip_length": 175},
         site_face="Front",
@@ -115,6 +124,9 @@ class ProbeCsvTests(unittest.TestCase):
 
         self.assertEqual(trajectory["insertion_to_tip_length_um"], 10000)
         self.assertEqual(trajectory["fit_inliers"], 3)
+        self.assertEqual(trajectory["reconstruction_schema_version"], 2)
+        self.assertEqual(trajectory["tip_to_lowest_contact_center_um"], 185)
+        self.assertEqual(trajectory["track_sampling_interval_um"], 2000)
         self.assertIn("insertion_allen_AP_vox", trajectory)
         self.assertIn("tip_allen_AP_vox", trajectory)
         self.assertNotIn("structure_id", trajectory)
@@ -129,7 +141,19 @@ class ProbeCsvTests(unittest.TestCase):
             all(value != "" for row in regions for value in row.values())
         )
 
-    def test_writer_creates_three_consistent_csv_files(self):
+    def test_track_rows_are_in_insertion_to_tip_order(self):
+        rows = list(iter_probe_track_rows("probe one", probe_data()))
+
+        self.assertEqual(len(rows), 6)
+        self.assertEqual(rows[0]["axial_depth_from_insertion_um"], 0)
+        self.assertEqual(rows[0]["axial_distance_up_from_tip_um"], 10000)
+        self.assertEqual(rows[-1]["axial_depth_from_insertion_um"], 10000)
+        self.assertEqual(rows[-1]["axial_distance_up_from_tip_um"], 0)
+        self.assertEqual(rows[0]["structure_acronym"], "R10")
+        self.assertEqual(rows[-1]["structure_acronym"], "R11")
+        self.assertIn("allen_AP_vox", rows[0])
+
+    def test_writer_creates_four_consistent_csv_files(self):
         with tempfile.TemporaryDirectory() as folder:
             selected_path = Path(folder) / "probe_export.csv"
             paths = write_probe_csv_files(
@@ -140,6 +164,7 @@ class ProbeCsvTests(unittest.TestCase):
                 paths,
                 {
                     "contacts": Path(folder) / "probe_export_contacts.csv",
+                    "track": Path(folder) / "probe_export_track.csv",
                     "trajectory": (
                         Path(folder) / "probe_export_trajectory.csv"
                     ),
@@ -152,9 +177,11 @@ class ProbeCsvTests(unittest.TestCase):
                     tables[table_name] = list(csv.DictReader(csv_file))
 
         self.assertEqual(len(tables["contacts"]), 3)
+        self.assertEqual(len(tables["track"]), 6)
         self.assertEqual(len(tables["trajectory"]), 1)
         self.assertEqual(len(tables["regions"]), 2)
         self.assertNotIn("record_type", tables["contacts"][0])
+        self.assertIn("structure_id", tables["track"][0])
         self.assertNotIn("structure_id", tables["trajectory"][0])
         self.assertNotIn("herbs_ML_vox", tables["regions"][0])
 
