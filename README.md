@@ -79,6 +79,27 @@ driftlessmap.run()
 For an editable development install, clone the repository and use
 `python -m pip install -e .`.
 
+### Check your version and upgrade
+
+Check the installed version:
+
+```bash
+python -m driftlessmap --version
+```
+
+Compare it against the latest stable release on
+[PyPI](https://pypi.org/project/driftlessmap/):
+
+```bash
+pip index versions driftlessmap
+```
+
+Upgrade to the latest stable release:
+
+```bash
+python -m pip install --upgrade driftlessmap
+```
+
 ### Zeiss CZI files
 
 CZI support uses the optional `aicspylibczi` package, whose prebuilt packages
