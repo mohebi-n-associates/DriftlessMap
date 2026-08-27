@@ -143,7 +143,8 @@ QT_QPA_PLATFORM=offscreen /Users/ali/miniconda/envs/HERBS/bin/python \
 The default local Python may lack `superqt`, `pytest`, or `tomli`; do not treat
 that environment-only absence as a product regression. The full HERBS Conda
 environment currently runs the complete suite. Offscreen OpenGL warnings are
-expected in headless tests.
+expected in headless tests. Linux CI must install `libgl1` and `libegl1` before
+importing PyQt6 GUI modules.
 
 Before handoff:
 
