@@ -221,7 +221,7 @@ border-color: rgb(75, 78, 84);</string>
     </widget>
     <widget class="QMenu" name="menuSave_Object">
      <property name="title">
-      <string>Save Object</string>
+      <string>Export Object</string>
      </property>
      <addaction name="actionSave_Current"/>
      <addaction name="actionSave_Probes"/>
@@ -240,6 +240,7 @@ border-color: rgb(75, 78, 84);</string>
     <addaction name="actionSingle_Image"/>
     <addaction name="separator"/>
     <addaction name="actionSave_Project"/>
+    <addaction name="actionSave_Portable_Project"/>
     <addaction name="menuSave_Operating_Data"/>
     <addaction name="menuSave_Object"/>
     <addaction name="separator"/>
@@ -479,6 +480,14 @@ selection-background-color: rgb(50, 50, 50);</string>
     <string>Save Project</string>
    </property>
   </action>
+  <action name="actionSave_Portable_Project">
+   <property name="text">
+    <string>Save Portable Project</string>
+   </property>
+   <property name="toolTip">
+    <string>Include the original histology source in the project archive</string>
+   </property>
+  </action>
   <action name="actionUndo">
    <property name="text">
     <string>Undo</string>
@@ -570,7 +579,7 @@ selection-background-color: rgb(50, 50, 50);</string>
   </action>
   <action name="actionSave_Current">
    <property name="text">
-    <string>Current</string>
+    <string>Current ...</string>
    </property>
   </action>
   <action name="actionSave_Probes">
@@ -608,7 +617,7 @@ selection-background-color: rgb(50, 50, 50);</string>
   </action>
   <action name="actionLoad_Objects">
    <property name="text">
-    <string>Load Objects</string>
+    <string>Import Objects</string>
    </property>
   </action>
   <action name="actionSave_Triangulation_Points">

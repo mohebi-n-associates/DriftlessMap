@@ -16,6 +16,29 @@ def project_metadata():
 
 
 class PackagingMetadataTests(unittest.TestCase):
+    def test_desktop_build_assets_and_native_workflow_exist(self):
+        metadata = project_metadata()
+        desktop_dependencies = metadata["optional-dependencies"]["desktop-build"]
+
+        self.assertTrue(any(item.startswith("pyinstaller") for item in desktop_dependencies))
+        for relative_path in (
+            "driftlessmap/icons/app/driftlessmap.png",
+            "driftlessmap/icons/app/driftlessmap.ico",
+            "driftlessmap/icons/app/driftlessmap.icns",
+            "packaging/DriftlessMap.spec",
+            "packaging/build_windows.ps1",
+            "packaging/build_macos.sh",
+            ".github/workflows/desktop-builds.yml",
+        ):
+            self.assertTrue((REPOSITORY_ROOT / relative_path).is_file(), relative_path)
+
+        workflow = (REPOSITORY_ROOT / ".github/workflows/desktop-builds.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("windows-latest", workflow)
+        self.assertIn("macos-14", workflow)
+        self.assertIn("release upload", workflow)
+
     def test_modern_runtime_and_dependency_baseline(self):
         metadata = project_metadata()
 
@@ -24,7 +47,13 @@ class PackagingMetadataTests(unittest.TestCase):
         self.assertIn("pyqtgraph>=0.14,<0.15", metadata["dependencies"])
         self.assertIn("superqt>=0.8,<0.9", metadata["dependencies"])
         self.assertIn("numpy>=2.0,<3", metadata["dependencies"])
-        self.assertIn("opencv-python>=4.10,<6", metadata["dependencies"])
+        self.assertIn("opencv-python-headless>=4.10,<6", metadata["dependencies"])
+        self.assertFalse(
+            any(
+                requirement.startswith("opencv-python>=")
+                for requirement in metadata["dependencies"]
+            )
+        )
         self.assertFalse(
             any(
                 requirement.startswith(("PyQt5", "h5py", "tables"))

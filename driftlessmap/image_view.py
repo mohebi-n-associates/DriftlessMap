@@ -446,11 +446,32 @@ class ImageView(QObject):
         for i in range(self.current_img.shape[2]):
             lut_points_data.append(self.curve_widget.curve_plot.lut_points[i].data['pos'].copy())
 
+        source_metadata = {
+                'display_name': self.image_file.file_name_list[
+                    min(self.scene_slider.value(), len(self.image_file.file_name_list) - 1)
+                ] if self.image_file.file_name_list else 'histology',
+                'is_czi': self.image_file.is_czi,
+                'is_rgb': self.image_file.is_rgb,
+                'pixel_type': self.image_file.pixel_type,
+                'level': self.image_file.level,
+                'n_channels': self.image_file.n_channels,
+                'data_type': self.image_file.data_type,
+                'n_scenes': self.image_file.n_scenes,
+                'n_pages': self.image_file.n_pages,
+                'scaling_val': self.image_file.scaling_val,
+                'rgb_colors': self.image_file.rgb_colors,
+                'hsv_colors': self.image_file.hsv_colors,
+                'channel_name': self.image_file.channel_name,
+                'gamma_val': self.image_file.gamma_val,
+        }
         data = {'current_img': self.current_img,
                 'processing_img': self.processing_img,
                 'current_scene': self.scene_slider.value(),
+                'current_page': self.display_img_index,
                 'current_scale': self.scale_slider.value(),
+                'source_metadata': source_metadata,
                 'channel_color': self.channel_color,
+                'channel_visible': self.channel_visible,
                 'color_combo_index': self.color_combo_index,
                 'original_lut_list': self.original_lut_list,
                 'color_lut_list': self.color_lut_list,
@@ -467,7 +488,17 @@ class ImageView(QObject):
         self.current_scale = img_ctrl_data['current_scale']
         self.channel_color = img_ctrl_data['channel_color']
         self.color_combo_index = img_ctrl_data['color_combo_index']
+        saved_channel_visible = img_ctrl_data.get(
+            'channel_visible', [True] * self.image_file.n_channels
+        )
         self.processing_img = img_ctrl_data['processing_img']
+        self.display_img_index = int(img_ctrl_data.get('current_page', 0))
+        if self.image_file.n_pages > 1:
+            page = min(self.display_img_index, self.image_file.n_pages - 1)
+            self.page_ctrl.page_slider.blockSignals(True)
+            self.page_ctrl.page_slider.setValue(page)
+            self.page_ctrl.page_label.setText(str(page))
+            self.page_ctrl.page_slider.blockSignals(False)
         # set data
         # self.scene_wrap.setVisible(False)
 
@@ -504,14 +535,17 @@ class ImageView(QObject):
         for i in range(self.image_file.n_channels):
             self.chn_widget_list[i].blockSignals(True)
             self.chn_widget_list[i].setVisible(True)
-            self.chn_widget_list[i].vis_btn.setChecked(False)
-            self.chn_widget_list[i].set_checked(False)
+            channel_visible = bool(saved_channel_visible[i])
+            self.chn_widget_list[i].vis_btn.setChecked(not channel_visible)
+            self.chn_widget_list[i].set_checked(not channel_visible)
             self.chn_widget_list[i].vis_btn.setText(self.image_file.channel_name[i])
             self.chn_widget_list[i].color_combo.blockSignals(True)
             self.chn_widget_list[i].add_item(self.image_file.hsv_colors[i])
             self.chn_widget_list[i].color_combo.setCurrentIndex(self.color_combo_index[i])
             self.chn_widget_list[i].color_combo.blockSignals(False)
-            self.channel_visible[i] = True
+            self.channel_visible[i] = channel_visible
+            self.img_stacks.image_list[i].setVisible(channel_visible)
+            self.curve_widget.set_channel_enable(i, channel_visible)
             self.chn_widget_list[i].blockSignals(False)
 
         self.original_lut_list = img_ctrl_data['original_lut_list']

@@ -43,43 +43,52 @@ See [CITATION.cff](CITATION.cff) for machine-readable citation metadata.
 - Safe, versioned project and object archives.
 - Support for custom compatible atlases.
 
-## Install from PyPI
+## Installation
 
-DriftlessMap 1.2.0 supports Python 3.10–3.14 and Qt 6 through PyQt6. Python
-3.14 in a dedicated environment is recommended for new installations.
+DriftlessMap 1.4.0 is available as a desktop application for end users and as
+a Python package for developers.
 
-Install the latest stable release:
+### Mode 1: desktop application for end users
 
-```bash
-python -m pip install driftlessmap
-```
+No Python or Conda installation is required. Download the asset for your
+computer from [GitHub Releases](https://github.com/mohebi-n-associates/DriftlessMap/releases):
 
-For a dedicated Conda environment:
+- **Windows 64-bit:** download `DriftlessMap-1.4.0-Windows-x64.zip`, extract
+  the complete folder, and double-click `DriftlessMap.exe`. Do not move the
+  executable out of its extracted folder.
+- **macOS:** download `DriftlessMap-1.4.0-macOS.dmg`, open it, and drag
+  `DriftlessMap.app` to Applications. The application bundle includes the
+  DriftlessMap icon and all Python dependencies.
+
+Release builds are currently unsigned. If Windows SmartScreen or macOS
+Gatekeeper displays a warning, verify that the file came from the official
+release page. On macOS, Control-click the app, choose **Open**, and confirm the
+first launch. Code signing and notarization are planned for a future release.
+
+### Mode 2: Conda and pip for developers
+
+DriftlessMap supports Python 3.10–3.14 and Qt 6 through PyQt6. Python 3.14 is
+recommended for core development:
 
 ```bash
 conda create --name DriftlessMap python=3.14 -y
 conda activate DriftlessMap
 python -m pip install --upgrade pip
+git clone https://github.com/mohebi-n-associates/DriftlessMap.git
+cd DriftlessMap
+python -m pip install -e ".[test]"
+```
+
+Launch the editable installation with `driftlessmap` or
+`python -m driftlessmap`. Library users can call `driftlessmap.run()`.
+
+To use the stable PyPI package instead of an editable checkout, run:
+
+```bash
 python -m pip install driftlessmap
 ```
 
-Launch the application with any of:
-
-```bash
-driftlessmap
-python -m driftlessmap
-```
-
-```python
-import driftlessmap
-
-driftlessmap.run()
-```
-
-For an editable development install, clone the repository and use
-`python -m pip install -e .`.
-
-### Check your version and upgrade
+#### Check your version and upgrade
 
 Check the installed version:
 
@@ -100,7 +109,7 @@ Upgrade to the latest stable release:
 python -m pip install --upgrade driftlessmap
 ```
 
-### Zeiss CZI files
+#### Zeiss CZI files
 
 CZI support uses the optional `aicspylibczi` package, whose prebuilt packages
 currently support Python through 3.13:
@@ -111,6 +120,13 @@ conda activate DriftlessMap-CZI
 python -m pip install --upgrade pip
 python -m pip install "driftlessmap[czi]"
 ```
+
+#### Building the desktop applications
+
+Native applications must be built on their target operating system. The
+release workflow builds both platforms automatically; maintainers can also run
+`packaging/build_windows.ps1` on Windows or `packaging/build_macos.sh` on
+macOS. Outputs are written to `dist/` as a Windows ZIP and a macOS DMG.
 
 ## Compatibility with HERBS
 

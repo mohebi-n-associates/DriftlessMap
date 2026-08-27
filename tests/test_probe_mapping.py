@@ -3,11 +3,34 @@ import unittest
 import numpy as np
 
 from driftlessmap.probe_utiles import (
+    MultiProbes,
+    Probe,
     calculate_probe_info,
     find_probe_surface_entry,
     line_fit_2d,
     robust_probe_line_fit,
 )
+
+
+class ProbeSettingsPersistenceTests(unittest.TestCase):
+    def test_probe_settings_round_trip_includes_face(self):
+        probe = Probe()
+        probe.set_np2()
+        probe.probe_faces_changed("Left")
+        saved = probe.get_settings()
+
+        restored = Probe()
+        restored.set_settings(saved)
+
+        self.assertEqual(restored.get_settings(), saved)
+
+    def test_multi_probe_settings_can_be_cleared_and_restored(self):
+        probes = MultiProbes()
+        saved = {"x_vals": [1, 2], "y_vals": [3, 4], "faces": [0, 1]}
+        probes.set_multi_probes(saved)
+        self.assertEqual(probes.get_multi_settings(), saved)
+        probes.set_multi_probes(None)
+        self.assertIsNone(probes.get_multi_settings())
 
 
 class ProbeMappingTests(unittest.TestCase):

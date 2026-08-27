@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 import re
 import sys
+import subprocess
 import tempfile
 import types
 from unittest import mock
@@ -17,10 +18,22 @@ from driftlessmap.uuuuuu import read_qss_file
 
 class RuntimePathTests(unittest.TestCase):
     def test_package_import_does_not_eagerly_import_the_gui(self):
-        self.assertTrue(callable(driftlessmap.run))
-        self.assertTrue(callable(driftlessmap.run_driftlessmap))
-        self.assertIs(driftlessmap.run_driftlessmap, driftlessmap.run)
-        self.assertNotIn("driftlessmap.app", sys.modules)
+        check = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                (
+                    "import sys, driftlessmap; "
+                    "assert callable(driftlessmap.run); "
+                    "assert driftlessmap.run_driftlessmap is driftlessmap.run; "
+                    "assert 'driftlessmap.app' not in sys.modules"
+                ),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(check.returncode, 0, check.stderr)
 
     def test_resources_resolve_outside_the_package_working_directory(self):
         previous_directory = os.getcwd()

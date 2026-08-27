@@ -2,6 +2,8 @@ import os
 import sys
 from os.path import dirname, realpath, join
 import copy
+from pathlib import Path
+import tempfile
 
 import pickle
 import csv
@@ -87,6 +89,7 @@ from .triangulation import (
 )
 
 from .image_reader import (
+    EmbeddedImageReader,
     HISTOLOGY_IMAGE_FILTER,
     ImageReader,
     ImagesReader,
@@ -116,6 +119,18 @@ from .obj_items import (
 )
 from .about import AboutDriftlessMapWindow
 from .persistence import save_driftlessmap_file
+from .provenance import (
+    ATLAS_IDENTITY_FILES,
+    describe_atlas_path,
+    describe_path,
+    pack_path,
+    path_stat_signature,
+    resolve_reference,
+    unpack_path,
+    utc_now_iso,
+    verify_reference,
+)
+from .version import APPLICATION_DISPLAY_NAME, APPLICATION_WINDOW_TITLE, __version__
 from .cell_detection import select_detection_channel
 from .coordinate_validation import coordinates_in_bounds
 from .probe_reconstruction import (
@@ -139,14 +154,27 @@ class DriftlessMap(QMainWindow, FORM_Main):
         super(DriftlessMap, self).__init__()
         QMainWindow.__init__(self)
         self.setupUi(self)
-        self.setWindowTitle(
-            "DriftlessMap - Interactive Histology Registration and Brain-Atlas Mapping"
-        )
+        self.setWindowTitle(APPLICATION_WINDOW_TITLE)
+        self.setWindowIcon(QIcon(resource_path("icons/app/driftlessmap.png")))
+        self.version_label = QLabel(APPLICATION_DISPLAY_NAME, self)
+        self.version_label.setObjectName("versionLabel")
+        self.version_label.setToolTip("Running DriftlessMap version {}".format(__version__))
+        self.version_label.setContentsMargins(8, 0, 10, 0)
+        self.statusbar.addPermanentWidget(self.version_label)
 
         self.home_path = str(os.path.expanduser("~"))
         self.save_path = self.home_path
+        self.current_project_path = None
+        self.project_created_at = None
+        self.atlas_provenance = None
+        self.histology_provenance = None
+        self._portable_source_directories = []
+        self._temporary_histology_source = None
+        self._loaded_histology_signature = None
+        self._loaded_atlas_signatures = {}
 
         self.num_windows = 1
+        self.current_layout = "coronal"
         self.volume_atlas_path = None
         self.volume_atlas_axis_info = None
         self.slice_atlas_path = None
@@ -482,6 +510,9 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.actionAtlas.triggered.connect(self.load_atlas_clicked)
         self.actionSingle_Image.triggered.connect(self.load_image)
         self.actionSave_Project.triggered.connect(self.save_project_called)
+        self.actionSave_Portable_Project.triggered.connect(
+            lambda: self.save_project_called(portable=True)
+        )
         self.actionCurrent_Layer.triggered.connect(self.save_current_layer)
         self.actionAll_Layer.triggered.connect(self.save_all_layer)
         self.actionSave_Current.triggered.connect(self.save_current_object)
@@ -696,6 +727,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
     # ------------------------------------------------------------------
     def show_only_slice_window(self):
         self.num_windows = 1
+        self.current_layout = "slice"
         self.atlas_view.radio_group.setVisible(True)
         self.coronalframe.setVisible(False)
         self.sagitalframe.setVisible(False)
@@ -716,6 +748,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
             self.sagital_layout.addWidget(self.atlas_view.slut, 0, 1, 1, 1)
             self.sagital_layout.addWidget(self.atlas_view.spage_ctrl, 1, 0, 1, 2)
         self.num_windows = 1
+        self.current_layout = "coronal"
         self.atlas_view.radio_group.setVisible(True)
         self.coronalframe.setVisible(True)
         self.sagitalframe.setVisible(False)
@@ -737,6 +770,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
             self.sagital_layout.addWidget(self.atlas_view.slut, 0, 1, 1, 1)
             self.sagital_layout.addWidget(self.atlas_view.spage_ctrl, 1, 0, 1, 2)
         self.num_windows = 1
+        self.current_layout = "sagittal"
         self.atlas_view.radio_group.setVisible(True)
         self.coronalframe.setVisible(False)
         self.sagitalframe.setVisible(True)
@@ -758,6 +792,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
             self.sagital_layout.addWidget(self.atlas_view.slut, 0, 1, 1, 1)
             self.sagital_layout.addWidget(self.atlas_view.spage_ctrl, 1, 0, 1, 2)
         self.num_windows = 1
+        self.current_layout = "horizontal"
         self.atlas_view.radio_group.setVisible(True)
         self.coronalframe.setVisible(False)
         self.sagitalframe.setVisible(False)
@@ -769,6 +804,8 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.atlas_view.section_rabnt3.setChecked(True)
 
     def show_only_image_window(self):
+        self.num_windows = 1
+        self.current_layout = "image"
         self.atlas_view.radio_group.setVisible(True)
         self.coronalframe.setVisible(False)
         self.sagitalframe.setVisible(False)
@@ -789,6 +826,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
             self.sagital_layout.addWidget(self.atlas_view.slut, 0, 1, 1, 1)
             self.sagital_layout.addWidget(self.atlas_view.spage_ctrl, 1, 0, 1, 2)
         self.num_windows = 1
+        self.current_layout = "3d"
         self.atlas_view.radio_group.setVisible(True)
         self.coronalframe.setVisible(False)
         self.sagitalframe.setVisible(False)
@@ -809,6 +847,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
             self.sagital_layout.addWidget(self.atlas_view.slut, 0, 1, 1, 1)
             self.sagital_layout.addWidget(self.atlas_view.spage_ctrl, 1, 0, 1, 2)
         self.num_windows = 2
+        self.current_layout = "volume-histology"
         self.atlas_view.radio_group.setVisible(True)
         if self.atlas_display == "coronal":
             self.coronalframe.setVisible(True)
@@ -831,6 +870,8 @@ class DriftlessMap(QMainWindow, FORM_Main):
     def show_slice_and_histology(self):
         if self.atlas_view.slice_image_data is None:
             return
+        self.num_windows = 2
+        self.current_layout = "slice-histology"
         self.coronalframe.setVisible(False)
         self.sagitalframe.setVisible(False)
         self.horizontalframe.setVisible(False)
@@ -850,6 +891,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
             self.sagital_layout.addWidget(self.atlas_view.slut, 0, 1, 1, 1)
             self.sagital_layout.addWidget(self.atlas_view.spage_ctrl, 1, 0, 1, 2)
         self.num_windows = 3
+        self.current_layout = "volume-3d-histology"
         self.atlas_view.radio_group.setVisible(True)
         if self.atlas_display == "coronal":
             self.coronalframe.setVisible(True)
@@ -880,6 +922,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
             self.sagital_copy_layout.addWidget(self.atlas_view.slut, 0, 1, 1, 1)
             self.sagital_copy_layout.addWidget(self.atlas_view.spage_ctrl, 1, 0, 1, 2)
         self.num_windows = 4
+        self.current_layout = "four-atlas-windows"
         self.atlas_view.radio_group.setVisible(False)
         self.coronalframe.setVisible(True)
         self.sagitalframe.setVisible(False)
@@ -985,10 +1028,101 @@ class DriftlessMap(QMainWindow, FORM_Main):
             self.valid_multi_settings = True
 
     def save_probe_setting_called(self):
-        self.print_message("under development", self.error_message_color)
+        path = QFileDialog.getSaveFileName(
+            self,
+            "Save Probe Setting",
+            self.save_path,
+            "DriftlessMap Probe Setting (*.dmapprobe)",
+        )[0]
+        if not path:
+            return
+        payload = {
+            "probe_settings": self.probe_settings.get_settings(),
+            "planning": self.get_probe_planning_data(),
+        }
+        success, error = save_driftlessmap_file(path, payload, "probe_settings")
+        if not success:
+            self.print_message(error, self.error_message_color)
+            return
+        self.print_message("Probe setting saved successfully.", self.normal_color)
 
     def load_probe_setting_called(self):
-        self.print_message("under development", self.error_message_color)
+        path = QFileDialog.getOpenFileName(
+            self,
+            "Load Probe Setting",
+            self.home_path,
+            "DriftlessMap Probe Setting (*.dmapprobe)",
+        )[0]
+        if not path:
+            return
+        payload, error = check_loading_pickle_file(
+            path, expected_kind="probe_settings"
+        )
+        if error is not None:
+            self.print_message(error, self.error_message_color)
+            return
+        try:
+            planning = payload.get("planning", {})
+            planning.setdefault("probe_settings", payload["probe_settings"])
+            self.set_probe_planning_data(planning)
+        except (KeyError, TypeError, ValueError) as exc:
+            self.print_message(
+                "Invalid probe setting: {}".format(exc), self.error_message_color
+            )
+            return
+        self.print_message("Probe setting loaded successfully.", self.normal_color)
+
+    def get_probe_planning_data(self):
+        return {
+            "probe_settings": self.probe_settings.get_settings(),
+            "probe_type": self.probe_type,
+            "site_face": self.site_face,
+            "multi_shanks_enabled": self.multi_shanks,
+            "multi_settings": self.multi_settings.get_multi_settings(),
+            "valid_probe_settings": self.valid_probe_settings,
+            "valid_multi_settings": self.valid_multi_settings,
+            "merge_sites": self.tool_box.merge_sites,
+            "pre_site_face_index": self.tool_box.pre_site_face_combo.currentIndex(),
+            "after_site_face_index": self.tool_box.after_site_face_combo.currentIndex(),
+        }
+
+    def set_probe_planning_data(self, planning):
+        settings = planning.get("probe_settings", planning)
+        self.probe_type = int(planning.get("probe_type", settings["probe_type"]))
+        self.tool_box.probe_type_combo.setCurrentIndex(self.probe_type)
+        # The combo signal configures type-specific UI. Restore the exact
+        # persisted geometry afterwards so custom settings are not replaced by
+        # the signal handler's temporary defaults.
+        self.probe_settings.set_settings(settings)
+
+        self.site_face = int(planning.get("site_face", 0))
+        pre_index = int(planning.get("pre_site_face_index", self.site_face))
+        after_index = int(planning.get("after_site_face_index", self.site_face))
+        self.tool_box.pre_site_face_combo.blockSignals(True)
+        self.tool_box.after_site_face_combo.blockSignals(True)
+        self.tool_box.pre_site_face_combo.setCurrentIndex(pre_index)
+        self.tool_box.after_site_face_combo.setCurrentIndex(after_index)
+        self.tool_box.pre_site_face_combo.blockSignals(False)
+        self.tool_box.after_site_face_combo.blockSignals(False)
+
+        self.multi_shanks = bool(planning.get("multi_shanks_enabled", False))
+        self.multi_settings.set_multi_probes(planning.get("multi_settings"))
+        self.valid_probe_settings = bool(
+            planning.get("valid_probe_settings", True)
+        )
+        self.valid_multi_settings = bool(
+            planning.get(
+                "valid_multi_settings",
+                planning.get("multi_settings") is not None,
+            )
+        )
+        self.tool_box.multi_prb_btn.blockSignals(True)
+        self.tool_box.multi_prb_btn.setChecked(self.multi_shanks)
+        self.tool_box.multi_prb_btn.blockSignals(False)
+        self.tool_box.merge_sites = bool(planning.get("merge_sites", False))
+        self.tool_box.merge_sites_btn.blockSignals(True)
+        self.tool_box.merge_sites_btn.setChecked(self.tool_box.merge_sites)
+        self.tool_box.merge_sites_btn.blockSignals(False)
 
     # ------------------------------------------------------------------
     #
@@ -1562,6 +1696,11 @@ class DriftlessMap(QMainWindow, FORM_Main):
             return
         self.volume_atlas_path = aln.worker.saving_folder
         self.current_atlas_path = aln.worker.saving_folder
+        self._loaded_atlas_signatures[
+            os.path.abspath(self.current_atlas_path)
+        ] = path_stat_signature(
+            self.current_atlas_path, included_names=ATLAS_IDENTITY_FILES
+        )
         self.current_atlas = "volume"
         self._set_volume_atlas_axis_info(aln.worker.saving_folder)
 
@@ -6320,6 +6459,9 @@ class DriftlessMap(QMainWindow, FORM_Main):
             ):
                 return
             self.current_img_path = image_file_path[0]
+            self._loaded_histology_signature = path_stat_signature(
+                self.current_img_path
+            )
             self.current_img_name = os.path.basename(
                 os.path.realpath(image_file_path[0])
             )
@@ -6500,6 +6642,9 @@ class DriftlessMap(QMainWindow, FORM_Main):
     def load_slice_atlas(self, atlas_path):
         self.slice_atlas_path = atlas_path
         self.current_atlas_path = atlas_path
+        self._loaded_atlas_signatures[os.path.abspath(atlas_path)] = (
+            path_stat_signature(atlas_path)
+        )
         self.atlas_view.clear_slice_info()
 
         if atlas_path[-4:] in [".jpg", ".png"]:
@@ -6627,6 +6772,11 @@ class DriftlessMap(QMainWindow, FORM_Main):
     def load_volume_atlas(self, atlas_folder):
         self.volume_atlas_path = atlas_folder
         self.current_atlas_path = atlas_folder
+        self._loaded_atlas_signatures[os.path.abspath(atlas_folder)] = (
+            path_stat_signature(
+                atlas_folder, included_names=ATLAS_IDENTITY_FILES
+            )
+        )
         self._set_volume_atlas_axis_info(atlas_folder)
         self.atlascontrolpanel.setEnabled(True)
         self.treeviewpanel.setEnabled(True)
@@ -6782,6 +6932,16 @@ class DriftlessMap(QMainWindow, FORM_Main):
     # --------------------------------------------------------------------
     #                            save merged object
     # --------------------------------------------------------------------
+    def get_object_export_provenance(self):
+        atlas = self._atlas_provenance_for_save(None)
+        return {
+            "schema_version": 1,
+            "software": {"name": "DriftlessMap", "version": __version__},
+            "exported_at": utc_now_iso(),
+            "coordinate_frame": "driftlessmap-atlas-view-vox",
+            "atlas": atlas,
+        }
+
     def save_merged_object(self, object_type):
         if not self.object_ctrl.obj_list:
             self.print_message("No object is created ...", self.error_message_color)
@@ -6820,15 +6980,25 @@ class DriftlessMap(QMainWindow, FORM_Main):
         )
         save_path = str(
             QFileDialog.getExistingDirectory(
-                self, "Select Folder to Save Objects", self.current_img_path
+                self, "Select Folder to Export Objects", self.current_img_path
             )
         )
         if save_path != "":
+            try:
+                with pg.BusyCursor():
+                    provenance = self.get_object_export_provenance()
+            except (OSError, ValueError) as exc:
+                self.print_message(
+                    "Unable to fingerprint the object atlas: {}".format(exc),
+                    self.error_message_color,
+                )
+                return
             for da_ind in valid_index:
                 data = {
                     "type": self.object_ctrl.obj_type[da_ind],
                     "data": self.object_ctrl.obj_data[da_ind],
                     "name": self.object_ctrl.obj_name[da_ind],
+                    "provenance": provenance,
                 }
                 s_path = os.path.join(save_path, self.object_ctrl.obj_name[da_ind])
                 success, error = save_driftlessmap_file(
@@ -6862,10 +7032,20 @@ class DriftlessMap(QMainWindow, FORM_Main):
             "DriftlessMap Object (*.dmapobj)",
         )
         if file_name[0] != "":
+            try:
+                with pg.BusyCursor():
+                    provenance = self.get_object_export_provenance()
+            except (OSError, ValueError) as exc:
+                self.print_message(
+                    "Unable to fingerprint the object atlas: {}".format(exc),
+                    self.error_message_color,
+                )
+                return
             da_data = {
                 "type": self.object_ctrl.obj_type[self.object_ctrl.current_obj_index],
                 "data": self.object_ctrl.obj_data[self.object_ctrl.current_obj_index],
                 "name": self.object_ctrl.obj_name[self.object_ctrl.current_obj_index],
+                "provenance": provenance,
             }
             success, error = save_driftlessmap_file(file_name[0], da_data, "object")
             if not success:
@@ -6909,6 +7089,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
         if object_file_path[0]:
             n_files = len(object_file_path[0])
             problem_obj_name = []
+            verified_atlas_references = {}
             for i in range(n_files):
                 file_name = os.path.basename(object_file_path[0][i])
                 object_dict, msg = check_loading_pickle_file(
@@ -6920,6 +7101,27 @@ class DriftlessMap(QMainWindow, FORM_Main):
                         self.error_message_color,
                     )
                     return
+
+                object_provenance = object_dict.get("provenance") or {}
+                object_atlas = object_provenance.get("atlas") or {}
+                object_reference = object_atlas.get("reference")
+                if object_reference is not None:
+                    identity = (
+                        object_reference.get("kind"),
+                        object_reference.get("size_bytes"),
+                        object_reference.get("sha256"),
+                    )
+                    if identity not in verified_atlas_references:
+                        with pg.BusyCursor():
+                            verified_atlas_references[identity] = verify_reference(
+                                self.current_atlas_path, object_reference
+                            )
+                    matches, reason = verified_atlas_references[identity]
+                    if not matches:
+                        problem_obj_name.append(
+                            "{} ({})".format(file_name, reason)
+                        )
+                        continue
 
                 if "merged" in object_dict["type"]:
                     data_list = object_dict["data"]["data"]
@@ -7440,10 +7642,111 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 # self.layer_ctrl.add_layer(layer_dict['layer_link'], layer_dict['color'])
                 # self.layer_ctrl.layer_list[-1].set_thumbnail_data(layer_dict['thumbnail'])
 
+    def _atlas_provenance_for_save(self, project_path):
+        if self.current_atlas_path is None:
+            return None
+        provenance = {
+            "schema_version": 1,
+            "atlas_kind": self.current_atlas,
+            "identifier": Path(self.current_atlas_path).name,
+        }
+        loaded_atlas_signature = self._loaded_atlas_signatures.get(
+            os.path.abspath(self.current_atlas_path)
+        )
+        if loaded_atlas_signature is not None:
+            current_signature = path_stat_signature(
+                self.current_atlas_path,
+                included_names=(
+                    ATLAS_IDENTITY_FILES if self.current_atlas == "volume" else None
+                ),
+            )
+            if current_signature != loaded_atlas_signature:
+                raise ValueError(
+                    "Atlas files changed after they were loaded. Reload the atlas "
+                    "before saving so the pixels and checksum describe the same data."
+                )
+        atlas_shape = getattr(self.atlas_view, "atlas_size", None)
+        if atlas_shape is not None:
+            provenance["driftlessmap_shape_vox"] = tuple(
+                int(value) for value in np.ravel(atlas_shape)
+            )
+        voxel_size = getattr(self.atlas_view, "vox_size_um", None)
+        if voxel_size is not None:
+            provenance["voxel_size_um"] = float(voxel_size)
+        if self.current_atlas == "volume" and os.path.isdir(self.current_atlas_path):
+            provenance["reference"] = describe_atlas_path(
+                self.current_atlas_path, project_path=project_path
+            )
+            provenance["axis_info"] = self.volume_atlas_axis_info
+            try:
+                recognized_allen = (
+                    self.volume_atlas_axis_info is not None
+                    and voxel_size is not None
+                    and is_allen_ccf_2017(self.volume_atlas_axis_info, voxel_size)
+                )
+            except (KeyError, TypeError, ValueError):
+                recognized_allen = False
+            if recognized_allen:
+                provenance["source"] = {
+                    "provider": "Allen Institute for Brain Science",
+                    "name": "Allen Mouse Common Coordinate Framework",
+                    "version": "CCFv3 2017",
+                }
+            else:
+                provenance["source"] = {
+                    "provider": None,
+                    "name": provenance["identifier"],
+                    "version": None,
+                }
+        elif os.path.exists(self.current_atlas_path):
+            provenance["reference"] = describe_path(
+                self.current_atlas_path, project_path=project_path
+            )
+        return provenance
+
+    def _histology_provenance_for_save(self, project_path, portable=False):
+        if self.image_view.current_img is None:
+            return None
+        reference = None
+        source_changed = False
+        if (
+            self.current_img_path
+            and os.path.exists(self.current_img_path)
+            and self.current_img_path != self._temporary_histology_source
+        ):
+            if self._loaded_histology_signature is not None and (
+                path_stat_signature(self.current_img_path)
+                != self._loaded_histology_signature
+            ):
+                source_changed = True
+                if portable:
+                    raise ValueError(
+                        "Histology source changed after it was loaded. Reload it "
+                        "before creating a portable project."
+                    )
+            else:
+                reference = describe_path(
+                    self.current_img_path, project_path=project_path
+                )
+        elif self.histology_provenance is not None:
+            reference = self.histology_provenance.get("reference")
+        return {
+            "schema_version": 1,
+            "reference": reference,
+            "selected_scene": int(self.image_view.scene_slider.value()),
+            "selected_page": int(self.image_view.display_img_index),
+            "working_raster_embedded": True,
+            "working_raster_shape": tuple(
+                int(value) for value in self.image_view.current_img.shape
+            ),
+            "working_raster_dtype": self.image_view.current_img.dtype.name,
+            "source_changed_since_load": source_changed,
+        }
+
     # -------------------------------------------------------------
     #                    save project
     # -------------------------------------------------------------
-    def save_project_called(self):
+    def save_project_called(self, portable=False):
         self.print_message("Saving Project ...", self.normal_color)
         if (
             self.atlas_view.atlas_data is None
@@ -7459,6 +7762,28 @@ class DriftlessMap(QMainWindow, FORM_Main):
             "DriftlessMap Project (*.dmap)",
         )
         if file_name[0] != "":
+            project_path = file_name[0]
+            try:
+                with pg.BusyCursor():
+                    atlas_provenance = self._atlas_provenance_for_save(project_path)
+                    histology_provenance = self._histology_provenance_for_save(
+                        project_path, portable=portable
+                    )
+            except (OSError, ValueError) as exc:
+                self.print_message(
+                    "Unable to fingerprint project inputs: {}".format(exc),
+                    self.error_message_color,
+                )
+                return
+            if histology_provenance and histology_provenance.get(
+                "source_changed_since_load"
+            ):
+                self.print_message(
+                    "The histology source changed after loading. The project will "
+                    "preserve the embedded active raster but will not link the "
+                    "changed file.",
+                    self.reminder_color,
+                )
             if self.current_atlas == "slice":
                 atlas_ctrl_data = self.atlas_view.save_slice_data_and_info()
             else:
@@ -7511,15 +7836,71 @@ class DriftlessMap(QMainWindow, FORM_Main):
             else:
                 object_data = None
 
-            # collect_probe_data
-            probe_settings = self.probe_settings.get_settings()
+            probe_planning = self.get_probe_planning_data()
+            probe_settings = probe_planning["probe_settings"]
+
+            saved_at = utc_now_iso()
+            if self.project_created_at is None:
+                self.project_created_at = saved_at
+
+            portable_sources = None
+            if portable and histology_provenance is not None:
+                reference = histology_provenance.get("reference")
+                if reference is None or not self.current_img_path or not os.path.exists(
+                    self.current_img_path
+                ):
+                    self.print_message(
+                        "The original histology source is unavailable; the portable "
+                        "project will still contain the active lossless raster.",
+                        self.reminder_color,
+                    )
+                else:
+                    try:
+                        with pg.BusyCursor():
+                            portable_sources = {
+                                "histology": pack_path(
+                                    self.current_img_path, reference=reference
+                                )
+                            }
+                    except (OSError, ValueError) as exc:
+                        self.print_message(
+                            "Unable to package the histology source: {}".format(exc),
+                            self.error_message_color,
+                        )
+                        return
 
             project_data = {
+                "project_schema_version": 2,
+                "software": {"name": "DriftlessMap", "version": __version__},
+                "created_at": self.project_created_at,
+                "saved_at": saved_at,
+                "portable": bool(portable_sources),
+                "portable_sources": portable_sources,
+                "atlas_provenance": atlas_provenance,
+                "histology_provenance": histology_provenance,
+                "session_state": {
+                    "current_layout": self.current_layout,
+                    "layer_shift_val": self.layer_shift_val,
+                    "layer_rotate_val": self.layer_rotate_val,
+                    "display_mode_3d": self.display_mode_3d,
+                    "display_mode_2d": self.display_mode_2d,
+                    "planes_visible": self.is_planes_on,
+                    "axes_visible": self.is_axis_on,
+                    "grids_visible": self.is_grids_on,
+                    "object_display_mode": self.obj_display_mode,
+                },
                 "atlas_path": self.current_atlas_path,
-                "img_path": self.current_img_path,
+                "img_path": (
+                    histology_provenance.get("reference", {}).get("absolute_path")
+                    if self.current_img_path == self._temporary_histology_source
+                    and histology_provenance is not None
+                    and histology_provenance.get("reference") is not None
+                    else self.current_img_path
+                ),
                 "current_atlas": self.current_atlas,
                 "num_windows": self.num_windows,
                 "probe_settings": probe_settings,
+                "probe_planning": probe_planning,
                 "np_onside": self.np_onside,
                 "processing_slice": self.atlas_view.processing_slice,
                 "processing_img": self.image_view.processing_img,
@@ -7538,9 +7919,156 @@ class DriftlessMap(QMainWindow, FORM_Main):
             if not success:
                 self.print_message(error, self.error_message_color)
                 return
+            self.current_project_path = project_path
+            self.atlas_provenance = atlas_provenance
+            self.histology_provenance = histology_provenance
             self.print_message("Project saved successfully.", self.normal_color)
         else:
             self.print_message("", self.normal_color)
+
+    def _ask_for_verified_input(self, reference, title):
+        QMessageBox.warning(
+            self,
+            "Project input unavailable",
+            "{} was moved, deleted, or no longer matches its saved checksum. "
+            "Select the original input to continue.".format(title),
+        )
+        if reference.get("kind") == "directory":
+            candidate = QFileDialog.getExistingDirectory(self, title, self.home_path)
+        else:
+            candidate = QFileDialog.getOpenFileName(self, title, self.home_path)[0]
+        if not candidate:
+            return None
+        matches, reason = verify_reference(candidate, reference)
+        if not matches:
+            QMessageBox.critical(
+                self,
+                "Input does not match",
+                "The selected input is not the one recorded by this project: {}.".format(
+                    reason
+                ),
+            )
+            return None
+        return candidate
+
+    def _extract_portable_histology(self, project_dict):
+        sources = project_dict.get("portable_sources") or {}
+        payload = sources.get("histology")
+        if payload is None:
+            return None
+        temporary = tempfile.TemporaryDirectory(prefix="driftlessmap-project-")
+        try:
+            extracted = unpack_path(payload, temporary.name)
+        except Exception:
+            temporary.cleanup()
+            raise
+        self._portable_source_directories.append(temporary)
+        self._temporary_histology_source = extracted
+        return extracted
+
+    def prepare_project_sources(self, project_dict, project_path):
+        """Resolve and verify linked inputs before mutating the active session."""
+        schema_version = int(project_dict.get("project_schema_version", 1))
+        if schema_version > 2:
+            self.print_message(
+                "This project uses a newer persistence schema ({}). Upgrade "
+                "DriftlessMap before opening it.".format(schema_version),
+                self.error_message_color,
+            )
+            return None
+        prepared = dict(project_dict)
+        prepared["_histology_load_mode"] = "source"
+
+        atlas_provenance = prepared.get("atlas_provenance") or {}
+        atlas_reference = atlas_provenance.get("reference")
+        if prepared.get("current_atlas") == "volume" and (
+            atlas_reference is not None or prepared.get("atlas_path") is not None
+        ):
+            resolved_atlas = None
+            if atlas_reference is not None:
+                with pg.BusyCursor():
+                    resolved_atlas, _ = resolve_reference(
+                        atlas_reference, project_path=project_path
+                    )
+                if resolved_atlas is None:
+                    resolved_atlas = self._ask_for_verified_input(
+                        atlas_reference, "Locate Volume Atlas Folder"
+                    )
+            else:
+                legacy_path = prepared.get("atlas_path")
+                if legacy_path and os.path.isdir(legacy_path):
+                    resolved_atlas = legacy_path
+                else:
+                    resolved_atlas = QFileDialog.getExistingDirectory(
+                        self, "Locate Volume Atlas Folder", self.home_path
+                    )
+            if not resolved_atlas:
+                self.print_message(
+                    "The project requires its volume atlas.",
+                    self.error_message_color,
+                )
+                return None
+            prepared["atlas_path"] = resolved_atlas
+
+        histology_provenance = prepared.get("histology_provenance") or {}
+        histology_reference = histology_provenance.get("reference")
+        if prepared.get("img_ctrl_data") is not None:
+            resolved_histology = None
+            if histology_reference is not None:
+                with pg.BusyCursor():
+                    resolved_histology, _ = resolve_reference(
+                        histology_reference, project_path=project_path
+                    )
+                if resolved_histology is None and prepared.get("portable_sources"):
+                    try:
+                        resolved_histology = self._extract_portable_histology(prepared)
+                        matches, _ = verify_reference(
+                            resolved_histology, histology_reference
+                        )
+                        if not matches:
+                            resolved_histology = None
+                    except (OSError, ValueError):
+                        resolved_histology = None
+                if resolved_histology is None:
+                    resolved_histology = self._ask_for_verified_input(
+                        histology_reference, "Locate Histology Source"
+                    )
+            else:
+                legacy_path = prepared.get("img_path")
+                if legacy_path and os.path.exists(legacy_path):
+                    resolved_histology = legacy_path
+
+            if resolved_histology:
+                prepared["img_path"] = resolved_histology
+                if resolved_histology != self._temporary_histology_source:
+                    self._temporary_histology_source = None
+            elif prepared["img_ctrl_data"].get("current_img") is not None:
+                prepared["_histology_load_mode"] = "embedded"
+                self.print_message(
+                    "Original histology is unavailable; restored the lossless "
+                    "active raster embedded in the project.",
+                    self.reminder_color,
+                )
+            else:
+                self.print_message(
+                    "The project has neither a matching histology source nor an "
+                    "embedded working raster.",
+                    self.error_message_color,
+                )
+                return None
+        return prepared
+
+    def _load_embedded_histology(self, img_ctrl_data):
+        reader = EmbeddedImageReader(
+            img_ctrl_data["current_img"], img_ctrl_data.get("source_metadata")
+        )
+        self.image_view.set_data(reader)
+        embedded_ctrl = dict(img_ctrl_data)
+        embedded_ctrl["current_scene"] = 0
+        embedded_ctrl["current_page"] = 0
+        self.image_view.load_img_ctrl_data(embedded_ctrl)
+        self.reset_corners_hist()
+        self.layerpanel.setEnabled(True)
 
     # -------------------------------------------------------------
     #                    load project
@@ -7550,6 +8078,29 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.current_img_path = p_dict["img_path"]
         self.current_atlas = p_dict["current_atlas"]
         self.num_windows = p_dict["num_windows"]
+        self.project_created_at = p_dict.get("created_at")
+        self.atlas_provenance = p_dict.get("atlas_provenance")
+        self.histology_provenance = p_dict.get("histology_provenance")
+        session_state = p_dict.get("session_state", {})
+        self.layer_shift_val = session_state.get(
+            "layer_shift_val", self.layer_shift_val
+        )
+        self.layer_rotate_val = session_state.get(
+            "layer_rotate_val", self.layer_rotate_val
+        )
+        desired_display_mode_3d = session_state.get(
+            "display_mode_3d", self.display_mode_3d
+        )
+        desired_display_mode_2d = session_state.get(
+            "display_mode_2d", self.display_mode_2d
+        )
+        desired_planes = session_state.get("planes_visible", self.is_planes_on)
+        desired_axes = session_state.get("axes_visible", self.is_axis_on)
+        desired_grids = session_state.get("grids_visible", self.is_grids_on)
+        desired_object_mode = session_state.get(
+            "object_display_mode", self.obj_display_mode
+        )
+        saved_layout = session_state.get("current_layout")
 
         self.np_onside = p_dict["np_onside"]
 
@@ -7590,12 +8141,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 self.show_only_slice_window()
 
         # load image data
-        if self.current_img_path is not None:
-            if not os.path.exists(self.current_img_path):
-                msg = "Can not find the image. Image file may be deleted or moved to another location"
-                self.print_message(msg, self.error_message_color)
-                return
-
+        if p_dict.get("img_ctrl_data") is not None:
             img_ctrl_data = p_dict["img_ctrl_data"]
 
             self.image_view.scale_slider.blockSignals(True)
@@ -7605,15 +8151,28 @@ class DriftlessMap(QMainWindow, FORM_Main):
             )
             self.image_view.scale_slider.blockSignals(False)
 
-            filename, file_extension = os.path.splitext(self.current_img_path)
-
-            scene_index = img_ctrl_data["current_scene"]
-            self.load_single_image_file(
-                self.current_img_path, file_extension, scene_index
-            )
-            self.save_path = self.current_img_path
-
-            self.image_view.load_img_ctrl_data(img_ctrl_data)
+            if p_dict.get("_histology_load_mode") == "embedded":
+                self._load_embedded_histology(img_ctrl_data)
+                self._loaded_histology_signature = None
+            elif os.path.isdir(self.current_img_path):
+                image_file = ImagesReader(self.current_img_path)
+                self.image_view.set_data(image_file)
+                self.image_view.load_img_ctrl_data(img_ctrl_data)
+                self._loaded_histology_signature = path_stat_signature(
+                    self.current_img_path
+                )
+            else:
+                _, file_extension = os.path.splitext(self.current_img_path)
+                scene_index = img_ctrl_data["current_scene"]
+                if not self.load_single_image_file(
+                    self.current_img_path, file_extension.lower(), scene_index
+                ):
+                    return
+                self.image_view.load_img_ctrl_data(img_ctrl_data)
+                self._loaded_histology_signature = path_stat_signature(
+                    self.current_img_path
+                )
+            self.save_path = self.current_img_path or self.current_project_path
 
             if self.image_view.processing_img is not None:
                 self.image_view.set_data_and_size(self.image_view.processing_img)
@@ -7635,14 +8194,15 @@ class DriftlessMap(QMainWindow, FORM_Main):
         tool_settings = p_dict["tool_data"]
         self.tool_box.set_tool_data(tool_settings)
 
-        try:
-            self.probe_type = p_dict["probe_settings"]["probe_type"]
-        except KeyError:
-            self.probe_type = p_dict["probe_type"]
-
-        self.tool_box.probe_type_combo.setCurrentIndex(self.probe_type)
-        if self.probe_type == 2:
-            self.probe_settings.set_linear_silicon(p_dict["probe_settings"])
+        probe_planning = p_dict.get("probe_planning")
+        if probe_planning is None:
+            probe_planning = {
+                "probe_settings": p_dict["probe_settings"],
+                "probe_type": p_dict["probe_settings"].get(
+                    "probe_type", p_dict.get("probe_type", 0)
+                ),
+            }
+        self.set_probe_planning_data(probe_planning)
 
         # settings
         setting_data = p_dict["setting_data"]
@@ -7714,6 +8274,32 @@ class DriftlessMap(QMainWindow, FORM_Main):
         if object_data is not None:
             # self.object_3d_list = object_data["object_3d_list"]
             self.object_ctrl.set_obj_data(object_data)
+
+        layout_methods = {
+            "slice": self.show_only_slice_window,
+            "coronal": self.show_only_coronal_window,
+            "sagittal": self.show_only_sagital_window,
+            "horizontal": self.show_only_horizontal_window,
+            "image": self.show_only_image_window,
+            "3d": self.show_only_3d_window,
+            "volume-histology": self.show_2_windows,
+            "slice-histology": self.show_slice_and_histology,
+            "volume-3d-histology": self.show_3_windows,
+            "four-atlas-windows": self.show_4_windows,
+        }
+        if saved_layout in layout_methods:
+            layout_methods[saved_layout]()
+        if self.display_mode_3d != desired_display_mode_3d:
+            self.switch_3d_display_mode()
+        if self.display_mode_2d != desired_display_mode_2d:
+            self.switch_2d_display_mode()
+        if self.is_planes_on != desired_planes:
+            self.show_3d_planes()
+        if self.is_axis_on != desired_axes:
+            self.show_3d_axes()
+        if self.is_grids_on != desired_grids:
+            self.show_grids()
+        self.obj_display_mode = desired_object_mode
 
         self.print_message("Project loaded successfully.", self.normal_color)
 
@@ -7866,6 +8452,12 @@ class DriftlessMap(QMainWindow, FORM_Main):
                     self.error_message_color,
                 )
                 return
+
+            prepared = self.prepare_project_sources(p_dict, project_path[0])
+            if prepared is None:
+                return
+            p_dict = prepared
+            self.current_project_path = project_path[0]
 
             if self.object_3d_list:
                 for _ in range(len(self.object_3d_list)):
@@ -8073,6 +8665,11 @@ class DriftlessMap(QMainWindow, FORM_Main):
 # -------------------------------------------------------------
 def main():
     app = QApplication(sys.argv)
+    app.setApplicationName("DriftlessMap")
+    app.setApplicationDisplayName("DriftlessMap")
+    app.setApplicationVersion(__version__)
+    app.setOrganizationName("Mohebi & Associates")
+    app.setWindowIcon(QIcon(resource_path("icons/app/driftlessmap.png")))
     qss_file_name = "qss/main_window.qss"
     herbs_style = read_qss_file(qss_file_name)
     app.setStyleSheet(herbs_style)
