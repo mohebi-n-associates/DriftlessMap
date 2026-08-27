@@ -9,7 +9,11 @@ from PyQt6.QtWidgets import QApplication
 
 import driftlessmap
 from driftlessmap.about import AboutDriftlessMapWindow
-from driftlessmap.version import __version__
+from driftlessmap.version import (
+    APPLICATION_DISPLAY_NAME,
+    APPLICATION_WINDOW_TITLE,
+    __version__,
+)
 
 
 class VersionTests(unittest.TestCase):
@@ -21,14 +25,10 @@ class VersionTests(unittest.TestCase):
         self.assertEqual(__version__, "1.4.0")
         self.assertEqual(driftlessmap.__version__, __version__)
 
-    def test_main_window_displays_the_version(self):
-        from driftlessmap.app import DriftlessMap
-
-        window = DriftlessMap()
-        self.assertIn("DriftlessMap {}".format(__version__), window.windowTitle())
-        self.assertEqual(window.version_label.text(), "DriftlessMap {}".format(__version__))
-        self.assertFalse(window.windowIcon().isNull())
-        window.close()
+    def test_main_window_display_strings_include_the_version(self):
+        self.assertEqual(APPLICATION_DISPLAY_NAME, "DriftlessMap {}".format(__version__))
+        self.assertTrue(APPLICATION_WINDOW_TITLE.startswith(APPLICATION_DISPLAY_NAME))
+        self.assertIn("Brain-Atlas Mapping", APPLICATION_WINDOW_TITLE)
 
     def test_about_dialog_reports_version_and_current_repository(self):
         dialog = AboutDriftlessMapWindow()

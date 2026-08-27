@@ -1,7 +1,10 @@
 import os
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 import unittest
+from functools import wraps
 from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -14,11 +17,64 @@ from driftlessmap.app import DriftlessMap
 from driftlessmap.persistence import load_driftlessmap_file
 
 
+PROJECT_TEST_CHILD = os.environ.get("DRIFTLESSMAP_PROJECT_TEST_CHILD") == "1"
+
+
+def isolated_gui_test(test):
+    """Run each OpenGL integration case in its own Qt process."""
+
+    @wraps(test)
+    def wrapper(self):
+        if PROJECT_TEST_CHILD:
+            return test(self)
+        environment = os.environ.copy()
+        environment["DRIFTLESSMAP_PROJECT_TEST_CHILD"] = "1"
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "unittest",
+                "tests.test_project_persistence.{}".format(test.__qualname__),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            env=environment,
+        )
+        self.assertEqual(
+            result.returncode,
+            0,
+            "{}\n{}".format(result.stdout, result.stderr),
+        )
+
+    return wrapper
+
+
 class ProjectPersistenceIntegrationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.application = QApplication.instance() or QApplication([])
+        cls.application = (
+            QApplication.instance() or QApplication([])
+            if PROJECT_TEST_CHILD
+            else None
+        )
 
+    def setUp(self):
+        self.windows = []
+
+    def tearDown(self):
+        for window in reversed(self.windows):
+            window.close()
+            window.deleteLater()
+        if self.application is not None:
+            self.application.processEvents()
+
+    def create_window(self):
+        window = DriftlessMap()
+        self.windows.append(window)
+        return window
+
+    @isolated_gui_test
     def test_image_project_restores_embedded_raster_when_source_moves(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
@@ -30,7 +86,7 @@ class ProjectPersistenceIntegrationTests(unittest.TestCase):
             pixels_bgr[..., 2] = 140
             cv2.imwrite(str(source), pixels_bgr)
 
-            window = DriftlessMap()
+            window = self.create_window()
             self.assertTrue(window.load_single_image_file(str(source), ".png"))
             window.current_img_path = str(source)
             expected = window.image_view.current_img.copy()
@@ -56,7 +112,7 @@ class ProjectPersistenceIntegrationTests(unittest.TestCase):
             self.assertEqual(len(reference["sha256"]), 64)
 
             source.rename(root / "moved.png")
-            restored = DriftlessMap()
+            restored = self.create_window()
             with patch.object(restored, "_ask_for_verified_input", return_value=None):
                 prepared = restored.prepare_project_sources(payload, str(project))
             self.assertEqual(prepared["_histology_load_mode"], "embedded")
@@ -70,6 +126,7 @@ class ProjectPersistenceIntegrationTests(unittest.TestCase):
                 restored.image_view.channel_visible[:3], [True, False, True]
             )
 
+    @isolated_gui_test
     def test_portable_project_streams_and_reopens_original_histology(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
@@ -77,7 +134,7 @@ class ProjectPersistenceIntegrationTests(unittest.TestCase):
             project = root / "portable.dmap"
             cv2.imwrite(str(source), np.full((6, 7, 3), 91, dtype=np.uint8))
 
-            window = DriftlessMap()
+            window = self.create_window()
             self.assertTrue(window.load_single_image_file(str(source), ".png"))
             window.current_img_path = str(source)
             with patch.object(
@@ -92,7 +149,7 @@ class ProjectPersistenceIntegrationTests(unittest.TestCase):
             self.assertTrue(payload["portable"])
             source.unlink()
 
-            restored = DriftlessMap()
+            restored = self.create_window()
             prepared = restored.prepare_project_sources(payload, str(project))
             self.assertEqual(prepared["_histology_load_mode"], "source")
             self.assertTrue(Path(prepared["img_path"]).is_file())

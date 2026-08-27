@@ -130,7 +130,7 @@ from .provenance import (
     utc_now_iso,
     verify_reference,
 )
-from .version import __version__
+from .version import APPLICATION_DISPLAY_NAME, APPLICATION_WINDOW_TITLE, __version__
 from .cell_detection import select_detection_channel
 from .coordinate_validation import coordinates_in_bounds
 from .probe_reconstruction import (
@@ -154,13 +154,9 @@ class DriftlessMap(QMainWindow, FORM_Main):
         super(DriftlessMap, self).__init__()
         QMainWindow.__init__(self)
         self.setupUi(self)
-        self.setWindowTitle(
-            "DriftlessMap {} - Interactive Histology Registration and Brain-Atlas Mapping".format(
-                __version__
-            )
-        )
+        self.setWindowTitle(APPLICATION_WINDOW_TITLE)
         self.setWindowIcon(QIcon(resource_path("icons/app/driftlessmap.png")))
-        self.version_label = QLabel("DriftlessMap {}".format(__version__), self)
+        self.version_label = QLabel(APPLICATION_DISPLAY_NAME, self)
         self.version_label.setObjectName("versionLabel")
         self.version_label.setToolTip("Running DriftlessMap version {}".format(__version__))
         self.version_label.setContentsMargins(8, 0, 10, 0)
