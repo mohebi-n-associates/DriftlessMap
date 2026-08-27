@@ -8,16 +8,17 @@ from functools import wraps
 from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+PROJECT_TEST_CHILD = os.environ.get("DRIFTLESSMAP_PROJECT_TEST_CHILD") == "1"
 
 import cv2
 import numpy as np
-from PyQt6.QtWidgets import QApplication, QFileDialog
 
-from driftlessmap.app import DriftlessMap
 from driftlessmap.persistence import load_driftlessmap_file
 
+if PROJECT_TEST_CHILD:
+    from PyQt6.QtWidgets import QApplication, QFileDialog
 
-PROJECT_TEST_CHILD = os.environ.get("DRIFTLESSMAP_PROJECT_TEST_CHILD") == "1"
+    from driftlessmap.app import DriftlessMap
 
 
 def isolated_gui_test(test):
