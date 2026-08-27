@@ -149,7 +149,9 @@ expected in local headless tests. Linux CI must install `libgl1`, `libegl1`,
 the Qt XCB runtime libraries listed in the workflows, `xvfb`, and `xauth`, then
 run GUI tests under `xvfb-run` with the Qt `xcb` platform and software OpenGL;
 Qt's offscreen plugin is not stable for `QOpenGLWidget` teardown across the
-Linux version matrix.
+Linux version matrix. CI invokes `tests/run_test_suite.py`, which preserves the
+real unittest/pytest result and skips only the unstable interpreter-shutdown
+destructor path after the suite has finished.
 
 Before handoff:
 

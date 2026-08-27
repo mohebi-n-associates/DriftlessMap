@@ -34,4 +34,4 @@ jobs:
         env:
           QT_QPA_PLATFORM: xcb
           QT_OPENGL: software
-        run: xvfb-run -a python -m pytest -q
+        run: xvfb-run -a python tests/run_test_suite.py pytest
