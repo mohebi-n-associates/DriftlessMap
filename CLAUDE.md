@@ -13,6 +13,8 @@ or important workflows change.
   reconstruction, anatomical annotation, and data export.
 - Python package: `driftlessmap`; GUI: PyQt6 + pyqtgraph/OpenGL.
 - Supported Python: 3.10-3.14. CZI support currently requires 3.10-3.13.
+- OpenCV uses the headless wheel because PyQt6 owns the GUI and Qt plugin
+  runtime; do not reintroduce the GUI OpenCV wheel.
 - DriftlessMap is an independently maintained continuation of HERBS. Preserve
   legacy HERBS file compatibility and coordinate field names where documented.
 

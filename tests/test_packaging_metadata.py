@@ -47,7 +47,13 @@ class PackagingMetadataTests(unittest.TestCase):
         self.assertIn("pyqtgraph>=0.14,<0.15", metadata["dependencies"])
         self.assertIn("superqt>=0.8,<0.9", metadata["dependencies"])
         self.assertIn("numpy>=2.0,<3", metadata["dependencies"])
-        self.assertIn("opencv-python>=4.10,<6", metadata["dependencies"])
+        self.assertIn("opencv-python-headless>=4.10,<6", metadata["dependencies"])
+        self.assertFalse(
+            any(
+                requirement.startswith("opencv-python>=")
+                for requirement in metadata["dependencies"]
+            )
+        )
         self.assertFalse(
             any(
                 requirement.startswith(("PyQt5", "h5py", "tables"))
