@@ -21,12 +21,13 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgl1 libegl1
+          sudo apt-get install -y libgl1 libegl1 libxcb-cursor0 xvfb xauth
       - name: Install DriftlessMap
         run: python -m pip install ".[test]"
       - name: Lint
         run: ruff check driftlessmap tests
       - name: Test
         env:
-          QT_QPA_PLATFORM: offscreen
-        run: python -m pytest -q
+          QT_QPA_PLATFORM: xcb
+          QT_OPENGL: software
+        run: xvfb-run -a python -m pytest -q
