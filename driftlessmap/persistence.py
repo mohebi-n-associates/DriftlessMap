@@ -6,8 +6,10 @@ import json
 import os
 from pathlib import Path
 import pickle
+import shutil
 import tempfile
 import zipfile
+from contextlib import contextmanager
 
 import numpy as np
 
@@ -18,11 +20,12 @@ SUPPORTED_FORMAT_NAMES = LEGACY_FORMAT_NAMES | {FORMAT_NAME}
 FORMAT_VERSION = 1
 MANIFEST_NAME = "manifest.json"
 MAX_MANIFEST_BYTES = 16 * 1024 * 1024
-MAX_ARCHIVE_BYTES = 8 * 1024 * 1024 * 1024
+MAX_ARCHIVE_BYTES = 64 * 1024 * 1024 * 1024
 
 REQUIRED_KEYS = {
     "layer": {"layer_link", "data", "color", "thumbnail"},
     "object": {"type", "data", "name"},
+    "probe_settings": {"probe_settings", "planning"},
     "project": {
         "atlas_path",
         "img_path",
@@ -52,6 +55,43 @@ REQUIRED_KEYS = {
         "atlas_display",
     },
 }
+
+
+class ArchiveAttachment:
+    """A file streamed into, or lazily read from, a DriftlessMap archive."""
+
+    def __init__(
+        self,
+        *,
+        source_path=None,
+        archive_path=None,
+        member_name=None,
+        display_name=None,
+    ):
+        self.source_path = None if source_path is None else str(source_path)
+        self.archive_path = None if archive_path is None else str(archive_path)
+        self.member_name = member_name
+        self.display_name = display_name
+        if self.source_path is None and (
+            self.archive_path is None or self.member_name is None
+        ):
+            raise ValueError("Attachment needs a source file or archive member.")
+
+    @contextmanager
+    def open(self):
+        if self.source_path is not None:
+            with open(self.source_path, "rb") as stream:
+                yield stream
+            return
+        with zipfile.ZipFile(self.archive_path, "r") as archive:
+            with archive.open(self.member_name, "r") as stream:
+                yield stream
+
+    def extract_to(self, destination):
+        destination = Path(destination)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        with self.open() as source, destination.open("wb") as output:
+            shutil.copyfileobj(source, output, length=8 * 1024 * 1024)
 
 
 def _numpy_pickle_globals():
@@ -216,7 +256,7 @@ def _validate_payload(data, kind):
     return data
 
 
-def _encode(value, arrays):
+def _encode(value, arrays, attachments):
     if value is None or isinstance(value, (bool, int, str)):
         return value
     if isinstance(value, float):
@@ -224,22 +264,48 @@ def _encode(value, arrays):
             return value
         return {"__type__": "float", "value": repr(value)}
     if isinstance(value, np.generic):
-        return _encode(value.item(), arrays)
+        return _encode(value.item(), arrays, attachments)
+    if isinstance(value, ArchiveAttachment):
+        name = "attachments/{:08d}.bin".format(len(attachments))
+        attachments.append((name, value))
+        return {
+            "__type__": "attachment",
+            "name": name,
+            "display_name": value.display_name,
+        }
     if isinstance(value, np.ndarray):
         if value.dtype.hasobject:
-            return {"__type__": "object_array", "value": _encode(value.tolist(), arrays)}
+            return {
+                "__type__": "object_array",
+                "value": _encode(value.tolist(), arrays, attachments),
+            }
+        for existing_name, existing_array in arrays:
+            if existing_array is value:
+                return {"__type__": "ndarray", "name": existing_name}
         name = "arrays/{:08d}.npy".format(len(arrays))
         arrays.append((name, value))
         return {"__type__": "ndarray", "name": name}
     if isinstance(value, dict):
         return {
             "__type__": "dict",
-            "items": [[_encode(key, arrays), _encode(item, arrays)] for key, item in value.items()],
+            "items": [
+                [
+                    _encode(key, arrays, attachments),
+                    _encode(item, arrays, attachments),
+                ]
+                for key, item in value.items()
+            ],
         }
     if isinstance(value, list):
-        return {"__type__": "list", "items": [_encode(item, arrays) for item in value]}
+        return {
+            "__type__": "list",
+            "items": [_encode(item, arrays, attachments) for item in value],
+        }
     if isinstance(value, tuple):
-        return {"__type__": "tuple", "items": [_encode(item, arrays) for item in value]}
+        return {
+            "__type__": "tuple",
+            "items": [_encode(item, arrays, attachments) for item in value],
+        }
     if isinstance(value, Path):
         return {"__type__": "path", "value": str(value)}
     if value.__class__.__name__ == "QColor" and hasattr(value, "getRgb"):
@@ -261,6 +327,15 @@ def _decode(value, archive):
             raise ValueError("Archive references a missing array: {}".format(name))
         with archive.open(name) as stream:
             return np.lib.format.read_array(stream, allow_pickle=False)
+    if value_type == "attachment":
+        name = value["name"]
+        if name not in archive.namelist() or not name.startswith("attachments/"):
+            raise ValueError("Archive references a missing attachment: {}".format(name))
+        return ArchiveAttachment(
+            archive_path=archive.filename,
+            member_name=name,
+            display_name=value.get("display_name"),
+        )
     if value_type == "object_array":
         return np.asarray(_decode(value["value"], archive), dtype=object)
     if value_type == "dict":
@@ -285,9 +360,10 @@ def save_driftlessmap_file(file_path, data, kind):
     """Atomically save data in the versioned DriftlessMap archive format."""
     destination = Path(file_path)
     arrays = []
+    attachments = []
     try:
         _validate_payload(data, kind)
-        encoded = _encode(data, arrays)
+        encoded = _encode(data, arrays, attachments)
         manifest = json.dumps(
             {
                 "format": FORMAT_NAME,
@@ -314,6 +390,11 @@ def save_driftlessmap_file(file_path, data, kind):
                 for name, array in arrays:
                     with archive.open(name, "w", force_zip64=True) as stream:
                         np.lib.format.write_array(stream, array, allow_pickle=False)
+                for name, attachment in attachments:
+                    with attachment.open() as source, archive.open(
+                        name, "w", force_zip64=True
+                    ) as output:
+                        shutil.copyfileobj(source, output, length=8 * 1024 * 1024)
             os.replace(str(temporary_path), str(destination))
         except Exception:
             temporary_path.unlink(missing_ok=True)

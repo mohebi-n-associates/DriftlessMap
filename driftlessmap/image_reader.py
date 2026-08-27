@@ -61,6 +61,54 @@ class ImageReader(object):
         self.scale = {"scene 0": 1.0}
 
 
+class EmbeddedImageReader(object):
+    """Recreate the active histology raster when its source is unavailable.
+
+    An embedded reader intentionally exposes one scene and one page.  The
+    original scene/page indices remain in project provenance, while the saved
+    active raster remains usable without pretending that unsaved source scenes
+    are available.
+    """
+
+    def __init__(self, image, metadata=None):
+        metadata = metadata or {}
+        image = np.asarray(image)
+        if image.ndim == 2:
+            image = image[..., None]
+        if image.ndim != 3 or image.shape[2] > MAX_CHANNELS:
+            raise ValueError("Embedded histology must be an H x W x C image.")
+
+        self.error_index = 0
+        self.is_czi = False
+        self.file_name_list = [metadata.get("display_name", "embedded-histology")]
+        self.n_scenes = 1
+        self.n_pages = 1
+        self.scaling_val = metadata.get("scaling_val")
+        self.is_rgb = bool(metadata.get("is_rgb", image.shape[2] in (3, 4)))
+        self.n_channels = int(metadata.get("n_channels", image.shape[2]))
+        if self.n_channels != image.shape[2]:
+            self.n_channels = image.shape[2]
+        self.data_type = metadata.get("data_type", image.dtype.name)
+        default_level = int(np.iinfo(image.dtype).max) if image.dtype.kind == "u" else 255
+        self.level = int(metadata.get("level", default_level))
+        self.pixel_type = metadata.get(
+            "pixel_type", "rgb24" if self.is_rgb else "gray{}".format(image.dtype.itemsize * 8)
+        )
+
+        if self.is_rgb:
+            default_colors = RGB_COLORS[: self.n_channels]
+            default_names = ["Red", "Green", "Blue"][: self.n_channels]
+        else:
+            default_colors = CHANNEL_COLORS[: self.n_channels]
+            default_names = CHANNEL_NAMES[: self.n_channels]
+        self.rgb_colors = [tuple(item) for item in metadata.get("rgb_colors", default_colors)]
+        self.channel_name = list(metadata.get("channel_name", default_names))
+        self.hsv_colors = [tuple(item) for item in metadata.get("hsv_colors", _hsv_colors(self.rgb_colors))]
+        self.gamma_val = list(metadata.get("gamma_val", []))
+        self.data = {"scene 0": image.copy()}
+        self.scale = {"scene 0": 1.0}
+
+
 class TIFFReader(object):
     """Read grayscale, RGB, channel, or page-stack TIFF data."""
 

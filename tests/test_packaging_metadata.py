@@ -16,6 +16,29 @@ def project_metadata():
 
 
 class PackagingMetadataTests(unittest.TestCase):
+    def test_desktop_build_assets_and_native_workflow_exist(self):
+        metadata = project_metadata()
+        desktop_dependencies = metadata["optional-dependencies"]["desktop-build"]
+
+        self.assertTrue(any(item.startswith("pyinstaller") for item in desktop_dependencies))
+        for relative_path in (
+            "driftlessmap/icons/app/driftlessmap.png",
+            "driftlessmap/icons/app/driftlessmap.ico",
+            "driftlessmap/icons/app/driftlessmap.icns",
+            "packaging/DriftlessMap.spec",
+            "packaging/build_windows.ps1",
+            "packaging/build_macos.sh",
+            ".github/workflows/desktop-builds.yml",
+        ):
+            self.assertTrue((REPOSITORY_ROOT / relative_path).is_file(), relative_path)
+
+        workflow = (REPOSITORY_ROOT / ".github/workflows/desktop-builds.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("windows-latest", workflow)
+        self.assertIn("macos-14", workflow)
+        self.assertIn("release upload", workflow)
+
     def test_modern_runtime_and_dependency_baseline(self):
         metadata = project_metadata()
 

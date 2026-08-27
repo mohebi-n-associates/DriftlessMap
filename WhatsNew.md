@@ -3,6 +3,47 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.4.0
+
+Release date: 27 August 2026
+
+This release adds native desktop distribution for Windows and macOS. Official
+GitHub releases can now include a Windows ZIP containing `DriftlessMap.exe` and
+a macOS DMG containing `DriftlessMap.app`, built reproducibly on native GitHub
+Actions runners with PyInstaller. Both bundles include the application runtime,
+optional CZI support, and a new DriftlessMap application icon.
+
+The running version is now visible in both the main-window title and the
+dashboard status bar, and the application exposes its name, version,
+organization, and icon through Qt desktop metadata. The README and manual now
+separate the no-Python desktop installation intended for end users from the
+Conda/pip workflow intended for developers.
+
+---
+
+## DriftlessMap 1.3.0
+
+Release date: 27 August 2026
+
+This release makes project persistence suitable for reproducible scientific
+work. Projects now record software/schema metadata, relative and absolute path
+hints, SHA-256 identities for source histology and processed atlas resources,
+complete registration topology, complete probe-planning state, and all object
+pieces and merged objects.
+
+The exact active histology raster remains embedded in every project and can be
+restored when the original source has moved. **Save Portable Project** also
+packages the original histology source for multi-scene or future reprocessing
+work. Processed volume atlases remain external to avoid very large duplicate
+archives, but they are verified before use and can be relocated interactively.
+
+Object files now carry atlas and coordinate-frame provenance. The former Save
+Object/Load Objects wording is now Export Object/Import Objects to clarify that
+objects are already included in a project. Standalone `.dmapprobe` save/load is
+implemented for probe geometry, face, multi-probe offsets, and merge choices.
+
+---
+
 ## DriftlessMap 1.2.0
 
 Release date: 27 July 2026

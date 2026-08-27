@@ -25,6 +25,8 @@ include driftlessmap/data/atlas_labels.pkl
 # Included are: icons/, data/, qss/
 recursive-include driftlessmap/icons *.svg
 recursive-include driftlessmap/icons *.png
+recursive-include driftlessmap/icons *.ico
+recursive-include driftlessmap/icons *.icns
 
 recursive-include driftlessmap/qss *.qss
 

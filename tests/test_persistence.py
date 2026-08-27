@@ -156,6 +156,65 @@ class SafeArchiveTests(unittest.TestCase):
             self.assertIsNone(loaded)
             self.assertIn("Expected a project file", error)
 
+    def test_repeated_array_references_are_stored_once(self):
+        shared = np.arange(10, dtype=np.uint16)
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "deduplicated.dmap"
+            success, error = persistence.save_driftlessmap_file(
+                path, {"first": shared, "second": shared}, "test"
+            )
+            self.assertTrue(success, error)
+            with persistence.zipfile.ZipFile(path) as archive:
+                arrays = [name for name in archive.namelist() if name.startswith("arrays/")]
+            self.assertEqual(arrays, ["arrays/00000000.npy"])
+
+            loaded, error = persistence.load_driftlessmap_file(path, "test")
+            self.assertIsNone(error)
+            np.testing.assert_array_equal(loaded["first"], shared)
+            np.testing.assert_array_equal(loaded["second"], shared)
+
+    def test_probe_setting_payload_has_its_own_validated_kind(self):
+        payload = {
+            "probe_settings": {"probe_type": 0},
+            "planning": {"site_face": 2},
+        }
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "probe.dmapprobe"
+            success, error = persistence.save_driftlessmap_file(
+                path, payload, "probe_settings"
+            )
+            self.assertTrue(success, error)
+            loaded, error = persistence.load_driftlessmap_file(
+                path, "probe_settings"
+            )
+        self.assertIsNone(error)
+        self.assertEqual(loaded, payload)
+
+    def test_attachment_streams_through_archive_and_extracts_lazily(self):
+        with tempfile.TemporaryDirectory() as folder:
+            source = Path(folder) / "source.czi"
+            source.write_bytes(bytes(range(255)) * 100)
+            archive_path = Path(folder) / "portable.dmap"
+            success, error = persistence.save_driftlessmap_file(
+                archive_path,
+                {
+                    "source": persistence.ArchiveAttachment(
+                        source_path=source, display_name="source.czi"
+                    )
+                },
+                "test",
+            )
+            self.assertTrue(success, error)
+
+            loaded, error = persistence.load_driftlessmap_file(
+                archive_path, "test"
+            )
+            self.assertIsNone(error)
+            self.assertIsInstance(loaded["source"], persistence.ArchiveAttachment)
+            extracted = Path(folder) / "restored.czi"
+            loaded["source"].extract_to(extracted)
+            self.assertEqual(extracted.read_bytes(), source.read_bytes())
+
     def test_legacy_herbs_manifest_remains_readable(self):
         data = {"answer": 42}
         with tempfile.TemporaryDirectory() as folder:

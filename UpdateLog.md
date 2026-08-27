@@ -1,5 +1,20 @@
 # Update Log
 
+### 27th August 2026
+##### DriftlessMap 1.4.0
+
+Adds native Windows and macOS desktop release builds, a new application icon,
+visible GUI version information, and separate end-user and developer
+installation instructions.
+
+### 27th August 2026
+##### DriftlessMap 1.3.0
+
+Adds reproducible project archives with checksummed, relocatable atlas and
+histology references; lossless embedded working histology; optional portable
+histology sources; complete probe-planning persistence; and atlas-bound object
+provenance. Standalone probe-setting save/load is now implemented.
+
 ### 27th July 2026
 ##### DriftlessMap 1.2.0
 

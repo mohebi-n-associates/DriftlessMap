@@ -1361,8 +1361,24 @@ class Probe(object):
             "y_bias": self.y_bias,
             "site_number_in_banks": self.site_number_in_banks,
             "multi_shanks": self.multi_shanks,
+            "faces": self.faces,
         }
         return data
+
+    def set_settings(self, settings):
+        """Restore a complete saved probe design, including its face."""
+        probe_type = int(settings["probe_type"])
+        if probe_type == 0:
+            self.set_np1()
+        elif probe_type == 1:
+            self.set_np2()
+        elif probe_type == 2:
+            self.set_linear_silicon(settings)
+        elif probe_type == 3:
+            self.set_tetrode()
+        else:
+            raise ValueError("Unknown probe type: {}".format(probe_type))
+        self.faces = settings.get("faces", self.faces)
 
     def probe_faces_changed(self, face_direction):
         self.faces = face_direction
@@ -1386,6 +1402,11 @@ class MultiProbes(object):
         self.faces = None
 
     def set_multi_probes(self, multi_settings):
+        if multi_settings is None:
+            self.x_vals = None
+            self.y_vals = None
+            self.faces = None
+            return
         self.x_vals = multi_settings["x_vals"]
         self.y_vals = multi_settings["y_vals"]
         self.faces = multi_settings["faces"]

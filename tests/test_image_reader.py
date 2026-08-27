@@ -104,5 +104,27 @@ class FolderReaderTests(unittest.TestCase):
         self.assertEqual(reader.data["scene 0"].shape, (3, 4, 3))
 
 
+class EmbeddedReaderTests(unittest.TestCase):
+    def test_embedded_reader_preserves_active_raster_contract(self):
+        pixels = np.arange(24, dtype=np.uint16).reshape(3, 4, 2)
+        reader = image_reader.EmbeddedImageReader(
+            pixels,
+            {
+                "is_rgb": False,
+                "pixel_type": "gray16",
+                "level": 65535,
+                "n_channels": 2,
+                "data_type": "uint16",
+                "rgb_colors": [(255, 0, 0), (0, 255, 0)],
+                "channel_name": ["A", "B"],
+            },
+        )
+
+        self.assertEqual(reader.n_scenes, 1)
+        self.assertEqual(reader.n_pages, 1)
+        self.assertEqual(reader.level, 65535)
+        np.testing.assert_array_equal(reader.data["scene 0"], pixels)
+
+
 if __name__ == "__main__":
     unittest.main()
