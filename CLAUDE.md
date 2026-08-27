@@ -146,9 +146,10 @@ The default local Python may lack `superqt`, `pytest`, or `tomli`; do not treat
 that environment-only absence as a product regression. The full HERBS Conda
 environment currently runs the complete suite. Offscreen OpenGL warnings are
 expected in local headless tests. Linux CI must install `libgl1`, `libegl1`,
-`libxcb-cursor0`, `xvfb`, and `xauth`, then run GUI tests under `xvfb-run` with
-the Qt `xcb` platform and software OpenGL; Qt's offscreen plugin is not stable
-for `QOpenGLWidget` teardown across the Linux version matrix.
+the Qt XCB runtime libraries listed in the workflows, `xvfb`, and `xauth`, then
+run GUI tests under `xvfb-run` with the Qt `xcb` platform and software OpenGL;
+Qt's offscreen plugin is not stable for `QOpenGLWidget` teardown across the
+Linux version matrix.
 
 Before handoff:
 
