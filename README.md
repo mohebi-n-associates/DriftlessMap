@@ -62,8 +62,29 @@ computer from [GitHub Releases](https://github.com/mohebi-n-associates/Driftless
 
 Release builds are currently unsigned. If Windows SmartScreen or macOS
 Gatekeeper displays a warning, verify that the file came from the official
-release page. On macOS, Control-click the app, choose **Open**, and confirm the
-first launch. Code signing and notarization are planned for a future release.
+release page before bypassing the warning. Code signing and notarization are
+planned for a future release.
+
+If macOS reports that Apple could not verify that DriftlessMap is free of
+malware:
+
+1. Click **Done**; do not move the application to the Trash.
+2. Drag `DriftlessMap.app` from the DMG into **Applications**.
+3. In Finder, Control-click `DriftlessMap.app`, choose **Open**, and confirm
+   **Open** if macOS offers that option.
+4. If the same warning remains, open **System Settings**, select **Privacy &
+   Security**, scroll to **Security**, and click **Open Anyway** beside the
+   DriftlessMap message.
+5. Authenticate when prompted and confirm **Open**. This approval is normally
+   required only for the first launch.
+
+Only use **Open Anyway** for a copy downloaded from the
+[official DriftlessMap 1.4.0 release](https://github.com/mohebi-n-associates/DriftlessMap/releases/tag/v1.4.0).
+The official macOS DMG has this SHA-256 digest:
+
+```text
+aa8ed43826e63cd1e111e3ee53310bb1ac569fd1409862070b847afaeefe7e94
+```
 
 ### Mode 2: Conda and pip for developers
 
