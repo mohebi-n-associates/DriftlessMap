@@ -69,12 +69,18 @@ class CustomerAtlasWorker(QObject):
         self.progress.emit(total_count)
 
     def run(self):
+        # Report unexpected failures instead of letting them escape the
+        # worker thread, which would leave the dialog stuck.
+        try:
+            self._run()
+        except Exception as exc:
+            self.error_occur.emit("Atlas processing failed: {}".format(exc))
+
+    def _run(self):
         self.progress.emit(1)
         if self.vox_size < 1e-4:
             self.error_occur.emit("Please set voxel size.")
             return
-        print(self.saving_folder)
-        print(self.label_local)
         df, msg = read_excel_file(os.path.join(self.saving_folder, self.label_local))
         if msg is not None:
             self.error_occur.emit(msg)

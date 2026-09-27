@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th September 2026
+##### DriftlessMap 1.4.22
+
+Atlas download and processing workers now report unexpected failures instead of leaving their dialogs stuck or aborting DriftlessMap, and closing a dialog after a finished background step no longer raises an error.
+
+### 27th September 2026
 ##### DriftlessMap 1.4.21
 
 Undo and redo are more reliable: history snapshots are independent copies, history for deleted layers is discarded instead of crashing, and atlas mask, slice and probe edits can be undone.
