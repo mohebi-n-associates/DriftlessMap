@@ -111,6 +111,8 @@ class SliceStack(pg.GraphicsLayoutWidget):
 
         cell_pnts = pg.ScatterPlotItem(pen=(0, 255, 0), brush=(0, 255, 0), size=5, hoverSize=8)
         probe_pnts = pg.ScatterPlotItem(pen=(0, 0, 255), brush=(0, 0, 255), symbol='s', size=5, hoverSize=8)
+        virus_pnts = pg.ScatterPlotItem(pen=(133, 255, 117), brush=(133, 255, 117), symbol='s', size=5,
+                                        hoverSize=8)
         bregma_pnt = pg.ScatterPlotItem(pen=(180, 112, 57), brush=(180, 112, 57), symbol='star', size=10, hoverSize=15)
 
         drawing_pnts = pg.PlotDataItem(pen=pg.mkPen(color=(255, 102, 0), width=2), brush=None)
@@ -125,6 +127,7 @@ class SliceStack(pg.GraphicsLayoutWidget):
                            'atlas-drawing': drawing_pnts,
                            'atlas-contour': contour_pnts,
                            'atlas-mask': mask_img,
+                           'atlas-virus': virus_pnts,
                            'grid_lines': grid_lines,
                            'tri_pnts': tri_pnts,
                            'circle_follow': circle_follow,
