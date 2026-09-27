@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th September 2026
+##### DriftlessMap 1.4.2
+
+Security fix: array sizes declared inside project, layer and object archives are checked against the stored data before memory is allocated, so a small crafted file can no longer exhaust memory.
+
+### 27th September 2026
 ##### DriftlessMap 1.4.1
 
 Security fix: processed-atlas mesh caches are now read with a restricted, non-executable reader, closing a code-execution path through shared atlas folders.
