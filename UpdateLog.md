@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th September 2026
+##### DriftlessMap 1.4.12
+
+Provenance fix: after falling back to the embedded histology raster, or restoring a slice atlas from a project, saving no longer fingerprints a changed or unverified file on disk as the source of that work.
+
+### 27th September 2026
 ##### DriftlessMap 1.4.11
 
 Atlas provenance fixes: Switch Atlas now records the atlas actually shown, and downloaded Waxholm and Allen atlases are opened through the verified loader so their path and fingerprint are recorded.

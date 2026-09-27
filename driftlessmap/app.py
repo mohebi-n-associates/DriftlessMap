@@ -7653,6 +7653,13 @@ class DriftlessMap(QMainWindow, FORM_Main):
                     "name": provenance["identifier"],
                     "version": None,
                 }
+        elif loaded_atlas_signature is None:
+            # Slice pixels restored from a project are embedded; keep the
+            # reference that described them rather than re-describing a file
+            # that was never verified against them.
+            previous = self.atlas_provenance or {}
+            if previous.get("reference") is not None:
+                provenance["reference"] = previous["reference"]
         elif os.path.exists(self.current_atlas_path):
             provenance["reference"] = describe_path(
                 self.current_atlas_path, project_path=project_path
@@ -7664,12 +7671,15 @@ class DriftlessMap(QMainWindow, FORM_Main):
             return None
         reference = None
         source_changed = False
+        # A file is linked only when its fingerprint was taken as it was
+        # loaded; otherwise its current bytes might not be the ones shown.
         if (
             self.current_img_path
             and os.path.exists(self.current_img_path)
             and self.current_img_path != self._temporary_histology_source
+            and self._loaded_histology_signature is not None
         ):
-            if self._loaded_histology_signature is not None and (
+            if (
                 path_stat_signature(self.current_img_path)
                 != self._loaded_histology_signature
             ):
@@ -8092,6 +8102,12 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 self.atlas_view.set_volume_atlas_ctrl_data(atlas_ctrl_data)
             else:
                 self.atlas_view.set_slice_data_and_info(atlas_ctrl_data)
+                # Slice pixels come from the project, not from the file at
+                # ``atlas_path``, so that file is not treated as verified.
+                self.slice_atlas_path = self.current_atlas_path
+                self._loaded_atlas_signatures.pop(
+                    os.path.abspath(self.current_atlas_path), None
+                )
                 if self.atlas_view.processing_slice is not None:
                     self.atlas_view.slice_stack.set_data(
                         self.atlas_view.processing_slice
@@ -8116,6 +8132,10 @@ class DriftlessMap(QMainWindow, FORM_Main):
 
             if p_dict.get("_histology_load_mode") == "embedded":
                 self._load_embedded_histology(img_ctrl_data)
+                # The raster did not come from any file on disk. Unlink the
+                # path so later saves keep the project's original reference
+                # instead of fingerprinting whatever file is there now.
+                self.current_img_path = None
                 self._loaded_histology_signature = None
             elif os.path.isdir(self.current_img_path):
                 image_file = ImagesReader(self.current_img_path)
