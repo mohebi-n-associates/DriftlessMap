@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th September 2026
+##### DriftlessMap 1.4.3
+
+Load Project no longer deletes the current objects before a replacement project has been chosen and verified, and its save prompt now offers Cancel.
+
+### 27th September 2026
 ##### DriftlessMap 1.4.2
 
 Security fix: array sizes declared inside project, layer and object archives are checked against the stored data before memory is allocated, so a small crafted file can no longer exhaust memory.

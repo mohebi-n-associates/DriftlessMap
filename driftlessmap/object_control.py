@@ -1715,7 +1715,14 @@ class ObjectControl(QObject):
         self.obj_comp_mode = data["obj_comp_mode"]
         self.current_obj_index = data["current_obj_index"]
 
+        if not self.obj_list:
+            self.current_obj_index = None
+            return
         self.obj_list[-1].set_checked(False)
+        if self.current_obj_index is None or not (
+            0 <= self.current_obj_index < len(self.obj_list)
+        ):
+            self.current_obj_index = len(self.obj_list) - 1
         self.obj_list[self.current_obj_index].set_checked(True)
 
         # print(self.obj_type)
@@ -1754,6 +1761,7 @@ class ObjectControl(QObject):
         self.obj_comp_mode = []
         self.obj_count = 0
         self.current_obj_index = None
+        self.linked_indexes = []
 
     def compare_obj_called(self):
         compare_names = [self.obj_name[ind] for ind in self.linked_indexes]

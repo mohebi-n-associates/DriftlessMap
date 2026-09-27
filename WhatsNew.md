@@ -3,6 +3,23 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.4.3
+
+Release date: 27 September 2026
+
+Load Project no longer deletes the objects in the current session before a
+replacement project is ready. Previously, every object piece and merged object
+was removed as soon as the "save the current project?" prompt was answered.
+This happened even if the file picker was then cancelled, the chosen file
+could not be read, or its sources could not be verified.
+
+Objects and their 3D views are now removed only after the new project has
+been read and verified. The prompt now offers **Cancel**. Choosing **Yes**
+and then cancelling or failing the save leaves the current session untouched,
+instead of loading over unsaved work.
+
+---
+
 ## DriftlessMap 1.4.2
 
 Release date: 27 September 2026
