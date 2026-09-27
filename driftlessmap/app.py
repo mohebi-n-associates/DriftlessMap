@@ -70,6 +70,7 @@ from .probe_utiles import (
     Probe,
     MultiProbes,
     calculate_probe_info,
+    probe_error_message,
     get_pre_multi_shank_vis_base,
     get_center_lines,
 )
@@ -6122,52 +6123,93 @@ class DriftlessMap(QMainWindow, FORM_Main):
             "axis_info": axis_info,
         }, None
 
+    # Merging is validate-then-commit: every merged object is computed first,
+    # and the source pieces are removed only when all of them succeed, so a
+    # failed merge never destroys the user's annotations.
+    MERGE_ERRORS = (ValueError, IndexError, KeyError, TypeError, ZeroDivisionError,
+                    np.linalg.LinAlgError)
+
+    def _merge_label_volume(self):
+        if (
+            self.current_atlas != "volume"
+            or self.atlas_view.atlas_label is None
+            or self.atlas_view.origin_3d is None
+        ):
+            return None, (
+                "Switch to the volume atlas used for these pieces before merging. "
+                "The pieces were kept."
+            )
+        label_data = np.transpose(self.atlas_view.atlas_label, (1, 2, 0))[:, :, ::-1]
+        return label_data, None
+
+    def _count_pieces(self, piece_type):
+        return sum(1 for da_type in self.object_ctrl.obj_type if da_type == piece_type)
+
+    def _commit_merged_objects(self, piece_indexes, merged_objects):
+        self.object_ctrl.delete_objects(piece_indexes)
+        for obj_name, obj_type, info_dict in merged_objects:
+            self.object_ctrl.add_object(
+                obj_name,
+                obj_type,
+                object_data=info_dict,
+                object_mode=self.obj_display_mode,
+            )
+
+    def _merge_failed(self, obj_name, reason):
+        self.print_message(
+            "Could not merge {}: {}. No pieces were removed.".format(obj_name, reason),
+            self.error_message_color,
+        )
+
     def merge_probes(self):
         if self.num_windows == 4:
             msg = "Can not merge probe pieces with all slice windows turned on."
             self.print_message(msg, self.error_message_color)
             return
-        probe_piece_count = len(
-            [
-                da_piece
-                for da_piece in self.object_ctrl.obj_type
-                if da_piece == "probe piece"
-            ]
-        )
-        if probe_piece_count == 0:
+        if self._count_pieces("probe piece") == 0:
             return
 
-        data, obj_names, pieces_names = self.object_ctrl.merge_pieces("probe piece")
-
-        label_data = np.transpose(self.atlas_view.atlas_label, (1, 2, 0))[:, :, ::-1]
-        probe_setting_data = self.probe_settings.get_settings()
+        label_data, label_error = self._merge_label_volume()
+        if label_error is not None:
+            self.print_message(label_error, self.error_message_color)
+            return
         atlas_metadata, atlas_error = self.get_probe_atlas_metadata()
         if atlas_error is not None:
             self.print_message(atlas_error, self.error_message_color)
             return
 
+        data, obj_names, pieces_names, piece_indexes = self.object_ctrl.collect_pieces(
+            "probe piece"
+        )
+        probe_setting_data = self.probe_settings.get_settings()
         merge_sites = self.tool_box.merge_sites
-        if self.image_view.image_file is None:
-            # pre-surgery
+        pre_surgery = self.image_view.image_file is None
+        if pre_surgery:
             if self.multi_shanks and self.valid_multi_settings:
-                site_face_vec = self.multi_settings.faces.copy()
+                site_face_vec = list(self.multi_settings.faces)
             else:
                 site_face_vec = [self.site_face for _ in range(len(data))]
-            for i in range(len(data)):
-                if len(data[i]) != 1:
-                    msg = "For pre-surgery plan, the desired probe can be merged from only one piece."
-                    self.print_message(msg, self.error_message_color)
-                    return
-                else:
-                    if len(data[i][0]) == 1:
-                        self.print_message(
-                            "Can not merge probe with only one point.",
-                            self.error_message_color,
-                        )
-                        return
+            if len(site_face_vec) < len(data):
+                self.print_message(
+                    "The multi-shank settings describe fewer shanks than the "
+                    "probes being merged. No pieces were removed.",
+                    self.error_message_color,
+                )
+                return
+            n_hat = self.atlas_view.get_plane_norm_vector(self.atlas_display)
 
-                n_hat = self.atlas_view.get_plane_norm_vector(self.atlas_display)
-
+        merged_objects = []
+        for i in range(len(data)):
+            if pre_surgery and len(data[i]) != 1:
+                self._merge_failed(
+                    obj_names[i],
+                    "a pre-surgery plan can be merged from only one piece",
+                )
+                return
+            if len(data[i]) == 1 and len(data[i][0]) == 1:
+                self._merge_failed(obj_names[i], "a probe needs more than one point")
+                return
+            try:
                 info_dict, error_index = calculate_probe_info(
                     data[i],
                     pieces_names[i],
@@ -6177,122 +6219,54 @@ class DriftlessMap(QMainWindow, FORM_Main):
                     probe_setting_data,
                     merge_sites,
                     self.atlas_view.origin_3d,
-                    site_face_vec[i],
-                    n_hat,
-                    True,
+                    site_face_vec[i] if pre_surgery else self.site_face,
+                    n_hat if pre_surgery else None,
+                    pre_surgery,
                     atlas_metadata,
                 )
+            except self.MERGE_ERRORS as exc:
+                self._merge_failed(obj_names[i], exc)
+                return
+            if error_index != 0:
+                self._merge_failed(obj_names[i], probe_error_message(error_index))
+                return
+            merged_objects.append((obj_names[i], "merged probe", info_dict))
 
-                if error_index != 0:
-                    msg = "Error index: {}, please contact maintainers.".format(
-                        error_index
-                    )
-                    self.print_message(msg, self.error_message_color)
-                    return
+        self._commit_merged_objects(piece_indexes, merged_objects)
 
-                self.object_ctrl.add_object(
-                    obj_names[i],
-                    "merged probe",
-                    object_data=info_dict,
-                    object_mode=self.obj_display_mode,
-                )
-        else:
-            # after-surgery
-            for i in range(len(data)):
-                if len(data[i]) == 1:
-                    if len(data[i][0]) == 1:
-                        self.print_message(
-                            "Can not merge probe with only one point.",
-                            self.error_message_color,
-                        )
-                        return
-
-                info_dict, error_index = calculate_probe_info(
+    def _merge_point_pieces(self, piece_type, merged_type, calculate):
+        if self._count_pieces(piece_type) == 0:
+            return
+        label_data, label_error = self._merge_label_volume()
+        if label_error is not None:
+            self.print_message(label_error, self.error_message_color)
+            return
+        data, obj_names, pieces_names, piece_indexes = self.object_ctrl.collect_pieces(
+            piece_type
+        )
+        merged_objects = []
+        for i in range(len(data)):
+            try:
+                info_dict = calculate(
                     data[i],
                     pieces_names[i],
                     label_data,
                     self.atlas_view.label_info,
-                    self.atlas_view.vox_size_um,
-                    probe_setting_data,
-                    merge_sites,
                     self.atlas_view.origin_3d,
-                    self.site_face,
-                    None,
-                    False,
-                    atlas_metadata,
                 )
-
-                if error_index != 0:
-                    msg = "Error index: {}, please contact maintainers.".format(
-                        error_index
-                    )
-                    self.print_message(msg, self.error_message_color)
-                    return
-
-                self.object_ctrl.add_object(
-                    obj_names[i],
-                    "merged probe",
-                    object_data=info_dict,
-                    object_mode=self.obj_display_mode,
-                )
+            except self.MERGE_ERRORS as exc:
+                self._merge_failed(obj_names[i], exc)
+                return
+            merged_objects.append((obj_names[i], merged_type, info_dict))
+        self._commit_merged_objects(piece_indexes, merged_objects)
 
     # virus related functions
     def merge_virus(self):
-        virus_piece_count = len(
-            [
-                da_piece
-                for da_piece in self.object_ctrl.obj_type
-                if da_piece == "virus piece"
-            ]
-        )
-        if virus_piece_count == 0:
-            return
-        data, obj_names, pieces_names = self.object_ctrl.merge_pieces("virus piece")
-        label_data = np.transpose(self.atlas_view.atlas_label, (1, 2, 0))[:, :, ::-1]
-
-        for i in range(len(data)):
-            info_dict = calculate_virus_info(
-                data[i],
-                pieces_names[i],
-                label_data,
-                self.atlas_view.label_info,
-                self.atlas_view.origin_3d,
-            )
-            self.object_ctrl.add_object(
-                obj_names[i],
-                "merged virus",
-                object_data=info_dict,
-                object_mode=self.obj_display_mode,
-            )
+        self._merge_point_pieces("virus piece", "merged virus", calculate_virus_info)
 
     # cell related functions
     def merge_cells(self):
-        cells_piece_count = len(
-            [
-                da_piece
-                for da_piece in self.object_ctrl.obj_type
-                if da_piece == "cells piece"
-            ]
-        )
-        if cells_piece_count == 0:
-            return
-        data, obj_names, pieces_names = self.object_ctrl.merge_pieces("cells piece")
-        label_data = np.transpose(self.atlas_view.atlas_label, (1, 2, 0))[:, :, ::-1]
-
-        for i in range(len(data)):
-            info_dict = calculate_cells_info(
-                data[i],
-                pieces_names[i],
-                label_data,
-                self.atlas_view.label_info,
-                self.atlas_view.origin_3d,
-            )
-            self.object_ctrl.add_object(
-                obj_names[i],
-                "merged cells",
-                object_data=info_dict,
-                object_mode=self.obj_display_mode,
-            )
+        self._merge_point_pieces("cells piece", "merged cells", calculate_cells_info)
 
     # drawing related functions
     def build_drawing_object_info(self, object_data, object_type, object_name):
@@ -6332,54 +6306,22 @@ class DriftlessMap(QMainWindow, FORM_Main):
         )
 
     def merge_drawings(self):
-        drawing_piece_count = len(
-            [
-                da_piece
-                for da_piece in self.object_ctrl.obj_type
-                if da_piece == "drawing piece"
-            ]
+        self._merge_point_pieces(
+            "drawing piece", "merged drawing", calculate_drawing_info
         )
-        if drawing_piece_count == 0:
-            return
-        data, obj_names, pieces_names = self.object_ctrl.merge_pieces("drawing piece")
-        label_data = np.transpose(self.atlas_view.atlas_label, (1, 2, 0))[:, :, ::-1]
-
-        for i in range(len(data)):
-            info_dict = calculate_drawing_info(
-                data[i],
-                pieces_names[i],
-                label_data,
-                self.atlas_view.label_info,
-                self.atlas_view.origin_3d,
-            )
-            self.object_ctrl.add_object(
-                obj_names[i],
-                "merged drawing",
-                object_data=info_dict,
-                object_mode=self.obj_display_mode,
-            )
 
     # contour related functions
     def merge_contour(self):
-        contour_piece_count = len(
-            [
-                da_piece
-                for da_piece in self.object_ctrl.obj_type
-                if da_piece == "contour piece"
-            ]
-        )
-        if contour_piece_count == 0:
+        if self._count_pieces("contour piece") == 0:
             return
-        data, obj_names, pieces_names = self.object_ctrl.merge_pieces("contour piece")
-
-        for i in range(len(data)):
-            info_dict = {"object_type": "contour", "data": data[i]}
-            self.object_ctrl.add_object(
-                obj_names[i],
-                "merged contour",
-                object_data=info_dict,
-                object_mode=self.obj_display_mode,
-            )
+        data, obj_names, pieces_names, piece_indexes = self.object_ctrl.collect_pieces(
+            "contour piece"
+        )
+        merged_objects = [
+            (obj_names[i], "merged contour", {"object_type": "contour", "data": data[i]})
+            for i in range(len(data))
+        ]
+        self._commit_merged_objects(piece_indexes, merged_objects)
 
     # common functions
     def obj_color_changed(self, ev):

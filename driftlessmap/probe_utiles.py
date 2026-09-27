@@ -17,6 +17,20 @@ from .version import __version__
 
 
 PROBE_COORDINATES_OUTSIDE_ATLAS = 16
+
+PROBE_ERROR_MESSAGES = {
+    PROBE_COORDINATES_OUTSIDE_ATLAS: (
+        "the fitted probe track leaves the atlas volume or never reaches "
+        "labeled brain tissue"
+    ),
+}
+
+
+def probe_error_message(error_index):
+    """Return a readable explanation for a probe reconstruction error code."""
+    return PROBE_ERROR_MESSAGES.get(
+        error_index, "probe reconstruction failed (code {})".format(error_index)
+    )
 _LINE_SAMPLE_STEP_VOX = 0.25
 
 

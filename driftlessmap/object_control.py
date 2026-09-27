@@ -1628,7 +1628,11 @@ class ObjectControl(QObject):
         self.obj_count += 1
 
     # merge object pieces
-    def merge_pieces(self, obj_type="probe piece"):
+    def collect_pieces(self, obj_type="probe piece"):
+        """Group pieces of one type by object name without removing them.
+
+        Returns ``(data, object_names, pieces_names, piece_indexes)``.
+        """
         if obj_type not in [
             "probe piece",
             "virus piece",
@@ -1670,6 +1674,11 @@ class ObjectControl(QObject):
             #         print(self.obj_data[da_piece_ind_in_obj_order[j]].T)
             #         temp = np.hstack([temp, self.obj_data[da_piece_ind_in_obj_order[j]].T])
             # data[i] = temp.T
+        return data, merging_object_names, pieces_names, cind
+
+    def merge_pieces(self, obj_type="probe piece"):
+        """Collect pieces of one type and remove them from the object list."""
+        data, merging_object_names, pieces_names, cind = self.collect_pieces(obj_type)
         self.delete_objects(cind)
         return data, merging_object_names, pieces_names
 
