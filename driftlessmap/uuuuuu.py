@@ -805,6 +805,12 @@ def get_upper_val(val, tol, lim):
     return upper_val
 
 
+def tolerance_mask(channel, selected_value, tol, level):
+    """Return a 0/255 mask of pixels within ``tol`` of ``selected_value``."""
+    lower_val, upper_val = get_bound_color(selected_value, tol, level, "gray")
+    return cv2.inRange(channel, float(lower_val), float(upper_val))
+
+
 def get_bound_color(color, tol, level, mode):
     tol = float(tol)
     if mode == "gray":

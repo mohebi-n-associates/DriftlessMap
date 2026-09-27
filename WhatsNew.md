@@ -3,6 +3,27 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.4.17
+
+Release date: 27 September 2026
+
+Several histology editing tools no longer fail in ordinary use.
+
+- **Eraser.** Erasing on the `img-overlay` layer, or on an empty mask or
+  virus layer, raised an error. The eraser now edits only layers it can
+  erase and ignores the rest.
+- **Magic wand.** The magic wand selected every pixel brighter than the lower
+  tolerance bound, instead of only pixels within the tolerance of the clicked
+  intensity. On 16-bit images, some tolerance values produced an empty
+  selection because the upper bound wrapped around. The wand now selects the
+  band on both sides of the clicked value at any bit depth.
+- **Number fields.** Clearing the eraser, pencil or ruler size, or the
+  magic-wand tolerance, while typing no longer raises an error on each
+  keystroke. Tolerance values below 0 are no longer accepted, and the
+  boundary-point count accepts only 2 to 99.
+
+---
+
 ## DriftlessMap 1.4.16
 
 Release date: 27 September 2026

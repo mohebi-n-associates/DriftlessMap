@@ -42,6 +42,7 @@ import warnings
 
 
 from .uuuuuu import (
+    tolerance_mask,
     get_cell_count,
     num_side_pnt_changed,
     merge_channels_into_single_img,
@@ -101,7 +102,7 @@ from .image_view import ImageView
 
 from .layers_control import *
 from .object_control import *
-from .toolbox import ToolBox
+from .toolbox import ToolBox, read_int_field
 from .wtiles import (
     LayerSettingDialog,
     SliceSettingDialog,
@@ -2386,7 +2387,9 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.atlas_view.slice_stack.image_dict["ruler_path"].setSymbolBrush(color=color)
 
     def change_ruler_size(self):
-        width = int(self.tool_box.ruler_size_valt.text())
+        width = read_int_field(self.tool_box.ruler_size_valt, minimum=1)
+        if width is None:
+            return
         self.tool_box.ruler_width_slider.setValue(width)
         color = np.ravel(self.tool_box.ruler_color_btn.color().getRgb())
         self.image_view.img_stacks.image_dict["ruler_path"].setPen(
@@ -2800,7 +2803,9 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.atlas_view.working_atlas.image_dict["atlas-drawing"].setFillBrush(None)
 
     def change_pencil_size(self):
-        val = int(self.tool_box.pencil_size_valt.text())
+        val = read_int_field(self.tool_box.pencil_size_valt, minimum=1)
+        if val is None:
+            return
         self.pencil_size = val
         self.tool_box.pencil_size_slider.setValue(val)
         self.image_view.img_stacks.image_dict["img-drawing"].setPen(
@@ -3176,13 +3181,13 @@ class DriftlessMap(QMainWindow, FORM_Main):
                         self.working_img_text[i].setVisible(False)
 
     def number_of_side_points_changed(self):
-        input_txt = self.tool_box.bound_pnts_num.text()
-        if input_txt == "":
+        input_txt = self.tool_box.bound_pnts_num.text().strip()
+        if read_int_field(self.tool_box.bound_pnts_num) is None:
             msg = "Number of boundary points can not be empty. Automatically set it to previous valid value. "
             self.print_message(msg, self.reminder_color)
             self.tool_box.bound_pnts_num.setText(str(self.np_onside))
             return
-        if input_txt == "0" or input_txt == "1":
+        if int(input_txt) < 2:
             msg = "Number of boundary points can not be less than 2. Automatically set it to previous valid value. "
             self.print_message(msg, self.reminder_color)
             self.tool_box.bound_pnts_num.setText(str(self.np_onside))
@@ -4131,6 +4136,8 @@ class DriftlessMap(QMainWindow, FORM_Main):
                     self.layer_ctrl.current_layer_index[0]
                 ]
                 if da_link in ["img-mask", "img-virus"]:
+                    if self.working_img_data[da_link] is None:
+                        return
                     temp = self.working_img_data[da_link].astype(np.uint8)
                     dst = cv2.bitwise_and(temp, temp, mask=mask_img)
                     self.image_view.img_stacks.image_dict[da_link].setImage(dst)
@@ -4172,7 +4179,11 @@ class DriftlessMap(QMainWindow, FORM_Main):
                     current_data = {"data": self.image_view.processing_img.copy()}
                     self.save_current_action("eraser_btn", da_link, current_data, res)
                 else:
-                    if not self.working_img_data[da_link]:
+                    # Only point layers can be erased point by point; other
+                    # raster layers and atlas layers are not editable here.
+                    if self.working_img_type.get(da_link) != "vector" or not (
+                        self.working_img_data.get(da_link)
+                    ):
                         return
                     temp = np.asarray(self.working_img_data[da_link])
                     remain_points, del_indexes = delete_points_inside_eraser(
@@ -4290,7 +4301,12 @@ class DriftlessMap(QMainWindow, FORM_Main):
                     self.save_current_action("eraser_btn", da_link, current_data, res)
         # ------------------------- magic wand
         elif self.tool_box.checkable_btn_dict["magic_wand_btn"].isChecked():
-            tol_val = float(self.tool_box.magic_tol_val.text())
+            tol_val = read_int_field(self.tool_box.magic_tol_val, minimum=0)
+            if tol_val is None:
+                self.print_message(
+                    "Enter a magic wand tolerance of 0 or more.", self.reminder_color
+                )
+                return
             if self.image_view.processing_img is None:
                 src_img = self.image_view.current_img.copy()
             else:
@@ -4310,14 +4326,13 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 temp = src_img[:, :, i]
                 selected_color = temp[int(y), int(x)]
                 # print("selected color", selected_color)
-                lower_val, upper_val = get_bound_color(
-                    selected_color, tol_val, self.image_view.image_file.level, "gray"
-                )
-                ret, thresh = cv2.threshold(
-                    temp, lower_val, upper_val, cv2.THRESH_BINARY
+                # Keep pixels within the tolerance band on both sides of the
+                # clicked intensity, at any bit depth.
+                thresh = tolerance_mask(
+                    temp, selected_color, tol_val, self.image_view.image_file.level
                 )
                 mask_img = cv2.bitwise_and(
-                    mask_img, mask_img, mask=thresh.astype(np.uint8)
+                    mask_img, mask_img, mask=thresh
                 )
             modifiers = QApplication.keyboardModifiers()
             if modifiers == Qt.KeyboardModifier.ShiftModifier:
@@ -5340,7 +5355,12 @@ class DriftlessMap(QMainWindow, FORM_Main):
             else:
                 src_img = self.atlas_view.slice_image_data.copy()
             white_img = np.ones(self.atlas_view.slice_size).astype("uint8")
-            tol_val = int(self.tool_box.magic_tol_val.text())
+            tol_val = read_int_field(self.tool_box.magic_tol_val, minimum=0)
+            if tol_val is None:
+                self.print_message(
+                    "Enter a magic wand tolerance of 0 or more.", self.reminder_color
+                )
+                return
             da_color = src_img[int(y), int(x), :3]
             lower_val, upper_val = get_bound_color(da_color, tol_val, 255, "rgb")
             mask_img = cv2.inRange(

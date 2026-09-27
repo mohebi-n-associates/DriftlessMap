@@ -7,6 +7,19 @@ from pyqtgraph.Qt import QtGui, QtCore
 from .resources import resource_path
 
 
+def read_int_field(line_edit, minimum=None, maximum=None):
+    """Return a line edit's integer value, or ``None`` while it is incomplete."""
+    try:
+        value = int(line_edit.text())
+    except ValueError:
+        return None
+    if minimum is not None and value < minimum:
+        return None
+    if maximum is not None and value > maximum:
+        return None
+    return value
+
+
 class ToolBox(QObject):
 
     def __init__(self):
@@ -122,7 +135,7 @@ class ToolBox(QObject):
         self.magic_tol_val = QLineEdit()
         self.magic_tol_val.setFixedWidth(40)
         # self.magic_tol_val.setAlignment(Qt.AlignmentFlag.AlignLeft)
-        self.magic_tol_val.setValidator(QIntValidator())
+        self.magic_tol_val.setValidator(QIntValidator(0, 65535))
         self.magic_tol_val.setText('0')
 
         self.magic_wand_kernel = QComboBox()
@@ -365,7 +378,7 @@ class ToolBox(QObject):
         self.bound_pnts_num.setFixedSize(50, 24)
         self.bound_pnts_num.setAlignment(Qt.AlignmentFlag.AlignLeft)
         self.bound_pnts_num.setMaxLength(2)
-        self.bound_pnts_num.setValidator(QIntValidator())
+        self.bound_pnts_num.setValidator(QIntValidator(2, 99))
         self.bound_pnts_num.setText('2')
         self.triang_vis_btn = QPushButton()
         self.triang_vis_btn.setCheckable(True)
@@ -521,7 +534,9 @@ class ToolBox(QObject):
         self.circle = self.original_circle * val
 
     def change_eraser_val(self):
-        val = int(self.eraser_size_valt.text())
+        val = read_int_field(self.eraser_size_valt, minimum=1)
+        if val is None:
+            return
         self.eraser_size_slider.setValue(val)
 
     def change_ruler_slider(self):
