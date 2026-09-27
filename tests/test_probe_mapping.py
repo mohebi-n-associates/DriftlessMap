@@ -11,6 +11,7 @@ from driftlessmap.probe_utiles import (
     get_angles,
     get_label_name,
     find_probe_surface_entry,
+    get_vis_data,
     line_fit_2d,
     robust_probe_line_fit,
 )
@@ -284,6 +285,43 @@ class ProbeRobustnessTests(unittest.TestCase):
         for direction in ([1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, -1.0]):
             angles = get_angles(np.asarray(direction))
             self.assertTrue(np.all(np.isfinite(angles)), direction)
+
+
+class SurfaceAndRegionLengthTests(unittest.TestCase):
+    def test_entry_ignores_tissue_above_a_gap_in_the_track(self):
+        labels = np.zeros((20, 20, 60), dtype=np.int32)
+        labels[:, :, 5:30] = 1   # tissue the probe actually traverses
+        labels[:, :, 40:50] = 2  # overhanging tissue above an empty gap
+        bregma = np.zeros(3)
+        direction = np.array([0.0, 0.0, -1.0])
+        anchor = np.array([10.0, 10.0, 25.0])
+        surface, error = find_probe_surface_entry(
+            labels, np.array([10.0, 10.0, 15.0]), direction, bregma, anchor=anchor
+        )
+        self.assertEqual(error, 0)
+        self.assertGreaterEqual(surface[2], 29)
+        self.assertLess(surface[2], 30.01)
+
+        # A traced start above the brain still finds the tissue below it.
+        surface, error = find_probe_surface_entry(
+            labels, np.array([10.0, 10.0, 15.0]), direction, bregma,
+            anchor=np.array([10.0, 10.0, 35.0]),
+        )
+        self.assertEqual(error, 0)
+        self.assertLess(surface[2], 30.01)
+
+    def test_region_length_is_averaged_over_columns_that_enter_it(self):
+        rows = 4
+        axial = np.array([0.0, 10.0, 20.0, 30.0])
+        column = np.column_stack([axial, np.zeros(rows), np.zeros(rows)])
+        column_loc = [column, column.copy()]
+        # Group 1 is entered only by column 0, over its upper two rows,
+        # which span axial bounds 15 to 30 um.
+        group_mat = np.array([[0, 0], [0, 0], [1, 0], [1, 0]], dtype=float)
+        sites = [np.array([[5.0, 0.0, 0.0]]), np.array([[5.0, 0.0, 0.0]])]
+        _vis, lengths, _sites, _text = get_vis_data(group_mat, column_loc, sites, None, 10)
+        self.assertEqual(len(lengths), 2)
+        self.assertAlmostEqual(lengths[1], 15.0)
 
 if __name__ == "__main__":
     unittest.main()

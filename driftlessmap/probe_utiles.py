@@ -284,8 +284,49 @@ def line_fit(points, return_diagnostics=False):
     return result[:4]
 
 
-def find_probe_surface_entry(label_data, center, direction, bregma):
-    """Find the first labeled atlas voxel along the fitted insertion line."""
+def _contiguous_surface_point(origin, direction, shape, is_occupied, anchor):
+    """Return the brain entry continuous with ``anchor`` along a line.
+
+    Samples run along ``direction`` (ventrally). From the sample nearest the
+    anchor, the search walks dorsally through contiguous tissue to its edge,
+    or, when the anchor lies outside the brain, ventrally to the first tissue.
+    Tissue the extended line crosses elsewhere, for example under a cortical
+    overhang, is ignored.
+    """
+    interval = _line_box_interval(origin, direction, shape)
+    if interval is None:
+        return None
+    lower, upper = interval
+    sample_count = max(
+        2, int(np.ceil((upper - lower) / _LINE_SAMPLE_STEP_VOX)) + 1
+    )
+    distances = np.linspace(lower, upper, sample_count)
+    coordinates = origin + distances[:, None] * direction
+    indexes = np.floor(coordinates).astype(int)
+    indexes = np.clip(indexes, 0, np.asarray(shape, dtype=int) - 1)
+    occupied = np.asarray(is_occupied(indexes), dtype=bool)
+    if not np.any(occupied):
+        return None
+    anchor_distance = float(np.dot(np.asarray(anchor, dtype=float) - origin, direction))
+    start = int(np.clip(np.searchsorted(distances, anchor_distance), 0, sample_count - 1))
+    if occupied[start]:
+        outside = np.flatnonzero(~occupied[:start])
+        first = int(outside[-1]) + 1 if len(outside) else 0
+    else:
+        inside = np.flatnonzero(occupied[start:])
+        if not len(inside):
+            return None
+        first = start + int(inside[0])
+    return coordinates[first]
+
+
+def find_probe_surface_entry(label_data, center, direction, bregma, anchor=None):
+    """Find where the fitted insertion line enters the brain.
+
+    With ``anchor`` (the dorsal end of the traced points), the entry is the
+    surface continuous with the traced track. Without it, the first labeled
+    voxel along the whole line is used.
+    """
     label_data = np.asarray(label_data)
     absolute_center = np.asarray(center, dtype=float) + np.asarray(
         bregma, dtype=float
@@ -293,6 +334,18 @@ def find_probe_surface_entry(label_data, center, direction, bregma):
 
     def occupied(indexes):
         return label_data[indexes[:, 0], indexes[:, 1], indexes[:, 2]] != 0
+
+    if anchor is not None:
+        surface = _contiguous_surface_point(
+            absolute_center,
+            np.asarray(direction, dtype=float),
+            label_data.shape,
+            occupied,
+            np.asarray(anchor, dtype=float) + np.asarray(bregma, dtype=float),
+        )
+        if surface is None:
+            return np.asarray(center, dtype=float), PROBE_COORDINATES_OUTSIDE_ATLAS
+        return surface - np.asarray(bregma, dtype=float), 0
 
     surface = _first_occupied_point(
         absolute_center,
@@ -652,7 +705,9 @@ def get_vis_data(group_mat, column_loc, sites_loc, sites_line_count, vox_size):
                 valid_sites = np.sum(column_n_sites[i][valid_ind])
                 temp.append(valid_length)
                 temp_sites.append(valid_sites)
-        group_length.append(np.sum(temp) / n_column)
+        # Average over the columns that actually pass through the region;
+        # columns that never enter it must not dilute its length.
+        group_length.append(np.sum(temp) / len(temp) if temp else 0.0)
         group_n_sites.append(np.sum(temp_sites))
 
     text_loc = []
@@ -927,7 +982,7 @@ def calculate_probe_info(
     # # print(pc_start_vox)
     # correct probe center start point
     pc_sp, error_index = find_probe_surface_entry(
-        label_data, avg, direction, bregma
+        label_data, avg, direction, bregma, anchor=pc_start_pnt
     )
     if error_index != 0:
         return data_dict, error_index

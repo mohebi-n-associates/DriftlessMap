@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th September 2026
+##### DriftlessMap 1.4.29
+
+Scientific fix: probe surface entry now follows the traced track instead of the first tissue the extended line touches, and per-region path lengths are averaged only over the site columns that pass through each region.
+
+### 27th September 2026
 ##### DriftlessMap 1.4.28
 
 Scientific fix: atlas voxels are now found by flooring coordinates everywhere, so points just outside the atlas or on the negative side of Bregma get the correct region; drawing surface depths are measured from the top of the brain surface; and region summaries tolerate unknown labels.

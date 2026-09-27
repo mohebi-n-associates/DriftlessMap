@@ -3,6 +3,34 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.4.29
+
+Release date: 27 September 2026
+
+**Scientific correction.** Two probe measurements have changed.
+
+- **Brain surface entry.** The entry point used to be the first labelled
+  voxel met along the fitted line, extended across the whole atlas. For
+  tilted tracks under an overhang, such as tissue beneath the cortex near the
+  colliculi or cerebellum, the extended line could cross unrelated tissue
+  first. That inflated the probe length and shifted every contact depth. The
+  entry is now the edge of the tissue that runs continuously from the most
+  dorsal traced point. If that point lies above the brain, the first tissue
+  below it is used.
+- **Region path length.** Path length per region was averaged over every
+  site column, including columns that never enter the region. A region
+  crossed by one of four columns was reported at a quarter of its length. It
+  is now averaged only over the columns that pass through it.
+
+The description of the path length has been corrected: it is the length
+along the shank, excluding the tip, not the fitted centreline length. The
+labelled track in `_track.csv` still covers the full insertion-to-tip length.
+
+**Action:** re-merge probes and re-export their CSV files, especially tilted
+tracks and multi-column probes near region borders.
+
+---
+
 ## DriftlessMap 1.4.28
 
 Release date: 27 September 2026

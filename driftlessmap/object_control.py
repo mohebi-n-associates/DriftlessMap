@@ -887,8 +887,10 @@ class ProbeInfoWindow(QDialog):
 
         interpretation_note = QLabel(
             "Angles are measured from the dorsoventral axis. Contacts are "
-            "physical recording sites; path is the fitted centerline length "
-            "inside each region. Allen Bregma AP/ML values are estimates."
+            "physical recording sites; path is the length along the shank "
+            "inside each region, averaged over the site columns that pass "
+            "through it and excluding the tip. Allen Bregma AP/ML values "
+            "are estimates."
         )
         interpretation_note.setWordWrap(True)
 
