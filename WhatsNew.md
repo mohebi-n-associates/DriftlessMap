@@ -3,6 +3,28 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.4.11
+
+Release date: 27 September 2026
+
+Projects now record the atlas that was actually in use.
+
+- **Switch Atlas.** Switching from the volume atlas to the slice atlas
+  recorded the volume atlas as current, and switching back recorded the
+  slice atlas. The next save could then fail with a false "atlas files
+  changed" error. It could also store the slice image as the project's volume
+  atlas, and such a project then failed to reopen.
+- **Waxholm download.** The downloaded atlas was displayed but never
+  recorded. After an Allen atlas had been loaded, saving recorded
+  Waxholm-space work against the Allen atlas's checksums.
+
+Finished Waxholm and Allen downloads now open through the same verified
+loader as **Load Atlas**. The downloaded folder is fingerprinted, its axis
+metadata is read, existing atlas layers are cleared, and the folder is
+remembered as the last-used atlas.
+
+---
+
 ## DriftlessMap 1.4.10
 
 Release date: 27 September 2026

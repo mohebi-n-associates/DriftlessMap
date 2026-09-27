@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th September 2026
+##### DriftlessMap 1.4.11
+
+Atlas provenance fixes: Switch Atlas now records the atlas actually shown, and downloaded Waxholm and Allen atlases are opened through the verified loader so their path and fingerprint are recorded.
+
+### 27th September 2026
 ##### DriftlessMap 1.4.10
 
 Scientific fix: exported source-atlas voxels (including Allen DV and AP) now contain the voxel whose label was reported, instead of lying one voxel away on flipped axes; imported integer point files are accepted and bounds-checked.

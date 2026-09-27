@@ -400,5 +400,57 @@ class ProjectPersistenceIntegrationTests(unittest.TestCase):
             self.assertEqual(window.atlas_tri_inside_data, [])
             self.assertIn("different size", window.statusbar.currentMessage())
 
+    @isolated_gui_test
+    def test_switching_atlases_tracks_the_active_atlas_path(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window = self._window_with_volume_atlas(root)
+            volume_path = window.volume_atlas_path
+            slice_image = root / "slice.png"
+            cv2.imwrite(str(slice_image), np.full((12, 16, 3), 70, dtype=np.uint8))
+            self.assertTrue(window.load_slice_atlas(str(slice_image)))
+
+            window.switch_atlas()
+            self.assertEqual(window.current_atlas, "volume")
+            self.assertEqual(window.current_atlas_path, volume_path)
+            window.switch_atlas()
+            self.assertEqual(window.current_atlas, "slice")
+            self.assertEqual(window.current_atlas_path, str(slice_image))
+
+    @isolated_gui_test
+    def test_downloaded_atlas_is_registered_for_provenance(self):
+        import driftlessmap.app as app_module
+        from tests.atlas_fixture import make_processed_atlas
+
+        with tempfile.TemporaryDirectory() as folder:
+            atlas_folder = make_processed_atlas(Path(folder) / "waxholm")
+
+            class FinishedDownload:
+                continue_process = True
+
+                def __init__(self):
+                    self.worker = type(
+                        "Worker", (), {"saving_folder": str(atlas_folder),
+                                       "deleteLater": lambda self: None}
+                    )()
+
+                def exec(self):
+                    return 1
+
+                def deleteLater(self):
+                    pass
+
+            window = self.create_window()
+            with patch.object(app_module, "AtlasDownloader", FinishedDownload), patch.object(
+                app_module, "save_last_atlas_path"
+            ) as remember:
+                window.download_waxholm_rat_atlas()
+            self.assertEqual(window.volume_atlas_path, str(atlas_folder))
+            self.assertEqual(window.current_atlas_path, str(atlas_folder))
+            self.assertIn(
+                os.path.abspath(str(atlas_folder)), window._loaded_atlas_signatures
+            )
+            remember.assert_called_once_with(str(atlas_folder))
+
 if __name__ == "__main__":
     unittest.main()
