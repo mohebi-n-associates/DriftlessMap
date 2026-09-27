@@ -8,7 +8,8 @@ from PyQt6.QtCore import *
 import pickle
 import shutil
 from .atlas_loader import process_atlas_raw_data
-from .obj_items import render_volume, render_small_volume
+from .obj_items import load_mesh_file, render_volume, render_small_volume
+from .persistence import load_legacy_pickle
 from .download_utils import DownloadCancelled, download_file
 
 
@@ -81,9 +82,10 @@ class WorkerProcessData(QObject):
 
         self.progress.emit(1)
 
-        infile = open(os.path.join(self.saving_folder, 'atlas_labels.pkl'), 'rb')
-        self.label_info = pickle.load(infile)
-        infile.close()
+        self.label_info, label_error = load_legacy_pickle(
+            os.path.join(self.saving_folder, 'atlas_labels.pkl'))
+        if label_error is not None:
+            raise ValueError(label_error)
 
         self.progress.emit(5)
 
@@ -119,9 +121,7 @@ class WorkerProcessData(QObject):
                 file_name = os.path.basename(da_file)
                 da_name, file_extension = os.path.splitext(file_name)
                 if file_extension == '.pkl':
-                    infile = open(os.path.join(save_path, da_file), 'rb')
-                    md = pickle.load(infile)
-                    infile.close()
+                    md = load_mesh_file(os.path.join(save_path, da_file))
 
                     self.small_mesh_list[str(da_name)] = md
 

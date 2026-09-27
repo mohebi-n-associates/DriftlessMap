@@ -5,6 +5,8 @@ import pyqtgraph.opengl as gl
 import numpy as np
 import scipy.ndimage as ndi
 
+from .persistence import PickledMeshState, load_mesh_pickle
+
 
 def get_object_vis_color(color):
     vis_color = (color[0] / 255, color[1] / 255, color[2] / 255, 1)
@@ -67,6 +69,23 @@ def make_3d_gl_widget(data_dict, obj_type):
     else:
         obj_3d = create_drawing_in_3d(data_dict)
     return obj_3d
+
+
+def mesh_from_state(mesh_state):
+    """Build a ``gl.MeshData`` from a validated :class:`PickledMeshState`."""
+    md = gl.MeshData()
+    for key, value in mesh_state.state.items():
+        if key in md.__dict__:
+            setattr(md, key, value)
+    return md
+
+
+def load_mesh_file(file_path):
+    """Load a whole-brain mesh or a ``{label: mesh}`` cache safely."""
+    data = load_mesh_pickle(file_path)
+    if isinstance(data, PickledMeshState):
+        return mesh_from_state(data)
+    return {key: mesh_from_state(value) for key, value in data.items()}
 
 
 def render_volume(atlas_data, atlas_folder, factor=2, level=0.1):

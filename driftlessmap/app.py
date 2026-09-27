@@ -115,6 +115,7 @@ from .obj_items import (
     create_contour_line_in_3d,
     render_volume,
     render_small_volume,
+    load_mesh_file,
     make_3d_gl_widget,
 )
 from .about import AboutDriftlessMapWindow
@@ -6817,31 +6818,19 @@ class DriftlessMap(QMainWindow, FORM_Main):
             self.print_message(msg, self.error_message_color)
 
         try:
-            infile = open(pre_made_meshdata_path, "rb")
-            meshdata = pickle.load(infile)
-            infile.close()
-        except (
-            IOError,
-            OSError,
-            ValueError,
-            pickle.PickleError,
-            pickle.UnpicklingError,
-        ):
+            meshdata = load_mesh_file(pre_made_meshdata_path)
+            if isinstance(meshdata, dict):
+                raise ValueError("Whole-brain mesh file contains a mesh list.")
+        except ValueError:
             msg = "Please pre-process mesh for the whole brain."
             self.print_message(msg, self.error_message_color)
             return
 
         try:
-            infile = open(pre_made_small_meshdata_path, "rb")
-            small_meshdata_list = pickle.load(infile)
-            infile.close()
-        except (
-            IOError,
-            OSError,
-            ValueError,
-            pickle.PickleError,
-            pickle.UnpicklingError,
-        ):
+            small_meshdata_list = load_mesh_file(pre_made_small_meshdata_path)
+            if not isinstance(small_meshdata_list, dict):
+                raise ValueError("Region mesh file does not contain a mesh list.")
+        except ValueError:
             self.print_message(
                 "Please re-process meshes for each brain region.",
                 self.error_message_color,

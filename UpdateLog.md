@@ -1,5 +1,10 @@
 # Update Log
 
+### 27th September 2026
+##### DriftlessMap 1.4.1
+
+Security fix: processed-atlas mesh caches are now read with a restricted, non-executable reader, closing a code-execution path through shared atlas folders.
+
 ### 27th August 2026
 ##### DriftlessMap 1.4.0
 

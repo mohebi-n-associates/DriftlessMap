@@ -510,17 +510,3 @@ class AtlasLoader(object):
         if error is not None:
             raise ValueError(error)
         return data
-
-
-
-
-
-
-
-
-
-
-
-class AtlasMeshLoader(object):
-    def __init__(self, atlas_folder):
-        pre_made_meshdata_path = os.path.join(atlas_folder, 'atlas_meshdata.pkl')

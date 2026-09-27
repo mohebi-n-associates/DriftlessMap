@@ -14,7 +14,7 @@ import pandas as pd
 
 from .atlas_loader import process_atlas_raw_data
 from .uuuuuu import hex2rgb, obj_data_to_mesh3d, make_contour_img
-from .obj_items import render_volume, render_small_volume
+from .obj_items import load_mesh_file, render_volume, render_small_volume
 from .atlas_downloader import DownloadThread
 from .atlas_transform import (
     compact_boundary_volume,
@@ -204,9 +204,8 @@ class WorkerProcessAllen(QObject):
 
         self.progress.emit(31)
 
-        infile = open(os.path.join(self.saving_folder, 'atlas_meshdata.pkl'), 'rb')
-        self.mesh_data = pickle.load(infile)
-        infile.close()
+        self.mesh_data = load_mesh_file(
+            os.path.join(self.saving_folder, 'atlas_meshdata.pkl'))
         self.progress.emit(33)
 
         self.status.emit("Preparing the Allen label hierarchy...")
@@ -348,9 +347,7 @@ class WorkerProcessAllen(QObject):
             file_name = os.path.basename(da_file)
             da_name, file_extension = os.path.splitext(file_name)
             if file_extension == '.pkl':
-                infile = open(os.path.join(mesh_path, da_file), 'rb')
-                md = pickle.load(infile)
-                infile.close()
+                md = load_mesh_file(os.path.join(mesh_path, da_file))
 
                 self.small_mesh_list[str(da_name)] = md
 

@@ -8,7 +8,7 @@ or important workflows change.
 
 ## Project identity
 
-- Current release: DriftlessMap 1.4.0.
+- Current release: DriftlessMap 1.4.1.
 - Desktop application for histology registration, atlas mapping, probe
   reconstruction, anatomical annotation, and data export.
 - Python package: `driftlessmap`; GUI: PyQt6 + pyqtgraph/OpenGL.
@@ -64,7 +64,9 @@ or important workflows change.
   - `.dmapprobe`: complete probe-planning settings.
 - Legacy `.herbs*` and inert `.pkl` files remain readable through the
   restricted unpickler. Never replace this with unrestricted `pickle.load` for
-  user files. Processed-atlas pickle caches are trusted internal inputs.
+  user files. Processed-atlas caches, including mesh caches, are also read
+  through restricted unpicklers (`load_legacy_pickle`, `load_mesh_file`),
+  because atlas folders can arrive alongside shared projects.
 
 ### Project behavior
 
