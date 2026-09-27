@@ -323,5 +323,76 @@ class ProjectPersistenceIntegrationTests(unittest.TestCase):
             self.assertEqual(window.atlas_view.slice_image_data.shape[:2], (12, 16))
 
 
+    def _window_with_volume_atlas(self, root):
+        from tests.atlas_fixture import make_processed_atlas
+
+        window = self.create_window()
+        atlas_folder = make_processed_atlas(root / "atlas")
+        self.assertTrue(window.load_volume_atlas(str(atlas_folder)))
+        return window
+
+    @isolated_gui_test
+    def test_loaded_landmarks_survive_the_view_switch(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            tri_path = root / "points.dmaptri"
+            window = self._window_with_volume_atlas(root)
+            self.assertEqual(window.atlas_display, "coronal")
+            window.atlas_tri_inside_data.extend([[5.0, 6.0], [10.0, 12.0]])
+            window.atlas_tri_data = (
+                window.atlas_tri_onside_data + window.atlas_tri_inside_data
+            )
+            window.tri_simplices = None
+            with patch.object(
+                QFileDialog, "getSaveFileName", return_value=(str(tri_path), "")
+            ):
+                window.save_triangulation_points()
+            self.assertTrue(tri_path.is_file())
+
+            window.atlas_view.section_rabnt2.setChecked(True)
+            self.assertEqual(window.atlas_display, "sagittal")
+            self.assertEqual(window.atlas_tri_inside_data, [])
+
+            with patch.object(
+                QFileDialog, "getOpenFileName", return_value=(str(tri_path), "")
+            ):
+                window.load_triangulation_points()
+
+            self.assertEqual(window.atlas_display, "coronal")
+            self.assertEqual(window.atlas_tri_inside_data, [[5.0, 6.0], [10.0, 12.0]])
+            self.assertEqual(
+                [item.textItem.toPlainText() for item in window.working_atlas_text],
+                ["1", "2"],
+            )
+
+    @isolated_gui_test
+    def test_landmarks_for_a_different_slice_size_are_rejected(self):
+        from driftlessmap.persistence import save_driftlessmap_file
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            tri_path = root / "other.dmaptri"
+            window = self._window_with_volume_atlas(root)
+            corners = [[0, 0], [99, 0], [99, 79], [0, 79]]
+            success, error = save_driftlessmap_file(
+                tri_path,
+                {
+                    "atlas_corner_points": corners,
+                    "atlas_side_lines": [],
+                    "atlas_tri_data": corners + [[3, 3]],
+                    "atlas_tri_inside_data": [[3, 3]],
+                    "atlas_tri_onside_data": corners,
+                    "atlas_display": "coronal",
+                },
+                "triangulation",
+            )
+            self.assertTrue(success, error)
+            with patch.object(
+                QFileDialog, "getOpenFileName", return_value=(str(tri_path), "")
+            ):
+                window.load_triangulation_points()
+            self.assertEqual(window.atlas_tri_inside_data, [])
+            self.assertIn("different size", window.statusbar.currentMessage())
+
 if __name__ == "__main__":
     unittest.main()

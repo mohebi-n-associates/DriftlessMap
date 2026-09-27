@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th September 2026
+##### DriftlessMap 1.4.6
+
+Loading triangulation points no longer wipes the loaded landmarks when the file was saved in a different atlas view; files are validated against the current atlas, and landmark labels are numbered consistently.
+
+### 27th September 2026
 ##### DriftlessMap 1.4.5
 
 Volume and slice atlas loads now validate everything before changing the session, so a failed load no longer corrupts atlas provenance or deletes atlas layers; slice atlases can be loaded from images again.

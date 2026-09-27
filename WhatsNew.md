@@ -3,6 +3,30 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.4.6
+
+Release date: 27 September 2026
+
+Loading triangulation points no longer throws away the landmarks just loaded.
+When a `.dmaptri` file was saved in a different atlas view (for example
+coronal while sagittal was showing), switching to that view reset the atlas
+landmarks. This happened after the file's points had been applied, so the
+interior landmarks and triangle topology were silently lost. The view is now
+switched first and the points applied afterwards.
+
+Triangulation files are now checked before they replace anything. A file is
+rejected with an explanation if it:
+
+- was saved for an atlas slice of a different size;
+- uses a different number of boundary points per side;
+- has missing fields or invalid coordinates;
+- has a triangle topology that references missing points.
+
+Loaded landmark labels are numbered from 1, matching landmarks placed by
+hand, and old labels are removed from every view.
+
+---
+
 ## DriftlessMap 1.4.5
 
 Release date: 27 September 2026

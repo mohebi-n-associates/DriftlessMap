@@ -1161,12 +1161,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
 
     def clear_tri_inside(self):
         self.atlas_tri_inside_data.clear()  # renew tri_inside data to empty
-        inds = np.arange(len(self.working_atlas_text))[::-1]
-        for da_ind in inds:
-            self.atlas_view.working_atlas.vb.removeItem(self.working_atlas_text[da_ind])
-            self.working_atlas_text[da_ind].deleteLater()
-            del self.working_atlas_text[da_ind]
-        self.working_atlas_text.clear()
+        self._remove_text_items(self.working_atlas_text)
 
     def reset_tri_onside_atlas(self):
         self.atlas_rect = (
@@ -1946,20 +1941,38 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 self.print_message(error, self.error_message_color)
                 return
 
-            if "atlas_corner_points" not in list(tri_data.keys()):
+            validation_error = self._triangulation_file_error(tri_data)
+            if validation_error is not None:
                 self.print_message(
-                    "Loaded data is not triangulation points data !!!",
+                    "Triangulation points were not loaded: {}".format(
+                        validation_error
+                    ),
                     self.error_message_color,
                 )
                 return
 
+            # Switch the atlas view first. Changing the view resets the atlas
+            # landmarks, so the loaded landmarks must be applied afterwards.
+            display_buttons = {
+                "coronal": self.atlas_view.section_rabnt1,
+                "sagittal": self.atlas_view.section_rabnt2,
+                "horizontal": self.atlas_view.section_rabnt3,
+            }
+            display_buttons[tri_data["atlas_display"]].setChecked(True)
+
+            self._remove_text_items(self.working_atlas_text)
             self.atlas_display = tri_data["atlas_display"]
-            self.atlas_corner_points = tri_data["atlas_corner_points"]
+            self.atlas_corner_points = [list(p) for p in tri_data["atlas_corner_points"]]
             self.atlas_side_lines = tri_data["atlas_side_lines"]
-            self.atlas_tri_data = tri_data["atlas_tri_data"]
-            self.atlas_tri_inside_data = tri_data["atlas_tri_inside_data"]
-            self.atlas_tri_onside_data = tri_data["atlas_tri_onside_data"]
+            self.atlas_tri_inside_data = [
+                list(p) for p in tri_data["atlas_tri_inside_data"]
+            ]
+            self.atlas_tri_onside_data = [
+                list(p) for p in tri_data["atlas_tri_onside_data"]
+            ]
+            self.atlas_tri_data = self.atlas_tri_onside_data + self.atlas_tri_inside_data
             loaded_simplices = tri_data.get("tri_simplices")
+            self._invalidate_triangulation(clear_topology=True)
             self.tri_simplices = (
                 None
                 if loaded_simplices is None
@@ -1970,25 +1983,95 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 if self.tri_simplices is not None
                 else None
             )
-            self.triangulation_registration = None
-            self.working_atlas_text = []
+            self.atlas_view.working_atlas.image_dict["tri_pnts"].setData(
+                pos=np.asarray(self.atlas_tri_data)
+            )
+            self._refresh_triangulation_text("atlas")
+            if self.tool_box.triang_vis_btn.isChecked():
+                self.update_atlas_tri_lines()
+            self.print_message(
+                "Loaded {} atlas landmarks.".format(len(self.atlas_tri_inside_data)),
+                self.normal_color,
+            )
 
-            if tri_data["atlas_display"] == "coronal":
-                self.atlas_view.section_rabnt1.setChecked(True)
-            elif tri_data["atlas_display"] == "sagittal":
-                self.atlas_view.section_rabnt2.setChecked(True)
-            else:
-                self.atlas_view.section_rabnt3.setChecked(True)
-            if self.atlas_tri_data:
-                self.atlas_view.working_atlas.image_dict["tri_pnts"].setData(
-                    self.atlas_tri_data
+    def _triangulation_file_error(self, tri_data):
+        """Return why a triangulation payload cannot be applied, or ``None``."""
+        required = (
+            "atlas_corner_points",
+            "atlas_side_lines",
+            "atlas_tri_data",
+            "atlas_tri_inside_data",
+            "atlas_tri_onside_data",
+            "atlas_display",
+        )
+        if not isinstance(tri_data, dict) or any(key not in tri_data for key in required):
+            return "the file is not a triangulation points file."
+        if tri_data["atlas_display"] not in ("coronal", "sagittal", "horizontal"):
+            return "unknown atlas view {!r}.".format(tri_data["atlas_display"])
+        point_sets = {}
+        for key in ("atlas_corner_points", "atlas_tri_inside_data", "atlas_tri_onside_data"):
+            try:
+                points = np.asarray(tri_data[key], dtype=float).reshape(-1, 2)
+            except (TypeError, ValueError):
+                return "{} does not contain 2D points.".format(key)
+            if not np.all(np.isfinite(points)):
+                return "{} contains invalid coordinates.".format(key)
+            point_sets[key] = points
+        view_sizes = {
+            "coronal": self.atlas_view.c_size,
+            "sagittal": self.atlas_view.s_size,
+            "horizontal": self.atlas_view.h_size,
+        }
+        view_size = view_sizes[tri_data["atlas_display"]]
+        view_corners, view_side_lines = get_corner_line_from_rect(
+            (0, 0, int(view_size[1]), int(view_size[0]))
+        )
+        expected_corners = np.asarray(view_corners, dtype=float)
+        if point_sets["atlas_corner_points"].shape != expected_corners.shape or not np.allclose(
+            point_sets["atlas_corner_points"], expected_corners
+        ):
+            return (
+                "it was saved for an atlas slice of a different size. Load the "
+                "atlas used when the points were saved."
+            )
+        expected_onside = len(
+            num_side_pnt_changed(self.np_onside, view_corners, view_side_lines)
+        )
+        if len(point_sets["atlas_tri_onside_data"]) != expected_onside:
+            return (
+                "it has {} boundary points but the current boundary-point "
+                "setting produces {}. Use the same number of points per side "
+                "as when the file was saved.".format(
+                    len(point_sets["atlas_tri_onside_data"]), expected_onside
                 )
-                for i, point in enumerate(self.atlas_tri_inside_data):
-                    text_item = pg.TextItem(str(i))
-                    text_item.setColor(self.triangle_color)
-                    text_item.setPos(point[0], point[1])
-                    self.working_atlas_text.append(text_item)
-                    self.atlas_view.working_atlas.vb.addItem(text_item)
+            )
+        simplices = tri_data.get("tri_simplices")
+        if simplices is not None:
+            n_points = len(point_sets["atlas_tri_onside_data"]) + len(
+                point_sets["atlas_tri_inside_data"]
+            )
+            try:
+                simplices = np.asarray(simplices, dtype=np.int64)
+            except (TypeError, ValueError):
+                return "the triangle topology is not an integer array."
+            if simplices.size and (
+                simplices.ndim != 2
+                or simplices.shape[1] != 3
+                or simplices.min() < 0
+                or simplices.max() >= n_points
+            ):
+                return "the triangle topology references missing points."
+        return None
+
+    @staticmethod
+    def _remove_text_items(text_items):
+        """Remove landmark labels from whichever view currently holds them."""
+        for item in text_items:
+            view_box = item.getViewBox()
+            if view_box is not None:
+                view_box.removeItem(item)
+            item.deleteLater()
+        text_items.clear()
 
     # ------------------------------------------------------------------
     #
@@ -3441,10 +3524,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
             text_items = self.working_img_text
             points = self.histo_tri_inside_data
 
-        for item in text_items:
-            view.vb.removeItem(item)
-            item.deleteLater()
-        text_items.clear()
+        self._remove_text_items(text_items)
         visible = self.tool_box.checkable_btn_dict["triang_btn"].isChecked()
         for index, point in enumerate(points, start=1):
             item = pg.TextItem(str(index))
