@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th September 2026
+##### DriftlessMap 1.4.16
+
+Layer shift and rotate fixes: rotating point layers no longer crashes and turns in the same direction as image layers about the correct centre, and shifting image layers on non-square slices keeps them aligned.
+
+### 27th September 2026
 ##### DriftlessMap 1.4.15
 
 Fixes crashes with slice atlases and the pencil: virus registration, Accept and Transfer and Edit > Clear now work with a slice atlas, erasing or lasso-deleting the slice layer edits the saved slice pixels, and changing pencil colour or size no longer fails.
