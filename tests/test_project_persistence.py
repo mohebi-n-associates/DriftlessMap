@@ -536,5 +536,32 @@ class ProjectPersistenceIntegrationTests(unittest.TestCase):
             # Histology data is kept so it can still be transferred.
             self.assertEqual(window.working_img_data["img-cells"], [[20.0, 30.0]])
 
+    @isolated_gui_test
+    def test_slice_atlas_supports_virus_clearing_and_slice_edits(self):
+        from pyqtgraph import ColorButton
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            slice_image = root / "slice.png"
+            cv2.imwrite(str(slice_image), np.full((12, 16, 3), 70, dtype=np.uint8))
+            window = self.create_window()
+            self.assertTrue(window.load_slice_atlas(str(slice_image)))
+            self.assertIn("atlas-virus", window.atlas_view.slice_stack.image_dict)
+            window.atlas_view.clear_atlas_stacks()
+
+            window.process_slice()
+            erased = window._atlas_raster("atlas-slice").copy()
+            erased[:4] = 0
+            window._set_atlas_raster("atlas-slice", erased)
+            np.testing.assert_array_equal(window.atlas_view.processing_slice, erased)
+
+            window.working_atlas_data["atlas-drawing"] = [[1, 1], [5, 1], [5, 5]]
+            window.tool_box.is_closed = True
+            button = ColorButton(color=(10, 200, 30))
+            window.change_pencil_color(button)
+            window.tool_box.pencil_size_valt.setText("4")
+            window.change_pencil_size()
+            self.assertEqual(window.pencil_size, 4)
+
 if __name__ == "__main__":
     unittest.main()

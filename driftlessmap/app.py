@@ -2807,7 +2807,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 color=self.pencil_color
             )
         if self.working_atlas_data["atlas-drawing"] and self.tool_box.is_closed:
-            self.atlas_view.working_atlas.image_dict["img-drawing"].setFillBrush(
+            self.atlas_view.working_atlas.image_dict["atlas-drawing"].setFillBrush(
                 color=self.pencil_color
             )
 
@@ -2855,6 +2855,9 @@ class DriftlessMap(QMainWindow, FORM_Main):
             pg.mkPen(color=self.pencil_color, width=self.pencil_size)
         )
         self.atlas_view.himg.image_dict["atlas-drawing"].setPen(
+            pg.mkPen(color=self.pencil_color, width=self.pencil_size)
+        )
+        self.atlas_view.slice_stack.image_dict["atlas-drawing"].setPen(
             pg.mkPen(color=self.pencil_color, width=self.pencil_size)
         )
 
@@ -5245,24 +5248,23 @@ class DriftlessMap(QMainWindow, FORM_Main):
             else:
                 if self.current_atlas == "volume":
                     return
+                if da_link not in ["atlas-mask", "atlas-slice"]:
+                    return
                 r = self.tool_box.eraser_size_slider.value()
-                mask_img = np.zeros(
-                    self.working_atlas_data[da_link].shape[:2], dtype=np.uint8
-                )
+                raster = self._atlas_raster(da_link)
+                if raster is None:
+                    return
+                mask_img = np.zeros(raster.shape[:2], dtype=np.uint8)
                 cv2.circle(
                     mask_img, center=(int(x), int(y)), radius=r, color=255, thickness=-1
                 )
                 mask_img = 255 - mask_img
-                if da_link in ["atlas-mask", "atlas-slice"]:
-                    temp = self.working_atlas_data[da_link].astype(np.uint8)
-                    dst = cv2.bitwise_and(temp, temp, mask=mask_img)
-                    res = cv2.resize(
-                        dst, self.atlas_view.slice_tb_size, interpolation=cv2.INTER_AREA
-                    )
-                    self.atlas_view.slice_stack.image_dict[da_link].setImage(dst)
-                    self.working_atlas_data[da_link] = dst
-                else:
-                    return
+                temp = raster.astype(np.uint8)
+                dst = cv2.bitwise_and(temp, temp, mask=mask_img)
+                res = cv2.resize(
+                    dst, self.atlas_view.slice_tb_size, interpolation=cv2.INTER_AREA
+                )
+                self._set_atlas_raster(da_link, dst)
             self.layer_ctrl.layer_list[
                 self.layer_ctrl.current_layer_index[0]
             ].set_thumbnail_data(res)
@@ -5460,13 +5462,11 @@ class DriftlessMap(QMainWindow, FORM_Main):
                         interpolation=cv2.INTER_AREA,
                     )
                 elif da_link == "atlas-slice":
-                    dst = cv2.bitwise_and(
-                        self.working_atlas_data[da_link],
-                        self.working_atlas_data[da_link],
-                        mask=mask,
-                    )
-                    self.atlas_view.slice_stack.set_data(dst)
-                    self.working_atlas_data[da_link] = dst
+                    raster = self._atlas_raster(da_link)
+                    if raster is None:
+                        return
+                    dst = cv2.bitwise_and(raster, raster, mask=mask)
+                    self._set_atlas_raster(da_link, dst)
                     res = cv2.resize(
                         dst, self.atlas_view.slice_tb_size, interpolation=cv2.INTER_AREA
                     )
@@ -5490,7 +5490,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
             self.layer_ctrl.layer_list[
                 self.layer_ctrl.current_layer_index[0]
             ].set_thumbnail_data(res)
-            current_data = {"data": self.working_atlas_data[da_link].copy()}
+            current_data = {"data": self._atlas_raster(da_link).copy()}
             self.save_current_action("delete", da_link, current_data, res)
         else:
             return
@@ -5902,6 +5902,20 @@ class DriftlessMap(QMainWindow, FORM_Main):
             )
             return
         self.object_ctrl.compare_obj_called()
+
+    def _atlas_raster(self, da_link):
+        """Return the editable pixels behind a raster atlas layer."""
+        if da_link == "atlas-slice":
+            return self.atlas_view.processing_slice
+        return self.working_atlas_data.get(da_link)
+
+    def _set_atlas_raster(self, da_link, pixels):
+        if da_link == "atlas-slice":
+            self.atlas_view.processing_slice = pixels
+            self.atlas_view.slice_stack.set_data(pixels)
+        else:
+            self.working_atlas_data[da_link] = pixels
+            self.atlas_view.slice_stack.image_dict[da_link].setImage(pixels)
 
     def make_probe_piece(self):
         if not self.valid_probe_settings:

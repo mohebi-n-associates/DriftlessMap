@@ -3,6 +3,26 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.4.15
+
+Release date: 27 September 2026
+
+Several tools stopped with an error because they looked up an annotation layer
+that did not exist.
+
+- **Slice atlas and virus data.** With a slice atlas, **Virus register**,
+  **Accept and Transfer** of virus data, and **Edit > Clear** all failed,
+  because the slice view had no layer for virus points. It now has one.
+- **Editing the slice layer.** The eraser, lasso delete and mask delete now
+  work on the `atlas-slice` layer. They edit the slice pixels that projects
+  save; previously they looked for those pixels in the wrong place and
+  failed.
+- **Pencil colour and size.** Changing the pencil colour while a closed atlas
+  drawing was present failed because the wrong layer name was used. Pencil
+  size changes now also apply to drawings on the slice atlas.
+
+---
+
 ## DriftlessMap 1.4.14
 
 Release date: 27 September 2026

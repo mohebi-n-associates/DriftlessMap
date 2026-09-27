@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th September 2026
+##### DriftlessMap 1.4.15
+
+Fixes crashes with slice atlases and the pencil: virus registration, Accept and Transfer and Edit > Clear now work with a slice atlas, erasing or lasso-deleting the slice layer edits the saved slice pixels, and changing pencil colour or size no longer fails.
+
+### 27th September 2026
 ##### DriftlessMap 1.4.14
 
 Changing a brain-region colour no longer crashes DriftlessMap on atlases with sparse structure IDs such as the Allen CCF, and the 3D region mesh receives the colour that was chosen.
