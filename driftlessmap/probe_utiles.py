@@ -17,11 +17,17 @@ from .version import __version__
 
 
 PROBE_COORDINATES_OUTSIDE_ATLAS = 16
+PROBE_TRACK_TOO_SHORT = 17
 
 PROBE_ERROR_MESSAGES = {
     PROBE_COORDINATES_OUTSIDE_ATLAS: (
         "the fitted probe track leaves the atlas volume or never reaches "
         "labeled brain tissue"
+    ),
+    PROBE_TRACK_TOO_SHORT: (
+        "the track inside the brain is too short to hold the tip and a "
+        "recording site in every column; check the probe length, tip length "
+        "and site offsets"
     ),
 }
 
@@ -303,15 +309,21 @@ def get_angles(direction):
     direction = direction / np.linalg.norm(direction)
 
     vertical_vec = np.array([0, 0, 1])
+    def plane_angle(projection):
+        # A direction with no component in this plane has no tilt in it.
+        norm = np.linalg.norm(projection)
+        if norm < 1e-12:
+            return 0.0
+        cosine = np.dot(projection / norm, vertical_vec)
+        return math.acos(float(np.clip(cosine, -1.0, 1.0)))
+
     ap_proj = direction.copy()
     ap_proj[0] = 0
-    ap_proj = ap_proj / np.linalg.norm(ap_proj)
     ml_proj = direction.copy()
     ml_proj[1] = 0
-    ml_proj = ml_proj / np.linalg.norm(ml_proj)
 
-    ap_val = math.acos(np.max([np.min([np.dot(ap_proj, vertical_vec), 1]), -1]))
-    ml_val = math.acos(np.max([np.min([np.dot(ml_proj, vertical_vec), 1]), -1]))
+    ap_val = plane_angle(ap_proj)
+    ml_val = plane_angle(ml_proj)
 
     ap_angle = np.degrees(ap_val)
     ml_angle = np.degrees(ml_val)
@@ -687,7 +699,14 @@ def get_label_name(label_info, region_label):
             label_acronym.append(" ")
             label_color.append((128, 128, 128))
         else:
-            da_ind = np.where(np.ravel(label_info["index"]) == region_label[i])[0][0]
+            matches = np.where(np.ravel(label_info["index"]) == region_label[i])[0]
+            if len(matches) == 0:
+                # The volume contains an ID the ontology does not describe.
+                label_names.append("Unknown [{}]".format(int(region_label[i])))
+                label_acronym.append("?{}".format(int(region_label[i])))
+                label_color.append((128, 128, 128))
+                continue
+            da_ind = matches[0]
             label_names.append(label_info["label"][da_ind])
             label_acronym.append(label_info["abbrev"][da_ind])
             label_color.append(label_info["color"][da_ind])
@@ -964,6 +983,11 @@ def calculate_probe_info(
     sites_loc_to_base_temp = get_sites_loc_related_to_base_center(
         probe_settings, probe_length_without_tip_um
     )
+    if probe_type_name != "Tetrode" and (
+        probe_length_without_tip_um <= 0
+        or any(len(column) == 0 for column in sites_loc_to_base_temp)
+    ):
+        return data_dict, PROBE_TRACK_TOO_SHORT
     # print('sites_loc_to_base')
     # print(sites_loc_to_base)
 
