@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th September 2026
+##### DriftlessMap 1.4.4
+
+Merging probe, virus, cell, drawing and contour pieces no longer deletes the pieces when the merge fails; all merged objects are computed first and pieces are removed only when every one succeeds.
+
+### 27th September 2026
 ##### DriftlessMap 1.4.3
 
 Load Project no longer deletes the current objects before a replacement project has been chosen and verified, and its save prompt now offers Cancel.

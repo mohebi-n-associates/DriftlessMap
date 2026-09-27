@@ -3,6 +3,26 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.4.4
+
+Release date: 27 September 2026
+
+A failed merge no longer destroys the pieces being merged. Previously all
+probe, virus, cell, drawing or contour pieces were removed before the merge
+was attempted. Any failure then lost them: the slice atlas being active, a
+probe with a single point, a pre-surgery probe made of several pieces, or a
+fitted track that leaves the atlas. If several objects were being merged,
+every object after the failing one was lost as well.
+
+Merging now works in two steps. Every merged object is calculated first, and
+the pieces are replaced only when all of them succeed. If anything fails, the
+status bar names the object and the reason and confirms that no pieces were
+removed. The opaque "Error index: 16, please contact maintainers" message now
+reads "the fitted probe track leaves the atlas volume or never reaches labeled
+brain tissue".
+
+---
+
 ## DriftlessMap 1.4.3
 
 Release date: 27 September 2026

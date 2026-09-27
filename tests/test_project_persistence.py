@@ -218,5 +218,85 @@ class ProjectPersistenceIntegrationTests(unittest.TestCase):
             self.assertEqual(len(window.object_ctrl.obj_list), 1)
 
 
+    def _window_with_pieces(self, piece_type, names):
+        window = self.create_window()
+        for name in names:
+            window.object_ctrl.add_object(
+                name,
+                piece_type,
+                np.array([[10.0, 10.0, 10.0], [12.0, 12.0, 4.0]]),
+                "opaque",
+            )
+        return window
+
+    def _pretend_volume_atlas(self, window):
+        window.current_atlas = "volume"
+        window.atlas_view.atlas_label = np.ones((20, 20, 20), dtype=np.int32)
+        window.atlas_view.origin_3d = np.array([10.0, 10.0, 10.0])
+        window.atlas_view.label_info = {"index": [1], "label": ["root"]}
+
+    @isolated_gui_test
+    def test_probe_merge_without_volume_atlas_keeps_pieces(self):
+        window = self._window_with_pieces(
+            "probe piece", ["probe 0 - piece 0", "probe 1 - piece 0"]
+        )
+        window.merge_probes()
+        self.assertEqual(window.object_ctrl.obj_type, ["probe piece"] * 2)
+
+    @isolated_gui_test
+    def test_failed_probe_reconstruction_keeps_every_piece(self):
+        import driftlessmap.app as app_module
+
+        window = self._window_with_pieces(
+            "probe piece", ["probe 0 - piece 0", "probe 1 - piece 0"]
+        )
+        self._pretend_volume_atlas(window)
+        outcomes = iter([({"probe": "first"}, 0), (None, 16)])
+        with patch.object(
+            window, "get_probe_atlas_metadata", return_value=({}, None)
+        ), patch.object(
+            app_module,
+            "calculate_probe_info",
+            side_effect=lambda *args: next(outcomes),
+        ), patch.object(window.object_ctrl, "add_object") as add_object:
+            window.merge_probes()
+        add_object.assert_not_called()
+        self.assertEqual(window.object_ctrl.obj_type, ["probe piece"] * 2)
+        message = window.statusbar.currentMessage()
+        self.assertIn("No pieces were removed", message)
+        self.assertIn("leaves the atlas volume", message)
+
+    @isolated_gui_test
+    def test_point_merge_exception_keeps_every_piece(self):
+        import driftlessmap.app as app_module
+
+        window = self._window_with_pieces(
+            "virus piece", ["virus 0 - piece 0", "virus 1 - piece 0"]
+        )
+        self._pretend_volume_atlas(window)
+        calls = []
+
+        def calculate(*args):
+            calls.append(args)
+            if len(calls) == 2:
+                raise IndexError("label outside atlas")
+            return {"virus": "first"}
+
+        with patch.object(app_module, "calculate_virus_info", side_effect=calculate):
+            window.merge_virus()
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(window.object_ctrl.obj_type, ["virus piece"] * 2)
+
+    @isolated_gui_test
+    def test_successful_merge_replaces_pieces(self):
+        window = self._window_with_pieces(
+            "contour piece", ["contour 0 - piece 0", "contour 0 - piece 1"]
+        )
+        with patch.object(window.object_ctrl, "add_object") as add_object:
+            window.merge_contour()
+        self.assertEqual(window.object_ctrl.obj_type, [])
+        add_object.assert_called_once()
+        self.assertEqual(add_object.call_args[0][:2], ("contour 0", "merged contour"))
+
 if __name__ == "__main__":
     unittest.main()
