@@ -3,6 +3,34 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.4.7
+
+Release date: 27 September 2026
+
+Several fixes to the Linear Silicon and Multi-Probe setting dialogs protect
+probe geometry from silent corruption.
+
+- **Cancel now discards your edits.** The dialogs used to edit the live probe
+  settings directly, so adding columns or probes, or changing a value, took
+  effect even when the dialog was cancelled.
+- **Added columns are laid out correctly.** In columns added with the column
+  spinbox, the "Number of Sites" and "Sites Distance" fields were in each
+  other's rows. Values typed into those fields were stored as the wrong
+  quantity.
+- **OK reflects every field.** OK is enabled only while every field holds a
+  valid value; previously only the most recently edited field was checked.
+  Clearing Site Height no longer hides the OK and Cancel buttons for good.
+- **Probe faces display correctly.** Saved multi-probe faces are shown, where
+  previously every face showed as "Out".
+- **Validity is checked on every accept.** The probe geometry is re-checked
+  each time the dialog is accepted, so correcting an invalid entry makes the
+  probe usable again. The check now requires each column to start within the
+  shank above the tip. It replaces the old site-height times site-distance
+  comparison, which did not measure anything physical. A zero tip length is
+  reported as a reminder and no longer stops the other checks.
+
+---
+
 ## DriftlessMap 1.4.6
 
 Release date: 27 September 2026

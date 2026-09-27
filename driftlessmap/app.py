@@ -70,6 +70,7 @@ from .probe_utiles import (
     Probe,
     MultiProbes,
     calculate_probe_info,
+    linear_silicon_settings_error,
     probe_error_message,
     get_pre_multi_shank_vis_base,
     get_center_lines,
@@ -1024,10 +1025,9 @@ class DriftlessMap(QMainWindow, FORM_Main):
         if rsp == QDialog.DialogCode.Accepted:
             self.multi_settings.set_multi_probes(multi_probe_info.multi_settings)
             msg = self.multi_settings.check_multi_settings()
+            self.valid_multi_settings = msg is None
             if msg is not None:
                 self.print_message(msg, self.error_message_color)
-                return
-            self.valid_multi_settings = True
 
     def save_probe_setting_called(self):
         path = QFileDialog.getSaveFileName(
@@ -2743,43 +2743,19 @@ class DriftlessMap(QMainWindow, FORM_Main):
             temp_settings = None
         ls_probe_info = LinearSiliconInfoDialog(temp_settings)
         rsp = ls_probe_info.exec()
-        if rsp == QDialog.DialogCode.Accepted:
-            self.probe_settings.set_linear_silicon(ls_probe_info.probe_settings)
-            if self.probe_settings.probe_length == 0:
-                self.valid_probe_settings = False
-                self.print_message(
-                    "Linear Silicon Probe can not be length 0 um.",
-                    self.error_message_color,
-                )
-                return
-            if self.probe_settings.tip_length == 0:
-                self.print_message(
-                    "Linear Silicon Probe has tip length 0 um. Is that correct?",
-                    self.reminder_color,
-                )
-                return
-            if self.probe_settings.site_height == 0:
-                self.valid_probe_settings = False
-                self.print_message(
-                    "Site height can not be 0 um.", self.error_message_color
-                )
-                return
-            if self.probe_settings.site_width == 0:
-                self.valid_probe_settings = False
-                self.print_message(
-                    "Site width can not be 0 um.", self.error_message_color
-                )
-                return
-            if (
-                self.probe_settings.site_height * self.probe_settings.sites_distance[0]
-                > self.probe_settings.probe_length
-            ):
-                self.valid_probe_settings = False
-                self.print_message(
-                    "Total sites length can not be larger than probe length",
-                    self.error_message_color,
-                )
-                return
+        if rsp != QDialog.DialogCode.Accepted:
+            return
+        self.probe_settings.set_linear_silicon(ls_probe_info.probe_settings)
+        error = linear_silicon_settings_error(ls_probe_info.probe_settings)
+        self.valid_probe_settings = error is None
+        if error is not None:
+            self.print_message(error, self.error_message_color)
+            return
+        if self.probe_settings.tip_length == 0:
+            self.print_message(
+                "Linear Silicon Probe has tip length 0 um. Is that correct?",
+                self.reminder_color,
+            )
 
     def site_face_changed(self, site_index):
         self.site_face = site_index

@@ -1,3 +1,4 @@
+import copy
 from PyQt6.QtWidgets import *
 from PyQt6.QtCore import *
 from PyQt6.QtGui import *
@@ -310,7 +311,8 @@ class LinearSiliconInfoDialog(QDialog):
                                    'x_bias': [0],
                                    'y_bias': [0]}
         else:
-            self.probe_settings = pss
+            # Edit a private copy so Cancel leaves the caller's settings intact.
+            self.probe_settings = copy.deepcopy(pss)
 
         n_column = len(self.probe_settings['x_bias'])
 
@@ -403,7 +405,6 @@ class LinearSiliconInfoDialog(QDialog):
         self.setLayout(layout)
 
     def n_column_changed(self):
-        print('gjgjhgjhg')
         n_column = self.n_column_spinbox.value()
         exist_column = len(self.x_bias_wl)
         if n_column == exist_column:
@@ -446,8 +447,8 @@ class LinearSiliconInfoDialog(QDialog):
                 self.x_bias_wl[-1].sig_text_changed.connect(self.x_bias_changed)
                 self.y_bias_wl[-1].sig_text_changed.connect(self.y_bias_changed)
 
-                self.right_layout.addWidget(self.sites_distance_wl[-1], 6, da_ind + 1, 1, 1)
-                self.right_layout.addWidget(self.per_max_sites_wl[-1], 7, da_ind + 1, 1, 1)
+                self.right_layout.addWidget(self.per_max_sites_wl[-1], 6, da_ind + 1, 1, 1)
+                self.right_layout.addWidget(self.sites_distance_wl[-1], 7, da_ind + 1, 1, 1)
                 self.right_layout.addWidget(self.x_bias_wl[-1], 8, da_ind + 1, 1, 1)
                 self.right_layout.addWidget(self.y_bias_wl[-1], 9, da_ind + 1, 1, 1)
 
@@ -455,108 +456,89 @@ class LinearSiliconInfoDialog(QDialog):
                 self.probe_settings['per_max_sites'].append(0)
                 self.probe_settings['x_bias'].append(0)
                 self.probe_settings['y_bias'].append(0)
+        self._refresh_ok_button()
+
+    FIELD_RULES = {
+        'probe_length': lambda v, s: v > 0,
+        'probe_thickness': lambda v, s: v >= 0,
+        'tip_length': lambda v, s: 0 <= v <= s['probe_length'],
+        'site_height': lambda v, s: v > 0,
+        'site_width': lambda v, s: v > 0,
+        'sites_distance': lambda v, s: v > 0,
+        'per_max_sites': lambda v, s: v > 0,
+        'x_bias': lambda v, s: True,
+        'y_bias': lambda v, s: v >= 0,
+    }
+
+    def _field_widgets(self):
+        return {
+            'probe_length': [self.probe_length_input],
+            'probe_thickness': [self.thickness_input],
+            'tip_length': [self.tip_length_input],
+            'site_height': [self.site_height_input],
+            'site_width': [self.site_width_input],
+            'sites_distance': self.sites_distance_wl,
+            'per_max_sites': self.per_max_sites_wl,
+            'x_bias': self.x_bias_wl,
+            'y_bias': self.y_bias_wl,
+        }
+
+    def _set_field(self, key, obj):
+        w_id, text_val = obj
+        try:
+            value = int(text_val)
+        except ValueError:
+            value = None
+        if value is not None:
+            if isinstance(self.probe_settings[key], list):
+                self.probe_settings[key][w_id] = value
+            else:
+                self.probe_settings[key] = value
+        self._refresh_ok_button()
+
+    def _refresh_ok_button(self):
+        """Enable OK only when every field holds a valid value."""
+        valid = True
+        for key, widgets in self._field_widgets().items():
+            for widget in widgets:
+                try:
+                    value = int(widget.text())
+                except ValueError:
+                    valid = False
+                    break
+                if not self.FIELD_RULES[key](value, self.probe_settings):
+                    valid = False
+                    break
+            if not valid:
+                break
+        self.button_box.button(QDialogButtonBox.StandardButton.Ok).setEnabled(valid)
 
     def probe_length_changed(self, obj):
-        text_val = obj[1]
-        if text_val in ['', '-', '+']:
-            self.button_box.setEnabled(False)
-        else:
-            self.probe_settings['probe_length'] = int(text_val)
-            if float(text_val) < 1e-4:
-                self.button_box.setEnabled(False)
-            else:
-                self.button_box.setEnabled(True)
+        self._set_field('probe_length', obj)
 
     def probe_thickness_changed(self, obj):
-        text_val = obj[1]
-        if text_val in ['', '-', '+']:
-            self.button_box.setEnabled(False)
-        else:
-            self.probe_settings['probe_thickness'] = int(text_val)
-            if float(text_val) < 0:
-                self.button_box.setEnabled(False)
-            else:
-                self.button_box.setEnabled(True)
+        self._set_field('probe_thickness', obj)
 
     def tip_length_changed(self, obj):
-        text_val = obj[1]
-        if text_val in ['', '-', '+']:
-            self.button_box.setEnabled(False)
-        else:
-            self.probe_settings['tip_length'] = int(text_val)
-            if float(text_val) < 0 or float(text_val) > self.probe_settings['probe_length']:
-                self.button_box.setEnabled(False)
-            else:
-                self.button_box.setEnabled(True)
+        self._set_field('tip_length', obj)
 
     def site_width_changed(self, obj):
-        text_val = obj[1]
-        if text_val in ['', '-', '+']:
-            self.button_box.setEnabled(False)
-        else:
-            self.probe_settings['site_width'] = int(text_val)
-            if float(text_val) < 1e-4:
-                self.button_box.setEnabled(False)
-            else:
-                self.button_box.setEnabled(True)
+        self._set_field('site_width', obj)
 
     def site_height_changed(self, obj):
-        text_val = obj[1]
-        if text_val in ['', '-', '+']:
-            self.button_box.setVisible(False)
-        else:
-            self.probe_settings['site_height'] = int(text_val)
-            if float(text_val) < 1e-4:
-                self.button_box.setEnabled(False)
-            else:
-                self.button_box.setEnabled(True)
+        self._set_field('site_height', obj)
 
-    #
     def sites_distance_changed(self, obj):
-        w_id = obj[0]
-        text_val = obj[1]
-        if text_val in ['', '-', '+']:
-            self.button_box.setEnabled(False)
-        else:
-            self.probe_settings['sites_distance'][w_id] = int(text_val)
-            if float(text_val) < 1e-4:
-                self.button_box.setEnabled(False)
-            else:
-                self.button_box.setEnabled(True)
+        self._set_field('sites_distance', obj)
 
     def per_max_sites_changed(self, obj):
-        w_id = obj[0]
-        text_val = obj[1]
-        if text_val in ['', '-', '+']:
-            self.button_box.setEnabled(False)
-        else:
-            self.probe_settings['per_max_sites'][w_id] = int(text_val)
-            if float(text_val) < 1e-4:
-                self.button_box.setEnabled(False)
-            else:
-                self.button_box.setEnabled(True)
+        self._set_field('per_max_sites', obj)
 
     def x_bias_changed(self, obj):
-        w_id = obj[0]
-        text_val = obj[1]
-        # text_val = self.x_bias_wl[index].text()
-        if text_val in ['', '-', '+']:
-            self.button_box.setEnabled(False)
-        else:
-            self.probe_settings['x_bias'][w_id] = int(text_val)
-            self.button_box.setEnabled(True)
+        self._set_field('x_bias', obj)
 
     def y_bias_changed(self, obj):
-        w_id = obj[0]
-        text_val = obj[1]
-        if text_val in ['', '-', '+']:
-            self.button_box.setEnabled(False)
-        else:
-            self.probe_settings['y_bias'][w_id] = int(text_val)
-            if float(text_val) < 0:
-                self.button_box.setEnabled(False)
-            else:
-                self.button_box.setEnabled(True)
+        self._set_field('y_bias', obj)
 
 
 class MultiProbePlanningDialog(QDialog):
@@ -585,7 +567,8 @@ class MultiProbePlanningDialog(QDialog):
             self.multi_settings['faces'] = [0, 0, 0, 0, 0]
 
         else:
-            self.multi_settings = multi_settings
+            # Edit a private copy so Cancel leaves the caller's settings intact.
+            self.multi_settings = copy.deepcopy(multi_settings)
 
         n_probe = len(self.multi_settings['x_vals'])
 
@@ -607,7 +590,8 @@ class MultiProbePlanningDialog(QDialog):
             self.y_val_wl.append(IntLineEdit(i, str(self.multi_settings['y_vals'][i])))
             self.faces_wl.append(FaceCombo(i))
             self.faces_wl[-1].addItems(['Out', 'In', 'Left', 'Right'])
-            self.faces_wl[-1].setCurrentText(str(self.multi_settings['faces'][i]))
+            face_index = int(self.multi_settings['faces'][i])
+            self.faces_wl[-1].setCurrentIndex(face_index if 0 <= face_index <= 3 else 0)
             self.x_val_wl[-1].sig_text_changed.connect(self.x_vals_changed)
             self.y_val_wl[-1].sig_text_changed.connect(self.y_vals_changed)
             self.faces_wl[-1].sig_text_changed.connect(self.faces_changed)
@@ -688,23 +672,26 @@ class MultiProbePlanningDialog(QDialog):
                 self.multi_settings['faces'].append(0)
 
     #
+    def _set_coordinate(self, key, obj):
+        w_id, text_val = obj
+        try:
+            self.multi_settings[key][w_id] = int(text_val)
+        except ValueError:
+            pass
+        valid = True
+        for widget in self.x_val_wl + self.y_val_wl:
+            try:
+                int(widget.text())
+            except ValueError:
+                valid = False
+                break
+        self.button_box.button(QDialogButtonBox.StandardButton.Ok).setEnabled(valid)
+
     def x_vals_changed(self, obj):
-        w_id = obj[0]
-        text_val = obj[1]
-        if text_val in ['', '-', '+']:
-            self.button_box.setEnabled(False)
-        else:
-            self.multi_settings['x_vals'][w_id] = int(text_val)
-            self.button_box.setEnabled(True)
+        self._set_coordinate('x_vals', obj)
 
     def y_vals_changed(self, obj):
-        w_id = obj[0]
-        text_val = obj[1]
-        if text_val in ['', '-', '+']:
-            self.button_box.setEnabled(False)
-        else:
-            self.multi_settings['y_vals'][w_id] = int(text_val)
-            self.button_box.setEnabled(True)
+        self._set_coordinate('y_vals', obj)
 
     def faces_changed(self, obj):
         w_id = obj[0]
