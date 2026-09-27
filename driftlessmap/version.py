@@ -1,6 +1,6 @@
 """Canonical DriftlessMap version."""
 
-__version__ = "1.4.9"
+__version__ = "1.4.10"
 APPLICATION_DISPLAY_NAME = "DriftlessMap {}".format(__version__)
 APPLICATION_WINDOW_TITLE = (
     "{} - Interactive Histology Registration and Brain-Atlas Mapping".format(

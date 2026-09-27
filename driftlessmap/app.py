@@ -142,6 +142,7 @@ from .probe_reconstruction import (
     is_allen_ccf_2017,
     normalize_axis_info,
     volume_view_vox_to_source_vox,
+    source_vox_to_herbs_vox,
 )
 from .roi_analysis import build_drawing_roi_info
 from .resources import resource_path
@@ -8511,14 +8512,15 @@ class DriftlessMap(QMainWindow, FORM_Main):
             axis_info, error = check_loading_pickle_file(file_path)
             if error is not None:
                 raise ValueError(error)
-            transpose_order = axis_info["to_HERBS"]
-            atlas_size = axis_info["size"]
-            direction_change = axis_info["direction_change"]
-            print(axis_info)
+            axis_info = normalize_axis_info(
+                axis_info, np.asarray(self.atlas_view.atlas_label.shape)[[1, 2, 0]]
+            )
         except (
             IOError,
             OSError,
             ValueError,
+            TypeError,
+            AttributeError,
             KeyError,
             IndexError,
             pickle.PickleError,
@@ -8545,24 +8547,26 @@ class DriftlessMap(QMainWindow, FORM_Main):
             if msg is not None:
                 self.print_message(msg, self.error_message_color)
                 return
-            if isinstance(data[0, 1], float):
-                extra_vox = 0
-            elif isinstance(data[0, 1], int):
-                extra_vox = 1
-            else:
+            if not (
+                np.issubdtype(data.dtype, np.integer)
+                or np.issubdtype(data.dtype, np.floating)
+            ):
                 msg = "Data is in wrong type, please check the Tutorial on GitHub."
                 self.print_message(msg, self.error_message_color)
                 return
+            source_points = np.asarray(data, dtype=float)
+            source_shape = np.asarray(axis_info["size"], dtype=float)
+            if not np.all(np.isfinite(source_points)) or np.any(
+                (source_points < 0) | (source_points >= source_shape)
+            ):
+                self.print_message(
+                    "Point coordinates must lie inside the source atlas volume "
+                    "{} in its native voxel order.".format(tuple(axis_info["size"])),
+                    self.error_message_color,
+                )
+                return
 
-            data_temp = data.copy()
-            for i in range(data.shape[1]):
-                if direction_change[i]:
-                    data_temp[:, i] = atlas_size[i] - extra_vox - data_temp[:, i]
-            if transpose_order != (0, 1, 2):
-                pnt_vox = data_temp[:, transpose_order]
-            else:
-                pnt_vox = data_temp.copy()
-
+            pnt_vox = source_vox_to_herbs_vox(source_points, axis_info)
             pnt_vis = pnt_vox - self.atlas_view.origin_3d
 
             self.object_ctrl.add_object(
