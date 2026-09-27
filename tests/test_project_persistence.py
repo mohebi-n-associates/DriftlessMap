@@ -687,5 +687,29 @@ class ProjectPersistenceIntegrationTests(unittest.TestCase):
             )
             self.assertEqual(window.working_atlas_data["cell_count"], [0] * 5)
 
+    @isolated_gui_test
+    def test_vertical_probe_is_drawn_at_its_ap_position_in_sagittal_view(self):
+        with tempfile.TemporaryDirectory() as folder:
+            window = self._window_with_volume_atlas(Path(folder))
+            view = window.atlas_view
+            origin = np.asarray(view.origin_3d, dtype=float)
+            start = np.array([3.0, -6.0, -2.0])  # ML, AP, DV relative to Bregma
+            end = np.array([3.0, -6.0, -9.0])
+            display = {
+                "insertion_vox": (start + origin).astype(int),
+                "insertion_coords": start,
+                "terminus_coords": end,
+                "insertion_coords_3d": start,
+                "terminus_coords_3d": end,
+                "ap_angle": 0.0,
+                "ml_angle": 0.0,
+                "vis_color": (255, 0, 0, 255),
+            }
+            view.rotate_cs_plane_after_merging_probe(display)
+            sagittal_x, _ = view.simg.display_objects[-1].getData()
+            coronal_x, _ = view.cimg.display_objects[-1].getData()
+            np.testing.assert_allclose(sagittal_x, [start[1] + origin[1]] * 2)
+            np.testing.assert_allclose(coronal_x, [start[0] + origin[0]] * 2)
+
 if __name__ == "__main__":
     unittest.main()

@@ -3,6 +3,19 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.4.27
+
+Release date: 27 September 2026
+
+When a merged probe with no mediolateral tilt was shown on the atlas, the
+sagittal view drew it at its mediolateral coordinate instead of its
+anteroposterior one, so the line appeared at the wrong AP position. The
+sagittal view's horizontal axis is AP, and the line now uses it. Tilted
+probes, and the coronal view, were already drawn correctly. Stored
+coordinates and exports were not affected.
+
+---
+
 ## DriftlessMap 1.4.26
 
 Release date: 27 September 2026
