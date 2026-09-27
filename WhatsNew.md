@@ -3,6 +3,34 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.4.13
+
+Release date: 27 September 2026
+
+**Scientific correction.** **Make Pieces** now builds every object piece from
+annotations that are in atlas coordinates. Previously, several piece types
+could be built from annotations still in the histology window, using their
+raw pixel positions as if they were atlas positions and without applying the
+registration:
+
+- **Virus pixels** were also put in (row, column) order, transposing them
+  relative to every other annotation.
+- **Histology cells** (with the atlas overlay transferred to histology) were
+  counted using the atlas cell counts, so they were silently dropped or
+  paired with the wrong layers.
+- **Histology contours** made **Make Pieces** crash.
+
+Annotations drawn in the histology window must now be moved into the atlas
+with **Transform to Atlas Slice Window** and then **Accept and Transfer**, as
+the manual describes. If any are waiting, **Make Pieces** lists them in the
+status bar and leaves them in place.
+
+**Action:** if you made virus, cell, contour, probe or drawing pieces directly
+from histology annotations, recreate them after transferring the annotations
+to the atlas.
+
+---
+
 ## DriftlessMap 1.4.12
 
 Release date: 27 September 2026

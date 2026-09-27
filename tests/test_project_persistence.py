@@ -495,5 +495,46 @@ class ProjectPersistenceIntegrationTests(unittest.TestCase):
             relinked = resaved_payload["histology_provenance"]["reference"]
             self.assertEqual(relinked["sha256"], original["sha256"])
 
+    @isolated_gui_test
+    def test_pieces_use_atlas_frame_points_in_x_y_order(self):
+        with tempfile.TemporaryDirectory() as folder:
+            window = self._window_with_volume_atlas(Path(folder))
+            window.working_atlas_data["atlas-virus"] = [[5.5, 9.5], [6.5, 9.5]]
+            window.working_atlas_data["atlas-contour"] = [[3.0, 4.0], [7.0, 4.0]]
+            window.working_atlas_data["atlas-cells"] = [[2.0, 3.0], [8.0, 9.0]]
+            window.working_atlas_data["cell_layer_index"] = [0, 1]
+            window.working_atlas_data["cell_size"] = [5, 5]
+            window.working_atlas_data["cell_symbol"] = ["o", "o"]
+            window.working_atlas_data["cell_count"] = [1, 1, 0, 0, 0]
+            window.make_object_pieces()
+
+            pieces = dict(zip(window.object_ctrl.obj_name, window.object_ctrl.obj_data))
+            expected_virus = window.atlas_view.get_3d_data_from_2d_view(
+                np.array([[5.5, 9.5], [6.5, 9.5]]), window.atlas_display
+            )
+            np.testing.assert_allclose(pieces["virus - piece"], expected_virus)
+            self.assertIn("contour - piece", pieces)
+            self.assertEqual(len(pieces["cells - piece"]), 1)
+            self.assertEqual(len(pieces["cells 1 - piece"]), 1)
+
+    @isolated_gui_test
+    def test_untransferred_histology_annotations_are_reported_not_misplaced(self):
+        with tempfile.TemporaryDirectory() as folder:
+            window = self._window_with_volume_atlas(Path(folder))
+            window.a2h_transferred = True
+            window.working_img_data["img-cells"] = [[20.0, 30.0]]
+            window.working_img_data["img-contour"] = [[1.0, 2.0], [3.0, 4.0]]
+            virus = np.zeros((10, 10), dtype=np.uint8)
+            virus[2, 3] = 1
+            window.working_img_data["img-virus"] = virus
+            window.make_object_pieces()
+
+            self.assertEqual(window.object_ctrl.obj_name, [])
+            message = window.statusbar.currentMessage()
+            for kind in ("cells", "contours", "virus pixels"):
+                self.assertIn(kind, message)
+            # Histology data is kept so it can still be transferred.
+            self.assertEqual(window.working_img_data["img-cells"], [[20.0, 30.0]])
+
 if __name__ == "__main__":
     unittest.main()
