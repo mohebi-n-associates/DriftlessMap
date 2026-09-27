@@ -218,7 +218,9 @@ class LabelTree(QWidget):
                 ch = item.child(i)
                 self.set_label_color(ch.id, color, recursive=recursive, emit=False)
         if emit:
-            self.label_color_changed.emit((label_id, self.current_lut[label_id]))
+            self.label_color_changed.emit(
+                (label_id, self.current_lut[display_index].copy())
+            )
     
     def lookup_table(self):
         lut = np.zeros((self.label_level + 1, 4), dtype=np.ubyte)

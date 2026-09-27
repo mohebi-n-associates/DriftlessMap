@@ -3,6 +3,19 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.4.14
+
+Release date: 27 September 2026
+
+Changing a region's colour in the label tree no longer crashes DriftlessMap on
+atlases whose structure IDs are sparse, such as the Allen CCF. There, most IDs
+(for example 997) are larger than the number of labels. The colour sent to
+the 3D view was looked up by structure ID rather than by the label's position
+in the colour table. Large IDs raised an error inside Qt, which can close the
+application. Small IDs sent the colour of an unrelated region to the 3D mesh.
+
+---
+
 ## DriftlessMap 1.4.13
 
 Release date: 27 September 2026
