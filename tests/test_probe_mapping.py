@@ -6,6 +6,7 @@ from driftlessmap.probe_utiles import (
     MultiProbes,
     Probe,
     calculate_probe_info,
+    calculate_vector_according_to_site_face,
     find_probe_surface_entry,
     line_fit_2d,
     robust_probe_line_fit,
@@ -160,6 +161,57 @@ class ProbeMappingTests(unittest.TestCase):
             track["structure_acronym"], ["TR"] * track["count"]
         )
 
+
+
+class SiteFaceFrameTests(unittest.TestCase):
+    DIRECTIONS = [
+        [0.0, 0.0, -1.0],
+        [0.5, 0.5, -np.sqrt(0.5)],
+        [-0.3, 0.2, -0.93],
+        [0.1, -0.6, -0.79],
+        [0.8, 0.0, -0.6],
+    ]
+
+    def test_every_face_is_an_orthonormal_right_handed_frame(self):
+        for direction in self.DIRECTIONS:
+            for face in range(4):
+                with self.subTest(direction=direction, face=face):
+                    r_hat, u_hat, n_hat = calculate_vector_according_to_site_face(
+                        np.asarray(direction), face
+                    )
+                    for vector in (r_hat, u_hat, n_hat):
+                        self.assertAlmostEqual(np.linalg.norm(vector), 1.0)
+                    self.assertAlmostEqual(float(np.dot(r_hat, u_hat)), 0.0)
+                    self.assertAlmostEqual(float(np.dot(r_hat, n_hat)), 0.0)
+                    self.assertAlmostEqual(float(np.dot(u_hat, n_hat)), 0.0)
+                    np.testing.assert_allclose(
+                        np.cross(r_hat, u_hat), n_hat, atol=1e-12
+                    )
+
+    def test_faces_are_rotations_of_face_zero_about_the_shank(self):
+        for direction in self.DIRECTIONS:
+            _, u0, n0 = calculate_vector_according_to_site_face(
+                np.asarray(direction), 0
+            )
+            frames = [
+                calculate_vector_according_to_site_face(np.asarray(direction), face)
+                for face in range(4)
+            ]
+            np.testing.assert_allclose(frames[1][1:], [-u0, -n0], atol=1e-12)
+            np.testing.assert_allclose(frames[2][1:], [-n0, u0], atol=1e-12)
+            np.testing.assert_allclose(frames[3][1:], [n0, -u0], atol=1e-12)
+
+    def test_vertical_probe_faces_match_the_documented_axes(self):
+        direction = np.array([0.0, 0.0, -1.0])
+        expected_normals = {
+            0: [0, 1, 0],
+            1: [0, -1, 0],
+            2: [-1, 0, 0],
+            3: [1, 0, 0],
+        }
+        for face, normal in expected_normals.items():
+            _, _, n_hat = calculate_vector_according_to_site_face(direction, face)
+            np.testing.assert_allclose(n_hat, normal, atol=1e-12)
 
 if __name__ == "__main__":
     unittest.main()

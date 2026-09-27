@@ -1199,49 +1199,34 @@ def get_vector_according_to_site_face(n_hat, u_hat, site_face):
 
 
 def calculate_vector_according_to_site_face(direction, site_face):
+    """Return the ``(r_hat, u_hat, n_hat)`` probe frame for a site face.
+
+    ``r_hat`` runs along the shank, ``u_hat`` across the shank face and
+    ``n_hat`` out of the face with the sites. Face 0 defines the reference
+    frame; the others rotate it about the shank: face 1 by 180 degrees and
+    faces 2 and 3 by 90 degrees to either side. Every frame is therefore
+    orthonormal and right-handed, whatever the probe tilt.
+    """
     # for after surgery
-    r_hat = direction.copy()
-    if check_parallel_to_z(direction):
-        if site_face == 0:
-            n_hat = np.array([0, 1, 0])
-            u_hat = np.cross(n_hat, r_hat)
-        elif site_face == 1:
-            n_hat = np.array([0, -1, 0])
-            u_hat = np.cross(n_hat, r_hat)
-        elif site_face == 2:
-            n_hat = np.array([-1, 0, 0])
-            u_hat = np.cross(n_hat, r_hat)
-        elif site_face == 3:
-            n_hat = np.array([1, 0, 0])
-            u_hat = np.cross(n_hat, r_hat)
-        else:
-            n_hat = None
-            u_hat = None
-            print("Site face can only be 0-Up, 1-Down, 2-Left, 3-Right.")
+    r_hat = np.asarray(direction, dtype=float).copy()
+    r_hat = r_hat / np.linalg.norm(r_hat)
+    if check_parallel_to_z(r_hat):
+        n0 = np.array([0.0, 1.0, 0.0])
+        u0 = np.cross(n0, r_hat)
     else:
-        if site_face == 0:
-            t_hat = np.array([-r_hat[1], r_hat[0], 0])
-            u_hat = t_hat / np.linalg.norm(t_hat)
-            n_hat = np.cross(r_hat, u_hat)
-        elif site_face == 1:
-            t_hat = np.array([r_hat[1], r_hat[0], 0])
-            u_hat = t_hat / np.linalg.norm(t_hat)
-            n_hat = np.cross(r_hat, u_hat)
-        elif site_face == 2:
-            t_hat = np.array([-r_hat[1], r_hat[0], 0])
-            n_hat = t_hat / np.linalg.norm(t_hat)
-            u_hat = np.cross(n_hat, r_hat)
-        elif site_face == 3:
-            t_hat = np.array([r_hat[1], r_hat[0], 0])
-            n_hat = t_hat / np.linalg.norm(t_hat)
-            u_hat = np.cross(n_hat, r_hat)
-        else:
-            n_hat = None
-            u_hat = None
-            print("Site face can only be 0-Up, 1-Down, 2-Left, 3-Right.")
-        # print('t_hat', t_hat)
-        # print(n_hat)
-        # print(u_hat)
+        t_hat = np.array([-r_hat[1], r_hat[0], 0.0])
+        u0 = t_hat / np.linalg.norm(t_hat)
+        n0 = np.cross(r_hat, u0)
+    frames = {
+        0: (u0, n0),
+        1: (-u0, -n0),
+        2: (-n0, u0),
+        3: (n0, -u0),
+    }
+    if site_face not in frames:
+        print("Site face can only be 0-Up, 1-Down, 2-Left, 3-Right.")
+        return r_hat, None, None
+    u_hat, n_hat = frames[site_face]
     return r_hat, u_hat, n_hat
 
 
