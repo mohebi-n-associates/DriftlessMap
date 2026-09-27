@@ -10,7 +10,7 @@ import shutil
 from .atlas_loader import process_atlas_raw_data
 from .obj_items import load_mesh_file, render_volume, render_small_volume
 from .persistence import load_legacy_pickle
-from .download_utils import DownloadCancelled, download_file
+from .download_utils import DownloadCancelled, download_file, thread_is_running
 
 
 class DownloadThread(QThread):
@@ -76,6 +76,17 @@ class WorkerProcessData(QObject):
         self.vox_size = vox_size
 
     def run(self):
+        # Always report back: an exception escaping a worker thread would
+        # leave the dialog waiting forever and can abort the application.
+        try:
+            self._run()
+        except Exception as exc:
+            self.success = False
+            self.message = 'Atlas processing failed: {}'.format(exc)
+        finally:
+            self.finished.emit()
+
+    def _run(self):
         target = os.path.join(self.saving_folder, 'atlas_labels.pkl')
         if not os.path.exists(target):
             shutil.copyfile(join(dirname(__file__), "data/atlas_labels.pkl"), target)
@@ -132,8 +143,6 @@ class WorkerProcessData(QObject):
 
             self.progress.emit(100)
             self.success = True
-
-        self.finished.emit()
 
 
 class AtlasDownloader(QDialog):
@@ -262,7 +271,7 @@ class AtlasDownloader(QDialog):
             thread.deleteLater()
 
     def has_active_downloads(self):
-        return any(thread.isRunning() for thread in self.download_threads.values())
+        return any(thread_is_running(thread) for thread in self.download_threads.values())
 
     # Setting progress bar
     def set_label_bar_value(self, value):
@@ -348,7 +357,7 @@ class AtlasDownloader(QDialog):
         if self.process_finished:
             event.accept()
             return
-        if self.has_active_downloads() or self.thread.isRunning():
+        if self.has_active_downloads() or thread_is_running(self.thread):
             QMessageBox.information(
                 self, 'Operation in progress', 'Please wait for the active operation to finish.'
             )

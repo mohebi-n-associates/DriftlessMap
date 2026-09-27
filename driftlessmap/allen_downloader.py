@@ -22,7 +22,7 @@ from .atlas_transform import (
     make_boundary_dict,
     normalize_atlas_volume,
 )
-from .download_utils import download_file
+from .download_utils import download_file, thread_is_running
 from .probe_reconstruction import allen_ccf_estimated_bregma_vox
 
 
@@ -778,7 +778,7 @@ class AllenDownloader(QDialog):
         self.downloading_atlas = self.has_active_downloads()
 
     def has_active_downloads(self):
-        return any(thread.isRunning() for thread in self.download_threads.values())
+        return any(thread_is_running(thread) for thread in self.download_threads.values())
 
     def mesh_download_failed(self, message):
         self.downloading_meshes = False
@@ -887,8 +887,8 @@ class AllenDownloader(QDialog):
             return
         if (
             self.has_active_downloads()
-            or self.mesh_thread.isRunning()
-            or self.thread.isRunning()
+            or thread_is_running(self.mesh_thread)
+            or thread_is_running(self.thread)
         ):
             QMessageBox.information(
                 self, 'Operation in progress', 'Please wait for the active operation to finish.'

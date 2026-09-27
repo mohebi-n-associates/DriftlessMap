@@ -3,6 +3,25 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.4.22
+
+Release date: 27 September 2026
+
+Background atlas work now fails cleanly.
+
+- **Unexpected errors are reported.** In the Waxholm download and the custom
+  Atlas Processor, an unexpected error in the background step (for example a
+  corrupt NIfTI file or running out of memory) escaped the worker thread. The
+  dialog then waited forever, refused to close, and could take the
+  application down with it. The error is now shown in the dialog, and the
+  dialog can be closed.
+- **Closing after a finished step.** Closing the Allen or Waxholm downloader
+  after its mesh or processing step had finished could raise "wrapped C/C++
+  object has been deleted". A finished background step is now treated as
+  stopped.
+
+---
+
 ## DriftlessMap 1.4.21
 
 Release date: 27 September 2026

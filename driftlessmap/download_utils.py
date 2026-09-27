@@ -83,3 +83,14 @@ def download_file(
             response.close()
         if temporary_path is not None:
             temporary_path.unlink(missing_ok=True)
+
+
+def thread_is_running(thread):
+    """Return whether a ``QThread`` runs, treating a deleted thread as stopped."""
+    if thread is None:
+        return False
+    try:
+        return thread.isRunning()
+    except RuntimeError:
+        # The C++ object was already released through ``deleteLater``.
+        return False
