@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th September 2026
+##### DriftlessMap 1.4.27
+
+Displaying a merged probe with no mediolateral tilt now draws it at the correct anteroposterior position in the sagittal view.
+
+### 27th September 2026
 ##### DriftlessMap 1.4.26
 
 Scientific fix: warped overlays and virus layers now line up with transferred points to within a pixel at any scale difference, and annotations in the last pixel row or column of an image are transferred instead of being reported as outside the mesh.

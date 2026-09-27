@@ -1141,8 +1141,9 @@ class AtlasView(QObject):
             s_start_pnt_3d = start_pnt + self.origin_3d
             s_end_pnt_3d = end_pnt + self.origin_3d
 
-            s_start_pnt = [s_start_pnt_3d[0], self.atlas_size[0] - s_start_pnt_3d[2]]
-            s_end_pnt = [s_end_pnt_3d[0], self.atlas_size[0] - s_end_pnt_3d[2]]
+            # The sagittal view's horizontal axis is AP (HERBS axis 1).
+            s_start_pnt = [s_start_pnt_3d[1], self.atlas_size[0] - s_start_pnt_3d[2]]
+            s_end_pnt = [s_end_pnt_3d[1], self.atlas_size[0] - s_end_pnt_3d[2]]
 
         c_pos = np.stack([c_start_pnt, c_end_pnt], axis=0)
         s_pos = np.stack([s_start_pnt, s_end_pnt], axis=0)
