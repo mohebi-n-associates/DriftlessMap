@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th September 2026
+##### DriftlessMap 1.4.31
+
+Saved files now get normal permissions (or keep those of the file they replace), are flushed to disk before replacing the previous version, and interrupted saves clean up their temporary files; NumPy's deprecated core module is no longer used.
+
+### 27th September 2026
 ##### DriftlessMap 1.4.30
 
 Drawing pieces remember whether they are areas or lines, so renamed drawings keep reporting area rather than a meaningless line length, and multi-probe settings pair with the right shank when there are more than ten probes.

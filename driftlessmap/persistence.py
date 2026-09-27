@@ -95,16 +95,27 @@ class ArchiveAttachment:
             shutil.copyfileobj(source, output, length=8 * 1024 * 1024)
 
 
+def _numpy_multiarray():
+    """Return NumPy's multiarray module without touching deprecated aliases."""
+    for module_name in ("numpy._core.multiarray", "numpy.core.multiarray"):
+        try:
+            return importlib.import_module(module_name)
+        except ImportError:
+            continue
+    raise ImportError("NumPy multiarray module is unavailable.")
+
+
 def _numpy_pickle_globals():
     """Return inert NumPy constructors used by supported pickle versions."""
+    multiarray = _numpy_multiarray()
     safe_globals = {
         ("numpy", "dtype"): np.dtype,
         ("numpy", "ndarray"): np.ndarray,
-        ("numpy.core.multiarray", "_reconstruct"): np.core.multiarray._reconstruct,
-        ("numpy.core.multiarray", "scalar"): np.core.multiarray.scalar,
-        ("numpy._core.multiarray", "_reconstruct"): np.core.multiarray._reconstruct,
-        ("numpy._core.multiarray", "scalar"): np.core.multiarray.scalar,
     }
+    # Pickles name either module layout, whichever NumPy wrote them.
+    for module_name in ("numpy.core.multiarray", "numpy._core.multiarray"):
+        safe_globals[(module_name, "_reconstruct")] = multiarray._reconstruct
+        safe_globals[(module_name, "scalar")] = multiarray.scalar
     frombuffer = None
     for module_name in ("numpy._core.numeric", "numpy.core.numeric"):
         try:
@@ -485,6 +496,37 @@ def _decode(value, archive):
     )
 
 
+def _target_mode(destination):
+    try:
+        return destination.stat().st_mode & 0o7777
+    except OSError:
+        umask = os.umask(0)
+        os.umask(umask)
+        return 0o666 & ~umask
+
+
+def _fsync_file(path):
+    """Flush file contents to disk so ``os.replace`` never exposes a stub."""
+    with open(path, "rb") as stream:
+        os.fsync(stream.fileno())
+
+
+def _fsync_directory(path):
+    """Persist the rename itself (POSIX only; Windows has no directory fsync)."""
+    if os.name != "posix":
+        return
+    try:
+        descriptor = os.open(str(path), os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        os.fsync(descriptor)
+    except OSError:
+        pass
+    finally:
+        os.close(descriptor)
+
+
 def save_driftlessmap_file(file_path, data, kind):
     """Atomically save data in the versioned DriftlessMap archive format."""
     destination = Path(file_path)
@@ -512,6 +554,9 @@ def save_driftlessmap_file(file_path, data, kind):
         ) as temporary:
             temporary_path = Path(temporary.name)
         try:
+            # NamedTemporaryFile is private (0600); give the saved file the
+            # permissions of the file it replaces, or the usual umask default.
+            os.chmod(str(temporary_path), _target_mode(destination))
             with zipfile.ZipFile(
                 temporary_path, "w", compression=zipfile.ZIP_DEFLATED, allowZip64=True
             ) as archive:
@@ -524,8 +569,11 @@ def save_driftlessmap_file(file_path, data, kind):
                         name, "w", force_zip64=True
                     ) as output:
                         shutil.copyfileobj(source, output, length=8 * 1024 * 1024)
+            _fsync_file(temporary_path)
             os.replace(str(temporary_path), str(destination))
-        except Exception:
+            _fsync_directory(destination.parent)
+        except BaseException:
+            # Also clean up on KeyboardInterrupt/SystemExit mid-write.
             temporary_path.unlink(missing_ok=True)
             raise
     except Exception as exc:
