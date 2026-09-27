@@ -147,11 +147,9 @@ class SliceStack(pg.GraphicsLayoutWidget):
     def set_data(self, data, scale=None):
         if data.ndim != 3:
             raise ValueError('Image data must have shape (height, width, channels).')
-        if data.shape[2] > len(self.image_list):
+        if data.shape[2] not in (1, 3, 4):
             raise ValueError(
-                'DriftlessMap supports at most {} image channels.'.format(
-                    len(self.image_list)
-                )
+                'A slice atlas image must have 1, 3 or 4 channels.'
             )
         self.data = data
         if scale is not None:

@@ -3,6 +3,29 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.4.5
+
+Release date: 27 September 2026
+
+A failed atlas load no longer damages the current session. Previously the
+atlas path and fingerprint were replaced, and atlas layers were deleted,
+before DriftlessMap had checked that the atlas could be read. The next save
+could then record the failed atlas as the source of work done in the
+previous one. The same was true for a missing or unreadable mesh cache, and
+for a slice-atlas image that could not be decoded.
+
+Both loaders now read and validate the whole atlas first, and change the
+session only after it is complete. The last-used atlas is remembered only
+after a successful load. If a project's volume atlas cannot be loaded, the
+project is no longer opened on top of the old atlas.
+
+Loading a slice atlas from an image works again; it had been failing because
+of an internal channel check. The slice-atlas dialog now also accepts
+`.jpeg`, `.tif`, `.tiff` and `.bmp` images, and extensions are matched
+regardless of case.
+
+---
+
 ## DriftlessMap 1.4.4
 
 Release date: 27 September 2026

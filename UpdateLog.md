@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th September 2026
+##### DriftlessMap 1.4.5
+
+Volume and slice atlas loads now validate everything before changing the session, so a failed load no longer corrupts atlas provenance or deletes atlas layers; slice atlases can be loaded from images again.
+
+### 27th September 2026
 ##### DriftlessMap 1.4.4
 
 Merging probe, virus, cell, drawing and contour pieces no longer deletes the pieces when the merge fails; all merged objects are computed first and pieces are removed only when every one succeeds.
