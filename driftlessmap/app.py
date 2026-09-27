@@ -1736,7 +1736,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.print_message(msg, self.normal_color)
         file_title = "Select Atlas Slice File"
         file_filter = (
-            "JPEG (*.jpg);;PNG (*.png);;"
+            "Images (*.jpg *.jpeg *.png *.tif *.tiff *.bmp);;"
             "DriftlessMap Slice (*.dmapslice);;"
             "Legacy HERBS Slice (*.herbsslice *.pkl)"
         )
@@ -1753,7 +1753,8 @@ class DriftlessMap(QMainWindow, FORM_Main):
         )
 
         if image_file_path[0] != "":
-            self.load_slice_atlas(image_file_path[0])
+            if not self.load_slice_atlas(image_file_path[0]):
+                return
 
             if self.image_view.image_file is not None:
                 self.show_slice_and_histology()
@@ -6582,23 +6583,23 @@ class DriftlessMap(QMainWindow, FORM_Main):
     #              Menu Bar ---- File ----- related
     #
     # ------------------------------------------------------------------
-    def load_slice_atlas(self, atlas_path):
-        self.slice_atlas_path = atlas_path
-        self.current_atlas_path = atlas_path
-        self._loaded_atlas_signatures[os.path.abspath(atlas_path)] = (
-            path_stat_signature(atlas_path)
-        )
-        self.atlas_view.clear_slice_info()
+    SLICE_IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp")
 
-        if atlas_path[-4:] in [".jpg", ".png"]:
-            try:
-                img_data = cv2.imread(atlas_path)
-            except (IOError, OSError):
-                msg = "Loading slice atlas is failed. Please check your image or contact maintainers."
+    def load_slice_atlas(self, atlas_path):
+        """Load a slice atlas image or file; return ``True`` only on success."""
+        atlas_signature = path_stat_signature(atlas_path)
+        slice_data = None
+        img_data = None
+        if os.path.splitext(atlas_path)[1].lower() in self.SLICE_IMAGE_EXTENSIONS:
+            img_data = cv2.imread(atlas_path, cv2.IMREAD_COLOR)
+            if img_data is None:
+                msg = (
+                    "Loading slice atlas failed. The image could not be read: "
+                    "{}".format(atlas_path)
+                )
                 self.print_message(msg, self.error_message_color)
-                return
+                return False
             img_data = cv2.cvtColor(img_data, cv2.COLOR_BGR2RGBA)
-            self.atlas_view.set_slice_data(img_data)
         else:
             slice_data, error = check_loading_pickle_file(
                 atlas_path, expected_kind="slice"
@@ -6608,7 +6609,15 @@ class DriftlessMap(QMainWindow, FORM_Main):
                     "Loading slice atlas failed. {}".format(error),
                     self.error_message_color,
                 )
-                return
+                return False
+
+        self.slice_atlas_path = atlas_path
+        self.current_atlas_path = atlas_path
+        self._loaded_atlas_signatures[os.path.abspath(atlas_path)] = atlas_signature
+        self.atlas_view.clear_slice_info()
+        if slice_data is None:
+            self.atlas_view.set_slice_data(img_data)
+        else:
             self.atlas_view.set_slice_data_and_info(slice_data)
 
         self.reset_tri_points_atlas()
@@ -6625,6 +6634,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
 
         self.object_ctrl.add_object_btn.setEnabled(False)
         self.object_ctrl.merge_probe_btn.setEnabled(False)
+        return True
 
     def set_volume_atlas_to_view(
         self, atlas_data, segmentation_data, atlas_info, label_info, boundary
@@ -6713,12 +6723,61 @@ class DriftlessMap(QMainWindow, FORM_Main):
 
     # load volume atlas
     def load_volume_atlas(self, atlas_folder):
+        """Load a processed volume atlas; return ``True`` only on success.
+
+        Everything is read and validated before any session state changes, so
+        a failed load leaves the current atlas, its layers and its provenance
+        untouched.
+        """
+        atlas_signature = path_stat_signature(
+            atlas_folder, included_names=ATLAS_IDENTITY_FILES
+        )
+        with pg.BusyCursor():
+            da_atlas = AtlasLoader(atlas_folder, load_boundaries=False)
+
+        if not da_atlas.success:
+            self.print_message(
+                "Loading the atlas failed. {}".format(da_atlas.msg),
+                self.error_message_color,
+            )
+            return False
+
+        pre_made_meshdata_path = os.path.join(atlas_folder, "atlas_meshdata.pkl")
+        pre_made_small_meshdata_path = os.path.join(
+            atlas_folder, "atlas_small_meshdata.pkl"
+        )
+        if not os.path.exists(pre_made_meshdata_path) or not os.path.exists(
+            pre_made_small_meshdata_path
+        ):
+            msg = "Brain mesh is not found! Please pre-process the atlas."
+            self.print_message(msg, self.error_message_color)
+            return False
+
+        try:
+            meshdata = load_mesh_file(pre_made_meshdata_path)
+            if isinstance(meshdata, dict):
+                raise ValueError("Whole-brain mesh file contains a mesh list.")
+        except ValueError:
+            msg = "Please pre-process mesh for the whole brain."
+            self.print_message(msg, self.error_message_color)
+            return False
+
+        try:
+            small_meshdata_list = load_mesh_file(pre_made_small_meshdata_path)
+            if not isinstance(small_meshdata_list, dict):
+                raise ValueError("Region mesh file does not contain a mesh list.")
+        except ValueError:
+            self.print_message(
+                "Please re-process meshes for each brain region.",
+                self.error_message_color,
+            )
+            return False
+
+        # The atlas is complete; commit it to the session.
         self.volume_atlas_path = atlas_folder
         self.current_atlas_path = atlas_folder
         self._loaded_atlas_signatures[os.path.abspath(atlas_folder)] = (
-            path_stat_signature(
-                atlas_folder, included_names=ATLAS_IDENTITY_FILES
-            )
+            atlas_signature
         )
         self._set_volume_atlas_axis_info(atlas_folder)
         self.atlascontrolpanel.setEnabled(True)
@@ -6730,54 +6789,6 @@ class DriftlessMap(QMainWindow, FORM_Main):
 
         if self.atlas_view.atlas_data is not None:
             self.delete_all_atlas_layer()
-            # self.atlas_view.clear_atlas()
-            # self.view3d.clear()
-            # self.view3d.addItem(self.atlas_view.mesh)
-            # self.view3d.addItem(self.atlas_view.ap_plate_mesh)
-            # self.view3d.addItem(self.atlas_view.dv_plate_mesh)
-            # self.view3d.addItem(self.atlas_view.ml_plate_mesh)
-
-        with pg.BusyCursor():
-            # from Archived.HERBS.herbs.atlas_loader import AtlasLoader
-            da_atlas = AtlasLoader(atlas_folder, load_boundaries=False)
-
-        if not da_atlas.success:
-            self.statusbar.showMessage(da_atlas.msg)
-            return
-        else:
-            self.print_message("Atlas loaded successfully.", self.normal_color)
-
-        # load mesh data
-        pre_made_meshdata_path = os.path.join(atlas_folder, "atlas_meshdata.pkl")
-        pre_made_small_meshdata_path = os.path.join(
-            atlas_folder, "atlas_small_meshdata.pkl"
-        )
-
-        if not os.path.exists(pre_made_meshdata_path) or not os.path.exists(
-            pre_made_small_meshdata_path
-        ):
-            msg = "Brain mesh is not found! Please pre-process the atlas."
-            self.print_message(msg, self.error_message_color)
-
-        try:
-            meshdata = load_mesh_file(pre_made_meshdata_path)
-            if isinstance(meshdata, dict):
-                raise ValueError("Whole-brain mesh file contains a mesh list.")
-        except ValueError:
-            msg = "Please pre-process mesh for the whole brain."
-            self.print_message(msg, self.error_message_color)
-            return
-
-        try:
-            small_meshdata_list = load_mesh_file(pre_made_small_meshdata_path)
-            if not isinstance(small_meshdata_list, dict):
-                raise ValueError("Region mesh file does not contain a mesh list.")
-        except ValueError:
-            self.print_message(
-                "Please re-process meshes for each brain region.",
-                self.error_message_color,
-            )
-            return
 
         atlas_data = np.transpose(da_atlas.atlas_data, [2, 0, 1])[::-1, :, :]
         atlas_info = da_atlas.atlas_info
@@ -6794,6 +6805,8 @@ class DriftlessMap(QMainWindow, FORM_Main):
         )
 
         self.set_volume_atlas_3d(unique_label, meshdata, small_meshdata_list)
+        self.print_message("Atlas loaded successfully.", self.normal_color)
+        return True
 
     # ------------------------------------------------------------------
     #
@@ -6816,14 +6829,14 @@ class DriftlessMap(QMainWindow, FORM_Main):
             )
         )
         if atlas_folder != "":
-            try:
-                save_last_atlas_path(atlas_folder)
-            except OSError:
-                self.print_message(
-                    "Atlas loaded, but its location could not be remembered.",
-                    self.reminder_color,
-                )
-            self.load_volume_atlas(atlas_folder)
+            if self.load_volume_atlas(atlas_folder):
+                try:
+                    save_last_atlas_path(atlas_folder)
+                except OSError:
+                    self.print_message(
+                        "Atlas loaded, but its location could not be remembered.",
+                        self.reminder_color,
+                    )
         else:
             self.print_message("", self.normal_color)
 
@@ -6849,14 +6862,14 @@ class DriftlessMap(QMainWindow, FORM_Main):
             )
 
         if atlas_folder != "":
-            try:
-                save_last_atlas_path(atlas_folder)
-            except OSError:
-                self.print_message(
-                    "Atlas loaded, but its location could not be remembered.",
-                    self.reminder_color,
-                )
-            self.load_volume_atlas(atlas_folder)
+            if self.load_volume_atlas(atlas_folder):
+                try:
+                    save_last_atlas_path(atlas_folder)
+                except OSError:
+                    self.print_message(
+                        "Atlas loaded, but its location could not be remembered.",
+                        self.reminder_color,
+                    )
         else:
             self.print_message("", self.normal_color)
 
@@ -8046,8 +8059,15 @@ class DriftlessMap(QMainWindow, FORM_Main):
         if self.current_atlas_path is not None:
             atlas_ctrl_data = p_dict["atlas_control"]
             if self.current_atlas == "volume":
-                if self.current_atlas_path is not None:
-                    self.load_volume_atlas(self.current_atlas_path)
+                if not self.load_volume_atlas(self.current_atlas_path):
+                    self.print_message(
+                        "The project's volume atlas could not be loaded, so "
+                        "the project was not opened. {}".format(
+                            self.statusbar.currentMessage().strip()
+                        ),
+                        self.error_message_color,
+                    )
+                    return
 
                 self.atlas_display = atlas_ctrl_data["atlas_display"]
 

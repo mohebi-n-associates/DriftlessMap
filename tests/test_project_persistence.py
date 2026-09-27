@@ -297,6 +297,31 @@ class ProjectPersistenceIntegrationTests(unittest.TestCase):
         self.assertEqual(window.object_ctrl.obj_type, [])
         add_object.assert_called_once()
         self.assertEqual(add_object.call_args[0][:2], ("contour 0", "merged contour"))
+    @isolated_gui_test
+    def test_failed_atlas_loads_leave_the_current_atlas_untouched(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            slice_image = root / "slice.png"
+            cv2.imwrite(str(slice_image), np.full((12, 16, 3), 70, dtype=np.uint8))
+            window = self.create_window()
+            self.assertTrue(window.load_slice_atlas(str(slice_image)))
+            signatures = dict(window._loaded_atlas_signatures)
+
+            empty_atlas = root / "not-an-atlas"
+            empty_atlas.mkdir()
+            self.assertFalse(window.load_volume_atlas(str(empty_atlas)))
+
+            broken_image = root / "broken.PNG"
+            broken_image.write_bytes(b"not an image")
+            self.assertFalse(window.load_slice_atlas(str(broken_image)))
+
+            self.assertEqual(window.current_atlas, "slice")
+            self.assertEqual(window.current_atlas_path, str(slice_image))
+            self.assertEqual(window.slice_atlas_path, str(slice_image))
+            self.assertIsNone(window.volume_atlas_path)
+            self.assertEqual(window._loaded_atlas_signatures, signatures)
+            self.assertEqual(window.atlas_view.slice_image_data.shape[:2], (12, 16))
+
 
 if __name__ == "__main__":
     unittest.main()
