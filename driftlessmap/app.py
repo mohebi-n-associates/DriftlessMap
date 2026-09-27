@@ -5908,10 +5908,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
             msg = "Not valid probe settings given. Please provide a valid setting."
             self.print_message(msg, self.error_message_color)
             return
-        if self.a2h_transferred:
-            data_tobe_registered = self.working_img_data["img-probe"]
-        else:
-            data_tobe_registered = self.working_atlas_data["atlas-probe"]
+        data_tobe_registered = self.working_atlas_data["atlas-probe"]
 
         if data_tobe_registered:
             center_data_2d = np.asarray(data_tobe_registered)
@@ -5965,18 +5962,11 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 )
 
             self.working_atlas_data["atlas-probe"].clear()
-            self.working_img_data["img-probe"].clear()
 
     def make_virus_piece(self):
-        if self.h2a_transferred:
-            if not self.working_atlas_data["atlas-virus"]:
-                return
-            processing_pnt = np.asarray(self.working_atlas_data["atlas-virus"])
-        else:
-            if self.working_img_data["img-virus"] is None:
-                return
-            inds = np.where(self.working_img_data["img-virus"] != 0)
-            processing_pnt = np.vstack([inds[0], inds[1]]).T
+        if not self.working_atlas_data["atlas-virus"]:
+            return
+        processing_pnt = np.asarray(self.working_atlas_data["atlas-virus"])
 
         data = self.atlas_view.get_3d_data_from_2d_view(
             processing_pnt, self.atlas_display
@@ -5991,15 +5981,9 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.working_atlas_data["atlas-virus"] = []
 
     def make_contour_piece(self):
-        if self.h2a_transferred:
-            if not self.working_atlas_data["atlas-contour"]:
-                return
-            processing_pnt = np.asarray(self.working_atlas_data["atlas-contour"])
-        else:
-            if not self.working_img_data["img-contour"]:
-                return
-            inds = np.where(self.working_img_data["img-contour"] != 0)
-            processing_pnt = np.vstack([inds[0], inds[1]]).T
+        if not self.working_atlas_data["atlas-contour"]:
+            return
+        processing_pnt = np.asarray(self.working_atlas_data["atlas-contour"])
 
         data = self.atlas_view.get_3d_data_from_2d_view(
             processing_pnt, self.atlas_display
@@ -6014,10 +5998,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.working_atlas_data["atlas-contour"] = []
 
     def make_drawing_piece(self):
-        if self.a2h_transferred:
-            data_tobe_registered = self.working_img_data["img-drawing"]
-        else:
-            data_tobe_registered = self.working_atlas_data["atlas-drawing"]
+        data_tobe_registered = self.working_atlas_data["atlas-drawing"]
         if not data_tobe_registered:
             return
         processing_data = np.asarray(data_tobe_registered)
@@ -6046,10 +6027,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.working_atlas_data["atlas-drawing"] = []
 
     def make_cell_piece(self):
-        if self.a2h_transferred:
-            data_tobe_registered = self.working_img_data["img-cells"]
-        else:
-            data_tobe_registered = self.working_atlas_data["atlas-cells"]
+        data_tobe_registered = self.working_atlas_data["atlas-cells"]
 
         if not data_tobe_registered:
             return
@@ -6088,11 +6066,40 @@ class DriftlessMap(QMainWindow, FORM_Main):
             msg = "Can not make pieces with all slice windows turned on."
             self.print_message(msg, self.error_message_color)
             return
+        # Object pieces are atlas coordinates, so they are made only from
+        # atlas-frame annotations. Histology annotations must first be
+        # transferred with Accept and Transfer, which applies the
+        # registration; their raw pixel positions are not atlas positions.
+        untransferred = self._untransferred_histology_annotations()
         self.make_probe_piece()
         self.make_virus_piece()
         self.make_cell_piece()
         self.make_drawing_piece()
         self.make_contour_piece()
+        if untransferred:
+            self.print_message(
+                "These histology annotations were not made into pieces: {}. "
+                "Use Transform to Atlas Slice Window, then Accept and "
+                "Transfer, to move them into the atlas first.".format(
+                    ", ".join(untransferred)
+                ),
+                self.reminder_color,
+            )
+
+    def _untransferred_histology_annotations(self):
+        kinds = []
+        for key, name in (
+            ("img-probe", "probe points"),
+            ("img-cells", "cells"),
+            ("img-drawing", "drawings"),
+            ("img-contour", "contours"),
+        ):
+            if len(self.working_img_data.get(key) or []) > 0:
+                kinds.append(name)
+        virus = self.working_img_data.get("img-virus")
+        if virus is not None and np.any(virus):
+            kinds.append("virus pixels")
+        return kinds
 
     def add_3d_object(self, data_dict, obj_type):
         if data_dict is None or "piece" in obj_type:

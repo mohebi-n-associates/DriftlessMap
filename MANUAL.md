@@ -1,6 +1,6 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 1.4.12**.
+This manual applies to **DriftlessMap 1.4.13**.
 
 DriftlessMap - Histological E-data Registration in Brain Space - is a desktop
 application for aligning rodent histology with a reference atlas, reconstructing
@@ -107,7 +107,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-DriftlessMap 1.4.12 requires:
+DriftlessMap 1.4.13 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -124,7 +124,7 @@ needed.
 Download the Windows ZIP or macOS DMG from the official GitHub Releases page.
 The desktop builds include Python and all runtime dependencies. Windows users
 extract the entire ZIP and run `DriftlessMap.exe`; macOS users open the DMG and
-drag `DriftlessMap.app` to Applications. The 1.4.12 release is unsigned, so the
+drag `DriftlessMap.app` to Applications. The 1.4.13 release is unsigned, so the
 first launch may require Windows SmartScreen confirmation or Control-clicking
 the macOS app and choosing **Open**.
 
@@ -172,7 +172,7 @@ python -m pip --version
 python -c "import driftlessmap; print(driftlessmap.__version__)"
 ```
 
-The final command should print `1.4.12`.
+The final command should print `1.4.13`.
 
 ### 2.5 Launching DriftlessMap
 
@@ -799,6 +799,10 @@ Once the registration is accepted:
 3. Confirm that the corresponding `atlas-*` layer appears.
 4. Read the status bar for points that fell outside the mesh.
 5. Add the atlas-layer data as an object piece in the Object View Controller.
+
+Object pieces are always made from atlas-layer data. Annotations that are
+still only in the histology window are not converted by **Make Pieces**; the
+status bar lists them so they can be transferred first.
 
 Points outside the registration mesh cannot be assigned a valid atlas
 coordinate. DriftlessMap preserves or rejects them according to the data type and

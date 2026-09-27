@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th September 2026
+##### DriftlessMap 1.4.13
+
+Scientific fix: Make Pieces now builds every piece type from atlas-frame annotations only; histology-frame virus pixels are no longer transposed or placed without registration, histology cells are no longer silently dropped, and contour pieces no longer crash.
+
+### 27th September 2026
 ##### DriftlessMap 1.4.12
 
 Provenance fix: after falling back to the embedded histology raster, or restoring a slice atlas from a project, saving no longer fingerprints a changed or unverified file on disk as the source of that work.
