@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th September 2026
+##### DriftlessMap 1.4.14
+
+Changing a brain-region colour no longer crashes DriftlessMap on atlases with sparse structure IDs such as the Allen CCF, and the 3D region mesh receives the colour that was chosen.
+
+### 27th September 2026
 ##### DriftlessMap 1.4.13
 
 Scientific fix: Make Pieces now builds every piece type from atlas-frame annotations only; histology-frame virus pixels are no longer transposed or placed without registration, histology cells are no longer silently dropped, and contour pieces no longer crash.
