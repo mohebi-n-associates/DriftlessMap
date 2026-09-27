@@ -3,6 +3,22 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.4.33
+
+Release date: 27 September 2026
+
+Merged probes and their exports now identify their atlas by content, not only
+by name and path. Each newly merged probe stores the SHA-256 content
+reference of the volume atlas it was reconstructed in, covering the atlas's
+identity files and shape metadata. The probe `_trajectory.csv` export
+includes it as `atlas_sha256`. A probe's coordinates can therefore be traced
+to the exact atlas data even after the atlas folder is renamed or moved.
+
+Probes merged with earlier versions keep working; re-merge them to add the
+reference.
+
+---
+
 ## DriftlessMap 1.4.32
 
 Release date: 27 September 2026
