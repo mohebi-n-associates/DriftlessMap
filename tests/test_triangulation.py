@@ -187,5 +187,49 @@ class PiecewiseAffineRegistrationTests(unittest.TestCase):
         self.assertTrue(np.all(np.isnan(transformed[1])))
 
 
+
+class PixelConventionTests(unittest.TestCase):
+    def scaled_registration(self):
+        histology_shape = (20, 30)
+        atlas_shape = (80, 120)
+        registration = build_piecewise_affine_registration(
+            rectangle_points(atlas_shape[1], atlas_shape[0]),
+            rectangle_points(histology_shape[1], histology_shape[0]),
+            atlas_shape=atlas_shape,
+            histology_shape=histology_shape,
+        )
+        return registration, histology_shape
+
+    def test_warped_pixels_land_where_their_centres_are_transferred(self):
+        registration, histology_shape = self.scaled_registration()
+        image = np.zeros(histology_shape, dtype=np.uint8)
+        image[7, 11] = 255
+        warped = warp_image_piecewise(
+            image, registration, "histology_to_atlas",
+            interpolation=cv2.INTER_NEAREST,
+        )
+        rows, cols = np.nonzero(warped)
+        warped_centre = np.array([cols.mean() + 0.5, rows.mean() + 0.5])
+        transferred, valid, _ = transform_points_piecewise(
+            np.array([[11.5, 7.5]]), registration, "histology_to_atlas"
+        )
+        self.assertTrue(valid[0])
+        np.testing.assert_allclose(warped_centre, transferred[0], atol=0.6)
+
+    def test_points_in_the_last_pixel_row_and_column_are_kept(self):
+        registration, histology_shape = self.scaled_registration()
+        height, width = histology_shape
+        points = np.array([[width - 0.5, height - 0.5], [0.5, height - 0.2]])
+        transferred, valid, _ = transform_points_piecewise(
+            points, registration, "histology_to_atlas"
+        )
+        self.assertTrue(np.all(valid))
+        self.assertTrue(np.all(transferred[:, 0] < 120))
+        self.assertTrue(np.all(transferred[:, 1] < 80))
+        outside, valid_outside, _ = transform_points_piecewise(
+            np.array([[width + 0.1, 3.0]]), registration, "histology_to_atlas"
+        )
+        self.assertFalse(valid_outside[0])
+
 if __name__ == "__main__":
     unittest.main()

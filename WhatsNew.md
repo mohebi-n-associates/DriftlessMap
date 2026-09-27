@@ -3,6 +3,30 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.4.26
+
+Release date: 27 September 2026
+
+**Scientific correction.** Warped images and transferred points now use the
+same pixel convention.
+
+- **Warped overlays line up with transferred points.** Transferred cells,
+  probes and drawings are placed at pixel centres. The dense image warp,
+  used for overlays and virus layers, sampled at pixel corners instead. The
+  two were offset by (scale − 1) / 2 pixels, for example about 4.5 histology
+  pixels (half an atlas voxel) at a 10× resolution difference. Warped
+  overlays and virus pixels now agree with point-transferred annotations to
+  within one pixel.
+- **The last pixel row and column are kept.** Annotations there were
+  reported as outside the registration mesh and dropped, because the mesh
+  ends at the centre of the last pixel. They are now assigned to the nearest
+  triangle and transferred.
+
+**Action:** re-transfer virus layers or overlays used for quantification
+when the histology and atlas resolutions differ substantially.
+
+---
+
 ## DriftlessMap 1.4.25
 
 Release date: 27 September 2026

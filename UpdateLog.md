@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th September 2026
+##### DriftlessMap 1.4.26
+
+Scientific fix: warped overlays and virus layers now line up with transferred points to within a pixel at any scale difference, and annotations in the last pixel row or column of an image are transferred instead of being reported as outside the mesh.
+
+### 27th September 2026
 ##### DriftlessMap 1.4.25
 
 Histology flips and rotations apply to every page of a stack, repeated 1-degree rotations no longer blur the raster, and every flip or rotation now updates the landmark frame.

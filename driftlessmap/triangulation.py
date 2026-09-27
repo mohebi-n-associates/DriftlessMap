@@ -381,6 +381,17 @@ def dense_inverse_map(registration, direction):
         _registration_spaces(registration, direction)
     )
     height, width = destination_shape
+    source_height, source_width = (
+        registration["histology_shape"]
+        if direction == "histology_to_atlas"
+        else registration["atlas_shape"]
+    )
+    # Point coordinates place pixel centres at ``index + 0.5`` while the
+    # landmark mesh spans ``0 .. size - 1``. Each destination pixel centre
+    # is assigned to a triangle using its position clamped into the mesh,
+    # then mapped with that triangle's affine transform at the true centre.
+    # ``cv2.remap`` samples integer map values at pixel centres, hence -0.5.
+    upper_bound = np.array([width - 1, height - 1], dtype=float)
     map_x = np.full((height, width), -1.0, dtype=np.float32)
     map_y = np.full((height, width), -1.0, dtype=np.float32)
     assigned = np.zeros((height, width), dtype=bool)
@@ -388,13 +399,13 @@ def dense_inverse_map(registration, direction):
     for simplex in registration["simplices"]:
         destination_triangle = destination_points[simplex]
         source_triangle = source_points[simplex]
-        x_min = max(0, int(np.floor(np.min(destination_triangle[:, 0]))))
+        x_min = max(0, int(np.floor(np.min(destination_triangle[:, 0]))) - 1)
         x_max = min(
-            width - 1, int(np.ceil(np.max(destination_triangle[:, 0])))
+            width - 1, int(np.ceil(np.max(destination_triangle[:, 0]))) + 1
         )
-        y_min = max(0, int(np.floor(np.min(destination_triangle[:, 1]))))
+        y_min = max(0, int(np.floor(np.min(destination_triangle[:, 1]))) - 1)
         y_max = min(
-            height - 1, int(np.ceil(np.max(destination_triangle[:, 1])))
+            height - 1, int(np.ceil(np.max(destination_triangle[:, 1]))) + 1
         )
         if x_max < x_min or y_max < y_min:
             continue
@@ -404,8 +415,10 @@ def dense_inverse_map(registration, direction):
             grid_y, grid_x = np.mgrid[
                 tile_y_min : tile_y_max + 1, x_min : x_max + 1
             ]
-            coordinates = np.column_stack((grid_x.ravel(), grid_y.ravel()))
-            weights = _barycentric(coordinates, destination_triangle)
+            centres = np.column_stack((grid_x.ravel(), grid_y.ravel())) + 0.5
+            weights = _barycentric(
+                np.clip(centres, 0.0, upper_bound), destination_triangle
+            )
             inside = np.all(weights >= -_BARYCENTRIC_TOLERANCE, axis=1)
             if not np.any(inside):
                 continue
@@ -416,9 +429,16 @@ def dense_inverse_map(registration, direction):
                 continue
             destination_y = destination_y[new_pixels]
             destination_x = destination_x[new_pixels]
-            source = weights[inside][new_pixels] @ source_triangle
-            map_x[destination_y, destination_x] = source[:, 0]
-            map_y[destination_y, destination_x] = source[:, 1]
+            exact = _barycentric(
+                centres[inside][new_pixels], destination_triangle
+            )
+            source = exact @ source_triangle - 0.5
+            map_x[destination_y, destination_x] = np.clip(
+                source[:, 0], 0.0, source_width - 1
+            )
+            map_y[destination_y, destination_x] = np.clip(
+                source[:, 1], 0.0, source_height - 1
+            )
             assigned[destination_y, destination_x] = True
     return map_x, map_y, assigned
 
@@ -483,12 +503,17 @@ def transform_points_piecewise(points, registration, direction):
         if direction == "histology_to_atlas"
         else registration["atlas_shape"]
     )
+    # Points anywhere inside the image are accepted, including the last half
+    # pixel beyond the mesh edge at ``size - 1``: they are assigned to a
+    # triangle by their position clamped into the mesh and transformed with
+    # that triangle's affine map.
     in_bounds = (
         (points[:, 0] >= 0)
-        & (points[:, 0] <= width - 1)
+        & (points[:, 0] < width)
         & (points[:, 1] >= 0)
-        & (points[:, 1] <= height - 1)
+        & (points[:, 1] < height)
     )
+    lookup = np.clip(points, 0.0, [width - 1, height - 1])
     unassigned = in_bounds.copy()
     for tri_index, simplex in enumerate(registration["simplices"]):
         if not np.any(unassigned):
@@ -498,20 +523,30 @@ def transform_points_piecewise(points, registration, direction):
         x_max, y_max = np.max(source_triangle, axis=0)
         candidates = np.flatnonzero(
             unassigned
-            & (points[:, 0] >= x_min - _BARYCENTRIC_TOLERANCE)
-            & (points[:, 0] <= x_max + _BARYCENTRIC_TOLERANCE)
-            & (points[:, 1] >= y_min - _BARYCENTRIC_TOLERANCE)
-            & (points[:, 1] <= y_max + _BARYCENTRIC_TOLERANCE)
+            & (lookup[:, 0] >= x_min - _BARYCENTRIC_TOLERANCE)
+            & (lookup[:, 0] <= x_max + _BARYCENTRIC_TOLERANCE)
+            & (lookup[:, 1] >= y_min - _BARYCENTRIC_TOLERANCE)
+            & (lookup[:, 1] <= y_max + _BARYCENTRIC_TOLERANCE)
         )
         if not len(candidates):
             continue
-        weights = _barycentric(points[candidates], source_triangle)
+        weights = _barycentric(lookup[candidates], source_triangle)
         inside = np.all(weights >= -_BARYCENTRIC_TOLERANCE, axis=1)
         selected = candidates[inside]
         if not len(selected):
             continue
-        transformed[selected] = weights[inside] @ destination_points[simplex]
+        exact = _barycentric(points[selected], source_triangle)
+        transformed[selected] = exact @ destination_points[simplex]
         triangle_index[selected] = tri_index
         unassigned[selected] = False
+    # Extrapolating the outermost half pixel can step just past the far edge
+    # of the destination image; keep such points inside its last pixel.
+    destination_height, destination_width = _destination_shape
+    transformed[:, 0] = np.clip(
+        transformed[:, 0], 0.0, np.nextafter(destination_width, 0)
+    )
+    transformed[:, 1] = np.clip(
+        transformed[:, 1], 0.0, np.nextafter(destination_height, 0)
+    )
     valid = triangle_index >= 0
     return transformed, valid, triangle_index
