@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th September 2026
+##### DriftlessMap 1.4.25
+
+Histology flips and rotations apply to every page of a stack, repeated 1-degree rotations no longer blur the raster, and every flip or rotation now updates the landmark frame.
+
+### 27th September 2026
 ##### DriftlessMap 1.4.24
 
 Bookkeeping fixes: switching or reloading an atlas clears every atlas layer, linked objects stay linked to the right objects after others are deleted or merged, deleting atlas cells resets their counts, and restored landmark labels use the same 1-based numbering as new ones.
