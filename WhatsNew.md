@@ -3,6 +3,28 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.4.19
+
+Release date: 27 September 2026
+
+Importing and exporting objects is more reliable.
+
+- **Import requires the volume atlas.** Importing objects while only a slice
+  atlas was loaded raised an error. Import now asks you to show the volume
+  atlas the objects belong to.
+- **Import checks coordinates correctly.** The bounds check compared
+  Bregma-relative coordinates with the atlas size in display axis order. It
+  allowed a coordinate equal to the axis size and never rejected negative
+  coordinates. Objects are now checked point by point against the volume they
+  will be drawn in.
+- **Export uses safe, unique file names.** Bulk export used object names
+  directly as file names. A name containing `/` or `:` could fail or write
+  elsewhere, and two objects with the same name overwrote each other. Unsafe
+  characters are now replaced, duplicates get a numbered suffix, and the
+  status bar confirms how many objects were exported.
+
+---
+
 ## DriftlessMap 1.4.18
 
 Release date: 27 September 2026

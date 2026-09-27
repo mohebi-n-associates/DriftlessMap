@@ -563,5 +563,40 @@ class ProjectPersistenceIntegrationTests(unittest.TestCase):
             window.change_pencil_size()
             self.assertEqual(window.pencil_size, 4)
 
+    @isolated_gui_test
+    def test_objects_export_with_safe_names_and_reimport_inside_the_atlas(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            export_dir = root / "objects"
+            export_dir.mkdir()
+            window = self._window_with_volume_atlas(root)
+            inside = np.array([[0.0, 0.0, 0.0], [1.0, 2.0, -3.0]])
+            for name in ("a/b - piece", "a:b - piece"):
+                window.object_ctrl.add_object(name, "contour piece", inside, "opaque")
+            window.merge_contour()
+            self.assertEqual(sorted(window.object_ctrl.obj_name), ["a/b", "a:b"])
+
+            with patch.object(
+                QFileDialog, "getExistingDirectory", return_value=str(export_dir)
+            ):
+                window.save_merged_object("contour")
+            exported = sorted(path.name for path in export_dir.iterdir())
+            self.assertEqual(exported, ["a_b (2).dmapobj", "a_b.dmapobj"])
+
+            outside = root / "outside.dmapobj"
+            from driftlessmap.persistence import save_driftlessmap_file
+
+            save_driftlessmap_file(
+                outside,
+                {"type": "contour piece", "data": np.array([[0.0, 0.0, 20.0]]),
+                 "name": "outside"},
+                "object",
+            )
+            paths = [str(export_dir / name) for name in exported] + [str(outside)]
+            with patch.object(QFileDialog, "getOpenFileNames", return_value=(paths, "")):
+                window.load_objects()
+            self.assertEqual(len(window.object_ctrl.obj_name), 4)
+            self.assertIn("outside.dmapobj", window.statusbar.currentMessage())
+
 if __name__ == "__main__":
     unittest.main()
