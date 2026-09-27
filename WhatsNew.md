@@ -3,6 +3,24 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.4.30
+
+Release date: 27 September 2026
+
+**Drawing mode is stored with each drawing.** Whether a drawing piece
+outlines an area or traces a line is now saved with the piece, in projects
+and when the piece is unmerged. Previously it was read from the piece's
+name, so renaming an area drawing made its ROI report show a line length:
+the summed distance between filled pixels, which has no meaning. Older
+projects and objects take the mode from the name, as before.
+
+**Shanks pair with the right settings.** Pieces are now grouped by object
+name in natural order ("probe 2" before "probe 10"). Alphabetical order
+paired multi-probe face settings with the wrong shanks once there were more
+than ten probes.
+
+---
+
 ## DriftlessMap 1.4.29
 
 Release date: 27 September 2026

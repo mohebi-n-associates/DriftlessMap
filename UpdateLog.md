@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th September 2026
+##### DriftlessMap 1.4.30
+
+Drawing pieces remember whether they are areas or lines, so renamed drawings keep reporting area rather than a meaningless line length, and multi-probe settings pair with the right shank when there are more than ten probes.
+
+### 27th September 2026
 ##### DriftlessMap 1.4.29
 
 Scientific fix: probe surface entry now follows the traced track instead of the first tissue the extended line touches, and per-region path lengths are averaged only over the site columns that pass through each region.
