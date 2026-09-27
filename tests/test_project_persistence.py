@@ -158,6 +158,65 @@ class ProjectPersistenceIntegrationTests(unittest.TestCase):
             restored.load_project(prepared)
             self.assertEqual(restored.image_view.current_img.shape, (6, 7, 3))
 
+    def _window_with_one_object(self, root):
+        source = root / "histology.png"
+        cv2.imwrite(str(source), np.full((6, 7, 3), 50, dtype=np.uint8))
+        window = self.create_window()
+        self.assertTrue(window.load_single_image_file(str(source), ".png"))
+        window.object_ctrl.add_object(
+            "line drawing - piece",
+            "drawing piece",
+            np.array([[0.0, 0.0, 2.0], [0.0, 0.0, 5.0]]),
+            "opaque",
+        )
+        self.assertEqual(len(window.object_ctrl.obj_list), 1)
+        return window
+
+    @isolated_gui_test
+    def test_cancelled_project_load_keeps_current_objects(self):
+        from PyQt6.QtWidgets import QMessageBox
+
+        with tempfile.TemporaryDirectory() as folder:
+            window = self._window_with_one_object(Path(folder))
+            buttons = QMessageBox.StandardButton
+            for reply in (buttons.No, buttons.Cancel):
+                with patch.object(
+                    QMessageBox, "question", return_value=reply
+                ), patch.object(
+                    QFileDialog, "getOpenFileName", return_value=("", "")
+                ):
+                    window.load_project_called()
+                self.assertEqual(len(window.object_ctrl.obj_list), 1)
+
+            # Choosing to save first but cancelling the save must not load.
+            with patch.object(
+                QMessageBox, "question", return_value=buttons.Yes
+            ), patch.object(
+                QFileDialog, "getSaveFileName", return_value=("", "")
+            ), patch.object(
+                QFileDialog, "getOpenFileName"
+            ) as open_dialog:
+                window.load_project_called()
+            open_dialog.assert_not_called()
+            self.assertEqual(len(window.object_ctrl.obj_list), 1)
+
+    @isolated_gui_test
+    def test_unreadable_project_file_keeps_current_objects(self):
+        from PyQt6.QtWidgets import QMessageBox
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window = self._window_with_one_object(root)
+            broken = root / "broken.dmap"
+            broken.write_bytes(b"not a project")
+            with patch.object(
+                QMessageBox, "question", return_value=QMessageBox.StandardButton.No
+            ), patch.object(
+                QFileDialog, "getOpenFileName", return_value=(str(broken), "")
+            ):
+                window.load_project_called()
+            self.assertEqual(len(window.object_ctrl.obj_list), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

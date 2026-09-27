@@ -7743,7 +7743,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
             and self.image_view.current_img is None
         ):
             self.print_message("No project can be saved.", self.reminder_color)
-            return
+            return False
         file_name = QFileDialog.getSaveFileName(
             self,
             "Save Project",
@@ -7763,7 +7763,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
                     "Unable to fingerprint project inputs: {}".format(exc),
                     self.error_message_color,
                 )
-                return
+                return False
             if histology_provenance and histology_provenance.get(
                 "source_changed_since_load"
             ):
@@ -7856,7 +7856,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
                             "Unable to package the histology source: {}".format(exc),
                             self.error_message_color,
                         )
-                        return
+                        return False
 
             project_data = {
                 "project_schema_version": 2,
@@ -7907,13 +7907,14 @@ class DriftlessMap(QMainWindow, FORM_Main):
             success, error = save_driftlessmap_file(file_name[0], project_data, "project")
             if not success:
                 self.print_message(error, self.error_message_color)
-                return
+                return False
             self.current_project_path = project_path
             self.atlas_provenance = atlas_provenance
             self.histology_provenance = histology_provenance
             self.print_message("Project saved successfully.", self.normal_color)
-        else:
-            self.print_message("", self.normal_color)
+            return True
+        self.print_message("", self.normal_color)
+        return False
 
     def _ask_for_verified_input(self, reference, title):
         QMessageBox.warning(
@@ -8400,15 +8401,23 @@ class DriftlessMap(QMainWindow, FORM_Main):
             reply = QMessageBox.question(
                 self,
                 "Message",
-                "Saving current project?",
+                "Save the current project before loading another one?",
+                QMessageBox.StandardButton.Yes
+                | QMessageBox.StandardButton.No
+                | QMessageBox.StandardButton.Cancel,
                 QMessageBox.StandardButton.Yes,
-                QMessageBox.StandardButton.No,
             )
 
+            if reply == QMessageBox.StandardButton.Cancel:
+                return
             if reply == QMessageBox.StandardButton.Yes:
-                self.save_project_called()
-
-            self.object_ctrl.clear_all()
+                if not self.save_project_called():
+                    self.print_message(
+                        "The current project was not saved, so no other "
+                        "project was loaded.",
+                        self.reminder_color,
+                    )
+                    return
 
         self.print_message("Loading project....", self.normal_color)
         file_options = QFileDialog.Option(0)
@@ -8448,6 +8457,9 @@ class DriftlessMap(QMainWindow, FORM_Main):
             p_dict = prepared
             self.current_project_path = project_path[0]
 
+            # Only now that a complete project is ready to replace the
+            # session are the current objects removed.
+            self.object_ctrl.clear_all()
             if self.object_3d_list:
                 for _ in range(len(self.object_3d_list)):
                     if not isinstance(self.object_3d_list[-1], list):
