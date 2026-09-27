@@ -91,6 +91,23 @@ def normalize_axis_info(axis_info, herbs_shape):
     }
 
 
+def flip_voxel_coordinates(values, size):
+    """Mirror continuous voxel coordinates along an axis of ``size`` voxels.
+
+    DriftlessMap samples labels with ``floor``: a continuous coordinate ``p``
+    belongs to voxel ``floor(p)``, which spans ``[k, k + 1)``. Mirroring that
+    voxel gives voxel ``size - 1 - k``. Fractional coordinates are mirrored
+    about the axis extent (``size - p``) so they stay inside the mirrored
+    voxel. Integer coordinates are voxel indices, such as slice positions,
+    and map to the mirrored index (``size - 1 - p``). In both cases
+    ``floor`` of the result is the voxel that was sampled. The mapping is its
+    own inverse.
+    """
+    values = np.asarray(values, dtype=float)
+    lower = np.floor(values)
+    return (size - 1 - lower) + (np.ceil(values) - values)
+
+
 def herbs_vox_to_source_vox(points, axis_info):
     """Convert one or more continuous HERBS voxels into source-atlas voxels."""
     points = np.asarray(points, dtype=float)
@@ -101,10 +118,25 @@ def herbs_vox_to_source_vox(points, axis_info):
     source_shape = np.asarray(axis_info["size"], dtype=float)
     for axis, should_flip in enumerate(axis_info["direction_change"]):
         if should_flip:
-            source_points[..., axis] = (
-                source_shape[axis] - 1 - source_points[..., axis]
+            source_points[..., axis] = flip_voxel_coordinates(
+                source_points[..., axis], source_shape[axis]
             )
     return source_points
+
+
+def source_vox_to_herbs_vox(points, axis_info):
+    """Convert source-atlas voxels into continuous HERBS voxels."""
+    points = np.asarray(points, dtype=float)
+    if points.shape[-1:] != (3,):
+        raise ValueError("Coordinate arrays must end with three values.")
+    source_points = points.copy()
+    source_shape = np.asarray(axis_info["size"], dtype=float)
+    for axis, should_flip in enumerate(axis_info["direction_change"]):
+        if should_flip:
+            source_points[..., axis] = flip_voxel_coordinates(
+                source_points[..., axis], source_shape[axis]
+            )
+    return source_points[..., np.asarray(axis_info["to_HERBS"])]
 
 
 def volume_view_vox_to_source_vox(points, view_shape, axis_info):
@@ -120,7 +152,7 @@ def volume_view_vox_to_source_vox(points, view_shape, axis_info):
         (
             points[..., 1],
             points[..., 2],
-            view_shape[0] - 1 - points[..., 0],
+            flip_voxel_coordinates(points[..., 0], view_shape[0]),
         ),
         axis=-1,
     )

@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th September 2026
+##### DriftlessMap 1.4.10
+
+Scientific fix: exported source-atlas voxels (including Allen DV and AP) now contain the voxel whose label was reported, instead of lying one voxel away on flipped axes; imported integer point files are accepted and bounds-checked.
+
+### 27th September 2026
 ##### DriftlessMap 1.4.9
 
 Scientific fix: ruler lengths are correct after reopening a project and for non-mosaic CZI images; projects now store the raster's true scale and embedded rasters keep it.

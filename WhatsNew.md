@@ -3,6 +3,35 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.4.10
+
+Release date: 27 September 2026
+
+**Scientific correction.** Exported source-atlas voxel coordinates now refer
+to the voxel whose label DriftlessMap reported. This applies to Allen
+`allen_DV_vox` and `allen_AP_vox` in probe, cell and drawing CSVs and in
+information windows. On source axes that are mirrored during atlas
+processing (Allen DV and AP), fractional coordinates were mirrored as if they
+were voxel indices. The exported value was therefore about one voxel away
+from the voxel that was labelled: 25 µm dorsal at 25 µm resolution, and it
+could fall in a different structure. The Bregma-estimated millimetre values
+derived from those voxels shifted by the same amount.
+
+One mirroring rule is now used for export, hover readouts and imported
+points. `floor(value)` of an exported coordinate is always the source voxel
+that was sampled. Fractional coordinates are mirrored about the axis extent,
+and integer coordinates are treated as voxel indices. The rule is documented
+in the manual's coordinate section.
+
+External point files with an integer dtype (for example `int64` NumPy arrays)
+are no longer rejected as the "wrong type". Imported points are checked
+against the source atlas volume before they are added.
+
+**Action:** re-export any probe, cell or drawing CSV that uses source-atlas
+or Allen voxel columns.
+
+---
+
 ## DriftlessMap 1.4.9
 
 Release date: 27 September 2026
