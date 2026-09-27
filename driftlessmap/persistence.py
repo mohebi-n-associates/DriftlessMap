@@ -235,6 +235,82 @@ class RestrictedUnpickler(pickle.Unpickler):
             ) from exc
 
 
+class PickledMeshState:
+    """Inert stand-in for a pickled ``pyqtgraph.opengl.MeshData``.
+
+    Only the instance state is kept, and it must be a mapping of private
+    attribute names to NumPy arrays or ``None``.
+    """
+
+    __slots__ = ("state",)
+
+    def __setstate__(self, state):
+        if isinstance(state, tuple) and len(state) == 2 and state[0] is None:
+            state = state[1]
+        if not isinstance(state, dict):
+            raise pickle.UnpicklingError("Mesh state must be a dictionary.")
+        for key, value in state.items():
+            if not isinstance(key, str) or not key.startswith("_"):
+                raise pickle.UnpicklingError("Mesh state has an invalid field.")
+            if value is not None and not isinstance(value, np.ndarray):
+                raise pickle.UnpicklingError(
+                    "Mesh field {} is not an array.".format(key)
+                )
+            if isinstance(value, np.ndarray) and value.dtype.hasobject:
+                raise pickle.UnpicklingError(
+                    "Mesh field {} contains Python objects.".format(key)
+                )
+        vertexes = state.get("_vertexes")
+        faces = state.get("_faces")
+        if vertexes is not None and (vertexes.ndim != 2 or vertexes.shape[1] != 3):
+            raise pickle.UnpicklingError("Mesh vertexes must have shape (N, 3).")
+        if faces is not None:
+            if faces.ndim != 2 or faces.shape[1] != 3:
+                raise pickle.UnpicklingError("Mesh faces must have shape (M, 3).")
+            if not np.issubdtype(faces.dtype, np.integer):
+                raise pickle.UnpicklingError("Mesh faces must be integers.")
+            if faces.size and (
+                vertexes is None
+                or faces.min() < 0
+                or faces.max() >= len(vertexes)
+            ):
+                raise pickle.UnpicklingError("Mesh faces reference missing vertexes.")
+        self.state = state
+
+
+class MeshUnpickler(RestrictedUnpickler):
+    """Restricted reader for processed-atlas mesh caches."""
+
+    SAFE_GLOBALS = {
+        **RestrictedUnpickler.SAFE_GLOBALS,
+        ("pyqtgraph.opengl.MeshData", "MeshData"): PickledMeshState,
+        ("pyqtgraph.opengl", "MeshData"): PickledMeshState,
+    }
+
+
+def load_mesh_pickle(file_path):
+    """Load a mesh cache without executing code.
+
+    Returns a :class:`PickledMeshState` or a ``{name: PickledMeshState}``
+    dictionary. Raises ``ValueError`` for unreadable or unsupported content.
+    """
+    try:
+        with open(file_path, "rb") as infile:
+            data = MeshUnpickler(infile).load()
+    except OSError as exc:
+        raise ValueError("Unable to read mesh file: {}".format(exc)) from exc
+    except Exception as exc:
+        raise ValueError("Invalid or unsupported mesh file: {}".format(exc)) from exc
+    if isinstance(data, PickledMeshState):
+        return data
+    if isinstance(data, dict) and all(
+        isinstance(key, str) and isinstance(value, PickledMeshState)
+        for key, value in data.items()
+    ):
+        return data
+    raise ValueError("Mesh file does not contain mesh data.")
+
+
 def load_legacy_pickle(file_path):
     """Load inert data from a legacy pickle with a consistent result tuple."""
     try:

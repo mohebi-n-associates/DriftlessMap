@@ -14,7 +14,7 @@ from PyQt6.QtWidgets import *
 import pyqtgraph.opengl as gl
 
 from .uuuuuu import read_qss_file, make_contour_img, read_excel_file, hex2rgb
-from .obj_items import render_volume, render_small_volume
+from .obj_items import load_mesh_file, render_volume, render_small_volume
 from .atlas_loader import process_atlas_raw_data, AtlasLoader, check_data_path_and_load
 from .atlas_transform import (
     compact_boundary_volume,
@@ -286,9 +286,7 @@ class CustomerAtlasWorker(QObject):
             file_name = os.path.basename(da_file)
             da_name, file_extension = os.path.splitext(file_name)
             if file_extension == ".pkl":
-                infile = open(os.path.join(mesh_path, da_file), "rb")
-                md = pickle.load(infile)
-                infile.close()
+                md = load_mesh_file(os.path.join(mesh_path, da_file))
 
                 small_mesh_list[str(da_name)] = md
 

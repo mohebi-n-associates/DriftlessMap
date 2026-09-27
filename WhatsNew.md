@@ -3,6 +3,25 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.4.1
+
+Release date: 27 September 2026
+
+Opening an atlas folder no longer runs Python code hidden in its mesh cache
+files. Before this release, `atlas_meshdata.pkl`, `atlas_small_meshdata.pkl`
+and the per-region files in `meshes/` were read with Python's unrestricted
+pickle loader. A crafted atlas folder shared alongside a project could
+therefore run arbitrary code when the project or atlas was opened. The same
+applied to the most recently used atlas, which loads at startup.
+
+These files are now read with a restricted reader that accepts only mesh
+vertex and face arrays. It checks their shapes and face indices before
+building the 3D mesh. Existing processed atlases load unchanged and do not
+need to be reprocessed. Atlas downloads and the Atlas Processor use the same
+safe reader.
+
+---
+
 ## DriftlessMap 1.4.0
 
 Release date: 27 August 2026
