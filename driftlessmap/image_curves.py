@@ -114,6 +114,16 @@ class CurvesPlot(pg.PlotWidget):
             self.depth_level = depth_level
 
         self.hist_data = hist_data.copy()
+        # Per-channel state belongs to the image being shown; start afresh so
+        # colours and enabled channels never carry over from the last image.
+        self.active_pen = []
+        self.active_brush = []
+        self.enable_channel = [False, False, False, False]
+        self.active_index = None
+        for i in range(len(self.hist_data), len(self.hist_list)):
+            self.hist_list[i].setVisible(False)
+            self.lut_line[i].setVisible(False)
+            self.lut_points[i].setVisible(False)
 
         self.plotItem.vb.setRange(xRange=[0, depth_level], yRange=[0, depth_level])
 
