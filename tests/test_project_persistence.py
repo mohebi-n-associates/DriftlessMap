@@ -614,5 +614,29 @@ class ProjectPersistenceIntegrationTests(unittest.TestCase):
             self.assertEqual(len(window.object_ctrl.obj_name), 4)
             self.assertIn("outside.dmapobj", window.statusbar.currentMessage())
 
+    @isolated_gui_test
+    def test_undo_snapshots_are_independent_and_survive_layer_deletion(self):
+        window = self.create_window()
+        cells = [[1.0, 2.0]]
+        sizes = [5]
+        snapshot = {"data": cells, "size": sizes, "symbol": ["+"], "index": [0],
+                    "count": [1, 0, 0, 0, 0]}
+        window.save_current_action("loc_btn", "img-cells", snapshot, None)
+        window.save_current_action("probe_btn", "img-probe", {"data": [[3.0, 4.0]]}, None)
+        cells.append([9.0, 9.0])
+        sizes.append(7)
+        stored = window.action_list[0]["data"]
+        self.assertEqual(stored["data"], [[1.0, 2.0]])
+        self.assertEqual(stored["size"], [5])
+
+        # Undo onto a layer that does not exist must not raise.
+        window.undo_called()
+
+        window.forget_layer_actions("img-cells")
+        self.assertEqual(
+            [action["link"] for action in window.action_list], ["img-probe"]
+        )
+        self.assertEqual(window.action_id, 0)
+
 if __name__ == "__main__":
     unittest.main()

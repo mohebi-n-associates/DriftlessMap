@@ -3,6 +3,26 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.4.21
+
+Release date: 27 September 2026
+
+Undo and redo now behave predictably.
+
+- **History cannot change after the fact.** Snapshots are now independent
+  copies. Previously some cell sizes, symbols and layer indexes, and the lasso
+  path, were stored by reference, so later edits changed what an undo would
+  restore.
+- **Deleting a layer is safe.** Deleting a layer now removes its undo
+  history. Undoing a step for a deleted layer used to raise an error.
+- **Atlas edits can be undone.** Undo and redo now restore edits to the atlas
+  mask, the atlas slice and atlas probe points. Previously these steps printed
+  a placeholder message and changed only the layer thumbnail.
+- **Atlas eraser.** Erasing on the atlas slice layer no longer fails while
+  recording the undo step.
+
+---
+
 ## DriftlessMap 1.4.20
 
 Release date: 27 September 2026

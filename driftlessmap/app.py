@@ -1417,11 +1417,12 @@ class DriftlessMap(QMainWindow, FORM_Main):
             for da_ind in del_index:
                 del self.action_list[da_ind]
             self.action_id = 0
+        # Snapshots are deep copies so later edits cannot rewrite history.
         current_action = {
             "tool": current_tool,
             "link": layer_link,
-            "data": data,
-            "layer": layer_tb,
+            "data": copy.deepcopy(data),
+            "layer": None if layer_tb is None else np.array(layer_tb, copy=True),
         }
         self.action_list.append(current_action)
         if len(self.action_list) > 6:
@@ -1441,13 +1442,23 @@ class DriftlessMap(QMainWindow, FORM_Main):
             return
         self.set_undo_redo_data()
 
+    def forget_layer_actions(self, layer_link):
+        """Drop undo history for a layer that no longer exists."""
+        self.action_list = [
+            action for action in self.action_list if action["link"] != layer_link
+        ]
+        self.action_id = 0
+
     def set_undo_redo_data(self):
         current_action = self.action_list[self.action_id - 1]
-        current_data = current_action["data"]
+        # Restore a copy so the snapshot survives further edits.
+        current_data = copy.deepcopy(current_action["data"])
         layer_link = current_action["link"]
         current_tool = current_action["tool"]
         da_layer = current_action["layer"]
-        if current_tool != "delete":
+        if layer_link not in self.layer_ctrl.layer_link:
+            return
+        if current_tool in self.tool_box.checkable_btn_dict:
             self.tool_box.checkable_btn_dict[current_tool].setChecked(True)
         if "img" in layer_link:
             if layer_link == "img-process":
@@ -1491,19 +1502,20 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 self.image_view.img_stacks.image_dict[layer_link].setData(
                     pos=np.asarray(self.working_img_data[layer_link])
                 )
-        elif "atlas" in layer_link:
-            if layer_link == "atlas-slice":
-                print("process")
-            elif layer_link == "atlas-mask":
-                print("mask")
-            elif layer_link == "atlas-probe":
-                print("cells")
             else:
-                print("others")
+                return
+        elif layer_link in ["atlas-slice", "atlas-mask"]:
+            self._set_atlas_raster(layer_link, current_data["data"])
+        elif layer_link == "atlas-probe":
+            self.working_atlas_data[layer_link] = current_data["data"]
+            self.atlas_view.working_atlas.image_dict[layer_link].setData(
+                pos=np.asarray(self.working_atlas_data[layer_link])
+            )
         else:
             return
-        da_index = np.where(np.ravel(self.layer_ctrl.layer_link) == layer_link)[0][0]
-        self.layer_ctrl.layer_list[da_index].set_thumbnail_data(da_layer)
+        if da_layer is not None:
+            da_index = self.layer_ctrl.layer_link.index(layer_link)
+            self.layer_ctrl.layer_list[da_index].set_thumbnail_data(da_layer)
 
     # ------------------------------------------------------------------
     #
@@ -5242,7 +5254,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
             self.layer_ctrl.layer_list[
                 self.layer_ctrl.current_layer_index[0]
             ].set_thumbnail_data(res)
-            current_data = {"data": self.working_atlas_data[da_link].copy()}
+            current_data = {"data": self._atlas_raster(da_link)}
             self.save_current_action("eraser_btn", da_link, current_data, res)
         # ------------------------- lasso
         elif self.tool_box.checkable_btn_dict["lasso_btn"].isChecked():
@@ -5737,6 +5749,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 self.atlas_view.working_atlas.image_dict[da_link].setVisible(vis)
 
     def layers_exist_changed(self, da_link):  # delete
+        self.forget_layer_actions(da_link)
         if da_link == "img-process":
             self.reset_current_image()
         elif da_link == "atlas-slice":

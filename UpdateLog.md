@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th September 2026
+##### DriftlessMap 1.4.21
+
+Undo and redo are more reliable: history snapshots are independent copies, history for deleted layers is discarded instead of crashing, and atlas mask, slice and probe edits can be undone.
+
+### 27th September 2026
 ##### DriftlessMap 1.4.20
 
 Image display fixes: masks and nearly black images load again, hidden channels stay hidden after project load, flips, rotations and page or scene changes, histogram colours no longer carry over between images, and colour swatches no longer accumulate on every project load.
