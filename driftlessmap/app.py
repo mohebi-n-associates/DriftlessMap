@@ -6074,6 +6074,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
             object_type="drawing piece",
             object_data=data,
             object_mode=self.obj_display_mode,
+            drawing_mode="area" if self.tool_box.is_closed else "line",
         )
 
         self.working_atlas_data["atlas-drawing"] = []
@@ -6340,7 +6341,9 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self._merge_point_pieces("cells piece", "merged cells", calculate_cells_info)
 
     # drawing related functions
-    def build_drawing_object_info(self, object_data, object_type, object_name):
+    def build_drawing_object_info(
+        self, object_data, object_type, object_name, plot_mode=None
+    ):
         """Analyze a drawing against the currently loaded volume atlas."""
         if (
             self.current_atlas != "volume"
@@ -6358,6 +6361,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 "pieces_names",
                 [object_name for _ in range(len(pieces))],
             )
+            plot_mode = object_data.get("plot_mode", plot_mode)
         else:
             pieces = [object_data]
             piece_names = [object_name]
@@ -6374,12 +6378,21 @@ class DriftlessMap(QMainWindow, FORM_Main):
             axis_info=self.volume_atlas_axis_info,
             label_volume=label_volume,
             label_info=self.atlas_view.label_info,
+            plot_mode=plot_mode,
         )
 
     def merge_drawings(self):
-        self._merge_point_pieces(
-            "drawing piece", "merged drawing", calculate_drawing_info
-        )
+        def calculate(data, pieces_names, label_data, label_info, bregma):
+            return calculate_drawing_info(
+                data,
+                pieces_names,
+                label_data,
+                label_info,
+                bregma,
+                plot_mode=self.object_ctrl.drawing_mode_of_piece(pieces_names[0]),
+            )
+
+        self._merge_point_pieces("drawing piece", "merged drawing", calculate)
 
     # contour related functions
     def merge_contour(self):

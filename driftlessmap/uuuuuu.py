@@ -194,15 +194,14 @@ def calculate_cells_info(data_list, pieces_names, label_data, label_info, bregma
     return res_dict
 
 
-def calculate_drawing_info(data_list, pieces_names, label_data, label_info, bregma):
+def calculate_drawing_info(
+    data_list, pieces_names, label_data, label_info, bregma, plot_mode=None
+):
     data = data_list[0]
     for i in range(1, len(data_list)):
         data = np.vstack([data, data_list[i]])
-    # print(data)
-    if "area" in pieces_names[0]:
-        plot_mode = "area"
-    else:
-        plot_mode = "line"
+    if plot_mode not in ("area", "line"):
+        plot_mode = "area" if "area" in pieces_names[0] else "line"
 
     region_label = get_region_label(data, label_data, bregma)
     (
