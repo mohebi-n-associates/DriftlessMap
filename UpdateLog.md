@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th September 2026
+##### DriftlessMap 1.4.19
+
+Object import checks coordinates against the loaded volume atlas correctly and no longer crashes with a slice atlas; bulk object export writes safe, unique file names and confirms completion.
+
+### 27th September 2026
 ##### DriftlessMap 1.4.18
 
 Probe reconstruction no longer crashes on tracks too short to hold a recording site, on atlas labels missing from the ontology, or on horizontal probe directions; each case now produces a clear message or a labelled result.

@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 from os.path import dirname, realpath, join
 import copy
@@ -6947,20 +6948,27 @@ class DriftlessMap(QMainWindow, FORM_Main):
                     self.error_message_color,
                 )
                 return
-            for da_ind in valid_index:
+            file_stems = self._object_file_names(
+                [self.object_ctrl.obj_name[da_ind] for da_ind in valid_index]
+            )
+            for da_ind, file_stem in zip(valid_index, file_stems):
                 data = {
                     "type": self.object_ctrl.obj_type[da_ind],
                     "data": self.object_ctrl.obj_data[da_ind],
                     "name": self.object_ctrl.obj_name[da_ind],
                     "provenance": provenance,
                 }
-                s_path = os.path.join(save_path, self.object_ctrl.obj_name[da_ind])
+                s_path = os.path.join(save_path, file_stem)
                 success, error = save_driftlessmap_file(
                     "{}.dmapobj".format(s_path), data, "object"
                 )
                 if not success:
                     self.print_message(error, self.error_message_color)
                     return
+            self.print_message(
+                "Exported {} objects to {}.".format(len(valid_index), save_path),
+                self.normal_color,
+            )
         else:
             return
 
@@ -7011,16 +7019,55 @@ class DriftlessMap(QMainWindow, FORM_Main):
         else:
             self.print_message("", self.normal_color)
 
+    def _object_points_in_atlas(self, object_dict):
+        """Check that an object's Bregma-relative points lie in the atlas."""
+        try:
+            if "merged" in object_dict["type"]:
+                pieces = object_dict["data"]["data"]
+            else:
+                pieces = [object_dict["data"]]
+            points = np.vstack(
+                [np.asarray(piece, dtype=float).reshape(-1, 3) for piece in pieces]
+            )
+        except (KeyError, TypeError, ValueError):
+            return False
+        if not len(points) or not np.all(np.isfinite(points)):
+            return False
+        view_shape = np.asarray(self.atlas_view.atlas_size)
+        herbs_shape = view_shape[[1, 2, 0]]
+        absolute = np.floor(points + np.asarray(self.atlas_view.origin_3d))
+        return coordinates_in_bounds(absolute, herbs_shape)
+
+    @staticmethod
+    def _object_file_names(names):
+        """Return unique, filesystem-safe file stems for object names."""
+        stems = []
+        used = set()
+        for name in names:
+            stem = re.sub(r'[\\/:*?"<>|\x00-\x1f]+', "_", str(name)).strip(" .")
+            stem = stem or "object"
+            candidate = stem
+            counter = 2
+            while candidate.lower() in used:
+                candidate = "{} ({})".format(stem, counter)
+                counter += 1
+            used.add(candidate.lower())
+            stems.append(candidate)
+        return stems
+
     # --------------------------------------------------------------------
     #                         Load object
     # --------------------------------------------------------------------
     def load_objects(self):
         if (
-            self.atlas_view.atlas_data is None
-            and self.atlas_view.slice_image_data is None
+            self.current_atlas != "volume"
+            or self.atlas_view.atlas_data is None
+            or self.atlas_view.origin_3d is None
         ):
             self.print_message(
-                "Atlas need to be loaded first.", self.error_message_color
+                "Load and show the volume atlas the objects belong to before "
+                "importing them.",
+                self.error_message_color,
             )
             return
         if self.num_windows == 4:
@@ -7077,16 +7124,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
                         )
                         continue
 
-                if "merged" in object_dict["type"]:
-                    data_list = object_dict["data"]["data"]
-                    data = data_list[0]
-                    for j in range(1, len(data_list)):
-                        data = np.vstack([data, data_list[j]])
-                    max_val = np.max(data, 0)
-                else:
-                    max_val = np.max(object_dict["data"], 0)
-
-                if np.any(max_val > self.atlas_view.atlas_size):
+                if not self._object_points_in_atlas(object_dict):
                     problem_obj_name.append(file_name)
                 else:
                     self.object_ctrl.add_object(
