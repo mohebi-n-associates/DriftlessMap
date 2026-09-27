@@ -226,6 +226,25 @@ def verify_reference(path, reference):
     records = reference.get("files", [])
     if not records:
         return False, "reference contains no files"
+    recorded_names = {str(record.get("path")) for record in records}
+    if recorded_names <= set(ATLAS_IDENTITY_FILES):
+        # An atlas reference: identity files that appeared since it was
+        # recorded change the atlas too, so they must not be ignored.
+        for name in ATLAS_IDENTITY_FILES:
+            if name not in recorded_names and (candidate / name).is_file():
+                return False, "unexpected {}".format(name)
+    if reference.get("sha256") is not None:
+        identity = [
+            (record["path"], record["size_bytes"], record["sha256"])
+            for record in records
+        ]
+        aggregate = hashlib.sha256(
+            json.dumps(identity, separators=(",", ":"), ensure_ascii=False).encode(
+                "utf-8"
+            )
+        ).hexdigest()
+        if aggregate != reference["sha256"]:
+            return False, "reference file list does not match its checksum"
     for record in records:
         try:
             relative = _safe_relative_path(record["path"])
@@ -267,10 +286,13 @@ def pack_path(path, reference=None):
     if reference is None:
         reference = describe_path(root)
     if root.is_file():
-        paths = [(root.name, root)]
+        paths = [(root.name, root, reference.get("sha256"))]
     else:
         recorded = reference.get("files", [])
-        paths = [(record["path"], root / record["path"]) for record in recorded]
+        paths = [
+            (record["path"], root / record["path"], record.get("sha256"))
+            for record in recorded
+        ]
     return {
         "schema_version": 1,
         "kind": reference["kind"],
@@ -279,10 +301,12 @@ def pack_path(path, reference=None):
             {
                 "path": relative,
                 "data": ArchiveAttachment(
-                    source_path=item, display_name=relative
+                    source_path=item,
+                    display_name=relative,
+                    expected_sha256=expected_sha256,
                 ),
             }
-            for relative, item in paths
+            for relative, item, expected_sha256 in paths
         ],
     }
 
@@ -301,9 +325,11 @@ def unpack_path(payload, destination):
     else:
         base = destination
 
+    written = []
     for record in payload.get("files", []):
         relative = _safe_relative_path(record["path"])
         output = (base / relative).resolve()
+        written.append(output)
         if destination not in output.parents:
             raise ValueError("Portable source escapes its extraction directory.")
         output.parent.mkdir(parents=True, exist_ok=True)
@@ -314,4 +340,10 @@ def unpack_path(payload, destination):
             # Compatibility with early development builds that stored bytes as
             # inert NumPy arrays before streaming attachments were introduced.
             output.write_bytes(np.asarray(data, dtype=np.uint8).tobytes())
+    if payload["kind"] == "file":
+        # A file payload's bytes live at its record path, which need not
+        # equal the payload name.
+        if len(written) != 1:
+            raise ValueError("A portable file source must contain exactly one file.")
+        return str(written[0])
     return str(root)

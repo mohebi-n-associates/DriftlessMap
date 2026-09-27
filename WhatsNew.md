@@ -3,6 +3,28 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.4.32
+
+Release date: 27 September 2026
+
+Reference checks now cover the remaining gaps.
+
+- **Portable projects verify what they pack.** **Save Portable Project** now
+  checks the SHA-256 of the histology bytes while streaming them into the
+  archive. If the file changed after it was fingerprinted, including during
+  the copy, the save stops with an explanation. Previously a changed file
+  could be packed under the old checksum.
+- **Atlas verification is stricter.** When a project's atlas folder is
+  verified, identity files that appeared after the atlas was recorded (for
+  example meshes processed later) now count as a change. The recorded file
+  list must also match its own combined checksum, so an edited list cannot
+  pass.
+- **Single-file sources extract correctly.** A portable single-file source
+  now reports the path it was written to, even when that differs from the
+  source's recorded name.
+
+---
+
 ## DriftlessMap 1.4.31
 
 Release date: 27 September 2026
