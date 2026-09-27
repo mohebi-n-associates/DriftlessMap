@@ -3,6 +3,28 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.4.16
+
+Release date: 27 September 2026
+
+**Edit > Rotate** and the layer shift controls now move transferred layers
+correctly.
+
+- **Rotating point layers** (probe, cell, virus or drawing layers) failed
+  with a matrix-shape error unless the layer held exactly two points. With
+  two points, the result was wrong.
+- **Rotation direction and centre.** Point layers turned the opposite way to
+  image layers. Atlas layers were rotated about the centre of the histology
+  landmark frame instead of the atlas frame.
+- **Shifting image layers** produced an image with its width and height
+  swapped on any non-square slice, so the layer no longer lined up with the
+  atlas.
+
+Point layers are now rotated with the same transform as image layers, about
+the centre of their own frame, and shifted images keep their size.
+
+---
+
 ## DriftlessMap 1.4.15
 
 Release date: 27 September 2026

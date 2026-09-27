@@ -44,7 +44,6 @@ import warnings
 from .uuuuuu import (
     get_cell_count,
     num_side_pnt_changed,
-    rotate,
     merge_channels_into_single_img,
     gamma_correction,
     create_vis_img,
@@ -145,6 +144,7 @@ from .probe_reconstruction import (
     source_vox_to_herbs_vox,
 )
 from .roi_analysis import build_drawing_roi_info
+from .layer_geometry import layer_center, rotate_points, rotate_raster, shift_raster
 from .resources import resource_path
 from .user_settings import load_last_atlas_path, save_last_atlas_path
 
@@ -1302,104 +1302,62 @@ class DriftlessMap(QMainWindow, FORM_Main):
             )
             return
         if "img-" in da_link:
-            if self.working_img_type[da_link] == "vector":
-                temp = np.asarray(self.working_img_data[da_link]).copy()
-                temp = temp + moving_vec
-                self.working_img_data[da_link] = temp.tolist()
-                self.image_view.img_stacks.image_dict[da_link].setData(
-                    pos=np.asarray(self.working_img_data[da_link])
-                )
-            else:
-                shift_mat = np.float32([[1, 0, moving_vec[0]], [0, 1, moving_vec[1]]])
-                da_img = self.working_img_data[da_link].copy()
-                self.working_img_data[da_link] = cv2.warpAffine(
-                    da_img, shift_mat, da_img.shape[:2]
-                )
-                self.image_view.img_stacks.image_dict[da_link].setImage(
-                    self.working_img_data[da_link]
-                )
+            data, types, stack = (
+                self.working_img_data,
+                self.working_img_type,
+                self.image_view.img_stacks,
+            )
         else:
-            if self.working_atlas_type[da_link] == "vector":
-                temp = np.asarray(self.working_atlas_data[da_link]).copy()
-                temp = temp + moving_vec
-                self.working_atlas_data[da_link] = temp.tolist()
-                self.atlas_view.working_atlas.image_dict[da_link].setData(
-                    pos=np.asarray(self.working_atlas_data[da_link])
-                )
-            else:
-                shift_mat = np.float32([[1, 0, moving_vec[0]], [0, 1, moving_vec[1]]])
-                da_img = self.working_atlas_data[da_link].copy()
-                self.working_atlas_data[da_link] = cv2.warpAffine(
-                    da_img, shift_mat, da_img.shape[:2]
-                )
-                self.atlas_view.working_atlas.image_dict[da_link].setImage(
-                    self.working_atlas_data[da_link]
-                )
-        if da_link == "atlas-overlay":
-            print("record after transferred action for later accept.")
+            data, types, stack = (
+                self.working_atlas_data,
+                self.working_atlas_type,
+                self.atlas_view.working_atlas,
+            )
+        if types[da_link] == "vector":
+            if not data[da_link]:
+                return
+            temp = np.asarray(data[da_link], dtype=float) + moving_vec
+            data[da_link] = temp.tolist()
+            stack.image_dict[da_link].setData(pos=np.asarray(data[da_link]))
+        else:
+            if data[da_link] is None:
+                return
+            data[da_link] = shift_raster(data[da_link], moving_vec)
+            stack.image_dict[da_link].setImage(data[da_link])
 
     def rotate_layers(self, da_link, rotate_angle):
-        theta = np.radians(rotate_angle)
-        rot_mat = np.array(
-            ((np.cos(theta), -np.sin(theta)), (np.sin(theta), np.cos(theta)))
-        )
-
         if da_link in ["img-process", "atlas-slice"]:
             self.print_message(
                 "Transform only works on overlay and transferred layers.",
                 self.reminder_color,
             )
             return
+        if "img-" in da_link:
+            data, types, stack = (
+                self.working_img_data,
+                self.working_img_type,
+                self.image_view.img_stacks,
+            )
+            center = layer_center(self.histo_tri_onside_data)
         else:
-            if "img-" in da_link:
-                img_rect = cv2.boundingRect(self.histo_tri_onside_data)
-                img_center = np.array(
-                    [img_rect[0] + 0.5 * img_rect[2], img_rect[1] + 0.5 * img_rect[3]]
-                ).astype(int)
-                if self.working_img_type[da_link] == "vector":
-                    temp = (
-                        np.asarray(self.working_img_data[da_link]).copy() - img_center
-                    )
-                    temp = np.dot(rot_mat, temp) + img_center
-                    self.working_img_data[da_link] = temp.tolist()
-                    self.image_view.img_stacks.image_dict[da_link].setData(
-                        pos=np.asarray(self.working_img_data[da_link])
-                    )
-                else:
-                    temp = rotate(
-                        self.working_img_data[da_link], rotate_angle, img_center
-                    )
-                    self.working_img_data[da_link] = temp.copy()
-                    self.image_view.img_stacks.image_dict[da_link].setImage(
-                        self.working_img_data[da_link]
-                    )
-            else:
-                atlas_rect = cv2.boundingRect(self.histo_tri_onside_data)
-                atlas_center = np.array(
-                    [
-                        atlas_rect[0] + 0.5 * atlas_rect[2],
-                        atlas_rect[1] + 0.5 * atlas_rect[3],
-                    ]
-                )
-                atlas_center = atlas_center.astype(int)
-                if self.working_atlas_type[da_link] == "vector":
-                    temp = (
-                        np.asarray(self.working_atlas_data[da_link]).copy()
-                        - atlas_center
-                    )
-                    temp = np.dot(rot_mat, temp) + atlas_center
-                    self.working_atlas_data[da_link] = temp.tolist()
-                    self.atlas_view.working_atlas.image_dict[da_link].setData(
-                        pos=np.asarray(self.working_atlas_data[da_link])
-                    )
-                else:
-                    temp = rotate(
-                        self.working_atlas_data[da_link], rotate_angle, atlas_center
-                    )
-                    self.working_atlas_data[da_link] = temp.copy()
-                    self.atlas_view.working_atlas.image_dict[da_link].setImage(
-                        self.working_atlas_data[da_link]
-                    )
+            data, types, stack = (
+                self.working_atlas_data,
+                self.working_atlas_type,
+                self.atlas_view.working_atlas,
+            )
+            center = layer_center(self.atlas_tri_onside_data)
+        if types[da_link] == "vector":
+            if not data[da_link]:
+                return
+            data[da_link] = rotate_points(
+                data[da_link], center, rotate_angle
+            ).tolist()
+            stack.image_dict[da_link].setData(pos=np.asarray(data[da_link]))
+        else:
+            if data[da_link] is None:
+                return
+            data[da_link] = rotate_raster(data[da_link], center, rotate_angle)
+            stack.image_dict[da_link].setImage(data[da_link])
 
     def vertical_translation_pressed(self, moving_direction):
         valid_links = self.get_valid_layer()
