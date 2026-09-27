@@ -289,6 +289,7 @@ def build_probe_reconstruction(
     axis_info=None,
     atlas_identifier=None,
     atlas_path=None,
+    atlas_reference=None,
     software_version=None,
     trajectory_fit=None,
 ):
@@ -453,6 +454,9 @@ def build_probe_reconstruction(
     atlas = {
         "identifier": atlas_identifier,
         "path_at_export": str(Path(atlas_path).resolve()) if atlas_path else None,
+        # Content identity (SHA-256 of the atlas identity files), so the
+        # atlas is never identified by its name or path alone.
+        "content_reference": atlas_reference,
         "voxel_size_um": voxel_size_um,
         "herbs_shape_vox": tuple(int(value) for value in herbs_atlas_shape),
         "bregma_herbs_vox": bregma_herbs_vox,

@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th September 2026
+##### DriftlessMap 1.4.33
+
+Merged probes now record the SHA-256 content identity of the atlas they were reconstructed in, and probe trajectory CSVs include it as atlas_sha256.
+
+### 27th September 2026
 ##### DriftlessMap 1.4.32
 
 Provenance integrity: portable projects verify the checksum of every source byte they pack, atlas verification rejects identity files that appeared after the atlas was recorded or a tampered file list, and single-file portable sources extract to the correct path.

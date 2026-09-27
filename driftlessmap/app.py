@@ -6189,10 +6189,17 @@ class DriftlessMap(QMainWindow, FORM_Main):
         if error is not None:
             return None, "Unable to load atlas axis metadata: {}".format(error)
 
+        try:
+            with pg.BusyCursor():
+                reference = describe_atlas_path(atlas_path)
+        except (OSError, ValueError) as exc:
+            return None, "Unable to fingerprint the atlas: {}".format(exc)
+
         return {
             "identifier": os.path.basename(os.path.normpath(atlas_path)),
             "path": os.path.abspath(atlas_path),
             "axis_info": axis_info,
+            "reference": reference,
         }, None
 
     # Merging is validate-then-commit: every merged object is computed first,

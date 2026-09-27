@@ -1222,6 +1222,7 @@ def calculate_probe_info(
         axis_info=atlas_metadata.get("axis_info"),
         atlas_identifier=atlas_metadata.get("identifier"),
         atlas_path=atlas_metadata.get("path"),
+        atlas_reference=atlas_metadata.get("reference"),
         software_version=__version__,
         trajectory_fit=trajectory_fit,
     )

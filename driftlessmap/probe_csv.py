@@ -249,6 +249,9 @@ def probe_trajectory_row(probe_name, probe_data):
         row["atlas_version"] = atlas["source_version"]
     if atlas.get("identifier"):
         row["atlas_identifier"] = atlas["identifier"]
+    reference = atlas.get("content_reference") or {}
+    if reference.get("sha256"):
+        row["atlas_sha256"] = reference["sha256"]
     if probe.get("site_face") is not None:
         row["site_face"] = probe["site_face"]
 

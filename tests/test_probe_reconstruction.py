@@ -193,6 +193,7 @@ class ProbeReconstructionTests(unittest.TestCase):
             },
             atlas_identifier="allen_mouse_25um",
             atlas_path="/atlas/allen_mouse_25um",
+            atlas_reference={"kind": "directory", "sha256": "ab" * 32, "size_bytes": 10},
             software_version="0.2.8.1",
         )
 
@@ -202,6 +203,7 @@ class ProbeReconstructionTests(unittest.TestCase):
         contacts = payload["coordinates"]["contacts"]
 
         self.assertEqual(payload["schema_version"], 2)
+        self.assertEqual(atlas["content_reference"]["sha256"], "ab" * 32)
         self.assertEqual(atlas["source_version"], "CCFv3 2017")
         self.assertEqual(atlas["source_axes"], ["AP", "DV", "LR"])
         self.assertEqual(tuple(atlas["source_shape_vox"]), (528, 320, 456))

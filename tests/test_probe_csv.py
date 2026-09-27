@@ -73,6 +73,7 @@ def probe_data():
             "size": (528, 320, 456),
         },
         atlas_identifier="allen_mouse_25um",
+        atlas_reference={"kind": "directory", "sha256": "cd" * 32, "size_bytes": 1},
         trajectory_fit=trajectory_fit,
     )
     return {
@@ -127,6 +128,7 @@ class ProbeCsvTests(unittest.TestCase):
         self.assertEqual(trajectory["reconstruction_schema_version"], 2)
         self.assertEqual(trajectory["tip_to_lowest_contact_center_um"], 185)
         self.assertEqual(trajectory["track_sampling_interval_um"], 2000)
+        self.assertEqual(trajectory["atlas_sha256"], "cd" * 32)
         self.assertIn("insertion_allen_AP_vox", trajectory)
         self.assertIn("tip_allen_AP_vox", trajectory)
         self.assertNotIn("structure_id", trajectory)
