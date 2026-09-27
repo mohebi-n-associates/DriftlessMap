@@ -26,6 +26,36 @@ PROBE_ERROR_MESSAGES = {
 }
 
 
+def linear_silicon_settings_error(settings):
+    """Return why linear-silicon geometry is unusable, or ``None``."""
+    if settings["probe_length"] <= 0:
+        return "Linear Silicon Probe can not be length 0 um."
+    if not 0 <= settings["tip_length"] < settings["probe_length"]:
+        return "The tip length must be shorter than the probe length."
+    if settings["site_height"] <= 0:
+        return "Site height can not be 0 um."
+    if settings["site_width"] <= 0:
+        return "Site width can not be 0 um."
+    columns = zip(
+        settings["per_max_sites"],
+        settings["sites_distance"],
+        settings["y_bias"],
+    )
+    shank_length = settings["probe_length"] - settings["tip_length"]
+    for column, (n_sites, distance, y_bias) in enumerate(columns, start=1):
+        if n_sites <= 0 or distance <= 0:
+            return (
+                "Column {} needs at least one site and a positive site "
+                "distance.".format(column)
+            )
+        if not 0 <= y_bias < shank_length:
+            return (
+                "Column {} starts {} um above the tip, beyond the {} um shank, "
+                "so it has no sites.".format(column, y_bias, shank_length)
+            )
+    return None
+
+
 def probe_error_message(error_index):
     """Return a readable explanation for a probe reconstruction error code."""
     return PROBE_ERROR_MESSAGES.get(
