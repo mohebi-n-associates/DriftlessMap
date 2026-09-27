@@ -3,6 +3,30 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.4.8
+
+Release date: 27 September 2026
+
+**Scientific correction.** Recording-site coordinates are now correct for
+probes reconstructed after surgery with the site face set to **In** (1) or
+**Right** (3) and a track that is not perfectly vertical. For these faces the
+across-shank direction was built from a vector that is not perpendicular to
+the shank. Lateral site offsets (x bias) therefore leaked into the depth
+direction, and the thickness offset shrank. For example, on a probe tilted
+45° in both axes, 71% of each lateral offset was added to the site depth.
+Contact coordinates, and the atlas regions assigned to contacts near region
+borders, were affected.
+
+All four faces now use one reference frame for the shank, rotated by 180° or
+90° as the face requires. Every face is now perpendicular to the shank and
+right-handed at any tilt. Faces **Out** (0) and **Left** (2), vertical
+probes, and pre-surgery plans are unchanged.
+
+**Action:** re-merge any after-surgery probe that used face In or Right on a
+tilted track, then re-export its CSV files.
+
+---
+
 ## DriftlessMap 1.4.7
 
 Release date: 27 September 2026

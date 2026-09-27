@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th September 2026
+##### DriftlessMap 1.4.8
+
+Scientific fix: recording-site positions for site faces "In" (1) and "Right" (3) on tilted after-surgery probes are now correct; affected merged probes should be re-merged and re-exported.
+
+### 27th September 2026
 ##### DriftlessMap 1.4.7
 
 Probe geometry dialogs: Cancel now discards edits, added linear-silicon columns put site count and spacing in the right rows, OK reflects every field, saved multi-probe faces display correctly, and geometry validity is re-evaluated on every accept.
