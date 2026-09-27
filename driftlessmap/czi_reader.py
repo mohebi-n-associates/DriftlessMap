@@ -2,7 +2,6 @@ import cv2
 from aicspylibczi import CziFile
 from pathlib import Path
 from os.path import dirname, realpath, join
-import pickle
 import numpy as np
 import colorsys
 from .uuuuuu import hex2rgb
@@ -16,7 +15,7 @@ class CZIReader(object):
         self.error_index = 0
         self.is_czi = True
         self.status = None
-        self.file_name_list = [czi_path[:-4]]
+        self.file_name_list = [str(Path(czi_path).with_suffix(""))]
         self.czi = CziFile(czi_path)
         self.czi_info = self.czi.dims
         self.dimensions = self.czi.get_dims_shape()
@@ -171,6 +170,10 @@ class CZIReader(object):
                 self.rgb_colors.append((r, g, b))
 
     def read_data(self, scale, scene_index=None):
+        if not self.is_mosaic:
+            # Non-mosaic images are always decoded at full resolution, so
+            # the recorded scale must describe the pixels, not the request.
+            scale = 1.0
         if scene_index is None:
             scene_index = np.arange(self.n_scenes)
         else:

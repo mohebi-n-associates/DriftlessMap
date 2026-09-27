@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th September 2026
+##### DriftlessMap 1.4.9
+
+Scientific fix: ruler lengths are correct after reopening a project and for non-mosaic CZI images; projects now store the raster's true scale and embedded rasters keep it.
+
+### 27th September 2026
 ##### DriftlessMap 1.4.8
 
 Scientific fix: recording-site positions for site faces "In" (1) and "Right" (3) on tilted after-surgery probes are now correct; affected merged probes should be re-merged and re-exported.
