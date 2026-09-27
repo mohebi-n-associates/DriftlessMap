@@ -3,6 +3,26 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.4.2
+
+Release date: 27 September 2026
+
+A small crafted file can no longer exhaust memory when opened. Before this
+release, a project, layer or object archive of a few hundred bytes could
+declare an array of any size. When the file was opened, DriftlessMap tried to
+reserve that much memory (for example about 137 GB) before discovering the
+data was missing.
+
+Each stored array's declared size is now checked against the bytes actually
+present in the archive before any memory is reserved. Legitimate files,
+including very compressible masks, load as before.
+
+Arrays that were shared when a file was saved are now loaded once and stay
+shared. Previously each reference was decoded into a separate copy, which used
+extra memory.
+
+---
+
 ## DriftlessMap 1.4.1
 
 Release date: 27 September 2026

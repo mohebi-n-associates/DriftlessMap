@@ -1,4 +1,6 @@
 import base64
+import io
+import json
 import importlib.util
 import os
 from pathlib import Path
@@ -172,6 +174,57 @@ class SafeArchiveTests(unittest.TestCase):
             self.assertIsNone(error)
             np.testing.assert_array_equal(loaded["first"], shared)
             np.testing.assert_array_equal(loaded["second"], shared)
+
+    def test_repeated_array_references_decode_to_one_shared_array(self):
+        shared = np.arange(10, dtype=np.uint16)
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "shared.dmap"
+            success, error = persistence.save_driftlessmap_file(
+                path, {"first": shared, "second": shared}, "test"
+            )
+            self.assertTrue(success, error)
+            loaded, error = persistence.load_driftlessmap_file(path, "test")
+            self.assertIsNone(error)
+            self.assertIs(loaded["first"], loaded["second"])
+
+    def _archive_with_array_member(self, folder, member_bytes):
+        path = Path(folder) / "forged.dmaplayer"
+        manifest = {
+            "format": persistence.FORMAT_NAME,
+            "version": persistence.FORMAT_VERSION,
+            "kind": "test",
+            "data": {"__type__": "ndarray", "name": "arrays/00000000.npy"},
+        }
+        with persistence.zipfile.ZipFile(
+            path, "w", compression=persistence.zipfile.ZIP_DEFLATED
+        ) as archive:
+            archive.writestr(persistence.MANIFEST_NAME, json.dumps(manifest))
+            archive.writestr("arrays/00000000.npy", member_bytes)
+        return path
+
+    def test_array_header_declaring_more_data_than_stored_is_rejected(self):
+        header = io.BytesIO()
+        np.lib.format.write_array_header_1_0(
+            header,
+            {"descr": "<f8", "fortran_order": False, "shape": (2**34,)},
+        )
+        with tempfile.TemporaryDirectory() as folder:
+            path = self._archive_with_array_member(folder, header.getvalue())
+            loaded, error = persistence.load_driftlessmap_file(path, "test")
+        self.assertIsNone(loaded)
+        self.assertIn("declares more data", error)
+
+    def test_highly_compressible_real_arrays_still_load(self):
+        zeros = np.zeros((512, 512, 16), dtype=np.uint8)
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "mask.dmap"
+            success, error = persistence.save_driftlessmap_file(
+                path, {"mask": zeros}, "test"
+            )
+            self.assertTrue(success, error)
+            loaded, error = persistence.load_driftlessmap_file(path, "test")
+        self.assertIsNone(error)
+        np.testing.assert_array_equal(loaded["mask"], zeros)
 
     def test_probe_setting_payload_has_its_own_validated_kind(self):
         payload = {

@@ -21,6 +21,7 @@ FORMAT_VERSION = 1
 MANIFEST_NAME = "manifest.json"
 MAX_MANIFEST_BYTES = 16 * 1024 * 1024
 MAX_ARCHIVE_BYTES = 64 * 1024 * 1024 * 1024
+MAX_DEFLATE_RATIO = 1100
 
 REQUIRED_KEYS = {
     "layer": {"layer_link", "data", "color", "thumbnail"},
@@ -391,6 +392,59 @@ def _encode(value, arrays, attachments):
     )
 
 
+class _ArchiveReader:
+    """Decoding context: one archive, its member names, and decoded arrays."""
+
+    def __init__(self, archive):
+        self.archive = archive
+        self.names = frozenset(archive.namelist())
+        self.arrays = {}
+
+    def read_array(self, name):
+        if name in self.arrays:
+            return self.arrays[name]
+        array = _read_checked_array(self.archive, name)
+        self.arrays[name] = array
+        return array
+
+
+def _read_checked_array(archive, name):
+    """Read an ``.npy`` member after checking its header against its size.
+
+    ``numpy.lib.format.read_array`` allocates the shape declared in the
+    header before reading any data, so a tiny member could otherwise demand
+    an arbitrarily large allocation.
+    """
+    info = archive.getinfo(name)
+    with archive.open(name) as stream:
+        version = np.lib.format.read_magic(stream)
+        if version == (1, 0):
+            shape, _, dtype = np.lib.format.read_array_header_1_0(stream)
+        elif version == (2, 0):
+            shape, _, dtype = np.lib.format.read_array_header_2_0(stream)
+        else:
+            raise ValueError(
+                "Unsupported array format version {} in {}".format(version, name)
+            )
+        header_length = stream.tell()
+    if dtype.hasobject:
+        raise ValueError("Array {} contains Python objects.".format(name))
+    element_count = 1
+    for dimension in shape:
+        element_count *= int(dimension)
+    declared_bytes = element_count * dtype.itemsize
+    # Deflate cannot expand data by more than about 1032:1, so the compressed
+    # size bounds what the member can really hold even if its recorded
+    # uncompressed size was forged.
+    physical_limit = info.compress_size * MAX_DEFLATE_RATIO + 1024 * 1024
+    if declared_bytes > min(info.file_size - header_length, physical_limit):
+        raise ValueError(
+            "Array {} declares more data than the archive contains.".format(name)
+        )
+    with archive.open(name) as stream:
+        return np.lib.format.read_array(stream, allow_pickle=False)
+
+
 def _decode(value, archive):
     if not isinstance(value, dict) or "__type__" not in value:
         return value
@@ -399,16 +453,15 @@ def _decode(value, archive):
         return float(value["value"])
     if value_type == "ndarray":
         name = value["name"]
-        if name not in archive.namelist() or not name.startswith("arrays/"):
+        if name not in archive.names or not name.startswith("arrays/"):
             raise ValueError("Archive references a missing array: {}".format(name))
-        with archive.open(name) as stream:
-            return np.lib.format.read_array(stream, allow_pickle=False)
+        return archive.read_array(name)
     if value_type == "attachment":
         name = value["name"]
-        if name not in archive.namelist() or not name.startswith("attachments/"):
+        if name not in archive.names or not name.startswith("attachments/"):
             raise ValueError("Archive references a missing attachment: {}".format(name))
         return ArchiveAttachment(
-            archive_path=archive.filename,
+            archive_path=archive.archive.filename,
             member_name=name,
             display_name=value.get("display_name"),
         )
@@ -520,7 +573,7 @@ def load_driftlessmap_file(file_path, expected_kind=None):
                         expected_kind, manifest.get("kind")
                     )
                 )
-            data = _decode(manifest["data"], archive)
+            data = _decode(manifest["data"], _ArchiveReader(archive))
             if expected_kind is not None:
                 data = _validate_payload(data, expected_kind)
             return data, None
