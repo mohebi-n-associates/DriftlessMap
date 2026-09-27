@@ -126,5 +126,18 @@ class EmbeddedReaderTests(unittest.TestCase):
         np.testing.assert_array_equal(reader.data["scene 0"], pixels)
 
 
+
+class EmbeddedReaderScaleTests(unittest.TestCase):
+    def test_embedded_raster_keeps_its_saved_scale(self):
+        pixels = np.zeros((4, 5, 3), dtype=np.uint8)
+        reader = image_reader.EmbeddedImageReader(pixels, {"image_scale": 0.1})
+        self.assertEqual(reader.scale["scene 0"], 0.1)
+
+    def test_invalid_or_missing_scale_falls_back_to_full_resolution(self):
+        pixels = np.zeros((4, 5, 3), dtype=np.uint8)
+        for metadata in (None, {}, {"image_scale": 0}, {"image_scale": "x"}):
+            reader = image_reader.EmbeddedImageReader(pixels, metadata)
+            self.assertEqual(reader.scale["scene 0"], 1.0)
+
 if __name__ == "__main__":
     unittest.main()

@@ -3,6 +3,33 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.4.9
+
+Release date: 27 September 2026
+
+**Scientific correction.** Histology ruler measurements are correct again in
+two situations.
+
+- **After reopening a project.** Projects stored the scale slider's
+  percentage (for example `10`) where the fraction of full resolution was
+  expected (for example `0.1`). After a reload, every ruler length was
+  divided by that number, so it read 10 to 100 times too short.
+- **Non-mosaic CZI images.** These are always decoded at full resolution, but
+  the slider value was recorded as their scale. At 10%, ruler lengths read
+  10 times too long.
+
+Projects now store the true fraction of full resolution under
+`image_scale`. The slider percentage is still kept for older readers. Older
+projects take their scale from the image as it is reloaded. When a project
+falls back to its embedded raster, the raster keeps the scale it was read at,
+so a CZI saved at 10% still measures correctly. Scene switching on CZI files
+no longer fails when the stored scale is fractional.
+
+**Action:** repeat any ruler measurements taken after reopening a project,
+or on a non-mosaic CZI read below 100%.
+
+---
+
 ## DriftlessMap 1.4.8
 
 Release date: 27 September 2026

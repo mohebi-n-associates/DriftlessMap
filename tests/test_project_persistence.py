@@ -121,6 +121,12 @@ class ProjectPersistenceIntegrationTests(unittest.TestCase):
             restored.load_project(prepared)
 
             np.testing.assert_array_equal(restored.image_view.current_img, expected)
+            self.assertEqual(payload["img_ctrl_data"]["image_scale"], 1.0)
+            self.assertEqual(restored.image_view.current_scale, 1.0)
+            # Older projects stored only the slider percentage.
+            self.assertEqual(
+                restored.image_view._restored_scale({"current_scale": 10}), 1.0
+            )
             self.assertEqual(restored.site_face, 2)
             self.assertTrue(restored.tool_box.merge_sites)
             self.assertEqual(

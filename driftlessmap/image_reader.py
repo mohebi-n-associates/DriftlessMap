@@ -106,7 +106,13 @@ class EmbeddedImageReader(object):
         self.hsv_colors = [tuple(item) for item in metadata.get("hsv_colors", _hsv_colors(self.rgb_colors))]
         self.gamma_val = list(metadata.get("gamma_val", []))
         self.data = {"scene 0": image.copy()}
-        self.scale = {"scene 0": 1.0}
+        try:
+            image_scale = float(metadata.get("image_scale", 1.0))
+        except (TypeError, ValueError):
+            image_scale = 1.0
+        if not np.isfinite(image_scale) or image_scale <= 0:
+            image_scale = 1.0
+        self.scale = {"scene 0": image_scale}
 
 
 class TIFFReader(object):

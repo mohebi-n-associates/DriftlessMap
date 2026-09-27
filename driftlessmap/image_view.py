@@ -359,7 +359,7 @@ class ImageView(QObject):
             self.current_scale = self.image_file.scale['scene {}'.format(scene_index)]
 
             if self.current_scale != self.scale_slider.value() * 0.01:
-                self.scale_slider.setValue(self.current_scale * 100)
+                self.scale_slider.setValue(int(round(self.current_scale * 100)))
 
             self.img_size = self.current_img.shape[:2]
             for i in range(self.image_file.n_channels):
@@ -463,12 +463,17 @@ class ImageView(QObject):
                 'hsv_colors': self.image_file.hsv_colors,
                 'channel_name': self.image_file.channel_name,
                 'gamma_val': self.image_file.gamma_val,
+                'image_scale': self._current_scale_value(),
         }
         data = {'current_img': self.current_img,
                 'processing_img': self.processing_img,
                 'current_scene': self.scene_slider.value(),
                 'current_page': self.display_img_index,
+                # ``current_scale`` is the scale slider percentage kept for
+                # older readers; ``image_scale`` is the fraction of full
+                # resolution the active raster was read at.
                 'current_scale': self.scale_slider.value(),
+                'image_scale': self._current_scale_value(),
                 'source_metadata': source_metadata,
                 'channel_color': self.channel_color,
                 'channel_visible': self.channel_visible,
@@ -483,9 +488,34 @@ class ImageView(QObject):
                 'lut_points_data': lut_points_data}
         return data
 
+    def _current_scale_value(self):
+        try:
+            scale = float(self.current_scale)
+        except (TypeError, ValueError):
+            return 1.0
+        return scale if np.isfinite(scale) and scale > 0 else 1.0
+
+    def _restored_scale(self, img_ctrl_data):
+        """Return the raster scale as a fraction of full resolution.
+
+        Projects before 1.4.9 stored only the slider percentage under
+        ``current_scale``; for those the reader's own scale for the scene is
+        authoritative, because it describes the pixels actually loaded.
+        """
+        saved = img_ctrl_data.get('image_scale')
+        try:
+            saved = float(saved)
+        except (TypeError, ValueError):
+            saved = None
+        if saved is not None and np.isfinite(saved) and saved > 0:
+            return saved
+        scene_key = 'scene {}'.format(self.scene_slider.value())
+        scales = getattr(self.image_file, 'scale', {}) or {}
+        return float(scales.get(scene_key, scales.get('scene 0', 1.0)))
+
     def load_img_ctrl_data(self, img_ctrl_data):
         self.current_img = img_ctrl_data['current_img']
-        self.current_scale = img_ctrl_data['current_scale']
+        self.current_scale = self._restored_scale(img_ctrl_data)
         self.channel_color = img_ctrl_data['channel_color']
         self.color_combo_index = img_ctrl_data['color_combo_index']
         saved_channel_visible = img_ctrl_data.get(
