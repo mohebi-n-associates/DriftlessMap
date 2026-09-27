@@ -86,12 +86,18 @@ def d2td3(pos2d, ax, ay, o):
 
 
 def get_region_label(data, label_data, bregma):
-    region_label = []
-    for i in range(len(data)):
-        temp = data[i] + bregma
-        temp = temp.astype(int)
-        region_label.append(label_data[temp[0], temp[1], temp[2]])
-    return region_label
+    """Return the atlas label under each Bregma-relative point.
+
+    A point belongs to voxel ``floor(point + bregma)``; points outside the
+    volume get label 0 (outside the brain) instead of wrapping around.
+    """
+    points = np.asarray(data, dtype=float).reshape(-1, 3) + np.asarray(bregma, dtype=float)
+    indexes = np.floor(points).astype(int)
+    inside = np.all((indexes >= 0) & (indexes < np.asarray(label_data.shape)), axis=1)
+    region_label = np.zeros(len(indexes), dtype=np.asarray(label_data).dtype)
+    valid = indexes[inside]
+    region_label[inside] = label_data[valid[:, 0], valid[:, 1], valid[:, 2]]
+    return region_label.tolist()
 
 
 def get_region_label_info(region_label, label_info):
@@ -107,12 +113,18 @@ def get_region_label_info(region_label, label_info):
             label_acronym.append(" ")
             label_color.append((128, 128, 128))
         else:
-            da_ind = np.where(label_info["index"] == unique_label[i])[0][0]
-            label_names.append(label_info["label"][da_ind])
-            label_acronym.append(label_info["abbrev"][da_ind])
-            label_color.append(label_info["color"][da_ind])
+            matches = np.where(np.ravel(label_info["index"]) == unique_label[i])[0]
+            if len(matches) == 0:
+                label_names.append("Unknown [{}]".format(int(unique_label[i])))
+                label_acronym.append("?{}".format(int(unique_label[i])))
+                label_color.append((128, 128, 128))
+            else:
+                da_ind = matches[0]
+                label_names.append(label_info["label"][da_ind])
+                label_acronym.append(label_info["abbrev"][da_ind])
+                label_color.append(label_info["color"][da_ind])
 
-        region_count.append(len(np.where(np.ravel(region_label) == unique_label[i])[0]))
+        region_count.append(int(np.count_nonzero(np.ravel(region_label) == unique_label[i])))
 
     return region_count, label_names, label_acronym, label_color, unique_label
 
@@ -122,18 +134,14 @@ def calculate_virus_info(data_list, pieces_names, label_data, label_info, bregma
     for i in range(1, len(data_list)):
         temp_data = np.vstack([temp_data, data_list[i]])
 
-    data = temp_data.astype(int)
-
-    # data = np.array([vox_data[0]])
-    # for i in range(1, len(vox_data)):
-    #     if np.any(vox_data[i] != data[-1]):
-    #         data = np.vstack([data, vox_data[i]])
-
-    region_label = get_region_label(data, label_data, bregma)
+    # Bregma is added before flooring so negative coordinates are not
+    # rounded towards Bregma.
+    region_label = get_region_label(temp_data, label_data, bregma)
     unique_region = np.sort(np.unique(region_label))
-    region_volume = []
-    for c_region in unique_region:
-        region_volume.append(len(np.where(label_data == c_region)[0]))
+    # Count voxels without materialising index arrays for the whole atlas.
+    region_volume = [
+        int(np.count_nonzero(label_data == c_region)) for c_region in unique_region
+    ]
 
     # print(region_volume)
     (
