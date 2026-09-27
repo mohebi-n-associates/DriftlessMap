@@ -173,5 +173,33 @@ class ProbeInfoWindowTests(unittest.TestCase):
         message.assert_called_once()
 
 
+
+class ObjectLinkTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
+    def test_links_follow_objects_when_others_are_deleted(self):
+        control = ObjectControl()
+        piece = np.array([[0.0, 0.0, 1.0], [0.0, 0.0, 2.0]])
+        for name in ("a", "b", "c"):
+            control.add_object(
+                name, "merged contour", {"object_type": "contour", "data": [piece]},
+                "opaque",
+            )
+        for index in (1, 2):
+            control.obj_list[index].link_button.setChecked(True)
+            control.obj_link_changed(control.obj_id[index])
+
+        control.delete_objects([0])
+
+        linked = control.linked_object_indexes()
+        self.assertEqual([control.obj_name[i] for i in linked], ["b", "c"])
+        control.delete_objects([linked[0]])
+        self.assertEqual(
+            [control.obj_name[i] for i in control.linked_object_indexes()],
+            ["c"],
+        )
+
 if __name__ == "__main__":
     unittest.main()

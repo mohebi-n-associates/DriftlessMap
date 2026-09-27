@@ -673,5 +673,19 @@ class ProjectPersistenceIntegrationTests(unittest.TestCase):
             window.shift_setting_changed()
         self.assertEqual(window.layer_shift_val, 40)
 
+    @isolated_gui_test
+    def test_clearing_atlas_layers_removes_every_adjacent_atlas_layer(self):
+        with tempfile.TemporaryDirectory() as folder:
+            window = self._window_with_volume_atlas(Path(folder))
+            thumbnail = np.zeros((8, 8, 3), dtype=np.uint8)
+            for link in ("atlas-probe", "atlas-cells", "atlas-drawing"):
+                window.layer_ctrl.master_layers(thumbnail, layer_type=link, color=[0, 0, 0])
+            window.working_atlas_data["cell_count"] = [2, 0, 0, 0, 0]
+            window.delete_all_atlas_layer()
+            self.assertEqual(
+                [link for link in window.layer_ctrl.layer_link if "atlas" in link], []
+            )
+            self.assertEqual(window.working_atlas_data["cell_count"], [0] * 5)
+
 if __name__ == "__main__":
     unittest.main()

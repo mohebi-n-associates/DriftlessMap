@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th September 2026
+##### DriftlessMap 1.4.24
+
+Bookkeeping fixes: switching or reloading an atlas clears every atlas layer, linked objects stay linked to the right objects after others are deleted or merged, deleting atlas cells resets their counts, and restored landmark labels use the same 1-based numbering as new ones.
+
+### 27th September 2026
 ##### DriftlessMap 1.4.23
 
 Settings safety: Slice Settings opens with the current calibration and can be cancelled, layer shift and rotate settings can be cancelled and no longer clamp above 99, and loaded probe planning is validated before it changes the session without discarding unaccepted probe points.
