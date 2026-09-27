@@ -3,6 +3,26 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.4.25
+
+Release date: 27 September 2026
+
+Flipping and rotating the histology image is now consistent.
+
+- **Every page of a stack.** Flips and rotations now apply to every page of
+  a multi-page stack. Previously only the page on screen changed, and moving
+  to another page brought back its unflipped, unrotated pixels.
+- **No cumulative blur.** Repeated 1° rotations now re-rotate the unrotated
+  image by the total angle, so the image is resampled once. Previously each
+  step resampled the result of the last one, adding blur and cropping the
+  corners each time. That degraded image was then embedded in saved
+  projects.
+- **Landmarks follow every change.** Flips and 180° rotations now reset the
+  histology landmark frame, as 90° rotations already did. The thumbnail size
+  also follows the new orientation.
+
+---
+
 ## DriftlessMap 1.4.24
 
 Release date: 27 September 2026

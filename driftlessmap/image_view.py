@@ -118,6 +118,8 @@ class ImageView(QObject):
         self.processing_img = None
         self.current_img = None
         self.current_scale = None
+        self._fine_rotation_base = None
+        self._fine_rotation_angle = 0
         self.img_size = None
         self.tb_size = None
         self.color_lut_list = []
@@ -238,6 +240,7 @@ class ImageView(QObject):
             self.curve_widget.line_type_combo.setCurrentIndex(0)
 
         self.image_file = image_file
+        self._fine_rotation_base = None
 
         if self.image_file.n_pages > 1:
             self.page_ctrl.set_max(self.image_file.n_pages - 1)
@@ -357,6 +360,7 @@ class ImageView(QObject):
                 scale_val = scale * 0.01
                 self.image_file.read_data(scale_val, scene_index=scene_index)
             self.current_img = copy.deepcopy(self.image_file.data['scene {}'.format(scene_index)])
+            self._fine_rotation_base = None
             self.current_scale = self.image_file.scale['scene {}'.format(scene_index)]
 
             if self.current_scale != self.scale_slider.value() * 0.01:
@@ -615,97 +619,78 @@ class ImageView(QObject):
             self.img_stacks.image_dict[da_key].clear()
 
     # image rotation
+    def _after_geometry_change(self):
+        self.clear_image_stacks()
+        self.img_stacks.set_data(self.current_img)
+        self.img_size = self.current_img.shape[:2]
+        self.img_stacks.image_dict['tri_pnts'].set_range(self.img_size[1], self.img_size[0])
+        self.tb_size = get_tb_size(self.img_size)
+        # Emits ``sig_image_changed`` so landmarks and layers follow the
+        # new geometry.
+        self.get_corner_and_lines()
+
+    def _transform_planes(self, operation):
+        """Apply a 2-D operation to every channel and every stack page."""
+        self._fine_rotation_base = None
+        self.current_img = np.dstack(
+            [operation(self.current_img[:, :, i]) for i in range(self.current_img.shape[2])]
+        )
+        if self.volume_img is not None:
+            self.volume_img = np.stack([operation(page) for page in self.volume_img], axis=0)
+        self._after_geometry_change()
+
     def image_vertical_flip(self):
         if self.image_file is None:
             return
-        # if self.image_file.is_rgb:
-        #     self.current_img = cv2.flip(self.current_img, 0)
-        # else:
-        for i in range(self.image_file.n_channels):
-            self.current_img[:, :, i] = cv2.flip(self.current_img[:, :, i], 0)
-        self.clear_image_stacks()
-        self.img_size = self.current_img.shape[:2]
-        self.img_stacks.image_dict['tri_pnts'].set_range(self.img_size[1], self.img_size[0])
-        self.img_stacks.set_data(self.current_img)
+        self._transform_planes(lambda plane: cv2.flip(plane, 0))
 
     def image_horizon_flip(self):
         if self.image_file is None:
             return
-        # if self.image_file.is_rgb:
-        #     self.current_img = cv2.flip(self.current_img, 1)
-        # else:
-        for i in range(self.image_file.n_channels):
-            self.current_img[:, :, i] = cv2.flip(self.current_img[:, :, i], 1)
-        self.clear_image_stacks()
-        self.img_stacks.set_data(self.current_img)
-        self.img_size = self.current_img.shape[:2]
-        self.img_stacks.image_dict['tri_pnts'].set_range(self.img_size[1], self.img_size[0])
+        self._transform_planes(lambda plane: cv2.flip(plane, 1))
 
     def image_90_rotate(self):
         if self.image_file is None:
             return
-        temp = []
-        for i in range(self.image_file.n_channels):
-            self.img_stacks.image_list[i].clear()
-            temp.append(cv2.rotate(self.current_img[:, :, i], cv2.ROTATE_90_CLOCKWISE))
-        self.current_img = np.dstack(temp)
-        self.clear_image_stacks()
-        self.img_stacks.set_data(self.current_img)
-        self.img_size = self.current_img.shape[:2]
-        self.img_stacks.image_dict['tri_pnts'].set_range(self.img_size[1], self.img_size[0])
-        self.get_corner_and_lines()
-        # self.image_file.data['scene %d' % scene_index] = self.current_img.copy()
-        self.tb_size = np.flip(self.tb_size, 0)
+        self._transform_planes(lambda plane: cv2.rotate(plane, cv2.ROTATE_90_CLOCKWISE))
 
     def image_180_rotate(self):
         if self.image_file is None:
             return
-        # if self.image_file.is_rgb:
-        #     self.current_img = cv2.rotate(self.current_img, cv2.ROTATE_180)
-        # else:
-        temp = []
-        for i in range(self.image_file.n_channels):
-            self.img_stacks.image_list[i].clear()
-            temp.append(cv2.rotate(self.current_img[:, :, i], cv2.ROTATE_180))
-        self.current_img = np.dstack(temp)
-        self.clear_image_stacks()
-        self.img_stacks.set_data(self.current_img)
-        self.img_size = self.current_img.shape[:2]
-        self.img_stacks.image_dict['tri_pnts'].set_range(self.img_size[1], self.img_size[0])
+        self._transform_planes(lambda plane: cv2.rotate(plane, cv2.ROTATE_180))
 
     def image_90_counter_rotate(self):
         if self.image_file is None:
             return
-        # if self.image_file.is_rgb:
-        #     self.current_img = cv2.rotate(self.current_img, cv2.ROTATE_90_COUNTERCLOCKWISE)
-        # else:
-        temp = []
-        for i in range(self.image_file.n_channels):
-            self.img_stacks.image_list[i].clear()
-            temp.append(cv2.rotate(self.current_img[:, :, i], cv2.ROTATE_90_COUNTERCLOCKWISE))
-        self.current_img = np.dstack(temp)
-        self.clear_image_stacks()
-        self.img_stacks.set_data(self.current_img)
-        self.img_size = self.current_img.shape[:2]
-        self.img_stacks.image_dict['tri_pnts'].set_range(self.img_size[1], self.img_size[0])
-        self.get_corner_and_lines()
-        self.tb_size = np.flip(self.tb_size, 0)
+        self._transform_planes(
+            lambda plane: cv2.rotate(plane, cv2.ROTATE_90_COUNTERCLOCKWISE)
+        )
 
     def image_1_rotate(self, rotate_direction):
+        """Rotate by one degree without compounding interpolation.
+
+        Each step re-rotates the unrotated image by the accumulated angle, so
+        repeated steps cost one resampling instead of one per step.
+        """
         if self.image_file is None:
             return
-        if rotate_direction == 'clockwise':
-            rotation_angle = - 1
+        step = -1 if rotate_direction == 'clockwise' else 1
+        if self._fine_rotation_base is None:
+            self._fine_rotation_base = (
+                self.current_img.copy(),
+                None if self.volume_img is None else self.volume_img.copy(),
+            )
+            self._fine_rotation_angle = 0
+        self._fine_rotation_angle += step
+        base_img, base_volume = self._fine_rotation_base
+        angle = self._fine_rotation_angle
+        if base_volume is not None:
+            self.volume_img = np.stack([rotate(page, angle) for page in base_volume], axis=0)
+            self.current_img = np.dstack([self.volume_img[self.display_img_index]])
         else:
-            rotation_angle = 1
-        temp = []
-        for i in range(self.image_file.n_channels):
-            temp.append(rotate(self.current_img[:, :, i], rotation_angle))
-        self.current_img = np.dstack(temp)
-        self.clear_image_stacks()
-        self.img_stacks.set_data(self.current_img)
-        self.img_size = self.current_img.shape[:2]
-        self.img_stacks.image_dict['tri_pnts'].set_range(self.img_size[1], self.img_size[0])
-        self.get_corner_and_lines()
+            self.current_img = np.dstack(
+                [rotate(base_img[:, :, i], angle) for i in range(base_img.shape[2])]
+            )
+        self._after_geometry_change()
 
     # def clear_curve_widget(self):
