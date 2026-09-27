@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th September 2026
+##### DriftlessMap 1.4.32
+
+Provenance integrity: portable projects verify the checksum of every source byte they pack, atlas verification rejects identity files that appeared after the atlas was recorded or a tampered file list, and single-file portable sources extract to the correct path.
+
+### 27th September 2026
 ##### DriftlessMap 1.4.31
 
 Saved files now get normal permissions (or keep those of the file they replace), are flushed to disk before replacing the previous version, and interrupted saves clean up their temporary files; NumPy's deprecated core module is no longer used.

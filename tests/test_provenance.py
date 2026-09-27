@@ -93,5 +93,68 @@ class ProvenanceTests(unittest.TestCase):
             self.assertIn("unsafe", reason)
 
 
+
+class ProvenanceIntegrityTests(unittest.TestCase):
+    def test_packing_refuses_a_source_that_changed_after_fingerprinting(self):
+        from driftlessmap import provenance
+        from driftlessmap.persistence import save_driftlessmap_file
+
+        with tempfile.TemporaryDirectory() as folder:
+            source = Path(folder) / "slide.tif"
+            source.write_bytes(b"original pixels")
+            reference = provenance.describe_path(source)
+            source.write_bytes(b"edited pixels!!")
+            payload = provenance.pack_path(source, reference=reference)
+            success, error = save_driftlessmap_file(
+                Path(folder) / "portable.dmap", {"portable": payload}, "test"
+            )
+            self.assertFalse(success)
+            self.assertIn("changed after it was fingerprinted", error)
+
+    def test_atlas_verification_rejects_identity_files_added_later(self):
+        from driftlessmap import provenance
+
+        with tempfile.TemporaryDirectory() as folder:
+            atlas = Path(folder) / "atlas"
+            atlas.mkdir()
+            (atlas / "atlas_pre_made.pkl").write_bytes(b"volume")
+            (atlas / "segment_pre_made.pkl").write_bytes(b"labels")
+            reference = provenance.describe_atlas_path(atlas)
+            self.assertEqual(provenance.verify_reference(atlas, reference), (True, None))
+            (atlas / "atlas_meshdata.pkl").write_bytes(b"new mesh")
+            matches, reason = provenance.verify_reference(atlas, reference)
+            self.assertFalse(matches)
+            self.assertIn("atlas_meshdata.pkl", reason)
+
+    def test_tampered_file_list_is_rejected(self):
+        from driftlessmap import provenance
+
+        with tempfile.TemporaryDirectory() as folder:
+            atlas = Path(folder) / "atlas"
+            atlas.mkdir()
+            (atlas / "atlas_pre_made.pkl").write_bytes(b"volume")
+            (atlas / "segment_pre_made.pkl").write_bytes(b"labels")
+            reference = provenance.describe_atlas_path(atlas)
+            reference["files"] = reference["files"][:1]
+            matches, reason = provenance.verify_reference(atlas, reference)
+            self.assertFalse(matches)
+
+    def test_single_file_payload_extracts_to_its_record_path(self):
+        from driftlessmap import provenance
+        from driftlessmap.persistence import ArchiveAttachment
+
+        with tempfile.TemporaryDirectory() as folder:
+            source = Path(folder) / "real.tif"
+            source.write_bytes(b"pixels")
+            payload = {
+                "kind": "file",
+                "name": "renamed.tif",
+                "files": [{"path": "real.tif",
+                           "data": ArchiveAttachment(source_path=source)}],
+            }
+            extracted = provenance.unpack_path(payload, Path(folder) / "out")
+            self.assertTrue(Path(extracted).is_file())
+            self.assertEqual(Path(extracted).read_bytes(), b"pixels")
+
 if __name__ == "__main__":
     unittest.main()

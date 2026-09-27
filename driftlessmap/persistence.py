@@ -1,5 +1,6 @@
 """Versioned, non-executable persistence for DriftlessMap user data."""
 
+import hashlib
 import io
 import importlib
 import json
@@ -68,11 +69,15 @@ class ArchiveAttachment:
         archive_path=None,
         member_name=None,
         display_name=None,
+        expected_sha256=None,
     ):
         self.source_path = None if source_path is None else str(source_path)
         self.archive_path = None if archive_path is None else str(archive_path)
         self.member_name = member_name
         self.display_name = display_name
+        # When set, saving verifies the streamed bytes against this digest so
+        # a source that changed since it was fingerprinted is never packed.
+        self.expected_sha256 = expected_sha256
         if self.source_path is None and (
             self.archive_path is None or self.member_name is None
         ):
@@ -496,6 +501,23 @@ def _decode(value, archive):
     )
 
 
+def _copy_attachment(source, output, attachment):
+    digest = hashlib.sha256()
+    while True:
+        chunk = source.read(8 * 1024 * 1024)
+        if not chunk:
+            break
+        digest.update(chunk)
+        output.write(chunk)
+    expected = attachment.expected_sha256
+    if expected is not None and digest.hexdigest() != expected:
+        raise ValueError(
+            "{} changed after it was fingerprinted; reload it before saving.".format(
+                attachment.display_name or attachment.source_path
+            )
+        )
+
+
 def _target_mode(destination):
     try:
         return destination.stat().st_mode & 0o7777
@@ -568,7 +590,7 @@ def save_driftlessmap_file(file_path, data, kind):
                     with attachment.open() as source, archive.open(
                         name, "w", force_zip64=True
                     ) as output:
-                        shutil.copyfileobj(source, output, length=8 * 1024 * 1024)
+                        _copy_attachment(source, output, attachment)
             _fsync_file(temporary_path)
             os.replace(str(temporary_path), str(destination))
             _fsync_directory(destination.parent)
