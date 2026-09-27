@@ -28,36 +28,34 @@ class LayerSettingDialog(QDialog):
         self.setWindowTitle(window_name)
         self.setStyleSheet(dialog_style)
 
+        val = int(min(max(val, min_val), max_val))
         self.val = val
 
+        # The range must be set before the value, or larger values clamp.
         self.val_slider = QSlider(Qt.Orientation.Horizontal)
+        self.val_slider.setRange(min_val, max_val)
         self.val_slider.setValue(val)
-        self.val_slider.setMinimum(min_val)
-        self.val_slider.setMaximum(max_val)
         self.val_slider.setSingleStep(1)
-        self.val_slider.sliderMoved.connect(self.val_spinbox_changed)
+        self.val_slider.valueChanged.connect(self.val_spinbox_changed)
 
         self.val_spinbox = QSpinBox()
+        self.val_spinbox.setRange(min_val, max_val)
         self.val_spinbox.setValue(val)
-        self.val_spinbox.setMaximum(max_val)
-        self.val_spinbox.setMinimum(min_val)
         self.val_spinbox.setSingleStep(1)
         self.val_spinbox.valueChanged.connect(self.value_changed)
 
-        # ok button, used to close window
-        ok_btn = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
-        ok_btn.accepted.connect(self.accept)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
 
-        # add widget to layout
         layout = QHBoxLayout()
         layout.addWidget(self.val_slider)
         layout.addWidget(self.val_spinbox)
         layout.addSpacing(10)
-        layout.addWidget(ok_btn)
+        layout.addWidget(buttons)
         self.setLayout(layout)
-
-    def accept(self) -> None:
-        self.close()
 
     def val_spinbox_changed(self):
         val = self.val_slider.value()
@@ -71,19 +69,22 @@ class LayerSettingDialog(QDialog):
 
 
 class SliceSettingDialog(QDialog):
-    def __init__(self):
+    CUTS = ['Coronal', 'Sagittal', 'Horizontal']
+
+    def __init__(self, cut='Coronal', width=0, height=0, distance=0):
         super().__init__()
 
         self.setWindowTitle('Current Slice Settings')
         self.setStyleSheet(dialog_style)
 
-        self.cut = 'Coronal'
-        self.width = 0
-        self.height = 0
-        self.distance = 0
+        self.cut = cut if cut in self.CUTS else 'Coronal'
+        self.width = float(width or 0)
+        self.height = float(height or 0)
+        self.distance = float(distance or 0)
 
         self.cut_combo = QComboBox()
-        self.cut_combo.addItems(['Coronal', 'Sagittal', 'Horizontal'])
+        self.cut_combo.addItems(self.CUTS)
+        self.cut_combo.setCurrentText(self.cut)
         self.cut_combo.currentIndexChanged.connect(self.cut_changed)
 
         width_label = QLabel('Width (mm):')
@@ -91,23 +92,24 @@ class SliceSettingDialog(QDialog):
         distance_label = QLabel('Distance w.r.t. Bregma (mm):')
 
         self.width_val = QDoubleSpinBox()
-        self.width_val.setValue(0)
         self.width_val.setRange(-50, 50)
+        self.width_val.setValue(self.width)
         self.width_val.valueChanged.connect(self.width_val_changed)
         self.height_val = QDoubleSpinBox()
-        self.height_val.setValue(0)
         self.height_val.setRange(-50, 50)
+        self.height_val.setValue(self.height)
         self.height_val.valueChanged.connect(self.height_val_changed)
         self.distance_val = QDoubleSpinBox()
-        self.distance_val.setValue(0)
         self.distance_val.setRange(-50, 50)
+        self.distance_val.setValue(self.distance)
         self.distance_val.valueChanged.connect(self.distance_val_changed)
 
-        # ok button, used to close window
-        ok_btn = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
-        ok_btn.accepted.connect(self.accept)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
 
-        # add widget to layout
         content_frame = QFrame()
         content_layout = QGridLayout(content_frame)
         content_layout.addWidget(self.cut_combo, 0, 0, 1, 2)
@@ -120,11 +122,8 @@ class SliceSettingDialog(QDialog):
 
         layout = QVBoxLayout()
         layout.addWidget(content_frame)
-        layout.addWidget(ok_btn)
+        layout.addWidget(buttons)
         self.setLayout(layout)
-
-    def accept(self) -> None:
-        self.close()
 
     def cut_changed(self):
         self.cut = self.cut_combo.currentText()

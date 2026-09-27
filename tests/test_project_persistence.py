@@ -638,5 +638,40 @@ class ProjectPersistenceIntegrationTests(unittest.TestCase):
         )
         self.assertEqual(window.action_id, 0)
 
+    @isolated_gui_test
+    def test_invalid_probe_planning_is_rejected_before_it_changes_anything(self):
+        window = self.create_window()
+        planning = window.get_probe_planning_data()
+        before = (window.probe_type, window.site_face)
+        for bad in ({"probe_type": 99}, {"site_face": 7}, {"pre_site_face_index": 12}):
+            with self.assertRaises(ValueError):
+                window.set_probe_planning_data(dict(planning, **bad))
+            self.assertEqual((window.probe_type, window.site_face), before)
+
+        window.working_atlas_data["atlas-probe"] = [[3.0, 4.0], [5.0, 6.0]]
+        window.set_probe_planning_data(dict(planning, site_face=2))
+        self.assertEqual(window.site_face, 2)
+        self.assertEqual(window.working_atlas_data["atlas-probe"], [[3.0, 4.0], [5.0, 6.0]])
+
+    @isolated_gui_test
+    def test_settings_dialogs_prefill_and_respect_cancel(self):
+        from driftlessmap.wtiles import LayerSettingDialog, SliceSettingDialog
+
+        dialog = SliceSettingDialog("Sagittal", 11.5, 8.0, -2.3)
+        self.assertEqual(dialog.cut_combo.currentText(), "Sagittal")
+        self.assertAlmostEqual(dialog.width_val.value(), 11.5)
+        self.assertAlmostEqual(dialog.distance_val.value(), -2.3)
+
+        layer = LayerSettingDialog("Shift", 0, 100, 250)
+        self.assertEqual(layer.val_spinbox.value(), 100)
+        layer = LayerSettingDialog("Shift", 0, 100, 150 // 2)
+        self.assertEqual(layer.val_slider.value(), 75)
+
+        window = self.create_window()
+        window.layer_shift_val = 40
+        with patch.object(LayerSettingDialog, "exec", return_value=0):
+            window.shift_setting_changed()
+        self.assertEqual(window.layer_shift_val, 40)
+
 if __name__ == "__main__":
     unittest.main()

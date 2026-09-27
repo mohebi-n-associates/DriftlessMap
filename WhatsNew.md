@@ -3,6 +3,26 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.4.23
+
+Release date: 27 September 2026
+
+Settings dialogs and probe-planning restores are safer.
+
+- **Slice Settings.** The dialog now opens with the slice's current cut,
+  width, height and distance from Bregma, and has a **Cancel** button.
+  Previously it always opened at zero and Coronal, and closing it with Esc
+  still applied those values, wiping the calibration.
+- **Layer shift and rotate settings.** These now have **Cancel** buttons.
+  They also no longer display values above 99 as 99.
+- **Probe planning from projects and `.dmapprobe` files.** Loaded planning is
+  checked before anything changes. An unknown probe type or an unknown site
+  face is rejected with a message, instead of leaving the controls in an
+  inconsistent state. Linear-silicon geometry is re-checked. Unaccepted
+  probe points on the atlas are kept.
+
+---
+
 ## DriftlessMap 1.4.22
 
 Release date: 27 September 2026

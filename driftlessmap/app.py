@@ -1091,18 +1091,58 @@ class DriftlessMap(QMainWindow, FORM_Main):
             "after_site_face_index": self.tool_box.after_site_face_combo.currentIndex(),
         }
 
-    def set_probe_planning_data(self, planning):
+    def _validated_probe_planning(self, planning):
+        """Check persisted probe planning before it changes the session."""
         settings = planning.get("probe_settings", planning)
-        self.probe_type = int(planning.get("probe_type", settings["probe_type"]))
+        if not isinstance(settings, dict):
+            raise ValueError("probe settings are missing")
+        probe_type = int(planning.get("probe_type", settings["probe_type"]))
+        if not 0 <= probe_type < self.tool_box.probe_type_combo.count():
+            raise ValueError("unknown probe type {}".format(probe_type))
+        site_face = int(planning.get("site_face", 0))
+        if site_face not in (0, 1, 2, 3):
+            raise ValueError("unknown site face {}".format(site_face))
+        pre_index = int(planning.get("pre_site_face_index", site_face))
+        after_index = int(planning.get("after_site_face_index", site_face))
+        for name, index, combo in (
+            ("pre-surgery face", pre_index, self.tool_box.pre_site_face_combo),
+            ("after-surgery face", after_index, self.tool_box.after_site_face_combo),
+        ):
+            if not 0 <= index < combo.count():
+                raise ValueError("unknown {} {}".format(name, index))
+        geometry_error = None
+        if probe_type == 2:
+            try:
+                geometry_error = linear_silicon_settings_error(settings)
+            except (KeyError, TypeError, IndexError):
+                geometry_error = "the linear silicon geometry is incomplete"
+        return settings, probe_type, site_face, pre_index, after_index, geometry_error
+
+    def set_probe_planning_data(self, planning):
+        (
+            settings,
+            probe_type,
+            site_face,
+            pre_index,
+            after_index,
+            geometry_error,
+        ) = self._validated_probe_planning(planning)
+        # Changing the probe type clears unaccepted probe points; a restore
+        # must not throw that work away.
+        pending_probe = list(self.working_atlas_data["atlas-probe"])
+        self.probe_type = probe_type
         self.tool_box.probe_type_combo.setCurrentIndex(self.probe_type)
         # The combo signal configures type-specific UI. Restore the exact
         # persisted geometry afterwards so custom settings are not replaced by
         # the signal handler's temporary defaults.
         self.probe_settings.set_settings(settings)
+        if pending_probe and not self.working_atlas_data["atlas-probe"]:
+            self.working_atlas_data["atlas-probe"] = pending_probe
+            self.atlas_view.working_atlas.image_dict["atlas-probe"].setData(
+                pos=np.asarray(pending_probe)
+            )
 
-        self.site_face = int(planning.get("site_face", 0))
-        pre_index = int(planning.get("pre_site_face_index", self.site_face))
-        after_index = int(planning.get("after_site_face_index", self.site_face))
+        self.site_face = site_face
         self.tool_box.pre_site_face_combo.blockSignals(True)
         self.tool_box.after_site_face_combo.blockSignals(True)
         self.tool_box.pre_site_face_combo.setCurrentIndex(pre_index)
@@ -1112,7 +1152,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
 
         self.multi_shanks = bool(planning.get("multi_shanks_enabled", False))
         self.multi_settings.set_multi_probes(planning.get("multi_settings"))
-        self.valid_probe_settings = bool(
+        self.valid_probe_settings = geometry_error is None and bool(
             planning.get("valid_probe_settings", True)
         )
         self.valid_multi_settings = bool(
@@ -1271,16 +1311,15 @@ class DriftlessMap(QMainWindow, FORM_Main):
         shift_setting = LayerSettingDialog(
             "Layer Shifting Setting", 0, 100, self.layer_shift_val
         )
-        shift_setting.exec()
-        self.layer_shift_val = shift_setting.val
+        if shift_setting.exec() == QDialog.DialogCode.Accepted:
+            self.layer_shift_val = shift_setting.val
 
     def rotate_setting_changed(self):
         rotate_setting = LayerSettingDialog(
             "Layer Rotating Setting", 0, 50, self.layer_rotate_val
         )
-        rotate_setting.exec()
-        self.layer_rotate_val = rotate_setting.val
-        # print(self.layer_rotate_val)
+        if rotate_setting.exec() == QDialog.DialogCode.Accepted:
+            self.layer_rotate_val = rotate_setting.val
 
     def get_valid_layer(self):
         if not self.layer_ctrl.current_layer_index or not self.h2a_transferred:
@@ -1691,9 +1730,14 @@ class DriftlessMap(QMainWindow, FORM_Main):
             msg = "No Slice Data is loaded.  Please load Slice through <Atlas Menu>."
             self.print_message(msg, self.error_message_color)
             return
-        slice_info = SliceSettingDialog()
-        slice_info.exec()
-        self.atlas_view.set_slice_info(slice_info)
+        slice_info = SliceSettingDialog(
+            self.atlas_view.slice_cut or "Coronal",
+            self.atlas_view.slice_width,
+            self.atlas_view.slice_height,
+            self.atlas_view.slice_distance,
+        )
+        if slice_info.exec() == QDialog.DialogCode.Accepted:
+            self.atlas_view.set_slice_info(slice_info)
 
     def crop_slice(self):
         if self.atlas_view.slice_image_data is None:
@@ -8235,7 +8279,13 @@ class DriftlessMap(QMainWindow, FORM_Main):
                     "probe_type", p_dict.get("probe_type", 0)
                 ),
             }
-        self.set_probe_planning_data(probe_planning)
+        try:
+            self.set_probe_planning_data(probe_planning)
+        except (KeyError, TypeError, ValueError) as exc:
+            self.print_message(
+                "The project's probe settings were not restored: {}".format(exc),
+                self.error_message_color,
+            )
 
         # settings
         setting_data = p_dict["setting_data"]

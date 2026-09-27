@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th September 2026
+##### DriftlessMap 1.4.23
+
+Settings safety: Slice Settings opens with the current calibration and can be cancelled, layer shift and rotate settings can be cancelled and no longer clamp above 99, and loaded probe planning is validated before it changes the session without discarding unaccepted probe points.
+
+### 27th September 2026
 ##### DriftlessMap 1.4.22
 
 Atlas download and processing workers now report unexpected failures instead of leaving their dialogs stuck or aborting DriftlessMap, and closing a dialog after a finished background step no longer raises an error.
