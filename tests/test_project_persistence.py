@@ -14,6 +14,7 @@ import cv2
 import numpy as np
 
 from driftlessmap.persistence import load_driftlessmap_file
+from driftlessmap.provenance import path_stat_signature
 
 if PROJECT_TEST_CHILD:
     from PyQt6.QtWidgets import QApplication, QFileDialog
@@ -90,6 +91,7 @@ class ProjectPersistenceIntegrationTests(unittest.TestCase):
             window = self.create_window()
             self.assertTrue(window.load_single_image_file(str(source), ".png"))
             window.current_img_path = str(source)
+            window._loaded_histology_signature = path_stat_signature(source)
             expected = window.image_view.current_img.copy()
             window.image_view.channel_visible[1] = False
             window.image_view.img_stacks.image_list[1].setVisible(False)
@@ -144,6 +146,7 @@ class ProjectPersistenceIntegrationTests(unittest.TestCase):
             window = self.create_window()
             self.assertTrue(window.load_single_image_file(str(source), ".png"))
             window.current_img_path = str(source)
+            window._loaded_histology_signature = path_stat_signature(source)
             with patch.object(
                 QFileDialog,
                 "getSaveFileName",
@@ -451,6 +454,46 @@ class ProjectPersistenceIntegrationTests(unittest.TestCase):
                 os.path.abspath(str(atlas_folder)), window._loaded_atlas_signatures
             )
             remember.assert_called_once_with(str(atlas_folder))
+
+    @isolated_gui_test
+    def test_embedded_fallback_never_links_a_changed_source(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            source = root / "histology.png"
+            project = root / "study.dmap"
+            resaved = root / "resaved.dmap"
+            cv2.imwrite(str(source), np.full((8, 10, 3), 40, dtype=np.uint8))
+
+            window = self.create_window()
+            self.assertTrue(window.load_single_image_file(str(source), ".png"))
+            window.current_img_path = str(source)
+            window._loaded_histology_signature = path_stat_signature(source)
+            with patch.object(
+                QFileDialog, "getSaveFileName", return_value=(str(project), "")
+            ):
+                self.assertTrue(window.save_project_called())
+            payload, error = load_driftlessmap_file(project, "project")
+            self.assertIsNone(error)
+            original = payload["histology_provenance"]["reference"]
+
+            # The source is replaced by different pixels at the same path.
+            cv2.imwrite(str(source), np.full((8, 10, 3), 200, dtype=np.uint8))
+            restored = self.create_window()
+            with patch.object(restored, "_ask_for_verified_input", return_value=None):
+                prepared = restored.prepare_project_sources(payload, str(project))
+            self.assertEqual(prepared["_histology_load_mode"], "embedded")
+            restored.current_project_path = str(project)
+            restored.load_project(prepared)
+            self.assertIsNone(restored.current_img_path)
+
+            with patch.object(
+                QFileDialog, "getSaveFileName", return_value=(str(resaved), "")
+            ):
+                self.assertTrue(restored.save_project_called())
+            resaved_payload, error = load_driftlessmap_file(resaved, "project")
+            self.assertIsNone(error)
+            relinked = resaved_payload["histology_provenance"]["reference"]
+            self.assertEqual(relinked["sha256"], original["sha256"])
 
 if __name__ == "__main__":
     unittest.main()

@@ -3,6 +3,24 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.4.12
+
+Release date: 27 September 2026
+
+Saving no longer ties your work to a file it was not derived from. Suppose a
+project's histology file had changed, and you declined to locate the original
+so the project fell back to its embedded raster. The next save used to
+fingerprint the changed file and record it as the source of the embedded
+work, which the persistence contract forbids. Slice atlases restored from a
+project had the same problem, because they were never fingerprinted.
+
+Now a histology or slice-atlas file is linked only if its fingerprint was
+taken as it was loaded. When the embedded raster is in use, the project keeps
+the reference it was opened with. That reference still describes the original
+file, so the original can be verified and relinked later.
+
+---
+
 ## DriftlessMap 1.4.11
 
 Release date: 27 September 2026
