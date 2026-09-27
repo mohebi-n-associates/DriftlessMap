@@ -378,15 +378,19 @@ def create_other_size(image, file_name, dim, location):
 def make_hist_data(image_data, max_val):
     hist_data_list = []
     for i in range(image_data.shape[2]):
-        if np.max(image_data[:, :, i]) == 0:
-            da_bins = max_val
+        channel_max = float(np.max(image_data[:, :, i]))
+        # One bin per intensity step, but at least three bins so the curve
+        # has enough points, even for masks or nearly black channels.
+        if channel_max >= 1:
+            da_bins = int(np.ceil(channel_max))
         else:
-            da_bins = np.max(image_data[:, :, i])
+            da_bins = int(max_val)
+        da_bins = max(da_bins, 3)
         hist_y, x = np.histogram(image_data[:, :, i], bins=da_bins)
         y = np.log1p(hist_y)
         y = y / np.max(y) * max_val
         y = np.append(y, 0)
-        sfunc = interp1d(x, y, "cubic")
+        sfunc = interp1d(x, y, "cubic" if len(x) >= 4 else "linear")
         inter_x = np.linspace(np.min(x), np.max(x), 200)
         inter_y = sfunc(inter_x)
         inter_y[inter_y < 0] = 0

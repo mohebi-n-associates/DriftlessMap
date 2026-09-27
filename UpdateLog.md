@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th September 2026
+##### DriftlessMap 1.4.20
+
+Image display fixes: masks and nearly black images load again, hidden channels stay hidden after project load, flips, rotations and page or scene changes, histogram colours no longer carry over between images, and colour swatches no longer accumulate on every project load.
+
+### 27th September 2026
 ##### DriftlessMap 1.4.19
 
 Object import checks coordinates against the loaded volume atlas correctly and no longer crashes with a slice atlas; bulk object export writes safe, unique file names and confirms completion.

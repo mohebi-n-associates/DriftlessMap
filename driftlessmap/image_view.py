@@ -173,6 +173,7 @@ class ImageView(QObject):
 
         # image stacks
         self.img_stacks = ImageStacks()
+        self.img_stacks.channel_visible = self.channel_visible
 
         # scene control
         self.page_ctrl = ImagePageController()
@@ -318,11 +319,11 @@ class ImageView(QObject):
             self.chn_widget_list[i].vis_btn.setChecked(False)
             self.chn_widget_list[i].vis = True
             self.chn_widget_list[i].set_checked(False)
+            self.channel_visible[i] = True
 
     def set_data_and_size(self, img_data):
         self.img_stacks.set_data(img_data)
         self.img_size = img_data.shape[:2]
-        print('image_view', self.img_size)
         rect = (0, 0, self.img_size[1], self.img_size[0])
         self.corner_points, self.side_lines = get_corner_line_from_rect(rect)
         self.img_stacks.image_dict['tri_pnts'].set_range(self.img_size[1], self.img_size[0])
@@ -570,7 +571,7 @@ class ImageView(QObject):
             self.chn_widget_list[i].set_checked(not channel_visible)
             self.chn_widget_list[i].vis_btn.setText(self.image_file.channel_name[i])
             self.chn_widget_list[i].color_combo.blockSignals(True)
-            self.chn_widget_list[i].add_item(self.image_file.hsv_colors[i])
+            # The image's own colour swatch was added when the image loaded.
             self.chn_widget_list[i].color_combo.setCurrentIndex(self.color_combo_index[i])
             self.chn_widget_list[i].color_combo.blockSignals(False)
             self.channel_visible[i] = channel_visible

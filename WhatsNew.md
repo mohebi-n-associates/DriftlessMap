@@ -3,6 +3,27 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.4.20
+
+Release date: 27 September 2026
+
+Several problems with how histology images are displayed have been fixed.
+
+- **Nearly black images load.** Images whose brightest pixel in a channel is
+  1 or 2, such as binary masks, failed to load while their histogram curve
+  was being built.
+- **Hidden channels stay hidden.** A channel hidden with its visibility
+  button reappeared after reopening a project, flipping, rotating, or
+  changing page or scene, even though its button still showed it as hidden.
+- **Histogram state resets per image.** Curve colours and the set of enabled
+  channels are reset for each new image. Previously a second image could use
+  the first image's colours, and a one-channel image opened after a
+  four-channel one could not use point editing.
+- **Colour swatches no longer pile up.** Each project load added another copy
+  of the image's own colour swatch to every channel's colour list.
+
+---
+
 ## DriftlessMap 1.4.19
 
 Release date: 27 September 2026

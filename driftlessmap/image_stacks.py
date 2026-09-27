@@ -229,6 +229,8 @@ class ImageStacks(pg.GraphicsLayoutWidget):
         pg.GraphicsLayoutWidget.__init__(self)
 
         self.data = None
+        # Shared with ImageView: which channels the user has chosen to show.
+        self.channel_visible = None
         self.vb = self.addViewBox()
         self.setBackground('k')
         self.vb.setAspectLocked()
@@ -316,7 +318,10 @@ class ImageStacks(pg.GraphicsLayoutWidget):
         self.base_layer.setImage(base_img)
         for i in range(self.data.shape[2]):
             self.image_list[i].setImage(self.data[:, :, i], autoLevels=False)
-            self.image_list[i].setVisible(True)
+            visible = True if self.channel_visible is None else bool(
+                self.channel_visible[i]
+            )
+            self.image_list[i].setVisible(visible)
         for i in range(self.data.shape[2], len(self.image_list)):
             self.image_list[i].clear()
             self.image_list[i].setVisible(False)

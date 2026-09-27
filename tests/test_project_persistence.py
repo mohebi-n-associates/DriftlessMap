@@ -134,6 +134,22 @@ class ProjectPersistenceIntegrationTests(unittest.TestCase):
             self.assertEqual(
                 restored.image_view.channel_visible[:3], [True, False, True]
             )
+            # The drawn channels, not only the model, must honour the choice.
+            self.assertEqual(
+                [item.isVisible() for item in restored.image_view.img_stacks.image_list[:3]],
+                [True, False, True],
+            )
+            fresh_counts = [
+                window.image_view.chn_widget_list[i].color_combo.count()
+                for i in range(3)
+            ]
+            self.assertEqual(
+                [
+                    restored.image_view.chn_widget_list[i].color_combo.count()
+                    for i in range(3)
+                ],
+                fresh_counts,
+            )
 
     @isolated_gui_test
     def test_portable_project_streams_and_reopens_original_histology(self):
