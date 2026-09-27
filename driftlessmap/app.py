@@ -1643,85 +1643,39 @@ class DriftlessMap(QMainWindow, FORM_Main):
     #                  Menu Bar ---- Atlas ----- related
     #
     # ------------------------------------------------------------------
+    def _open_downloaded_atlas(self, dialog):
+        """Open a freshly processed download like any other atlas folder.
+
+        Routing downloads through :meth:`load_volume_atlas` records the atlas
+        path, content fingerprint and axis metadata used for provenance.
+        """
+        saving_folder = getattr(dialog.worker, "saving_folder", None)
+        dialog.worker.deleteLater()
+        dialog.deleteLater()
+        if not saving_folder:
+            return
+        if self.load_volume_atlas(saving_folder):
+            try:
+                save_last_atlas_path(saving_folder)
+            except OSError:
+                self.print_message(
+                    "Atlas loaded, but its location could not be remembered.",
+                    self.reminder_color,
+                )
+
     def download_waxholm_rat_atlas(self):
         wax = AtlasDownloader()
         wax.exec()
-
         if not wax.continue_process:
             return
-        self.volume_atlas_axis_info = None
-
-        atlas_data = np.transpose(wax.worker.atlas_data, [2, 0, 1])[::-1, :, :]
-        atlas_info = wax.worker.atlas_info
-
-        label_info = wax.worker.label_info
-
-        segmentation_data = np.transpose(wax.worker.segmentation_data, [2, 0, 1])[
-            ::-1, :, :
-        ]
-        unique_label = wax.worker.unique_label
-
-        s_boundary = np.transpose(wax.worker.boundary["s_contour"], [2, 0, 1])[
-            ::-1, :, :
-        ]
-        c_boundary = np.transpose(wax.worker.boundary["c_contour"], [2, 0, 1])[
-            ::-1, :, :
-        ]
-        h_boundary = np.transpose(wax.worker.boundary["h_contour"], [2, 0, 1])[
-            ::-1, :, :
-        ]
-
-        boundary = {
-            "s_contour": s_boundary,
-            "c_contour": c_boundary,
-            "h_contour": h_boundary,
-        }
-
-        self.set_volume_atlas_to_view(
-            atlas_data, segmentation_data, atlas_info, label_info, boundary
-        )
-        self.set_volume_atlas_3d(
-            unique_label, wax.worker.mesh_data, wax.worker.small_mesh_list
-        )
-
-        wax.worker.deleteLater()
-        wax.deleteLater()
+        self._open_downloaded_atlas(wax)
 
     def download_allen_mice_atlas(self):
         aln = AllenDownloader()
         aln.exec()
         if not aln.continue_process:
             return
-        self.volume_atlas_path = aln.worker.saving_folder
-        self.current_atlas_path = aln.worker.saving_folder
-        self._loaded_atlas_signatures[
-            os.path.abspath(self.current_atlas_path)
-        ] = path_stat_signature(
-            self.current_atlas_path, included_names=ATLAS_IDENTITY_FILES
-        )
-        self.current_atlas = "volume"
-        self._set_volume_atlas_axis_info(aln.worker.saving_folder)
-
-        atlas_data = np.transpose(aln.worker.atlas_data, [2, 0, 1])[::-1, :, :]
-        atlas_info = aln.worker.atlas_info
-
-        label_info = aln.worker.label_info
-
-        segmentation_data = np.transpose(aln.worker.segmentation_data, [2, 0, 1])[
-            ::-1, :, :
-        ]
-        unique_label = aln.worker.unique_label
-
-        self.set_volume_atlas_to_view(
-            atlas_data, segmentation_data, atlas_info, label_info, None
-        )
-        aln.worker.boundary = None
-        self.set_volume_atlas_3d(
-            unique_label, aln.worker.mesh_data, aln.worker.small_mesh_list
-        )
-
-        aln.worker.deleteLater()
-        aln.deleteLater()
+        self._open_downloaded_atlas(aln)
 
     def process_raw_atlas_data(self):
         process_atlas_window = AtlasProcessor()
@@ -1863,7 +1817,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.delete_all_atlas_layer()
 
         if self.current_atlas == "volume":
-            self.current_atlas_path = self.volume_atlas_path
+            self.current_atlas_path = self.slice_atlas_path
             self.actionSwitch_Atlas.setText("Switch Atlas: Slice")
             self.current_atlas = "slice"
             self.atlascontrolpanel.setEnabled(False)
@@ -1875,7 +1829,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
             self.object_ctrl.add_object_btn.setEnabled(False)
             self.object_ctrl.merge_probe_btn.setEnabled(False)
         else:
-            self.current_atlas_path = self.slice_atlas_path
+            self.current_atlas_path = self.volume_atlas_path
             self.actionSwitch_Atlas.setText("Switch Atlas: Volume")
             self.current_atlas = "volume"
             self.atlascontrolpanel.setEnabled(True)
