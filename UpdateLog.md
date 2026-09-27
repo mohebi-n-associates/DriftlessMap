@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th September 2026
+##### DriftlessMap 1.4.17
+
+Editing-tool fixes: the histology eraser no longer crashes on overlay or empty layers, the magic wand selects a two-sided intensity band that works on 16-bit images, and clearing a size or tolerance field no longer raises errors.
+
+### 27th September 2026
 ##### DriftlessMap 1.4.16
 
 Layer shift and rotate fixes: rotating point layers no longer crashes and turns in the same direction as image layers about the correct centre, and shifting image layers on non-square slices keeps them aligned.
