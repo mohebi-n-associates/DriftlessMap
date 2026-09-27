@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th September 2026
+##### DriftlessMap 1.4.28
+
+Scientific fix: atlas voxels are now found by flooring coordinates everywhere, so points just outside the atlas or on the negative side of Bregma get the correct region; drawing surface depths are measured from the top of the brain surface; and region summaries tolerate unknown labels.
+
+### 27th September 2026
 ##### DriftlessMap 1.4.27
 
 Displaying a merged probe with no mediolateral tilt now draws it at the correct anteroposterior position in the sagittal view.

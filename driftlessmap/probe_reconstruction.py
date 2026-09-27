@@ -250,7 +250,7 @@ def _coordinate_record(relative_bregma_vox, bregma_herbs_vox, voxel_size_um,
         "herbs_vox_index": (
             np.asarray(voxel_index, dtype=int)
             if voxel_index is not None
-            else herbs_vox.astype(int)
+            else np.floor(herbs_vox).astype(int)
         ),
         "bregma_um": relative_bregma_vox * voxel_size_um,
         "source_vox": source_vox,

@@ -782,7 +782,7 @@ def get_pnt_from_loc(sct, loc, n_vec, u_vec, r_vec, bregma, vox_size):
         temp = temp / vox_size
         pnt.append(temp)
         vox_temp = temp + bregma
-        vox_temp = vox_temp.astype(int)
+        vox_temp = np.floor(vox_temp).astype(int)
         pnt_vox.append(vox_temp)
 
     return pnt, pnt_vox
@@ -957,9 +957,9 @@ def calculate_probe_info(
     }
 
     pv_sp = pc_sp + bregma
-    pv_sp = pv_sp.astype(int)
+    pv_sp = np.floor(pv_sp).astype(int)
     pv_ep = pc_ep + bregma
-    pv_ep = pv_ep.astype(int)
+    pv_ep = np.floor(pv_ep).astype(int)
 
     enter_coords = pc_sp * vxsize_um
     end_coords = pc_ep * vxsize_um
@@ -1003,7 +1003,8 @@ def calculate_probe_info(
     else:
         contact_pnt = [np.asarray([pc_ep], dtype=float) for _ in range(4)]
         contact_vox = [
-            np.asarray([pc_ep + bregma], dtype=float).astype(int) for _ in range(4)
+            np.floor(np.asarray([pc_ep + bregma], dtype=float)).astype(int)
+            for _ in range(4)
         ]
 
     if not coordinate_groups_in_bounds(contact_vox, label_data.shape):
@@ -1065,7 +1066,7 @@ def calculate_probe_info(
     else:
         sites_pnt = [np.array([pc_ep])]
         sites_vox_temp = sites_pnt[0] + bregma
-        sites_vox = [sites_vox_temp.astype(int)]
+        sites_vox = [np.floor(sites_vox_temp).astype(int)]
 
     if not coordinate_groups_in_bounds(sites_vox, label_data.shape):
         return data_dict, PROBE_COORDINATES_OUTSIDE_ATLAS
@@ -1135,7 +1136,7 @@ def calculate_probe_info(
         np.asarray(pc_sp, dtype=float)
         + (track_depth_um / vxsize_um)[:, None] * track_direction
     )
-    track_vox = (track_pnt + np.asarray(bregma, dtype=float)).astype(int)
+    track_vox = np.floor(track_pnt + np.asarray(bregma, dtype=float)).astype(int)
     if not coordinates_in_bounds(track_vox, label_data.shape):
         return None, PROBE_COORDINATES_OUTSIDE_ATLAS
     track_labels = label_data[

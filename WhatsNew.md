@@ -3,6 +3,34 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.4.28
+
+Release date: 27 September 2026
+
+**Scientific correction.** Region assignment and surface depth now follow the
+voxel-edge convention used elsewhere, in which voxel `k` spans `[k, k + 1)`.
+
+- **Coordinates are floored, not truncated.** Several places truncated
+  coordinates toward zero instead of flooring them. A point at −0.4 was
+  therefore treated as voxel 0, so points just outside the atlas received an
+  edge label. For virus objects, truncation happened before Bregma was
+  added, so fractional points on the negative side of Bregma were counted in
+  the neighbouring voxel. This affected probe contacts, track labels, cell,
+  virus and drawing regions, and ROI reports.
+- **Surface depth.** Drawing ROI depths are now measured from the top face of
+  the dorsal-most labelled voxel. Previously they were measured from its
+  lower face: every depth was up to one voxel too shallow, and points inside
+  that top voxel got no depth at all.
+- **Unknown labels.** Cell, virus and drawing summaries now list structure
+  IDs missing from the ontology as `Unknown [ID]` instead of failing.
+- **Speed.** Counting the voxels of each region no longer builds an index of
+  the whole atlas, so large atlases are faster.
+
+**Action:** re-merge virus, cell and drawing objects and re-export ROI CSVs
+where exact region counts near boundaries or surface depths matter.
+
+---
+
 ## DriftlessMap 1.4.27
 
 Release date: 27 September 2026
