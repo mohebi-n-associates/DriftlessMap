@@ -299,5 +299,53 @@ class SafeArchiveTests(unittest.TestCase):
         self.assertEqual(loaded, data)
 
 
+
+class AtomicSaveTests(unittest.TestCase):
+    @unittest.skipUnless(os.name == "posix", "POSIX permissions")
+    def test_saved_files_use_umask_or_keep_existing_permissions(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "shared.dmap"
+            umask = os.umask(0)
+            os.umask(umask)
+            success, error = persistence.save_driftlessmap_file(path, {"a": 1}, "test")
+            self.assertTrue(success, error)
+            self.assertEqual(path.stat().st_mode & 0o777, 0o666 & ~umask)
+
+            os.chmod(path, 0o640)
+            success, error = persistence.save_driftlessmap_file(path, {"a": 2}, "test")
+            self.assertTrue(success, error)
+            self.assertEqual(path.stat().st_mode & 0o777, 0o640)
+
+    def test_failed_save_keeps_the_old_file_and_leaves_no_temporary(self):
+        class Exploding:
+            def open(self):
+                raise OSError("disk vanished")
+
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "project.dmap"
+            success, error = persistence.save_driftlessmap_file(path, {"a": 1}, "test")
+            self.assertTrue(success, error)
+            source = Path(folder) / "source.bin"
+            source.write_bytes(b"data")
+            attachment = persistence.ArchiveAttachment(source_path=source)
+            attachment.open = Exploding().open
+            success, error = persistence.save_driftlessmap_file(
+                path, {"a": 2, "file": attachment}, "test"
+            )
+            self.assertFalse(success)
+            loaded, error = persistence.load_driftlessmap_file(path, "test")
+            self.assertEqual(loaded, {"a": 1})
+            leftovers = [p.name for p in Path(folder).iterdir() if p.name.endswith(".tmp")]
+            self.assertEqual(leftovers, [])
+
+    def test_numpy_constructors_resolve_without_deprecation_warnings(self):
+        import warnings
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", DeprecationWarning)
+            safe = persistence._numpy_pickle_globals()
+        self.assertIn(("numpy.core.multiarray", "_reconstruct"), safe)
+        self.assertIn(("numpy._core.multiarray", "scalar"), safe)
+
 if __name__ == "__main__":
     unittest.main()

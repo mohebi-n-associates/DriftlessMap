@@ -3,6 +3,30 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.4.31
+
+Release date: 27 September 2026
+
+Saving is safer, and saved files can be shared normally.
+
+- **Permissions.** Projects, layers, objects and other DriftlessMap files
+  were written readable only by their owner, because the temporary file
+  used for atomic saving was private. That broke shared lab folders and
+  tightened the permissions of any file that was overwritten. New files now
+  use your normal default permissions, and overwritten files keep the
+  permissions they had.
+- **Crash safety.** Each save is flushed to disk before it replaces the
+  previous version, and the rename is flushed too on macOS and Linux. A power
+  loss or crash can no longer leave a truncated project in place of the good
+  one.
+- **Interrupted saves.** A save stopped by Ctrl-C or a forced quit now
+  removes its temporary file.
+- **NumPy compatibility.** Reading older HERBS pickles no longer goes through
+  NumPy's deprecated `numpy.core` module, which future NumPy releases will
+  remove.
+
+---
+
 ## DriftlessMap 1.4.30
 
 Release date: 27 September 2026
