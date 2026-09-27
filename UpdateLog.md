@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th September 2026
+##### DriftlessMap 1.4.18
+
+Probe reconstruction no longer crashes on tracks too short to hold a recording site, on atlas labels missing from the ontology, or on horizontal probe directions; each case now produces a clear message or a labelled result.
+
+### 27th September 2026
 ##### DriftlessMap 1.4.17
 
 Editing-tool fixes: the histology eraser no longer crashes on overlay or empty layers, the magic wand selects a two-sided intensity band that works on 16-bit images, and clearing a size or tolerance field no longer raises errors.

@@ -3,6 +3,26 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.4.18
+
+Release date: 27 September 2026
+
+Probe reconstruction now copes with three edge cases that used to stop the
+merge with an internal error.
+
+- **Short tracks.** When the track inside the brain was too short to hold the
+  tip and at least one recording site in every column, the merge raised an
+  index error. It now reports "the track inside the brain is too short to hold
+  the tip and a recording site in every column", and the probe pieces are
+  kept.
+- **Unknown structure IDs.** A structure ID present in the atlas volume but
+  missing from its ontology, as can happen with custom or trimmed atlases,
+  raised an error. Such regions are now named `Unknown [ID]`, shown in grey.
+- **Horizontal probe directions.** A direction exactly along the ML or AP
+  axis produced undefined (NaN) tilt angles. It now produces finite angles.
+
+---
+
 ## DriftlessMap 1.4.17
 
 Release date: 27 September 2026

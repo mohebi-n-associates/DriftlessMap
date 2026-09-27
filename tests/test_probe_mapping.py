@@ -7,6 +7,9 @@ from driftlessmap.probe_utiles import (
     Probe,
     calculate_probe_info,
     calculate_vector_according_to_site_face,
+    PROBE_TRACK_TOO_SHORT,
+    get_angles,
+    get_label_name,
     find_probe_surface_entry,
     line_fit_2d,
     robust_probe_line_fit,
@@ -212,6 +215,75 @@ class SiteFaceFrameTests(unittest.TestCase):
         for face, normal in expected_normals.items():
             _, _, n_hat = calculate_vector_according_to_site_face(direction, face)
             np.testing.assert_allclose(n_hat, normal, atol=1e-12)
+
+
+class ProbeRobustnessTests(unittest.TestCase):
+    LABEL_INFO = {
+        "index": np.array([10]),
+        "label": np.array(["Test region"]),
+        "abbrev": np.array(["TR"]),
+        "color": np.array([[1, 2, 3]]),
+        "parent": np.array([0]),
+        "level_indicator": [1],
+    }
+
+    def settings(self, **overrides):
+        settings = {
+            "probe_type": 2,
+            "probe_type_name": "Linear-Silicon",
+            "probe_thickness": 0,
+            "probe_length": 600,
+            "tip_length": 50,
+            "site_height": 10,
+            "site_width": 10,
+            "per_max_sites": [5],
+            "sites_distance": [100],
+            "x_bias": [0],
+            "y_bias": [50],
+            "site_number_in_banks": None,
+            "multi_shanks": None,
+        }
+        settings.update(overrides)
+        return settings
+
+    def reconstruct(self, labels, settings):
+        points = [np.array([[0.0, 0.0, 25.0], [0.0, 0.0, -30.0]])]
+        return calculate_probe_info(
+            points,
+            ["probe piece"],
+            labels,
+            self.LABEL_INFO,
+            vxsize_um=10,
+            probe_settings=settings,
+            merge_sites=False,
+            bregma=np.array([50.0, 50.0, 50.0]),
+            site_face=0,
+            n_hat=None,
+            pre_plan=False,
+        )
+
+    def labels(self, region=10):
+        labels = np.zeros((101, 101, 101), dtype=np.int32)
+        labels[5:96, 5:96, 20:81] = region
+        return labels
+
+    def test_track_without_room_for_sites_reports_an_error(self):
+        _, error = self.reconstruct(self.labels(), self.settings(y_bias=[5000]))
+        self.assertEqual(error, PROBE_TRACK_TOO_SHORT)
+
+    def test_labels_missing_from_the_ontology_are_named_unknown(self):
+        names, acronyms, colors = get_label_name(self.LABEL_INFO, [10, 99, 0])
+        self.assertEqual(names[:2], ["Test region", "Unknown [99]"])
+        self.assertEqual(acronyms[1], "?99")
+        np.testing.assert_array_equal(colors[1], [128, 128, 128])
+        info, error = self.reconstruct(self.labels(region=99), self.settings())
+        self.assertEqual(error, 0)
+        self.assertIn("Unknown [99]", info["label_name"])
+
+    def test_horizontal_directions_have_finite_angles(self):
+        for direction in ([1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, -1.0]):
+            angles = get_angles(np.asarray(direction))
+            self.assertTrue(np.all(np.isfinite(angles)), direction)
 
 if __name__ == "__main__":
     unittest.main()
