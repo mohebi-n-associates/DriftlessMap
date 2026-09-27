@@ -3,6 +3,28 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.4.24
+
+Release date: 27 September 2026
+
+This release fixes several places where the application's records drifted
+out of step with what was on screen.
+
+- **All atlas layers are cleared.** Switching atlases, reloading an atlas or
+  opening a project skipped every other atlas layer, leaving layers that
+  pointed at data that had already been cleared.
+- **Object links stay with their objects.** Linked objects were remembered by
+  list position. Deleting or merging another object shifted those positions,
+  so **Compare** showed the wrong probes or failed. Links now follow the
+  objects themselves.
+- **Cell counts reset.** Deleting the `atlas-cells` layer left the per-layer
+  cell counts in an invalid state instead of resetting them to zero.
+- **Landmark labels match after reopening a project.** Restored labels were
+  numbered from 0, while landmarks placed by hand are numbered from 1. They
+  also stayed hidden even when the triangulation tool was active.
+
+---
+
 ## DriftlessMap 1.4.23
 
 Release date: 27 September 2026

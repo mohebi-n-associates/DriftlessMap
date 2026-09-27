@@ -1489,13 +1489,21 @@ class ObjectControl(QObject):
             return
 
     def obj_link_changed(self, clicked_id):
-        da_index = np.where(np.ravel(self.obj_id) == clicked_id)[0][0]
+        # Links are kept by object ID, which stays valid when other objects
+        # are deleted or merged; list positions would shift.
+        da_index = self.obj_id.index(clicked_id)
         if self.obj_list[da_index].link_button.isChecked():
-            self.linked_indexes.append(da_index)
-        else:
-            if da_index in self.linked_indexes:
-                del_ind = np.where(np.ravel(self.linked_indexes) == da_index)[0][0]
-                self.linked_indexes.pop(del_ind)
+            if clicked_id not in self.linked_indexes:
+                self.linked_indexes.append(clicked_id)
+        elif clicked_id in self.linked_indexes:
+            self.linked_indexes.remove(clicked_id)
+
+    def linked_object_indexes(self):
+        """Return current list positions of linked objects that still exist."""
+        self.linked_indexes = [
+            obj_id for obj_id in self.linked_indexes if obj_id in self.obj_id
+        ]
+        return [self.obj_id.index(obj_id) for obj_id in self.linked_indexes]
 
     def obj_color_changed(self, clicked_id):
         self.set_active_layer_to_current(clicked_id)
@@ -1773,7 +1781,8 @@ class ObjectControl(QObject):
         self.linked_indexes = []
 
     def compare_obj_called(self):
-        compare_names = [self.obj_name[ind] for ind in self.linked_indexes]
-        compare_data = [self.obj_data[ind] for ind in self.linked_indexes]
+        linked = self.linked_object_indexes()
+        compare_names = [self.obj_name[ind] for ind in linked]
+        compare_data = [self.obj_data[ind] for ind in linked]
         info_window = CompareWindow(compare_names, compare_data)
         info_window.exec()

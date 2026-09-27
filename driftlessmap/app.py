@@ -5741,10 +5741,12 @@ class DriftlessMap(QMainWindow, FORM_Main):
     def delete_all_atlas_layer(self):
         if not self.layer_ctrl.layer_link:
             return
-        for da_link in self.layer_ctrl.layer_link:
+        # Iterate over a snapshot: deleting shifts the live list, which would
+        # skip the layer after each deleted one.
+        for da_link in list(self.layer_ctrl.layer_link):
             if "atlas" not in da_link:
                 continue
-            da_index = np.where(np.ravel(self.layer_ctrl.layer_link) == da_link)[0][0]
+            da_index = self.layer_ctrl.layer_link.index(da_link)
             self.layer_ctrl.delete_layer(da_index)
             self.layers_exist_changed(da_link)
         self.remove_h2a_transferred_layers()
@@ -5842,6 +5844,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
                     "cell_layer_index",
                 ]:
                     self.working_atlas_data[da_key] = []
+                self.working_atlas_data["cell_count"] = [0 for _ in range(5)]
                 for i in range(5):
                     self.tool_box.cell_count_val_list[i].setText("0")
 
@@ -5899,7 +5902,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
         if self.atlas_view.has_display_objects:
             self.atlas_view.clear_all_display_obj()
 
-        if self.object_ctrl.linked_indexes:
+        if self.object_ctrl.linked_object_indexes():
             self.print_message(
                 "Displaying linked objects is under development.", self.reminder_color
             )
@@ -5919,14 +5922,13 @@ class DriftlessMap(QMainWindow, FORM_Main):
         # for cell/virus, show only on the current page
 
     def compare_object(self):
-        if len(self.object_ctrl.linked_indexes) < 2:
+        linked = self.object_ctrl.linked_object_indexes()
+        if len(linked) < 2:
             self.print_message(
                 "Need at least 2 objects to compare.", self.reminder_color
             )
             return
-        objects_type = np.ravel(self.object_ctrl.obj_type)[
-            np.ravel(self.object_ctrl.linked_indexes)
-        ]
+        objects_type = np.ravel(self.object_ctrl.obj_type)[np.ravel(linked)]
         if len(np.unique(objects_type)) > 1:
             self.print_message(
                 "Only the same type of objects can be compared.", self.reminder_color
@@ -8455,27 +8457,13 @@ class DriftlessMap(QMainWindow, FORM_Main):
             self.atlas_view.working_atlas.image_dict["tri_pnts"].setData(
                 pos=np.asarray(self.atlas_tri_data)
             )
-            for i in range(len(self.atlas_tri_inside_data)):
-                self.working_atlas_text.append(pg.TextItem(str(i)))
-                self.working_atlas_text[-1].setColor(self.triangle_color)
-                self.working_atlas_text[-1].setPos(
-                    self.atlas_tri_inside_data[i][0], self.atlas_tri_inside_data[i][1]
-                )
-                self.atlas_view.working_atlas.vb.addItem(self.working_atlas_text[-1])
-                self.working_atlas_text[-1].setVisible(False)
+            self._refresh_triangulation_text("atlas")
 
         if self.image_view.current_img is not None and self.histo_tri_inside_data:
             self.image_view.img_stacks.image_dict["tri_pnts"].setData(
                 pos=np.asarray(self.histo_tri_data)
             )
-            for i in range(len(self.histo_tri_inside_data)):
-                self.working_img_text.append(pg.TextItem(str(i)))
-                self.working_img_text[-1].setColor(self.triangle_color)
-                self.working_img_text[-1].setPos(
-                    self.histo_tri_inside_data[i][0], self.histo_tri_inside_data[i][1]
-                )
-                self.image_view.img_stacks.vb.addItem(self.working_img_text[-1])
-                self.working_img_text[-1].setVisible(False)
+            self._refresh_triangulation_text("image")
 
         if (
             self.current_atlas_path is not None
