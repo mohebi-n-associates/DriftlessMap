@@ -18,7 +18,7 @@ from .persistence import ArchiveAttachment
 
 
 REFERENCE_SCHEMA_VERSION = 1
-_REFERENCE_CACHE = {}
+_REFERENCE_CACHE: dict = {}
 ATLAS_IDENTITY_FILES = (
     "atlas_axis_info.pkl",
     "atlas_labels.pkl",
