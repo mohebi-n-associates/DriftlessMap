@@ -3,6 +3,22 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.4.50
+
+Release date: 27 September 2026
+
+This is internal restructuring with no change in behaviour.
+
+The click handlers for the histology window (about 490 lines) and the atlas
+window (about 270 lines) were each one long `if`/`elif` chain over every
+tool. Each tool now has its own method: ruler, eraser, magic wand, lasso,
+triangulation, cell locator and probe in the histology window; ruler,
+triangulation, eraser, lasso, probe, magic wand and Bregma picker in the
+atlas window. The handlers themselves are now short dispatchers. A new test
+drives the ruler, triangulation and probe tools through the real handlers.
+
+---
+
 ## DriftlessMap 1.4.49
 
 Release date: 27 September 2026

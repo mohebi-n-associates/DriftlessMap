@@ -1,6 +1,6 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 1.4.49**.
+This manual applies to **DriftlessMap 1.4.50**.
 
 DriftlessMap - Histological E-data Registration in Brain Space - is a desktop
 application for aligning rodent histology with a reference atlas, reconstructing
@@ -107,7 +107,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-DriftlessMap 1.4.49 requires:
+DriftlessMap 1.4.50 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -126,7 +126,7 @@ page. The macOS DMG (`-macOS-arm64.dmg`) is built for Apple Silicon; on an Intel
 Mac, use the developer installation below.
 The desktop builds include Python and all runtime dependencies. Windows users
 extract the entire ZIP and run `DriftlessMap.exe`; macOS users open the DMG and
-drag `DriftlessMap.app` to Applications. The 1.4.49 release is unsigned, so the
+drag `DriftlessMap.app` to Applications. The 1.4.50 release is unsigned, so the
 first launch may require Windows SmartScreen confirmation or Control-clicking
 the macOS app and choosing **Open**.
 
@@ -174,7 +174,7 @@ python -m pip --version
 python -c "import driftlessmap; print(driftlessmap.__version__)"
 ```
 
-The final command should print `1.4.49`.
+The final command should print `1.4.50`.
 
 ### 2.5 Launching DriftlessMap
 

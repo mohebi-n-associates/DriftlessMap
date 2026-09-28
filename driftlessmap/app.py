@@ -3953,426 +3953,436 @@ class DriftlessMap(QMainWindow, FORM_Main):
                     self.inactive_drawing()
                     self.clear_img_pencil_closed_style()
 
-        # ------------------------- ruler
-        if self.tool_box.checkable_btn_dict["ruler_btn"].isChecked():
-            if len(self.working_img_data["ruler_path"]) == 2:
-                self.inactive_img_ruler()
-                self.tool_box.ruler_length_label.setText("Length:")
-            else:
-                self.working_img_data["ruler_path"].append([x, y])
-                self.image_view.img_stacks.image_dict["ruler_path"].setData(
-                    np.asarray(self.working_img_data["ruler_path"])
-                )
-        # ------------------------- eraser
-        elif self.tool_box.checkable_btn_dict["eraser_btn"].isChecked():
-            if (
-                not self.layer_ctrl.layer_id
-                or len(self.layer_ctrl.current_layer_index) > 1
-            ):
-                self.print_message(
-                    "Eraser only works on one single layer.", self.error_message_color
-                )
+        tool_handlers = (
+            ("ruler_btn", self._image_click_ruler),
+            ("eraser_btn", self._image_click_eraser),
+            ("magic_wand_btn", self._image_click_magic_wand),
+            ("lasso_btn", self._image_click_lasso),
+            ("triang_btn", self._image_click_triang),
+            ("loc_btn", self._image_click_loc),
+            ("probe_btn", self._image_click_probe),
+        )
+        for tool, handler in tool_handlers:
+            if self.tool_box.checkable_btn_dict[tool].isChecked():
+                handler(pos, x, y)
                 return
-            else:
-                r = self.tool_box.eraser_size_slider.value()
-                mask_img = np.zeros(self.image_view.img_size, dtype=np.uint8)
-                cv2.circle(
-                    mask_img, center=(int(x), int(y)), radius=r, color=255, thickness=-1
-                )
-                mask_img = 255 - mask_img
 
-                da_link = self.layer_ctrl.layer_link[
-                    self.layer_ctrl.current_layer_index[0]
-                ]
-                if da_link in ["img-mask", "img-virus"]:
-                    if self.working_img_data[da_link] is None:
-                        return
-                    temp = self.working_img_data[da_link].astype(np.uint8)
-                    dst = cv2.bitwise_and(temp, temp, mask=mask_img)
-                    self.image_view.img_stacks.image_dict[da_link].setImage(dst)
-                    self.working_img_data[da_link] = dst
-                    vis_img = color_vis_img(
-                        dst,
-                        self.layer_ctrl.layer_color[
-                            self.layer_ctrl.current_layer_index[0]
-                        ],
-                    )
-                    res = cv2.resize(
-                        vis_img, self.image_view.tb_size, interpolation=cv2.INTER_AREA
-                    )
-                    self.layer_ctrl.layer_list[
+    def _image_click_ruler(self, pos, x, y):
+        if len(self.working_img_data["ruler_path"]) == 2:
+            self.inactive_img_ruler()
+            self.tool_box.ruler_length_label.setText("Length:")
+        else:
+            self.working_img_data["ruler_path"].append([x, y])
+            self.image_view.img_stacks.image_dict["ruler_path"].setData(
+                np.asarray(self.working_img_data["ruler_path"])
+            )
+
+    def _image_click_eraser(self, pos, x, y):
+        if (
+            not self.layer_ctrl.layer_id
+            or len(self.layer_ctrl.current_layer_index) > 1
+        ):
+            self.print_message(
+                "Eraser only works on one single layer.", self.error_message_color
+            )
+            return
+        else:
+            r = self.tool_box.eraser_size_slider.value()
+            mask_img = np.zeros(self.image_view.img_size, dtype=np.uint8)
+            cv2.circle(
+                mask_img, center=(int(x), int(y)), radius=r, color=255, thickness=-1
+            )
+            mask_img = 255 - mask_img
+
+            da_link = self.layer_ctrl.layer_link[
+                self.layer_ctrl.current_layer_index[0]
+            ]
+            if da_link in ["img-mask", "img-virus"]:
+                if self.working_img_data[da_link] is None:
+                    return
+                temp = self.working_img_data[da_link].astype(np.uint8)
+                dst = cv2.bitwise_and(temp, temp, mask=mask_img)
+                self.image_view.img_stacks.image_dict[da_link].setImage(dst)
+                self.working_img_data[da_link] = dst
+                vis_img = color_vis_img(
+                    dst,
+                    self.layer_ctrl.layer_color[
                         self.layer_ctrl.current_layer_index[0]
-                    ].set_thumbnail_data(res)
-                    # save action
-                    current_data = {"data": self.working_img_data[da_link].copy()}
-                    self.save_current_action("eraser_btn", da_link, current_data, res)
-                elif da_link == "img-process":
-                    temp = self.image_view.processing_img.copy()
-                    dst = cv2.bitwise_and(temp, temp, mask=mask_img)
-                    if self.image_view.image_file.pixel_type != "rgb24":
-                        channel_hsv = self.image_view.image_file.hsv_colors
-                        img_temp = merge_channels_into_single_img(dst, channel_hsv)
-                        input_img = cv2.normalize(
-                            img_temp, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U
-                        )
-                    else:
-                        input_img = dst.copy()
-                    res = cv2.resize(
-                        input_img, self.image_view.tb_size, interpolation=cv2.INTER_AREA
-                    )
-                    self.layer_ctrl.layer_list[
-                        self.layer_ctrl.current_layer_index[0]
-                    ].set_thumbnail_data(res)
-                    self.image_view.img_stacks.set_data(dst)
-                    self.image_view.processing_img = dst
-                    current_data = {"data": self.image_view.processing_img.copy()}
-                    self.save_current_action("eraser_btn", da_link, current_data, res)
-                else:
-                    # Only point layers can be erased point by point; other
-                    # raster layers and atlas layers are not editable here.
-                    if self.working_img_type.get(da_link) != "vector" or not (
-                        self.working_img_data.get(da_link)
-                    ):
-                        return
-                    temp = np.asarray(self.working_img_data[da_link])
-                    remain_points, del_indexes = delete_points_inside_eraser(
-                        temp, np.array([x, y]), r
-                    )
-                    if remain_points is None:
-                        return
-                    self.working_img_data[da_link] = remain_points.tolist()
-                    if self.working_img_data[da_link]:
-                        if da_link == "img-contour":
-                            self.image_view.img_stacks.image_dict[da_link].setData(
-                                remain_points
-                            )
-                            da_color = self.layer_ctrl.layer_color[
-                                self.layer_ctrl.current_layer_index[0]
-                            ]
-                            vis_img = create_vis_img(
-                                self.image_view.img_size,
-                                self.working_img_data[da_link],
-                                da_color,
-                                "l",
-                            )
-                            res = cv2.resize(
-                                vis_img,
-                                self.image_view.tb_size,
-                                interpolation=cv2.INTER_AREA,
-                            )
-                            self.layer_ctrl.layer_list[
-                                self.layer_ctrl.current_layer_index[0]
-                            ].set_thumbnail_data(res)
-                        elif da_link == "img-drawing":
-                            self.image_view.img_stacks.image_dict[da_link].setData(
-                                remain_points
-                            )
-                            da_color = self.layer_ctrl.layer_color[
-                                self.layer_ctrl.current_layer_index[0]
-                            ]
-                            vis_img = create_vis_img(
-                                self.image_view.img_size,
-                                self.working_img_data[da_link],
-                                da_color,
-                                "l",
-                                self.tool_box.is_closed,
-                            )
-                            res = cv2.resize(
-                                vis_img,
-                                self.image_view.tb_size,
-                                interpolation=cv2.INTER_AREA,
-                            )
-                            self.layer_ctrl.layer_list[
-                                self.layer_ctrl.current_layer_index[0]
-                            ].set_thumbnail_data(res)
-                        else:
-                            if da_link == "img-cells":
-                                del_inds = np.sort(del_indexes)[::-1]
-                                for da_ind in del_inds:
-                                    del self.working_img_data["cell_size"][da_ind]
-                                    del self.working_img_data["cell_symbol"][da_ind]
-                                    del self.working_img_data["cell_layer_index"][
-                                        da_ind
-                                    ]
-                                cell_layer_index = self.working_img_data[
-                                    "cell_layer_index"
-                                ].copy()
-                                self.working_img_data["cell_count"] = get_cell_count(
-                                    cell_layer_index
-                                )
-                                self.tool_box.update_cell_count_label(
-                                    self.working_img_data["cell_count"]
-                                )
-
-                                self.image_view.img_stacks.image_dict[da_link].setData(
-                                    pos=remain_points,
-                                    symbol=self.working_img_data["cell_symbol"],
-                                )
-                            else:
-                                self.image_view.img_stacks.image_dict[da_link].setData(
-                                    pos=remain_points
-                                )
-                            da_color = self.layer_ctrl.layer_color[
-                                self.layer_ctrl.current_layer_index[0]
-                            ]
-                            vis_img = create_vis_img(
-                                self.image_view.img_size,
-                                self.working_img_data[da_link],
-                                da_color,
-                                "p",
-                            )
-                            res = cv2.resize(
-                                vis_img,
-                                self.image_view.tb_size,
-                                interpolation=cv2.INTER_AREA,
-                            )
-                            self.layer_ctrl.layer_list[
-                                self.layer_ctrl.current_layer_index[0]
-                            ].set_thumbnail_data(res)
-                    else:
-                        return
-                    # save action
-                    if da_link == "img-cells":
-                        current_data = {
-                            "data": self.working_img_data[da_link].copy(),
-                            "size": self.working_img_data["cell_size"],
-                            "symbol": self.working_img_data["cell_symbol"],
-                            "index": self.working_img_data["cell_layer_index"],
-                            "count": self.working_img_data["cell_count"],
-                        }
-                    elif da_link == "img-drawing":
-                        current_data = {
-                            "data": self.working_img_data[da_link].copy(),
-                            "closed": self.tool_box.is_closed,
-                        }
-                    else:
-                        current_data = {"data": self.working_img_data[da_link].copy()}
-                    self.save_current_action("eraser_btn", da_link, current_data, res)
-        # ------------------------- magic wand
-        elif self.tool_box.checkable_btn_dict["magic_wand_btn"].isChecked():
-            tol_val = read_int_field(self.tool_box.magic_tol_val, minimum=0)
-            if tol_val is None:
-                self.print_message(
-                    "Enter a magic wand tolerance of 0 or more.", self.reminder_color
-                )
-                return
-            if self.image_view.processing_img is None:
-                src_img = self.image_view.current_img.copy()
-            else:
-                src_img = self.image_view.processing_img.copy()
-
-            # if self.image_view.image_file.is_rgb:
-            #     da_color = src_img[int(y), int(x)]
-            #     lower_val, upper_val = get_bound_color(da_color, tol_val, self.image_view.image_file.level, 'rgb')
-            #     print(lower_val, upper_val)
-            #
-            #     mask_img = cv2.inRange(src_img[:, :, :3], tuple(lower_val), tuple(upper_val))
-            # else:
-            mask_img = self.white_img.copy()
-            for i in range(self.image_view.image_file.n_channels):
-                if not self.image_view.channel_visible[i]:
-                    continue
-                temp = src_img[:, :, i]
-                selected_color = temp[int(y), int(x)]
-                # print("selected color", selected_color)
-                # Keep pixels within the tolerance band on both sides of the
-                # clicked intensity, at any bit depth.
-                thresh = tolerance_mask(
-                    temp, selected_color, tol_val, self.image_view.image_file.level
-                )
-                mask_img = cv2.bitwise_and(
-                    mask_img, mask_img, mask=thresh
-                )
-            modifiers = QApplication.keyboardModifiers()
-            if modifiers == Qt.KeyboardModifier.ShiftModifier:
-                if self.working_img_data["img-mask"] is None:
-                    self.working_img_data["img-mask"] = cv2.bitwise_or(
-                        mask_img, mask_img, mask=self.white_img
-                    )
-                else:
-                    self.working_img_data["img-mask"] = cv2.bitwise_or(
-                        self.working_img_data["img-mask"], mask_img, mask=self.white_img
-                    )
-            else:
-                self.working_img_data["img-mask"] = mask_img.copy()
-
-            if self.kernel is not None:
-                temp = self.working_img_data["img-mask"].copy()
-                open_img = cv2.morphologyEx(temp, cv2.MORPH_OPEN, self.kernel)
-                close_img = cv2.morphologyEx(open_img, cv2.MORPH_CLOSE, self.kernel)
-                self.working_img_data["img-mask"] = close_img.copy()
-            self.image_view.img_stacks.image_dict["img-mask"].setImage(
-                self.working_img_data["img-mask"]
-            )
-            temp = color_vis_img(
-                self.working_img_data["img-mask"], self.magic_wand_lut[1]
-            )
-            res = cv2.resize(
-                temp, self.image_view.tb_size, interpolation=cv2.INTER_AREA
-            )
-            self.layer_ctrl.master_layers(
-                res, layer_type="img-mask", color=self.magic_wand_lut[1]
-            )
-            # save action
-            current_data = {"data": self.working_img_data["img-mask"].copy()}
-            self.save_current_action("magic_wand_btn", "img-mask", current_data, res)
-
-        # ------------------------- lasso
-        elif self.tool_box.checkable_btn_dict["lasso_btn"].isChecked():
-            if self.working_atlas_data["lasso_path"]:
-                self.inactive_slice_window_lasso()
-            if self.img_lasso_is_closure:
-                self.inactive_lasso()
-                return
-            new_pnt = np.array([x, y])
-            if len(self.working_img_data["lasso_path"]) > 1:
-                dists = np.sum(
-                    (np.asarray(self.working_img_data["lasso_path"][0]) - new_pnt) ** 2
-                )
-            else:
-                dists = 1e5
-            if dists < np.min(self.image_view.img_size) * 0.05:
-                self.working_img_data["lasso_path"].append(
-                    self.working_img_data["lasso_path"][0]
-                )
-                self.image_view.img_stacks.image_dict["lasso_path"].setPen(
-                    pg.mkPen(color="r", width=3, style=Qt.PenStyle.SolidLine)
-                )
-                self.img_lasso_is_closure = True
-            else:
-                self.working_img_data["lasso_path"].append([x, y])
-            drawing_pnts = np.asarray(self.working_img_data["lasso_path"])
-            self.image_view.img_stacks.image_dict["lasso_path"].setData(drawing_pnts)
-            # save action
-            current_data = {"data": self.working_img_data["lasso_path"]}
-            self.save_current_action("lasso_btn", "lasso_path", current_data, None)
-        # ------------------------- triang -- triangulation pnts
-        elif self.tool_box.checkable_btn_dict["triang_btn"].isChecked():
-            if self.a2h_transferred or self.h2a_transferred:
-                return
-            self._invalidate_triangulation(clear_topology=True)
-            self.histo_tri_inside_data.append([int(x), int(y)])
-            self.histo_tri_data = (
-                self.histo_tri_onside_data + self.histo_tri_inside_data
-            )
-            self.image_view.img_stacks.image_dict["tri_pnts"].setData(
-                pos=np.asarray(self.histo_tri_data)
-            )
-            self.working_img_text.append(
-                pg.TextItem(str(len(self.histo_tri_inside_data)))
-            )
-            self.working_img_text[-1].setColor(self.triangle_color)
-            self.image_view.img_stacks.vb.addItem(self.working_img_text[-1])
-            self.working_img_text[-1].setPos(x, y)
-            if self.tool_box.triang_vis_btn.isChecked():
-                self.update_histo_tri_lines()
-            elif len(self.atlas_tri_data) == len(self.histo_tri_data):
-                self._build_triangulation_registration(
-                    strict=False, show_error=False
-                )
-        # ------------------------- loc -- cell
-        elif self.tool_box.checkable_btn_dict["loc_btn"].isChecked():
-            if self.tool_box.cell_selector_btn.isChecked():
-                if "rgb" in self.image_view.image_file.pixel_type:
-                    layer_ind = 0
-                else:
-                    # only one layer is allowed to work on
-                    da_layer = [
-                        ind for ind in range(4) if self.image_view.channel_visible[ind]
-                    ]
-                    n_layers = len(da_layer)
-                    if n_layers == 0:
-                        self.print_message(
-                            "No image layer is visualised.", self.error_message_color
-                        )
-                        return
-                    if n_layers > 1:
-                        self.print_message(
-                            "Only one image layer is allowed to select cells.",
-                            self.error_message_color,
-                        )
-                        return
-                    layer_ind = da_layer[0] + 1
-
-                self.working_img_data["img-cells"].append([x, y])
-                self.working_img_data["cell_size"].append(1)
-                self.working_img_data["cell_symbol"].append(
-                    self.cell_base_symbol[layer_ind]
-                )
-                self.working_img_data["cell_layer_index"].append(layer_ind)
-                self.working_img_data["cell_count"][layer_ind] += 1
-                self.tool_box.update_single_cell_count_label(
-                    self.working_img_data["cell_count"], layer_ind
-                )
-
-                self.image_view.img_stacks.image_dict["img-cells"].setData(
-                    pos=np.asarray(self.working_img_data["img-cells"])
-                )
-                self.image_view.img_stacks.image_dict["img-cells"].setSymbol(
-                    symbol=self.working_img_data["cell_symbol"]
-                )
-
-                # print(self.image_view.img_stacks.image_dict['img-cells'].data)
-                # print(self.image_view.img_stacks.image_dict['img-cells'].)
-
-                cv2.circle(
-                    self.cell_img,
-                    (int(x), int(y)),
-                    radius=2,
-                    color=self.cell_color,
-                    thickness=-1,
+                    ],
                 )
                 res = cv2.resize(
-                    self.cell_img, self.image_view.tb_size, interpolation=cv2.INTER_AREA
+                    vis_img, self.image_view.tb_size, interpolation=cv2.INTER_AREA
                 )
-                self.layer_ctrl.master_layers(
-                    res, layer_type="img-cells", color=self.cell_color
+                self.layer_ctrl.layer_list[
+                    self.layer_ctrl.current_layer_index[0]
+                ].set_thumbnail_data(res)
+                # save action
+                current_data = {"data": self.working_img_data[da_link].copy()}
+                self.save_current_action("eraser_btn", da_link, current_data, res)
+            elif da_link == "img-process":
+                temp = self.image_view.processing_img.copy()
+                dst = cv2.bitwise_and(temp, temp, mask=mask_img)
+                if self.image_view.image_file.pixel_type != "rgb24":
+                    channel_hsv = self.image_view.image_file.hsv_colors
+                    img_temp = merge_channels_into_single_img(dst, channel_hsv)
+                    input_img = cv2.normalize(
+                        img_temp, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U
+                    )
+                else:
+                    input_img = dst.copy()
+                res = cv2.resize(
+                    input_img, self.image_view.tb_size, interpolation=cv2.INTER_AREA
                 )
-
-                current_data = {
-                    "data": self.working_img_data["img-cells"].copy(),
-                    "size": self.working_img_data["cell_size"].copy(),
-                    "symbol": self.working_img_data["cell_symbol"].copy(),
-                    "index": self.working_img_data["cell_layer_index"].copy(),
-                    "count": self.working_img_data["cell_count"].copy(),
-                }
-
-                self.save_current_action("loc_btn", "img-cells", current_data, res)
-            if self.tool_box.cell_aim_btn.isChecked():
-                self.working_img_data["img-blob"].append([x, y])
-                self.image_view.img_stacks.image_dict["img-blob"].setData(
-                    pos=np.asarray(self.working_img_data["img-blob"])
-                )
-        # ------------------------- probe
-        elif self.tool_box.checkable_btn_dict["probe_btn"].isChecked():
-            self.working_img_data["img-probe"].append([x, y])
-            self.image_view.img_stacks.image_dict["img-probe"].setData(
-                pos=np.asarray(self.working_img_data["img-probe"])
-            )
-            if len(self.working_img_data["img-probe"]) > 1:
-                vis_points, msg = line_fit_2d(self.working_img_data["img-probe"])
-                if msg is not None:
-                    self.print_message(msg, self.error_message_color)
+                self.layer_ctrl.layer_list[
+                    self.layer_ctrl.current_layer_index[0]
+                ].set_thumbnail_data(res)
+                self.image_view.img_stacks.set_data(dst)
+                self.image_view.processing_img = dst
+                current_data = {"data": self.image_view.processing_img.copy()}
+                self.save_current_action("eraser_btn", da_link, current_data, res)
+            else:
+                # Only point layers can be erased point by point; other
+                # raster layers and atlas layers are not editable here.
+                if self.working_img_type.get(da_link) != "vector" or not (
+                    self.working_img_data.get(da_link)
+                ):
                     return
-                self.image_view.img_stacks.image_dict["img-trajectory"].setData(
-                    vis_points
+                temp = np.asarray(self.working_img_data[da_link])
+                remain_points, del_indexes = delete_points_inside_eraser(
+                    temp, np.array([x, y]), r
                 )
-            vis_img = create_vis_img(
-                self.image_view.img_size,
-                self.working_img_data["img-probe"],
-                self.probe_color,
-                "p",
+                if remain_points is None:
+                    return
+                self.working_img_data[da_link] = remain_points.tolist()
+                if self.working_img_data[da_link]:
+                    if da_link == "img-contour":
+                        self.image_view.img_stacks.image_dict[da_link].setData(
+                            remain_points
+                        )
+                        da_color = self.layer_ctrl.layer_color[
+                            self.layer_ctrl.current_layer_index[0]
+                        ]
+                        vis_img = create_vis_img(
+                            self.image_view.img_size,
+                            self.working_img_data[da_link],
+                            da_color,
+                            "l",
+                        )
+                        res = cv2.resize(
+                            vis_img,
+                            self.image_view.tb_size,
+                            interpolation=cv2.INTER_AREA,
+                        )
+                        self.layer_ctrl.layer_list[
+                            self.layer_ctrl.current_layer_index[0]
+                        ].set_thumbnail_data(res)
+                    elif da_link == "img-drawing":
+                        self.image_view.img_stacks.image_dict[da_link].setData(
+                            remain_points
+                        )
+                        da_color = self.layer_ctrl.layer_color[
+                            self.layer_ctrl.current_layer_index[0]
+                        ]
+                        vis_img = create_vis_img(
+                            self.image_view.img_size,
+                            self.working_img_data[da_link],
+                            da_color,
+                            "l",
+                            self.tool_box.is_closed,
+                        )
+                        res = cv2.resize(
+                            vis_img,
+                            self.image_view.tb_size,
+                            interpolation=cv2.INTER_AREA,
+                        )
+                        self.layer_ctrl.layer_list[
+                            self.layer_ctrl.current_layer_index[0]
+                        ].set_thumbnail_data(res)
+                    else:
+                        if da_link == "img-cells":
+                            del_inds = np.sort(del_indexes)[::-1]
+                            for da_ind in del_inds:
+                                del self.working_img_data["cell_size"][da_ind]
+                                del self.working_img_data["cell_symbol"][da_ind]
+                                del self.working_img_data["cell_layer_index"][
+                                    da_ind
+                                ]
+                            cell_layer_index = self.working_img_data[
+                                "cell_layer_index"
+                            ].copy()
+                            self.working_img_data["cell_count"] = get_cell_count(
+                                cell_layer_index
+                            )
+                            self.tool_box.update_cell_count_label(
+                                self.working_img_data["cell_count"]
+                            )
+
+                            self.image_view.img_stacks.image_dict[da_link].setData(
+                                pos=remain_points,
+                                symbol=self.working_img_data["cell_symbol"],
+                            )
+                        else:
+                            self.image_view.img_stacks.image_dict[da_link].setData(
+                                pos=remain_points
+                            )
+                        da_color = self.layer_ctrl.layer_color[
+                            self.layer_ctrl.current_layer_index[0]
+                        ]
+                        vis_img = create_vis_img(
+                            self.image_view.img_size,
+                            self.working_img_data[da_link],
+                            da_color,
+                            "p",
+                        )
+                        res = cv2.resize(
+                            vis_img,
+                            self.image_view.tb_size,
+                            interpolation=cv2.INTER_AREA,
+                        )
+                        self.layer_ctrl.layer_list[
+                            self.layer_ctrl.current_layer_index[0]
+                        ].set_thumbnail_data(res)
+                else:
+                    return
+                # save action
+                if da_link == "img-cells":
+                    current_data = {
+                        "data": self.working_img_data[da_link].copy(),
+                        "size": self.working_img_data["cell_size"],
+                        "symbol": self.working_img_data["cell_symbol"],
+                        "index": self.working_img_data["cell_layer_index"],
+                        "count": self.working_img_data["cell_count"],
+                    }
+                elif da_link == "img-drawing":
+                    current_data = {
+                        "data": self.working_img_data[da_link].copy(),
+                        "closed": self.tool_box.is_closed,
+                    }
+                else:
+                    current_data = {"data": self.working_img_data[da_link].copy()}
+                self.save_current_action("eraser_btn", da_link, current_data, res)
+
+    def _image_click_magic_wand(self, pos, x, y):
+        tol_val = read_int_field(self.tool_box.magic_tol_val, minimum=0)
+        if tol_val is None:
+            self.print_message(
+                "Enter a magic wand tolerance of 0 or more.", self.reminder_color
+            )
+            return
+        if self.image_view.processing_img is None:
+            src_img = self.image_view.current_img.copy()
+        else:
+            src_img = self.image_view.processing_img.copy()
+
+        # if self.image_view.image_file.is_rgb:
+        #     da_color = src_img[int(y), int(x)]
+        #     lower_val, upper_val = get_bound_color(da_color, tol_val, self.image_view.image_file.level, 'rgb')
+        #     print(lower_val, upper_val)
+        #
+        #     mask_img = cv2.inRange(src_img[:, :, :3], tuple(lower_val), tuple(upper_val))
+        # else:
+        mask_img = self.white_img.copy()
+        for i in range(self.image_view.image_file.n_channels):
+            if not self.image_view.channel_visible[i]:
+                continue
+            temp = src_img[:, :, i]
+            selected_color = temp[int(y), int(x)]
+            # print("selected color", selected_color)
+            # Keep pixels within the tolerance band on both sides of the
+            # clicked intensity, at any bit depth.
+            thresh = tolerance_mask(
+                temp, selected_color, tol_val, self.image_view.image_file.level
+            )
+            mask_img = cv2.bitwise_and(
+                mask_img, mask_img, mask=thresh
+            )
+        modifiers = QApplication.keyboardModifiers()
+        if modifiers == Qt.KeyboardModifier.ShiftModifier:
+            if self.working_img_data["img-mask"] is None:
+                self.working_img_data["img-mask"] = cv2.bitwise_or(
+                    mask_img, mask_img, mask=self.white_img
+                )
+            else:
+                self.working_img_data["img-mask"] = cv2.bitwise_or(
+                    self.working_img_data["img-mask"], mask_img, mask=self.white_img
+                )
+        else:
+            self.working_img_data["img-mask"] = mask_img.copy()
+
+        if self.kernel is not None:
+            temp = self.working_img_data["img-mask"].copy()
+            open_img = cv2.morphologyEx(temp, cv2.MORPH_OPEN, self.kernel)
+            close_img = cv2.morphologyEx(open_img, cv2.MORPH_CLOSE, self.kernel)
+            self.working_img_data["img-mask"] = close_img.copy()
+        self.image_view.img_stacks.image_dict["img-mask"].setImage(
+            self.working_img_data["img-mask"]
+        )
+        temp = color_vis_img(
+            self.working_img_data["img-mask"], self.magic_wand_lut[1]
+        )
+        res = cv2.resize(
+            temp, self.image_view.tb_size, interpolation=cv2.INTER_AREA
+        )
+        self.layer_ctrl.master_layers(
+            res, layer_type="img-mask", color=self.magic_wand_lut[1]
+        )
+        # save action
+        current_data = {"data": self.working_img_data["img-mask"].copy()}
+        self.save_current_action("magic_wand_btn", "img-mask", current_data, res)
+
+    def _image_click_lasso(self, pos, x, y):
+        if self.working_atlas_data["lasso_path"]:
+            self.inactive_slice_window_lasso()
+        if self.img_lasso_is_closure:
+            self.inactive_lasso()
+            return
+        new_pnt = np.array([x, y])
+        if len(self.working_img_data["lasso_path"]) > 1:
+            dists = np.sum(
+                (np.asarray(self.working_img_data["lasso_path"][0]) - new_pnt) ** 2
+            )
+        else:
+            dists = 1e5
+        if dists < np.min(self.image_view.img_size) * 0.05:
+            self.working_img_data["lasso_path"].append(
+                self.working_img_data["lasso_path"][0]
+            )
+            self.image_view.img_stacks.image_dict["lasso_path"].setPen(
+                pg.mkPen(color="r", width=3, style=Qt.PenStyle.SolidLine)
+            )
+            self.img_lasso_is_closure = True
+        else:
+            self.working_img_data["lasso_path"].append([x, y])
+        drawing_pnts = np.asarray(self.working_img_data["lasso_path"])
+        self.image_view.img_stacks.image_dict["lasso_path"].setData(drawing_pnts)
+        # save action
+        current_data = {"data": self.working_img_data["lasso_path"]}
+        self.save_current_action("lasso_btn", "lasso_path", current_data, None)
+
+    def _image_click_triang(self, pos, x, y):
+        if self.a2h_transferred or self.h2a_transferred:
+            return
+        self._invalidate_triangulation(clear_topology=True)
+        self.histo_tri_inside_data.append([int(x), int(y)])
+        self.histo_tri_data = (
+            self.histo_tri_onside_data + self.histo_tri_inside_data
+        )
+        self.image_view.img_stacks.image_dict["tri_pnts"].setData(
+            pos=np.asarray(self.histo_tri_data)
+        )
+        self.working_img_text.append(
+            pg.TextItem(str(len(self.histo_tri_inside_data)))
+        )
+        self.working_img_text[-1].setColor(self.triangle_color)
+        self.image_view.img_stacks.vb.addItem(self.working_img_text[-1])
+        self.working_img_text[-1].setPos(x, y)
+        if self.tool_box.triang_vis_btn.isChecked():
+            self.update_histo_tri_lines()
+        elif len(self.atlas_tri_data) == len(self.histo_tri_data):
+            self._build_triangulation_registration(
+                strict=False, show_error=False
+            )
+
+    def _image_click_loc(self, pos, x, y):
+        if self.tool_box.cell_selector_btn.isChecked():
+            if "rgb" in self.image_view.image_file.pixel_type:
+                layer_ind = 0
+            else:
+                # only one layer is allowed to work on
+                da_layer = [
+                    ind for ind in range(4) if self.image_view.channel_visible[ind]
+                ]
+                n_layers = len(da_layer)
+                if n_layers == 0:
+                    self.print_message(
+                        "No image layer is visualised.", self.error_message_color
+                    )
+                    return
+                if n_layers > 1:
+                    self.print_message(
+                        "Only one image layer is allowed to select cells.",
+                        self.error_message_color,
+                    )
+                    return
+                layer_ind = da_layer[0] + 1
+
+            self.working_img_data["img-cells"].append([x, y])
+            self.working_img_data["cell_size"].append(1)
+            self.working_img_data["cell_symbol"].append(
+                self.cell_base_symbol[layer_ind]
+            )
+            self.working_img_data["cell_layer_index"].append(layer_ind)
+            self.working_img_data["cell_count"][layer_ind] += 1
+            self.tool_box.update_single_cell_count_label(
+                self.working_img_data["cell_count"], layer_ind
+            )
+
+            self.image_view.img_stacks.image_dict["img-cells"].setData(
+                pos=np.asarray(self.working_img_data["img-cells"])
+            )
+            self.image_view.img_stacks.image_dict["img-cells"].setSymbol(
+                symbol=self.working_img_data["cell_symbol"]
+            )
+
+            # print(self.image_view.img_stacks.image_dict['img-cells'].data)
+            # print(self.image_view.img_stacks.image_dict['img-cells'].)
+
+            cv2.circle(
+                self.cell_img,
+                (int(x), int(y)),
+                radius=2,
+                color=self.cell_color,
+                thickness=-1,
             )
             res = cv2.resize(
-                vis_img, self.image_view.tb_size, interpolation=cv2.INTER_AREA
+                self.cell_img, self.image_view.tb_size, interpolation=cv2.INTER_AREA
             )
             self.layer_ctrl.master_layers(
-                res, layer_type="img-probe", color=self.probe_color
+                res, layer_type="img-cells", color=self.cell_color
             )
-            current_data = {"data": self.working_img_data["img-probe"].copy()}
-            self.save_current_action("probe_btn", "img-probe", current_data, res)
-        else:
-            return
+
+            current_data = {
+                "data": self.working_img_data["img-cells"].copy(),
+                "size": self.working_img_data["cell_size"].copy(),
+                "symbol": self.working_img_data["cell_symbol"].copy(),
+                "index": self.working_img_data["cell_layer_index"].copy(),
+                "count": self.working_img_data["cell_count"].copy(),
+            }
+
+            self.save_current_action("loc_btn", "img-cells", current_data, res)
+        if self.tool_box.cell_aim_btn.isChecked():
+            self.working_img_data["img-blob"].append([x, y])
+            self.image_view.img_stacks.image_dict["img-blob"].setData(
+                pos=np.asarray(self.working_img_data["img-blob"])
+            )
+
+    def _image_click_probe(self, pos, x, y):
+        self.working_img_data["img-probe"].append([x, y])
+        self.image_view.img_stacks.image_dict["img-probe"].setData(
+            pos=np.asarray(self.working_img_data["img-probe"])
+        )
+        if len(self.working_img_data["img-probe"]) > 1:
+            vis_points, msg = line_fit_2d(self.working_img_data["img-probe"])
+            if msg is not None:
+                self.print_message(msg, self.error_message_color)
+                return
+            self.image_view.img_stacks.image_dict["img-trajectory"].setData(
+                vis_points
+            )
+        vis_img = create_vis_img(
+            self.image_view.img_size,
+            self.working_img_data["img-probe"],
+            self.probe_color,
+            "p",
+        )
+        res = cv2.resize(
+            vis_img, self.image_view.tb_size, interpolation=cv2.INTER_AREA
+        )
+        self.layer_ctrl.master_layers(
+            res, layer_type="img-probe", color=self.probe_color
+        )
+        current_data = {"data": self.working_img_data["img-probe"].copy()}
+        self.save_current_action("probe_btn", "img-probe", current_data, res)
 
     def img_stacks_hovered(self, event):
         if event.isExit():
@@ -5010,256 +5020,267 @@ class DriftlessMap(QMainWindow, FORM_Main):
                     "No slice atlas data is loaded.", self.error_message_color
                 )
                 return
-        # ------------------------- ruler
-        if self.tool_box.checkable_btn_dict["ruler_btn"].isChecked():
-            if len(self.working_atlas_data["ruler_path"]) == 2:
-                self.inactive_atlas_ruler()
-                self.tool_box.ruler_length_label.setText("Length:")
-            else:
-                self.working_atlas_data["ruler_path"].append([x, y])
-                self.atlas_view.working_atlas.image_dict["ruler_path"].setData(
-                    np.asarray(self.working_atlas_data["ruler_path"])
-                )
-
-        # ------------------------- triangle
-        elif self.tool_box.checkable_btn_dict["triang_btn"].isChecked():
-            if self.a2h_transferred or self.h2a_transferred:
+        tool_handlers = (
+            ("ruler_btn", self._atlas_click_ruler),
+            ("triang_btn", self._atlas_click_triang),
+            ("eraser_btn", self._atlas_click_eraser),
+            ("lasso_btn", self._atlas_click_lasso),
+            ("probe_btn", self._atlas_click_probe),
+            ("magic_wand_btn", self._atlas_click_magic_wand),
+        )
+        for tool, handler in tool_handlers:
+            if self.tool_box.checkable_btn_dict[tool].isChecked():
+                handler(pos, x, y)
                 return
-            if self.np_onside is None:
-                # print(self.np_onside)
-                self.print_message(
-                    "Please set valid number of boundary points!",
-                    self.error_message_color,
-                )
-                return
-            self._invalidate_triangulation(clear_topology=True)
-            self.atlas_tri_inside_data.append([int(x), int(y)])
-            self.atlas_tri_data = (
-                self.atlas_tri_onside_data + self.atlas_tri_inside_data
-            )
-            self.atlas_view.working_atlas.image_dict["tri_pnts"].setData(
-                pos=np.asarray(self.atlas_tri_data)
-            )
-            self.working_atlas_text.append(
-                pg.TextItem(str(len(self.atlas_tri_inside_data)))
-            )
-            self.working_atlas_text[-1].setColor(self.triangle_color)
-            self.working_atlas_text[-1].setPos(x, y)
-            self.atlas_view.working_atlas.vb.addItem(self.working_atlas_text[-1])
-            if self.tool_box.triang_vis_btn.isChecked():
-                self.update_atlas_tri_lines()
-            elif len(self.atlas_tri_data) == len(self.histo_tri_data):
-                self._build_triangulation_registration(
-                    strict=False, show_error=False
-                )
-        # ------------------------- eraser
-        elif self.tool_box.checkable_btn_dict["eraser_btn"].isChecked():
-            if (
-                not self.layer_ctrl.layer_id
-                or len(self.layer_ctrl.current_layer_index) > 1
-            ):
-                self.print_message(
-                    "Eraser only works on one single layer.", self.error_message_color
-                )
-                return
-            da_link = self.layer_ctrl.layer_link[self.layer_ctrl.current_layer_index[0]]
-            if da_link == "atlas-probe":
-                res = self.atlas_erasing_probe(pos)
-                if res is None:
-                    return
-            else:
-                if self.current_atlas == "volume":
-                    return
-                if da_link not in ["atlas-mask", "atlas-slice"]:
-                    return
-                r = self.tool_box.eraser_size_slider.value()
-                raster = self._atlas_raster(da_link)
-                if raster is None:
-                    return
-                mask_img = np.zeros(raster.shape[:2], dtype=np.uint8)
-                cv2.circle(
-                    mask_img, center=(int(x), int(y)), radius=r, color=255, thickness=-1
-                )
-                mask_img = 255 - mask_img
-                temp = raster.astype(np.uint8)
-                dst = cv2.bitwise_and(temp, temp, mask=mask_img)
-                res = cv2.resize(
-                    dst, self.atlas_view.slice_tb_size, interpolation=cv2.INTER_AREA
-                )
-                self._set_atlas_raster(da_link, dst)
-            self.layer_ctrl.layer_list[
-                self.layer_ctrl.current_layer_index[0]
-            ].set_thumbnail_data(res)
-            current_data = {"data": self._atlas_raster(da_link)}
-            self.save_current_action("eraser_btn", da_link, current_data, res)
-        # ------------------------- lasso
-        elif self.tool_box.checkable_btn_dict["lasso_btn"].isChecked():
-            if self.working_img_data["lasso_path"]:
-                self.inactive_lasso()
-            if self.atlas_lasso_is_closure:
-                self.inactive_slice_window_lasso()
-                return
-            if self.current_atlas == "volume":
-                return
-            new_pnt = np.array([x, y])
-            if len(self.working_atlas_data["lasso_path"]) > 1:
-                dists = np.sum(
-                    (np.asarray(self.working_atlas_data["lasso_path"][0]) - new_pnt)
-                    ** 2
-                )
-            else:
-                dists = 1e5
-            if dists < 5:
-                self.working_atlas_data["lasso_path"].append(
-                    self.working_atlas_data["lasso_path"][0]
-                )
-                self.atlas_view.slice_stack.image_dict["lasso_path"].setPen(
-                    pg.mkPen(color="r", width=3, style=Qt.PenStyle.SolidLine)
-                )
-                self.atlas_lasso_is_closure = True
-            else:
-                self.working_atlas_data["lasso_path"].append([x, y])
-            drawing_pnts = np.asarray(self.working_atlas_data["lasso_path"])
-            self.atlas_view.slice_stack.image_dict["lasso_path"].setData(drawing_pnts)
-            current_data = {"data": self.working_atlas_data["lasso_path"].copy()}
-            self.save_current_action("lasso_btn", "lasso_path", current_data, None)
-        # ------------------------- probe
-        elif self.tool_box.checkable_btn_dict["probe_btn"].isChecked():
-            self.working_atlas_data["atlas-probe"].append([x, y])
+        if self.actionBregma_Picker.isChecked():
+            self._atlas_click_bregma(pos, x, y)
 
-            if len(self.working_atlas_data["atlas-probe"]) > 2:
-                self.working_atlas_data["atlas-probe"].clear()
-                self.atlas_view.working_atlas.image_dict["atlas-probe"].clear()
-                self.atlas_view.working_atlas.image_dict["atlas-trajectory"].clear()
-                self.atlas_view.working_atlas.remove_pre_trajectories_vis_lines()
-            if len(self.working_atlas_data["atlas-probe"]) == 0:
-                self.atlas_view.working_atlas.image_dict["atlas-probe"].clear()
-                self.atlas_view.working_atlas.remove_pre_trajectories_vis_lines()
-                return
-            if self.image_view.image_file is None:
-                # pre-surgery
-                points2d = self.working_atlas_data["atlas-probe"].copy()
-                points2d = np.asarray(points2d)
-
-                if self.multi_shanks and self.valid_multi_settings:
-                    base_loc_1d = get_pre_multi_shank_vis_base(
-                        self.multi_settings.x_vals, self.multi_settings.y_vals
-                    )
-                else:
-                    base_loc_1d = np.array([0])
-
-                if self.current_atlas == "volume":
-                    self.atlas_view.draw_pre_2d_vis_data_for_volume_atlas(
-                        points2d, base_loc_1d
-                    )
-                else:
-                    self.atlas_view.draw_pre_2d_vis_data_for_slice_atlas(
-                        points2d, base_loc_1d
-                    )
-            else:
-                # after-surgery
-                self.atlas_view.working_atlas.image_dict["atlas-probe"].setData(
-                    pos=np.asarray(self.working_atlas_data["atlas-probe"])
-                )
-                if len(self.working_atlas_data["atlas-probe"]) > 1:
-                    if self.current_atlas == "volume":
-                        current_img = (
-                            self.atlas_view.working_atlas.label_img.image.copy()
-                        )
-                    else:
-                        current_img = None
-                    vis_points, msg = line_fit_2d(
-                        self.working_atlas_data["atlas-probe"], current_img
-                    )
-                    if msg is not None:
-                        self.print_message(msg, self.error_message_color)
-                        return
-                    self.atlas_view.working_atlas.image_dict[
-                        "atlas-trajectory"
-                    ].setData(vis_points)
-
-            vis_img = create_vis_img(
-                self.atlas_view.slice_size,
-                self.working_atlas_data["atlas-probe"],
-                self.probe_color,
-                "p",
-            )
-            res = cv2.resize(
-                vis_img, self.atlas_view.slice_tb_size, interpolation=cv2.INTER_AREA
-            )
-            self.layer_ctrl.master_layers(
-                res, layer_type="atlas-probe", color=self.probe_color
-            )
-
-            current_data = {"data": self.working_atlas_data["atlas-probe"].copy()}
-            self.save_current_action("probe_btn", "atlas-probe", current_data, None)
-        # ------------------------- magic wand -- mask
-        elif self.tool_box.checkable_btn_dict["magic_wand_btn"].isChecked():
-            if self.current_atlas == "volume":
-                if not self.h2a_transferred:
-                    return
-                src_img = self.atlas_view.working_atlas.image_dict[
-                    "atlas-overlay"
-                ].image.copy()
-            else:
-                src_img = self.atlas_view.slice_image_data.copy()
-            white_img = np.ones(self.atlas_view.slice_size).astype("uint8")
-            tol_val = read_int_field(self.tool_box.magic_tol_val, minimum=0)
-            if tol_val is None:
-                self.print_message(
-                    "Enter a magic wand tolerance of 0 or more.", self.reminder_color
-                )
-                return
-            da_color = src_img[int(y), int(x), :3]
-            lower_val, upper_val = get_bound_color(da_color, tol_val, 255, "rgb")
-            mask_img = cv2.inRange(
-                src_img[:, :, :3],
-                np.array(lower_val, dtype="float"),
-                np.array(upper_val, dtype="float"),
-            )
-
-            modifiers = QApplication.keyboardModifiers()
-            if modifiers == Qt.KeyboardModifier.ShiftModifier:
-                if self.working_atlas_data["atlas-mask"] is None:
-                    self.working_atlas_data["atlas-mask"] = cv2.bitwise_or(
-                        mask_img, mask_img, mask=white_img
-                    )
-                else:
-                    self.working_atlas_data["atlas-mask"] = cv2.bitwise_or(
-                        self.working_atlas_data["atlas-mask"], mask_img, mask=white_img
-                    )
-            else:
-                self.working_atlas_data["atlas-mask"] = mask_img.copy()
-
-            if self.kernel is not None:
-                temp = self.working_atlas_data["atlas-mask"].copy()
-                open_img = cv2.morphologyEx(temp, cv2.MORPH_OPEN, self.kernel)
-                close_img = cv2.morphologyEx(open_img, cv2.MORPH_CLOSE, self.kernel)
-                self.working_atlas_data["atlas-mask"] = close_img.copy()
-
-            self.atlas_view.working_atlas.image_dict["atlas-mask"].setImage(
-                self.working_atlas_data["atlas-mask"]
-            )
-            res = cv2.resize(
-                self.working_atlas_data["atlas-mask"],
-                self.atlas_view.slice_tb_size,
-                interpolation=cv2.INTER_AREA,
-            )
-            self.layer_ctrl.master_layers(
-                res, layer_type="atlas-mask", color=self.magic_wand_lut[1]
-            )
-            current_data = {"data": self.working_atlas_data["atlas-mask"].copy()}
-            self.save_current_action("magic_wand_btn", "atlas-mask", current_data, res)
-        # ------------------------- bregma picker
-        elif self.actionBregma_Picker.isChecked():
-            self.atlas_view.slice_bregma = [x, y]
-            self.atlas_view.slice_stack.image_dict["bregma_pnt"].setData(
-                pos=np.array([self.atlas_view.slice_bregma])
-            )
-            self.actionBregma_Picker.setChecked(False)
-            self.atlas_view.check_info_ready()
+    def _atlas_click_ruler(self, pos, x, y):
+        if len(self.working_atlas_data["ruler_path"]) == 2:
+            self.inactive_atlas_ruler()
+            self.tool_box.ruler_length_label.setText("Length:")
         else:
+            self.working_atlas_data["ruler_path"].append([x, y])
+            self.atlas_view.working_atlas.image_dict["ruler_path"].setData(
+                np.asarray(self.working_atlas_data["ruler_path"])
+            )
+
+    def _atlas_click_triang(self, pos, x, y):
+        if self.a2h_transferred or self.h2a_transferred:
             return
+        if self.np_onside is None:
+            # print(self.np_onside)
+            self.print_message(
+                "Please set valid number of boundary points!",
+                self.error_message_color,
+            )
+            return
+        self._invalidate_triangulation(clear_topology=True)
+        self.atlas_tri_inside_data.append([int(x), int(y)])
+        self.atlas_tri_data = (
+            self.atlas_tri_onside_data + self.atlas_tri_inside_data
+        )
+        self.atlas_view.working_atlas.image_dict["tri_pnts"].setData(
+            pos=np.asarray(self.atlas_tri_data)
+        )
+        self.working_atlas_text.append(
+            pg.TextItem(str(len(self.atlas_tri_inside_data)))
+        )
+        self.working_atlas_text[-1].setColor(self.triangle_color)
+        self.working_atlas_text[-1].setPos(x, y)
+        self.atlas_view.working_atlas.vb.addItem(self.working_atlas_text[-1])
+        if self.tool_box.triang_vis_btn.isChecked():
+            self.update_atlas_tri_lines()
+        elif len(self.atlas_tri_data) == len(self.histo_tri_data):
+            self._build_triangulation_registration(
+                strict=False, show_error=False
+            )
+
+    def _atlas_click_eraser(self, pos, x, y):
+        if (
+            not self.layer_ctrl.layer_id
+            or len(self.layer_ctrl.current_layer_index) > 1
+        ):
+            self.print_message(
+                "Eraser only works on one single layer.", self.error_message_color
+            )
+            return
+        da_link = self.layer_ctrl.layer_link[self.layer_ctrl.current_layer_index[0]]
+        if da_link == "atlas-probe":
+            res = self.atlas_erasing_probe(pos)
+            if res is None:
+                return
+        else:
+            if self.current_atlas == "volume":
+                return
+            if da_link not in ["atlas-mask", "atlas-slice"]:
+                return
+            r = self.tool_box.eraser_size_slider.value()
+            raster = self._atlas_raster(da_link)
+            if raster is None:
+                return
+            mask_img = np.zeros(raster.shape[:2], dtype=np.uint8)
+            cv2.circle(
+                mask_img, center=(int(x), int(y)), radius=r, color=255, thickness=-1
+            )
+            mask_img = 255 - mask_img
+            temp = raster.astype(np.uint8)
+            dst = cv2.bitwise_and(temp, temp, mask=mask_img)
+            res = cv2.resize(
+                dst, self.atlas_view.slice_tb_size, interpolation=cv2.INTER_AREA
+            )
+            self._set_atlas_raster(da_link, dst)
+        self.layer_ctrl.layer_list[
+            self.layer_ctrl.current_layer_index[0]
+        ].set_thumbnail_data(res)
+        current_data = {"data": self._atlas_raster(da_link)}
+        self.save_current_action("eraser_btn", da_link, current_data, res)
+
+    def _atlas_click_lasso(self, pos, x, y):
+        if self.working_img_data["lasso_path"]:
+            self.inactive_lasso()
+        if self.atlas_lasso_is_closure:
+            self.inactive_slice_window_lasso()
+            return
+        if self.current_atlas == "volume":
+            return
+        new_pnt = np.array([x, y])
+        if len(self.working_atlas_data["lasso_path"]) > 1:
+            dists = np.sum(
+                (np.asarray(self.working_atlas_data["lasso_path"][0]) - new_pnt)
+                ** 2
+            )
+        else:
+            dists = 1e5
+        if dists < 5:
+            self.working_atlas_data["lasso_path"].append(
+                self.working_atlas_data["lasso_path"][0]
+            )
+            self.atlas_view.slice_stack.image_dict["lasso_path"].setPen(
+                pg.mkPen(color="r", width=3, style=Qt.PenStyle.SolidLine)
+            )
+            self.atlas_lasso_is_closure = True
+        else:
+            self.working_atlas_data["lasso_path"].append([x, y])
+        drawing_pnts = np.asarray(self.working_atlas_data["lasso_path"])
+        self.atlas_view.slice_stack.image_dict["lasso_path"].setData(drawing_pnts)
+        current_data = {"data": self.working_atlas_data["lasso_path"].copy()}
+        self.save_current_action("lasso_btn", "lasso_path", current_data, None)
+
+    def _atlas_click_probe(self, pos, x, y):
+        self.working_atlas_data["atlas-probe"].append([x, y])
+
+        if len(self.working_atlas_data["atlas-probe"]) > 2:
+            self.working_atlas_data["atlas-probe"].clear()
+            self.atlas_view.working_atlas.image_dict["atlas-probe"].clear()
+            self.atlas_view.working_atlas.image_dict["atlas-trajectory"].clear()
+            self.atlas_view.working_atlas.remove_pre_trajectories_vis_lines()
+        if len(self.working_atlas_data["atlas-probe"]) == 0:
+            self.atlas_view.working_atlas.image_dict["atlas-probe"].clear()
+            self.atlas_view.working_atlas.remove_pre_trajectories_vis_lines()
+            return
+        if self.image_view.image_file is None:
+            # pre-surgery
+            points2d = self.working_atlas_data["atlas-probe"].copy()
+            points2d = np.asarray(points2d)
+
+            if self.multi_shanks and self.valid_multi_settings:
+                base_loc_1d = get_pre_multi_shank_vis_base(
+                    self.multi_settings.x_vals, self.multi_settings.y_vals
+                )
+            else:
+                base_loc_1d = np.array([0])
+
+            if self.current_atlas == "volume":
+                self.atlas_view.draw_pre_2d_vis_data_for_volume_atlas(
+                    points2d, base_loc_1d
+                )
+            else:
+                self.atlas_view.draw_pre_2d_vis_data_for_slice_atlas(
+                    points2d, base_loc_1d
+                )
+        else:
+            # after-surgery
+            self.atlas_view.working_atlas.image_dict["atlas-probe"].setData(
+                pos=np.asarray(self.working_atlas_data["atlas-probe"])
+            )
+            if len(self.working_atlas_data["atlas-probe"]) > 1:
+                if self.current_atlas == "volume":
+                    current_img = (
+                        self.atlas_view.working_atlas.label_img.image.copy()
+                    )
+                else:
+                    current_img = None
+                vis_points, msg = line_fit_2d(
+                    self.working_atlas_data["atlas-probe"], current_img
+                )
+                if msg is not None:
+                    self.print_message(msg, self.error_message_color)
+                    return
+                self.atlas_view.working_atlas.image_dict[
+                    "atlas-trajectory"
+                ].setData(vis_points)
+
+        vis_img = create_vis_img(
+            self.atlas_view.slice_size,
+            self.working_atlas_data["atlas-probe"],
+            self.probe_color,
+            "p",
+        )
+        res = cv2.resize(
+            vis_img, self.atlas_view.slice_tb_size, interpolation=cv2.INTER_AREA
+        )
+        self.layer_ctrl.master_layers(
+            res, layer_type="atlas-probe", color=self.probe_color
+        )
+
+        current_data = {"data": self.working_atlas_data["atlas-probe"].copy()}
+        self.save_current_action("probe_btn", "atlas-probe", current_data, None)
+
+    def _atlas_click_magic_wand(self, pos, x, y):
+        if self.current_atlas == "volume":
+            if not self.h2a_transferred:
+                return
+            src_img = self.atlas_view.working_atlas.image_dict[
+                "atlas-overlay"
+            ].image.copy()
+        else:
+            src_img = self.atlas_view.slice_image_data.copy()
+        white_img = np.ones(self.atlas_view.slice_size).astype("uint8")
+        tol_val = read_int_field(self.tool_box.magic_tol_val, minimum=0)
+        if tol_val is None:
+            self.print_message(
+                "Enter a magic wand tolerance of 0 or more.", self.reminder_color
+            )
+            return
+        da_color = src_img[int(y), int(x), :3]
+        lower_val, upper_val = get_bound_color(da_color, tol_val, 255, "rgb")
+        mask_img = cv2.inRange(
+            src_img[:, :, :3],
+            np.array(lower_val, dtype="float"),
+            np.array(upper_val, dtype="float"),
+        )
+
+        modifiers = QApplication.keyboardModifiers()
+        if modifiers == Qt.KeyboardModifier.ShiftModifier:
+            if self.working_atlas_data["atlas-mask"] is None:
+                self.working_atlas_data["atlas-mask"] = cv2.bitwise_or(
+                    mask_img, mask_img, mask=white_img
+                )
+            else:
+                self.working_atlas_data["atlas-mask"] = cv2.bitwise_or(
+                    self.working_atlas_data["atlas-mask"], mask_img, mask=white_img
+                )
+        else:
+            self.working_atlas_data["atlas-mask"] = mask_img.copy()
+
+        if self.kernel is not None:
+            temp = self.working_atlas_data["atlas-mask"].copy()
+            open_img = cv2.morphologyEx(temp, cv2.MORPH_OPEN, self.kernel)
+            close_img = cv2.morphologyEx(open_img, cv2.MORPH_CLOSE, self.kernel)
+            self.working_atlas_data["atlas-mask"] = close_img.copy()
+
+        self.atlas_view.working_atlas.image_dict["atlas-mask"].setImage(
+            self.working_atlas_data["atlas-mask"]
+        )
+        res = cv2.resize(
+            self.working_atlas_data["atlas-mask"],
+            self.atlas_view.slice_tb_size,
+            interpolation=cv2.INTER_AREA,
+        )
+        self.layer_ctrl.master_layers(
+            res, layer_type="atlas-mask", color=self.magic_wand_lut[1]
+        )
+        current_data = {"data": self.working_atlas_data["atlas-mask"].copy()}
+        self.save_current_action("magic_wand_btn", "atlas-mask", current_data, res)
+
+    def _atlas_click_bregma(self, pos, x, y):
+        self.atlas_view.slice_bregma = [x, y]
+        self.atlas_view.slice_stack.image_dict["bregma_pnt"].setData(
+            pos=np.array([self.atlas_view.slice_bregma])
+        )
+        self.actionBregma_Picker.setChecked(False)
+        self.atlas_view.check_info_ready()
 
     def slice_stack_key_pressed(self, action):
         if len(self.layer_ctrl.current_layer_index) != 1:
