@@ -772,5 +772,32 @@ class ProjectPersistenceIntegrationTests(unittest.TestCase):
                 window._build_triangulation_registration(strict=False, show_error=False)
                 self.assertEqual(build.call_count, 2)
 
+    @isolated_gui_test
+    def test_click_dispatch_reaches_each_tool(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window = self._window_with_volume_atlas(root)
+            source = root / "histology.png"
+            cv2.imwrite(str(source), np.full((30, 40, 3), 80, dtype=np.uint8))
+            self.assertTrue(window.load_single_image_file(str(source), ".png"))
+            window.reset_corners_hist()
+            buttons = window.tool_box.checkable_btn_dict
+
+            buttons["ruler_btn"].setChecked(True)
+            window.img_stacks_clicked((5.0, 6.0))
+            window.img_stacks_clicked((15.0, 16.0))
+            self.assertEqual(len(window.working_img_data["ruler_path"]), 2)
+            buttons["ruler_btn"].setChecked(False)
+
+            buttons["triang_btn"].setChecked(True)
+            before = len(window.atlas_tri_inside_data)
+            window.atlas_stacks_clicked((10.0, 12.0))
+            self.assertEqual(len(window.atlas_tri_inside_data), before + 1)
+            buttons["triang_btn"].setChecked(False)
+
+            buttons["probe_btn"].setChecked(True)
+            window.atlas_stacks_clicked((8.0, 9.0))
+            self.assertEqual(len(window.working_atlas_data["atlas-probe"]), 1)
+
 if __name__ == "__main__":
     unittest.main()
