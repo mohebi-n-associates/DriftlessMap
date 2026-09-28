@@ -5,6 +5,13 @@ from pyqtgraph.Qt import QtCore
 
 
 class MovablePoints(pg.GraphItem):
+    """Draggable scatter points built on ``pg.GraphItem``.
+
+    Adapted from the ``CustomGraphItem`` example distributed with pyqtgraph
+    (MIT License, Copyright (c) 2012 University of North Carolina at Chapel
+    Hill, Luke Campagnola).
+    """
+
     mouseHovered = pyqtSignal(object)
     mouseDragged = pyqtSignal(object)
     mouseClicked = pyqtSignal(object)

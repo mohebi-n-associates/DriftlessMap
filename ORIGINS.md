@@ -62,6 +62,13 @@ The complete project remains licensed under the MIT License:
 When redistributing DriftlessMap or a substantial portion of its source, retain
 `LICENSE.txt`. Preserving this file is a condition of the MIT License.
 
+## Adapted third-party code
+
+- `driftlessmap/movable_points.py` adapts the `CustomGraphItem` example from
+  pyqtgraph (<https://github.com/pyqtgraph/pyqtgraph>), MIT License,
+  Copyright (c) 2012 University of North Carolina at Chapel Hill, Luke
+  Campagnola.
+
 ## Compatibility names
 
 Names such as `.herbs*` legacy file extensions, `HERBS_CONFIG_DIR`, and
