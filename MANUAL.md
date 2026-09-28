@@ -756,9 +756,10 @@ section and fills the Triangulation tool with paired landmarks:
 2. Choose **Atlas > Propose Landmarks**. If landmarks already exist, you are
    asked before they are replaced.
 3. DriftlessMap fits the outlines, then refines the fit on the image
-   intensities where that improves the match. It places about 36 landmarks
-   evenly inside the atlas section, and moves the boundary anchors with the
-   same fit.
+   intensities where that improves the match. It places 10 landmarks at the
+   most distinctive atlas points (corner-like template structure and meeting
+   points of region boundaries), spread over the section and numbered from
+   the most distinctive. It moves the boundary anchors with the same fit.
 4. The status bar reports the number of pairs and the outline overlap. The
    Triangulation tool opens so you can check the mesh. Drag any landmark that
    is off, add more where the anatomy needs them, and check mesh quality

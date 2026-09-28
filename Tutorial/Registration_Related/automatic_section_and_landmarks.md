@@ -133,27 +133,36 @@ The fit has two stages:
    is kept only if it improves the intensity match without making the outline
    match noticeably worse; otherwise the outline fit is used.
 
-DriftlessMap then places about 36 points on an even grid inside the atlas
-section and maps each point into the section with the fitted transform. Points
-that land off the tissue are dropped. The fixed frame points around the mesh
-are carried through the same transform, so they agree with the interior
-landmarks.
+DriftlessMap then chooses 10 landmarks. It scores every point inside the
+atlas section by how distinctive it is: corner-like structure in the atlas
+template, and places where several region boundaries meet. Points like these
+can be matched in both directions, unlike a point on a straight edge or in
+uniform tissue. It picks the most distinctive point first, then keeps picking
+while discounting points close to those already chosen, so the landmarks
+spread over the section instead of clustering. Points that the fit maps off
+the tissue are skipped. The landmarks are numbered from the most distinctive.
+The fixed frame points around the mesh are carried through the same transform,
+so they agree with the interior landmarks.
 
 <p align="center">
 <img src="../../image/automation/04_proposed_landmarks.png" width="90%">
 </p>
 
-For the sample, the status bar reports 26 landmark pairs from the outline fit,
+For the sample, the status bar reports 10 landmark pairs from the outline fit,
 with an outline overlap of 0.96. Here the deformable refinement did not
-improve the match, so it was not used. The Triangulation tool is switched on,
-and its status shows **Mesh: review (54 triangles)**: some triangles are
-narrow and worth a look (see Section 8.5 of the manual).
+improve the match, so it was not used. The landmarks fall on the cerebellar
+folia, the edges of the hippocampus and ventricles, and deep structures. The
+olfactory bulb and frontal cortex get none, because the atlas template is
+smooth there; the frame points still anchor that end. The Triangulation tool
+is switched on, and its status shows **Mesh: review (22 triangles)**: some
+triangles are narrow and worth a look (see Section 8.5 of the manual).
 
 ### 5. Review, correct and transfer
 
 Treat the proposal as a first draft. Check each numbered pair against the
-anatomy, drag any point that is off, and add points where the anatomy needs
-more detail, as you would when placing landmarks by hand. Then transfer the
+anatomy and drag any point that is off. Ten landmarks give a coarse mesh, so
+add points where the anatomy needs more detail, as you would when placing
+landmarks by hand. Then transfer the
 section to the atlas as usual.
 
 <p align="center">
