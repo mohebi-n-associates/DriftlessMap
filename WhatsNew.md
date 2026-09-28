@@ -3,6 +3,16 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.4.41
+
+Release date: 27 September 2026
+
+Automatic cell detection now runs on a background thread behind a progress
+dialog. Detecting cells on a large histology section no longer freezes the
+window. The detected cells are unchanged.
+
+---
+
 ## DriftlessMap 1.4.40
 
 Release date: 27 September 2026
