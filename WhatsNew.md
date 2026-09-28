@@ -15,11 +15,17 @@ Release date: 27 September 2026
 
 ### Changed
 
-- **Propose Landmarks** now proposes 10 landmarks instead of about 36. They
-  are placed at the most distinctive atlas points, where the template has
-  corner-like structure or several region boundaries meet, and spread over
-  the section. They are numbered from the most distinctive. Add more by hand
-  where the anatomy needs them.
+- **Propose Landmarks** now suggests up to 10 landmarks instead of about 36,
+  each on a feature you can see and check in both images:
+  - up to 5 at the sharpest tips and notches of the brain outline, snapped
+    onto the section outline;
+  - the rest on strong internal edges that both images show, such as the
+    corpus callosum and the ventricles.
+
+  An edge seen in only one image is never chosen: an atlas region border in
+  uniform-looking tissue, or a dye track in the section. The status bar says
+  how many points are on the outline and how many are internal. Confirm or
+  drag each point, and add more by hand where the anatomy needs them.
 
 ### Documentation
 

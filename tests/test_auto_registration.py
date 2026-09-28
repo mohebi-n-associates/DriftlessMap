@@ -5,7 +5,11 @@ import unittest
 import cv2
 import numpy as np
 
-from driftlessmap.auto_registration import _importance, _select, propose_landmarks
+from driftlessmap.atlas_matching import tissue_mask
+from driftlessmap.auto_registration import (
+    EDGE_MARGIN, MIN_AGREEMENT, _outer_contour, _outline_points, _shared_edge_score,
+    propose_landmarks,
+)
 
 
 def synthetic_slice(size=(160, 240)):
@@ -61,34 +65,68 @@ class ProposeLandmarkTests(unittest.TestCase):
         inner = cv2.erode((labels > 0).astype(np.uint8), np.ones((9, 9), np.uint8)) > 0
         grid = grid[inner[grid[:, 1].astype(int), grid[:, 0].astype(int)]]
         proposal = propose_landmarks(intensity, labels, section, boundary_points=grid)
-        self.assertEqual(len(proposal.atlas_points), 10)
+        self.assertTrue(3 <= len(proposal.atlas_points) <= 10)
+        self.assertEqual(len(proposal.kinds), len(proposal.atlas_points))
         errors = np.linalg.norm(proposal.boundary_points - known_warp(grid), axis=1)
         # section pixels are 2.5x atlas pixels: within ~1.6 atlas pixels,
         # including grid points close to the outline
         self.assertLess(np.median(errors), 4.0, errors)
-        truth = known_warp(proposal.atlas_points)
-        landmark_errors = np.linalg.norm(proposal.histology_points - truth, axis=1)
-        self.assertLess(np.median(landmark_errors), 6.0, landmark_errors)
+        internal = np.array([kind == "internal" for kind in proposal.kinds])
+        if internal.any():
+            truth = known_warp(proposal.atlas_points[internal])
+            landmark_errors = np.linalg.norm(proposal.histology_points[internal] - truth, axis=1)
+            self.assertLess(np.median(landmark_errors), 6.0, landmark_errors)
         self.assertGreater(proposal.overlap_final, 0.9)
 
-    def test_landmarks_are_distinctive_and_spread_out(self):
+    def test_outline_points_lie_on_both_outlines(self):
         intensity, labels = synthetic_slice()
         section = warped_section(intensity, labels)
-        proposal = propose_landmarks(intensity, labels, section, deformable=False, count=8)
-        points = proposal.atlas_points
-        self.assertEqual(len(points), 8)
-        inner = labels > 0
-        importance = _importance(intensity, labels, inner)
-        at_points = importance[points[:, 1].astype(int), points[:, 0].astype(int)]
-        self.assertGreater(at_points.mean(), 2 * importance[inner].mean())
-        gaps = np.linalg.norm(points[:, None] - points[None], axis=2)
-        np.fill_diagonal(gaps, np.inf)
-        self.assertGreater(gaps.min(), 10.0)  # not clustered
+        proposal = propose_landmarks(intensity, labels, section, deformable=False)
+        outline = np.array([kind == "outline" for kind in proposal.kinds])
+        self.assertGreaterEqual(outline.sum(), 2)
+        atlas_contour = _outer_contour(labels > 0) + 0.5
+        section_contour = _outer_contour(tissue_mask(section)) + 0.5
+        for a, h in zip(proposal.atlas_points[outline], proposal.histology_points[outline]):
+            self.assertLess(np.linalg.norm(atlas_contour - a, axis=1).min(), 1.0)
+            self.assertLess(np.linalg.norm(section_contour - h, axis=1).min(), 1.0)
+        # a notch where the two lobes of the synthetic slice meet is found
+        notch = np.array([[35.8, 117.4], [20.0, 84.0]])  # ellipse intersections
+        self.assertLess(min(np.linalg.norm(proposal.atlas_points[outline] - q, axis=1).min()
+                            for q in notch), 12.0)
 
-    def test_selection_prefers_weight_but_keeps_distance(self):
-        points = np.array([[0.0, 0.0], [1.0, 0.0], [50.0, 0.0]])
-        chosen = _select(points, np.array([1.0, 0.9, 0.5]), 2, spacing=20.0)
-        self.assertEqual(chosen.tolist(), [0, 2])
+    def test_internal_points_sit_on_edges_both_images_show(self):
+        intensity, labels = synthetic_slice()
+        section = warped_section(intensity, labels)
+        proposal = propose_landmarks(intensity, labels, section, deformable=False)
+        internal = proposal.atlas_points[[kind == "internal" for kind in proposal.kinds]]
+        self.assertGreaterEqual(len(internal), 1)
+        edges = cv2.Canny((intensity * 255).astype(np.uint8), 20, 60) > 0
+        ys, xs = np.nonzero(edges)
+        edge_points = np.column_stack([xs, ys]) + 0.5
+        for point in internal:
+            self.assertLess(np.linalg.norm(edge_points - point, axis=1).min(), 4.0)
+
+    def test_an_edge_in_only_one_image_scores_nothing(self):
+        atlas = np.full((80, 80), 0.4, np.float32)
+        atlas[:, 40:] = 0.9                       # an edge in both images
+        section = atlas.copy()
+        section[20:60, 15] = 1.0                  # a "dye track" only in the section
+        atlas_only = atlas.copy()
+        atlas_only[40:, 60] = 0.1                 # a border only in the atlas
+        inner = np.ones_like(atlas, bool)
+        score = _shared_edge_score(atlas_only, section, inner)
+        self.assertGreater(score[40, 39:41].max(), MIN_AGREEMENT)
+        self.assertLess(score[40, 12:18].max(), MIN_AGREEMENT)
+        self.assertLess(score[60, 58:62].max(), MIN_AGREEMENT)
+
+    def test_outline_cut_by_the_image_edge_is_skipped(self):
+        intensity, labels = synthetic_slice()
+        cut = labels.copy()
+        cut[:, :40] = 0
+        cut[40:130, :40] = 1                      # brain runs off the left edge
+        image = cv2.normalize(intensity + 0.4 * (cut > 0), None, 0, 1, cv2.NORM_MINMAX)
+        points = _outline_points(cut > 0, image, 5)
+        self.assertTrue(np.all(points[:, 0] >= EDGE_MARGIN), points)
 
     def test_affine_only_mode_and_empty_atlas(self):
         intensity, labels = synthetic_slice()
