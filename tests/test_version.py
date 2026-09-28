@@ -22,7 +22,7 @@ class VersionTests(unittest.TestCase):
         cls.app = QApplication.instance() or QApplication([])
 
     def test_public_package_version_uses_the_canonical_value(self):
-        self.assertEqual(__version__, "1.4.36")
+        self.assertEqual(__version__, "1.4.37")
         self.assertEqual(driftlessmap.__version__, __version__)
 
     def test_main_window_display_strings_include_the_version(self):
