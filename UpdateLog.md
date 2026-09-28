@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th September 2026
+##### DriftlessMap 1.4.49
+
+Architecture cleanup: the active atlas is recorded through a single session method, per-view display updates go through one registry instead of copy-pasted blocks, and GUI-free project helpers move into a tested project_io module.
+
+### 27th September 2026
 ##### DriftlessMap 1.4.48
 
 Test coverage for the tool settings, the histogram curve widget and the channel colour selector, with a default channel index so the selector is safe before it is assigned a channel.
