@@ -371,8 +371,9 @@ def tilted_slice(volume, plane, index, tilt_degrees, pivot, order=1):
     """Sample the tilted slice ``AtlasView`` shows for these rotation controls.
 
     ``tilt_degrees`` is the (horizontal, vertical) pair of the view's rotation
-    spinboxes; ``pivot`` is the current (coronal, sagittal, horizontal)
-    indices, about which the view rotates. Mirrors
+    spinboxes; ``pivot`` is the (coronal, sagittal, horizontal) page indices
+    about which the view rotates. The view shows ``index`` as its own page,
+    so that component of the pivot is always ``index``. Mirrors
     ``AtlasView.rotate_*_current_slice``.
     """
     from scipy.ndimage import map_coordinates
@@ -380,6 +381,12 @@ def tilted_slice(volume, plane, index, tilt_degrees, pivot, order=1):
     h_rad, v_rad = np.deg2rad(tilt_degrees)
     size0, size1, size2 = volume.shape
     c_id, s_id, h_index = pivot
+    if plane == "coronal":
+        c_id = index
+    elif plane == "sagittal":
+        s_id = index
+    elif plane == "horizontal":
+        h_index = index
     o_rot = np.array([size0 - 1 - h_index, s_id, c_id], dtype=float)
     if plane == "coronal":
         rotation = _rotation_x(h_rad) @ _rotation_y(v_rad)
@@ -444,3 +451,108 @@ def refine_tilt(histology, label_volume, intensity_volume, plane, orientation,
                for row, tilt, score in zip(rows, keys, scores)]
     matches.sort(key=lambda match: match.score, reverse=True)
     return matches
+
+
+def mirrored_tilt(plane, tilt_degrees):
+    """The rotation-control tilt of the mirror-image cut in the other hemisphere.
+
+    Rotations mixing the medio-lateral axis change sign: in the view's axes
+    (0 DV, 1 ML, 2 AP), ``rotation_x`` mixes ML-AP and ``rotation_z`` mixes
+    DV-ML, while ``rotation_y`` (DV-AP) is unaffected.
+    """
+    h, v = tilt_degrees
+    if plane == "coronal":      # Rx(h) @ Ry(v)
+        return (-h, v)
+    if plane == "sagittal":     # Rx(h) @ Rz(v)
+        return (-h, -v)
+    if plane == "horizontal":   # Rz(v) @ Ry(h)
+        return (h, -v)
+    raise ValueError("Unknown atlas plane {!r}.".format(plane))
+
+
+def mirror_hemisphere(plane, orientation):
+    """The orientation showing the other hemisphere (coronal/horizontal).
+
+    Mirrors the oriented section along the view's medio-lateral axis.
+    """
+    if plane == "coronal":
+        return Orientation(orientation.quarter_turns, not orientation.mirrored)
+    if plane == "horizontal":
+        return Orientation((orientation.quarter_turns + 2) % 4, not orientation.mirrored)
+    return orientation
+
+
+@dataclass(frozen=True)
+class Suggestion:
+    """One ready-to-apply atlas section suggestion."""
+
+    plane: str
+    orientation: Orientation
+    index: int
+    tilt_degrees: tuple
+    score: float
+    silhouette: float
+
+
+@dataclass(frozen=True)
+class SuggestionReport:
+    plane_candidates: tuple   # best Candidate per plane, best first
+    suggestions: tuple        # Suggestion objects, best first
+    midline: object           # sagittal midline index, or None
+
+    @property
+    def plane_margin(self):
+        """Silhouette lead of the best plane over the runner-up."""
+        if len(self.plane_candidates) < 2:
+            return 1.0
+        return self.plane_candidates[0].silhouette - self.plane_candidates[1].silhouette
+
+
+def _distinct(indexes, count, spacing):
+    chosen = []
+    for index in indexes:
+        if all(abs(index - other) >= spacing for other in chosen):
+            chosen.append(index)
+        if len(chosen) == count:
+            break
+    return chosen
+
+
+def suggest_sections(histology, label_volume, intensity_volume, midline, pivot,
+                     max_suggestions=6, depth_candidates=4,
+                     angles=(-6, -3, 0, 3, 6), progress=None):
+    """Plane, orientation, depth and tilt suggestions for one section.
+
+    ``midline`` is the sagittal page index of the midline (for searching one
+    hemisphere); ``pivot`` is the current (coronal, sagittal, horizontal) page
+    indices of the atlas view.
+    """
+    def stage(start, end):
+        if progress is None:
+            return None
+        return lambda fraction: progress(start + (end - start) * fraction)
+
+    planes = best_by_plane(search_planes(histology, label_volume, progress=stage(0.0, 0.3)))
+    best = planes[0]
+    length = plane_length(label_volume.shape, best.plane)
+    depths = rank_depths(
+        histology, label_volume, intensity_volume, best.plane, best.orientation,
+        indexes=hemisphere_indexes(best.plane, length, midline), progress=stage(0.3, 0.6),
+    )
+    spacing = max(2, length // 100)
+    chosen = _distinct([match.index for match in depths], depth_candidates, spacing)
+    tilts = refine_tilt(
+        histology, label_volume, intensity_volume, best.plane, best.orientation,
+        indexes=chosen, pivot=pivot, angles=angles, progress=stage(0.6, 1.0),
+    )
+    suggestions, seen = [], set()
+    for match in tilts:
+        if match.index in seen:
+            continue  # the best tilt of each depth
+        seen.add(match.index)
+        suggestions.append(Suggestion(best.plane, best.orientation, match.index,
+                                      match.tilt_degrees, match.score, match.silhouette))
+        if len(suggestions) == max_suggestions:
+            break
+    return SuggestionReport(tuple(planes), tuple(suggestions),
+                            midline if best.plane == "sagittal" else None)

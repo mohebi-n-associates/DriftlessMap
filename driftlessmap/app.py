@@ -141,7 +141,9 @@ from .probe_reconstruction import (
     source_vox_to_herbs_vox,
 )
 from .roi_analysis import build_drawing_roi_info
+from .atlas_matching import suggest_sections
 from .background import run_in_background
+from .section_suggestion_dialog import SectionSuggestionDialog
 from .landmarks import LANDMARK_FIELDS, LandmarkModel, triangulation_payload_error
 from .project_io import (
     default_working_atlas_data,
@@ -525,6 +527,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.actionRegister_Slice_Info.triggered.connect(self.register_slice_info)
         self.actionSave_Slice.triggered.connect(self.save_processed_slice)
         self.actionSwitch_Atlas.triggered.connect(self.switch_atlas)
+        self.actionSuggest_Atlas_Section.triggered.connect(self.suggest_atlas_section)
         self.actionBregma_Picker.setCheckable(True)
         self.actionBregma_Picker.triggered.connect(self.pick_bregma)
         self.actionCreate_Slice_Layer.triggered.connect(self.process_slice)
@@ -1755,6 +1758,92 @@ class DriftlessMap(QMainWindow, FORM_Main):
             self.print_message(
                 "Current Slice is saved successfully.", self.normal_color
             )
+
+    def suggest_atlas_section(self):
+        """Suggest and apply the atlas plane, slice and tilt for the section."""
+        if (
+            self.current_atlas != "volume"
+            or self.atlas_view.atlas_data is None
+            or self.atlas_view.atlas_label is None
+        ):
+            self.print_message(
+                "Load a volume atlas before suggesting an atlas section.",
+                self.error_message_color,
+            )
+            return
+        if self.image_view.current_img is None:
+            self.print_message(
+                "Load a histology section before suggesting an atlas section.",
+                self.error_message_color,
+            )
+            return
+        view = self.atlas_view
+        section = np.asarray(self.image_view.current_img)
+        midline = int(view.origin_3d[0])
+        # Tilts for coronal/horizontal pivot on the midline (see above); the
+        # sagittal pivot is its own page, so its value here does not matter.
+        pivot = (int(view.current_coronal_index), midline,
+                 int(view.current_horizontal_index))
+        try:
+            report = run_in_background(
+                self,
+                "Comparing the section with the atlas...",
+                suggest_sections,
+                section,
+                view.atlas_label,
+                view.atlas_data,
+                midline,
+                pivot,
+            )
+        except ValueError as exc:
+            self.print_message(
+                "No atlas section could be suggested: {}".format(exc),
+                self.error_message_color,
+            )
+            return
+        if not report.suggestions:
+            self.print_message(
+                "No atlas section could be suggested for this image.",
+                self.error_message_color,
+            )
+            return
+        dialog = SectionSuggestionDialog(
+            report, section, view.atlas_data, pivot, view.vox_size_um, self
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        choice = dialog.choice()
+        if choice is not None:
+            self.apply_section_suggestion(*choice)
+
+    def apply_section_suggestion(self, plane, index, orientation, tilt, rotate_histology):
+        """Show ``plane``/``index`` at ``tilt`` and orient the histology."""
+        view = self.atlas_view
+        if rotate_histology:
+            for _ in range(orientation.quarter_turns % 4):
+                self.image_view.image_90_counter_rotate()
+            if orientation.mirrored:
+                self.image_view.image_horizon_flip()
+        buttons = {"coronal": view.section_rabnt1, "sagittal": view.section_rabnt2,
+                   "horizontal": view.section_rabnt3}
+        pages = {"coronal": view.cpage_ctrl, "sagittal": view.spage_ctrl,
+                 "horizontal": view.hpage_ctrl}
+        rotations = {"coronal": view.crotation_ctrl, "sagittal": view.srotation_ctrl,
+                     "horizontal": view.hrotation_ctrl}
+        buttons[plane].setChecked(True)
+        if plane in ("coronal", "horizontal"):
+            view.spage_ctrl.set_val(int(view.origin_3d[0]))
+        pages[plane].set_val(int(index))
+        rotation = rotations[plane]
+        rotation.h_spinbox.setValue(float(tilt[0]))
+        rotation.v_spinbox.setValue(float(tilt[1]))
+        self.print_message(
+            "Showing the suggested {} slice {} at tilt ({:+.1f}°, {:+.1f}°). "
+            "Check the match before placing landmarks.".format(
+                plane, index, tilt[0], tilt[1]
+            ),
+            self.normal_color,
+        )
 
     def switch_atlas(self):
         if (

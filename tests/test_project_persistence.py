@@ -799,5 +799,47 @@ class ProjectPersistenceIntegrationTests(unittest.TestCase):
             window.atlas_stacks_clicked((8.0, 9.0))
             self.assertEqual(len(window.working_atlas_data["atlas-probe"]), 1)
 
+    @isolated_gui_test
+    def test_suggested_section_is_applied_to_the_views(self):
+        from driftlessmap.atlas_matching import atlas_slice
+        from driftlessmap.section_suggestion_dialog import SectionSuggestionDialog
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window = self._window_with_volume_atlas(root)
+            view = window.atlas_view
+            target = int(view.origin_3d[0]) + 5
+            slice_ = atlas_slice(view.atlas_data, "sagittal", target).astype(np.float32)
+            section = cv2.resize(slice_, None, fx=6, fy=6)
+            section = np.rot90(section)  # the histology arrives rotated
+            path = root / "section.png"
+            cv2.imwrite(str(path), np.dstack([section] * 3).astype(np.uint8))
+            self.assertTrue(window.load_single_image_file(str(path), ".png"))
+            before = window.image_view.current_img.shape
+
+            chosen = []
+            original_choice = SectionSuggestionDialog.choice
+
+            def record(dialog):
+                chosen.append(original_choice(dialog))
+                return chosen[-1]
+
+            with patch.object(SectionSuggestionDialog, "exec", return_value=1), patch.object(
+                SectionSuggestionDialog, "choice", record
+            ):
+                window.suggest_atlas_section()
+
+            plane, index, _orientation, tilt, _rotate = chosen[0]
+            self.assertEqual(plane, "sagittal")
+            self.assertTrue(view.section_rabnt2.isChecked())
+            self.assertEqual(window.atlas_display, "sagittal")
+            # The fixture brain is uniform in ML, so depth itself is arbitrary;
+            # what matters is that the chosen suggestion is applied exactly.
+            self.assertEqual(view.current_sagital_index, index)
+            self.assertAlmostEqual(view.srotation_ctrl.h_spinbox.value(), tilt[0])
+            self.assertAlmostEqual(view.srotation_ctrl.v_spinbox.value(), tilt[1])
+            # the histology was turned back to the atlas orientation
+            self.assertEqual(window.image_view.current_img.shape[:2], before[:2][::-1])
+
 if __name__ == "__main__":
     unittest.main()
