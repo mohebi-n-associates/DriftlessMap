@@ -1,4 +1,5 @@
 import numpy as np
+from .persistence import write_cache_pickle
 import os
 from os.path import dirname, join
 from PyQt6.QtWidgets import *
@@ -7,7 +8,11 @@ from PyQt6.QtCore import *
 
 import pickle
 import shutil
-from .atlas_loader import process_atlas_raw_data
+from .atlas_loader import (
+    begin_atlas_processing,
+    finish_atlas_processing,
+    process_atlas_raw_data,
+)
 from .obj_items import load_mesh_file, render_volume, render_small_volume
 from .persistence import load_legacy_pickle
 from .download_utils import DownloadCancelled, download_file, thread_is_running
@@ -79,7 +84,10 @@ class WorkerProcessData(QObject):
         # Always report back: an exception escaping a worker thread would
         # leave the dialog waiting forever and can abort the application.
         try:
+            begin_atlas_processing(self.saving_folder)
             self._run()
+            if self.success:
+                finish_atlas_processing(self.saving_folder)
         except Exception as exc:
             self.success = False
             self.message = 'Atlas processing failed: {}'.format(exc)
@@ -137,9 +145,7 @@ class WorkerProcessData(QObject):
                     self.small_mesh_list[str(da_name)] = md
 
             self.progress.emit(97)
-            outfile = open(os.path.join(self.saving_folder, 'atlas_small_meshdata.pkl'), 'wb')
-            pickle.dump(self.small_mesh_list, outfile)
-            outfile.close()
+            write_cache_pickle(os.path.join(self.saving_folder, 'atlas_small_meshdata.pkl'), self.small_mesh_list)
 
             self.progress.emit(100)
             self.success = True

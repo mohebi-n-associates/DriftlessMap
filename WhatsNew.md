@@ -3,6 +3,26 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.4.35
+
+Release date: 27 September 2026
+
+Interrupted atlas processing can no longer produce a mismatched atlas.
+
+- **Atomic cache writes.** Every processed-atlas cache file is now written to a
+  temporary file, flushed, and renamed into place. This covers volumes,
+  labels, meshes, contours and axis metadata. A crash, a full disk or a forced
+  quit leaves the previous file intact instead of a truncated one.
+- **Unfinished runs are detected.** Atlas processing, the Allen downloader and
+  the Waxholm downloader mark their folder from the first cache write until
+  they succeed. A folder left marked by an interrupted run is refused with
+  "Atlas processing in this folder did not finish". Previously a new
+  `segment_pre_made.pkl` could be loaded together with a stale
+  `atlas_pre_made.pkl` from an earlier atlas. Atlases processed before this
+  release carry no mark and load as usual.
+
+---
+
 ## DriftlessMap 1.4.34
 
 Release date: 27 September 2026

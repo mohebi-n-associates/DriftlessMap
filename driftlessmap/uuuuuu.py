@@ -1,5 +1,6 @@
 import os
 import numpy as np
+from .persistence import write_cache_pickle
 import math
 import pandas as pd
 import cv2
@@ -1102,9 +1103,7 @@ def make_atlas_label_contour(atlas_folder, segmentation_data):
 
     bnd = {"data": boundary}
 
-    outfile_ct = open(os.path.join(atlas_folder, "contour_pre_made.pkl"), "wb")
-    pickle.dump(bnd, outfile_ct)
-    outfile_ct.close()
+    write_cache_pickle(os.path.join(atlas_folder, "contour_pre_made.pkl"), bnd)
 
     return boundary
 
