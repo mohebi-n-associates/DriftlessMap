@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th September 2026
+##### DriftlessMap 1.4.36
+
+Atlas downloads request unencoded transfers, verify every redirect hop uses HTTPS, tolerate unusual Content-Length headers, and record each file's SHA-256 in download_manifest.json so a changed upstream file is detected instead of silently mixed into an existing atlas.
+
+### 27th September 2026
 ##### DriftlessMap 1.4.35
 
 Processed-atlas caches are written atomically, and an interrupted atlas download or processing run marks its folder so a mix of new and old cache files is never loaded as one atlas.
