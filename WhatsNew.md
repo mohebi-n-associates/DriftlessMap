@@ -3,6 +3,18 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.4.39
+
+Release date: 27 September 2026
+
+Moving, adding or deleting a registration landmark with the triangle mesh
+shown is faster. Each change rebuilt the full piecewise-affine registration
+twice, once for the atlas window and once for the histology window. The
+registration is now built once and reused while the landmarks, image sizes
+and triangle topology are unchanged, which roughly halves the work per edit.
+
+---
+
 ## DriftlessMap 1.4.38
 
 Release date: 27 September 2026

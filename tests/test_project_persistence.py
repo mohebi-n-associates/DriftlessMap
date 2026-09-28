@@ -746,5 +746,31 @@ class ProjectPersistenceIntegrationTests(unittest.TestCase):
         self.assertEqual(merged["cell_count"], [0] * 5)
         self.assertEqual(merged["ruler_path"], [])
 
+    @isolated_gui_test
+    def test_registration_is_built_once_per_landmark_state(self):
+        import driftlessmap.app as app_module
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window = self._window_with_volume_atlas(root)
+            source = root / "histology.png"
+            cv2.imwrite(str(source), np.full((30, 40, 3), 80, dtype=np.uint8))
+            self.assertTrue(window.load_single_image_file(str(source), ".png"))
+            window.reset_corners_hist()
+            window.reset_tri_points_atlas()
+            with patch.object(
+                app_module,
+                "build_piecewise_affine_registration",
+                wraps=app_module.build_piecewise_affine_registration,
+            ) as build:
+                first = window._build_triangulation_registration(strict=False, show_error=False)
+                second = window._build_triangulation_registration(strict=False, show_error=False)
+                self.assertIsNotNone(first)
+                self.assertIs(first, second)
+                self.assertEqual(build.call_count, 1)
+                window.histo_tri_data[0] = [1.0, 1.0]
+                window._build_triangulation_registration(strict=False, show_error=False)
+                self.assertEqual(build.call_count, 2)
+
 if __name__ == "__main__":
     unittest.main()
