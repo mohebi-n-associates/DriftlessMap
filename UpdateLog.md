@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th September 2026
+##### DriftlessMap 1.4.51
+
+Architecture cleanup: registration landmarks, their triangle topology, the cached registration and landmark labels are owned by one LandmarkModel, and triangulation-file validation becomes a GUI-free, tested function.
+
+### 27th September 2026
 ##### DriftlessMap 1.4.50
 
 Architecture cleanup: the two largest event handlers, image-window and atlas-window clicks, are split into one method per tool behind a dispatch table, with a regression test for the dispatch.

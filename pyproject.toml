@@ -128,6 +128,7 @@ files = [
     "driftlessmap/download_utils.py",
     "driftlessmap/image_reader.py",
     "driftlessmap/layer_geometry.py",
+    "driftlessmap/landmarks.py",
     "driftlessmap/layer_validation.py",
     "driftlessmap/persistence.py",
     "driftlessmap/probe_csv.py",

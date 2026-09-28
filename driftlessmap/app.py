@@ -142,6 +142,7 @@ from .probe_reconstruction import (
 )
 from .roi_analysis import build_drawing_roi_info
 from .background import run_in_background
+from .landmarks import LANDMARK_FIELDS, LandmarkModel, triangulation_payload_error
 from .project_io import (
     default_working_atlas_data,
     default_working_img_data,
@@ -216,6 +217,8 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.small_atlas_rect = None
         self.small_histo_rect = None
 
+        # Landmark state lives in one model; see the properties below.
+        self.landmarks = LandmarkModel()
         self.atlas_corner_points = None
         self.atlas_side_lines = None
         self.atlas_tri_data = []
@@ -1896,72 +1899,15 @@ class DriftlessMap(QMainWindow, FORM_Main):
 
     def _triangulation_file_error(self, tri_data):
         """Return why a triangulation payload cannot be applied, or ``None``."""
-        required = (
-            "atlas_corner_points",
-            "atlas_side_lines",
-            "atlas_tri_data",
-            "atlas_tri_inside_data",
-            "atlas_tri_onside_data",
-            "atlas_display",
+        return triangulation_payload_error(
+            tri_data,
+            {
+                "coronal": self.atlas_view.c_size,
+                "sagittal": self.atlas_view.s_size,
+                "horizontal": self.atlas_view.h_size,
+            },
+            self.np_onside,
         )
-        if not isinstance(tri_data, dict) or any(key not in tri_data for key in required):
-            return "the file is not a triangulation points file."
-        if tri_data["atlas_display"] not in ("coronal", "sagittal", "horizontal"):
-            return "unknown atlas view {!r}.".format(tri_data["atlas_display"])
-        point_sets = {}
-        for key in ("atlas_corner_points", "atlas_tri_inside_data", "atlas_tri_onside_data"):
-            try:
-                points = np.asarray(tri_data[key], dtype=float).reshape(-1, 2)
-            except (TypeError, ValueError):
-                return "{} does not contain 2D points.".format(key)
-            if not np.all(np.isfinite(points)):
-                return "{} contains invalid coordinates.".format(key)
-            point_sets[key] = points
-        view_sizes = {
-            "coronal": self.atlas_view.c_size,
-            "sagittal": self.atlas_view.s_size,
-            "horizontal": self.atlas_view.h_size,
-        }
-        view_size = view_sizes[tri_data["atlas_display"]]
-        view_corners, view_side_lines = get_corner_line_from_rect(
-            (0, 0, int(view_size[1]), int(view_size[0]))
-        )
-        expected_corners = np.asarray(view_corners, dtype=float)
-        if point_sets["atlas_corner_points"].shape != expected_corners.shape or not np.allclose(
-            point_sets["atlas_corner_points"], expected_corners
-        ):
-            return (
-                "it was saved for an atlas slice of a different size. Load the "
-                "atlas used when the points were saved."
-            )
-        expected_onside = len(
-            num_side_pnt_changed(self.np_onside, view_corners, view_side_lines)
-        )
-        if len(point_sets["atlas_tri_onside_data"]) != expected_onside:
-            return (
-                "it has {} boundary points but the current boundary-point "
-                "setting produces {}. Use the same number of points per side "
-                "as when the file was saved.".format(
-                    len(point_sets["atlas_tri_onside_data"]), expected_onside
-                )
-            )
-        simplices = tri_data.get("tri_simplices")
-        if simplices is not None:
-            n_points = len(point_sets["atlas_tri_onside_data"]) + len(
-                point_sets["atlas_tri_inside_data"]
-            )
-            try:
-                simplices = np.asarray(simplices, dtype=np.int64)
-            except (TypeError, ValueError):
-                return "the triangle topology is not an integer array."
-            if simplices.size and (
-                simplices.ndim != 2
-                or simplices.shape[1] != 3
-                or simplices.min() < 0
-                or simplices.max() >= n_points
-            ):
-                return "the triangle topology references missing points."
-        return None
 
     @staticmethod
     def _remove_text_items(text_items):
@@ -3115,10 +3061,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
         )
 
     def _invalidate_triangulation(self, clear_topology=False):
-        self.triangulation_registration = None
-        if clear_topology:
-            self.tri_simplices = None
-            self.triangulation_topology_point_count = None
+        self.landmarks.invalidate(clear_topology=clear_topology)
         self._set_triangulation_quality()
 
     def _build_triangulation_registration(self, strict=True, show_error=True):
@@ -3145,15 +3088,11 @@ class DriftlessMap(QMainWindow, FORM_Main):
             simplices = self.tri_simplices
         # One landmark edit refreshes both windows; reuse the registration
         # when nothing it depends on has changed.
-        cache_key = (
-            np.asarray(self.atlas_tri_data, dtype=float).tobytes(),
-            np.asarray(self.histo_tri_data, dtype=float).tobytes(),
-            tuple(np.ravel(self.atlas_view.slice_size)),
-            tuple(np.ravel(self.image_view.img_size)),
-            None if simplices is None else np.asarray(simplices).tobytes(),
+        cache_key = self.landmarks.cache_key(
+            self.atlas_view.slice_size, self.image_view.img_size, simplices
         )
         cached = self.triangulation_registration
-        if cached is not None and getattr(self, "_registration_cache_key", None) == cache_key:
+        if cached is not None and self.landmarks.registration_cache_key == cache_key:
             registration = cached
         else:
             registration = None
@@ -3193,7 +3132,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.tri_simplices = registration["simplices"].copy()
         self.triangulation_topology_point_count = point_count
         self.triangulation_registration = registration
-        self._registration_cache_key = cache_key[:4] + (
+        self.landmarks.registration_cache_key = cache_key[:4] + (
             np.asarray(self.tri_simplices).tobytes(),
         )
         self._set_triangulation_quality(registration=registration)
@@ -8608,3 +8547,20 @@ def main():
     window = DriftlessMap()
     window.show()
     return app.exec()
+
+
+def _landmark_property(name):
+    def getter(self):
+        return getattr(self.landmarks, name)
+
+    def setter(self, value):
+        setattr(self.landmarks, name, value)
+
+    return property(getter, setter, doc="Delegates to ``LandmarkModel.{}``.".format(name))
+
+
+# Existing call sites keep reading ``self.atlas_tri_data`` and friends; the
+# values are stored on ``self.landmarks``.
+for _name in LANDMARK_FIELDS:
+    setattr(DriftlessMap, _name, _landmark_property(_name))
+del _name
