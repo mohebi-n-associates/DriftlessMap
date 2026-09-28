@@ -3,7 +3,7 @@
 ### 27th September 2026
 ##### DriftlessMap 1.6.1
 
-Fixes **Show Boundary**, which drew atlas region boundaries almost black and therefore invisibly.
+Fixes **Show Boundary**, which drew atlas region boundaries almost black and therefore invisibly. **Propose Landmarks** now proposes 10 distinctive, well-spread landmarks instead of about 36. Adds a tutorial for the automatic section and landmark suggestions.
 
 ### 27th September 2026
 ##### DriftlessMap 1.6.0

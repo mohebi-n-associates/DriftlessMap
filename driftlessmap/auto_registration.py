@@ -1,9 +1,9 @@
 """Automatic landmark proposal between an atlas slice and a histology section.
 
 The atlas slice is the fixed image, so the fitted SimpleITK transform maps an
-atlas point directly to the matching section point; sampling it at a grid of
-atlas points yields landmark pairs for DriftlessMap's piecewise-affine
-registration, which the user then reviews and edits.
+atlas point directly to the matching section point; sampling it at a few
+distinctive, well-spread atlas points yields landmark pairs for DriftlessMap's
+piecewise-affine registration, which the user then reviews and edits.
 
 Both images are given physical coordinates in DriftlessMap's convention
 (pixel ``k`` spans ``[k, k + 1)``; its centre is ``k + 0.5``), so points need
@@ -131,26 +131,68 @@ def _bspline_on_intensities(fixed, moving, fixed_mask, affine, mesh_size):
     return composite, after < before
 
 
-def _grid_points(mask, count):
-    """Roughly ``count`` points on a regular grid inside the eroded mask."""
-    height, width = mask.shape
-    step = max(2, int(np.sqrt(mask.sum() / max(count, 1))))
-    inner = cv2.erode(mask.astype(np.uint8), np.ones((3, 3), np.uint8), iterations=max(1, step // 3)) > 0
-    points = [
-        (x + 0.5, y + 0.5)
-        for y in range(step // 2, height, step)
-        for x in range(step // 2, width, step)
-        if inner[y, x]
-    ]
-    return np.asarray(points, dtype=float).reshape(-1, 2)
+def _spacing(mask, count):
+    """Typical distance between ``count`` points spread over ``mask``."""
+    return max(2.0, float(np.sqrt(mask.sum() / max(count, 1))))
 
 
-def propose_landmarks(atlas_intensity, atlas_labels, section, count=36,
+def _importance(atlas_image, atlas_labels, inner):
+    """How distinctive each atlas pixel is as a landmark, in [0, 2].
+
+    Corner-like structure in the template image plus junctions of region
+    boundaries; both are places that can be matched in two directions,
+    unlike points along a straight edge or in uniform tissue.
+    """
+    def normalised(response):
+        response = np.where(inner, response, 0.0)
+        top = np.percentile(response[inner], 99) if inner.any() else 0.0
+        return np.clip(response / top, 0.0, 1.0) if top > 0 else np.zeros_like(response)
+
+    image = cv2.GaussianBlur(np.asarray(atlas_image, dtype=np.float32), (0, 0), 1.0)
+    labels = np.asarray(atlas_labels).astype(np.int64)
+    edge = np.zeros(labels.shape, np.float32)
+    edge[:-1] += labels[:-1] != labels[1:]
+    edge[:, :-1] += labels[:, :-1] != labels[:, 1:]
+    edge = cv2.GaussianBlur(edge, (0, 0), 1.5)
+    return (normalised(cv2.cornerMinEigenVal(image, 5, 3))
+            + normalised(cv2.cornerMinEigenVal(edge, 5, 3)))
+
+
+def _candidate_points(inner, spacing):
+    """A fine grid of pixel-centre points inside ``inner``."""
+    step = max(1, int(spacing / 6))
+    rows, cols = np.nonzero(inner[::step, ::step])
+    return np.column_stack([cols * step + 0.5, rows * step + 0.5]).astype(float)
+
+
+def _select(points, weights, count, spacing):
+    """Greedily pick up to ``count`` important points that are spread out.
+
+    A point's weight is discounted while it is closer than ``spacing`` to an
+    already chosen point, so the choice covers the whole section rather than
+    clustering on the most distinctive region. Returns indexes, most
+    distinctive first.
+    """
+    chosen = []
+    nearest = np.full(len(points), np.inf)
+    for _ in range(min(count, len(points))):
+        score = weights * np.minimum(nearest / spacing, 1.0)
+        index = int(np.argmax(score))
+        if score[index] <= 0:
+            break
+        chosen.append(index)
+        nearest = np.minimum(nearest, np.linalg.norm(points - points[index], axis=1))
+    return np.asarray(chosen, dtype=int)
+
+
+def propose_landmarks(atlas_intensity, atlas_labels, section, count=10,
                       deformable=True, mesh_size=6, boundary_points=None):
     """Propose paired landmarks mapping an atlas slice onto a section.
 
     ``section`` must already be in the atlas orientation (see
-    ``atlas_matching``). ``boundary_points`` are further atlas points (such
+    ``atlas_matching``). Up to ``count`` landmarks are chosen at the most
+    distinctive atlas points that land on tissue, spread over the section,
+    most distinctive first. ``boundary_points`` are further atlas points (such
     as the mesh's frame points) to carry through the same transform; they are
     clamped into the section image so they remain valid landmarks.
     Returns a :class:`LandmarkProposal`.
@@ -189,7 +231,11 @@ def propose_landmarks(atlas_intensity, atlas_labels, section, count=36,
         except RuntimeError:
             pass  # optimiser failure: fall back to the affine fit
 
-    atlas_points = _grid_points(atlas_mask, count)
+    spacing = _spacing(atlas_mask, count)
+    inner = cv2.erode(atlas_mask.astype(np.uint8), np.ones((3, 3), np.uint8),
+                      iterations=max(1, int(spacing / 5))) > 0
+    importance = _importance(atlas_image, atlas_labels, inner)
+    atlas_points = _candidate_points(inner, spacing)
     mapped = np.array([transform.TransformPoint((float(x), float(y)))
                        for x, y in atlas_points]).reshape(-1, 2)
     height, width = section_mask.shape
@@ -197,13 +243,16 @@ def propose_landmarks(atlas_intensity, atlas_labels, section, count=36,
         (mapped[:, 0] >= 0) & (mapped[:, 0] < width)
         & (mapped[:, 1] >= 0) & (mapped[:, 1] < height)
     )
-    if inside.any():
-        rows = np.clip(mapped[inside, 1].astype(int), 0, height - 1)
-        cols = np.clip(mapped[inside, 0].astype(int), 0, width - 1)
-        on_tissue = section_mask[rows, cols]
-        keep = np.flatnonzero(inside)[on_tissue]
-    else:
-        keep = np.array([], dtype=int)
+    on_tissue = np.zeros(len(mapped), dtype=bool)
+    rows = np.clip(mapped[inside, 1].astype(int), 0, height - 1)
+    cols = np.clip(mapped[inside, 0].astype(int), 0, width - 1)
+    on_tissue[inside] = section_mask[rows, cols]
+    valid = np.flatnonzero(on_tissue)
+    # A small floor keeps featureless regions eligible, so every part of the
+    # section can still receive a landmark when it is far from the others.
+    weights = 0.05 + importance[atlas_points[valid, 1].astype(int),
+                                atlas_points[valid, 0].astype(int)]
+    keep = valid[_select(atlas_points[valid], weights, count, spacing)]
     boundary = np.asarray(boundary_points if boundary_points is not None else [],
                           dtype=float).reshape(-1, 2)
     carried = np.array([transform.TransformPoint((float(x), float(y)))

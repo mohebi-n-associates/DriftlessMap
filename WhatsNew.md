@@ -13,6 +13,14 @@ Release date: 27 September 2026
   boundary images were stored as one byte per pixel, they had been drawn
   almost black, so the button appeared to do nothing.
 
+### Changed
+
+- **Propose Landmarks** now proposes 10 landmarks instead of about 36. They
+  are placed at the most distinctive atlas points, where the template has
+  corner-like structure or several region boundaries meet, and spread over
+  the section. They are numbered from the most distinctive. Add more by hand
+  where the anatomy needs them.
+
 ### Documentation
 
 - A new tutorial, [Automatic Section Matching and Landmark Proposal](Tutorial/Registration_Related/automatic_section_and_landmarks.md),

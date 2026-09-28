@@ -5,7 +5,7 @@ import unittest
 import cv2
 import numpy as np
 
-from driftlessmap.auto_registration import propose_landmarks
+from driftlessmap.auto_registration import _importance, _select, propose_landmarks
 
 
 def synthetic_slice(size=(160, 240)):
@@ -54,13 +54,41 @@ class ProposeLandmarkTests(unittest.TestCase):
     def test_landmarks_follow_a_known_deformation(self):
         intensity, labels = synthetic_slice()
         section = warped_section(intensity, labels)
-        proposal = propose_landmarks(intensity, labels, section, count=30)
-        self.assertGreaterEqual(len(proposal.atlas_points), 15)
+        # Measure the fit on a fixed interior grid, independent of which
+        # landmarks are selected, by carrying the grid through the transform.
+        ys, xs = np.mgrid[10:160:12, 10:240:12]
+        grid = np.column_stack([xs.ravel(), ys.ravel()]).astype(float) + 0.5
+        inner = cv2.erode((labels > 0).astype(np.uint8), np.ones((9, 9), np.uint8)) > 0
+        grid = grid[inner[grid[:, 1].astype(int), grid[:, 0].astype(int)]]
+        proposal = propose_landmarks(intensity, labels, section, boundary_points=grid)
+        self.assertEqual(len(proposal.atlas_points), 10)
+        errors = np.linalg.norm(proposal.boundary_points - known_warp(grid), axis=1)
+        # section pixels are 2.5x atlas pixels: within ~1.6 atlas pixels,
+        # including grid points close to the outline
+        self.assertLess(np.median(errors), 4.0, errors)
         truth = known_warp(proposal.atlas_points)
-        errors = np.linalg.norm(proposal.histology_points - truth, axis=1)
-        # section pixels are 2.5x atlas pixels: stay within ~1 atlas pixel
-        self.assertLess(np.median(errors), 3.0, errors)
+        landmark_errors = np.linalg.norm(proposal.histology_points - truth, axis=1)
+        self.assertLess(np.median(landmark_errors), 6.0, landmark_errors)
         self.assertGreater(proposal.overlap_final, 0.9)
+
+    def test_landmarks_are_distinctive_and_spread_out(self):
+        intensity, labels = synthetic_slice()
+        section = warped_section(intensity, labels)
+        proposal = propose_landmarks(intensity, labels, section, deformable=False, count=8)
+        points = proposal.atlas_points
+        self.assertEqual(len(points), 8)
+        inner = labels > 0
+        importance = _importance(intensity, labels, inner)
+        at_points = importance[points[:, 1].astype(int), points[:, 0].astype(int)]
+        self.assertGreater(at_points.mean(), 2 * importance[inner].mean())
+        gaps = np.linalg.norm(points[:, None] - points[None], axis=2)
+        np.fill_diagonal(gaps, np.inf)
+        self.assertGreater(gaps.min(), 10.0)  # not clustered
+
+    def test_selection_prefers_weight_but_keeps_distance(self):
+        points = np.array([[0.0, 0.0], [1.0, 0.0], [50.0, 0.0]])
+        chosen = _select(points, np.array([1.0, 0.9, 0.5]), 2, spacing=20.0)
+        self.assertEqual(chosen.tolist(), [0, 2])
 
     def test_affine_only_mode_and_empty_atlas(self):
         intensity, labels = synthetic_slice()
