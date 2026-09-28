@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th September 2026
+##### DriftlessMap 1.4.52
+
+The review roadmap now records which release addressed each item and lists the few items that still need a maintainer decision or external resources.
+
+### 27th September 2026
 ##### DriftlessMap 1.4.51
 
 Architecture cleanup: registration landmarks, their triangle topology, the cached registration and landmark labels are owned by one LandmarkModel, and triangulation-file validation becomes a GUI-free, tested function.

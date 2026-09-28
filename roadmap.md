@@ -20,6 +20,81 @@ Priority levels:
 Every fix should come with a regression test (CLAUDE.md rule 2). Items marked
 ✔ were reproduced or checked directly against the code during review.
 
+## Status (updated for 1.4.52)
+
+Each item was fixed in its own release, 1.4.1 to 1.4.51, with regression
+tests. The suite grew from 126 to 233 tests. The detailed item list below is
+kept as the original review record; line numbers refer to 1.4.0.
+
+| Items | Release |
+| --- | --- |
+| 0.1 mesh pickles; 0.2 allocation bomb | 1.4.1; 1.4.2 |
+| 0.3 load clears objects; 0.4 merge deletes pieces | 1.4.3; 1.4.4 |
+| 0.5 atlas load commits early (plus the broken slice-image load) | 1.4.5 |
+| 0.6 landmark load wipes points | 1.4.6 |
+| 0.7 dialog Cancel; 0.12 dialog rows; validity flags; faces shown | 1.4.7 |
+| 0.8 site faces 1/3 | 1.4.8 |
+| 0.9 ruler scale; 0.10 CZI scale; 1.12 scene switch | 1.4.9 |
+| 0.11 Allen DV voxel; 1.16 integer point files | 1.4.10 |
+| 0.13 switch paths; 0.14 Waxholm path | 1.4.11 |
+| 0.15 unverified re-link | 1.4.12 |
+| 0.16 virus axes; 0.17 a2h cells; 1.8 contour crash | 1.4.13 |
+| 1.1 label colour | 1.4.14 |
+| 1.2 pencil key; 1.3 slice `atlas-virus`; 1.4 `atlas-slice` | 1.4.15 |
+| 1.5 rotate; 1.6 shift | 1.4.16 |
+| 1.7 eraser; 1.14 size fields; magic wand band | 1.4.17 |
+| 1.9 short tracks; 1.10 unknown labels; NaN angles | 1.4.18 |
+| 1.11 object import bounds; export names | 1.4.19 |
+| 1.13 dark images; hidden channels; histogram state; swatches | 1.4.20 |
+| 1.15 undo | 1.4.21 |
+| 1.18 worker exceptions and deleted threads | 1.4.22 |
+| Settings dialogs; probe-planning validation | 1.4.23 |
+| Layer deletion loop; stale links; cell counts; label numbering | 1.4.24 |
+| Stack-wide flips and rotations without blur | 1.4.25 |
+| Warp half-pixel offset; last row and column | 1.4.26 |
+| Sagittal overlay axis | 1.4.27 |
+| Floor instead of truncate; surface depth; region volume speed | 1.4.28 |
+| Surface entry; region path length | 1.4.29 |
+| ROI metric by name; natural shank order | 1.4.30 |
+| File mode, fsync, cleanup; `np.core` | 1.4.31 |
+| Portable re-hash; atlas identity files; extraction path | 1.4.32 |
+| Merged-probe atlas SHA-256 | 1.4.33 |
+| Atlas layer validation; older-project defaults; failed-load report | 1.4.34 |
+| Atomic atlas caches and unfinished-run marker | 1.4.35 |
+| gzip length; HTTPS hops; checksum manifest | 1.4.36 |
+| Atlas Processor paths, cancelled picks, CSV column (plus a crash on open) | 1.4.37 |
+| Non-ASCII paths; TIFF folders; CZI metadata | 1.4.38 |
+| Registration rebuilt twice | 1.4.39 |
+| Background hashing, saving, verification and warps; cell detection | 1.4.40, 1.4.41 |
+| 3.2 dead, vendored and debug code; `utils.py` rename | 1.4.42–1.4.44 |
+| 3.3 star imports, unused code, wider lint; mypy | 1.4.43, 1.4.46 |
+| 3.5 CI consolidation, SHA pins, Dependabot, gated releases, constraints, script exit codes, arm64 naming, optional signing | 1.4.45 |
+| 3.6 contributor guide, `.DS_Store`, `MANIFEST.in` | 1.4.47 |
+| 3.4 test backfill | throughout, plus 1.4.48 |
+| 3.1 atlas session, view registry, `project_io`, per-tool handlers, `LandmarkModel` | 1.4.49–1.4.51 |
+
+### Still open
+
+These items need a maintainer decision or resources that are not in the
+repository.
+
+- **Large binaries** (`CookBook.pdf`, tutorial video, demo images). Moving
+  them to Git LFS or release assets rewrites history and needs a force-push.
+  `CONTRIBUTING.md` now asks contributors not to add more.
+- **Code signing and notarization.** The workflow steps are in place and run
+  once `WINDOWS_CERTIFICATE_*`, `MACOS_CERTIFICATE_*`,
+  `MACOS_SIGNING_IDENTITY` and `APPLE_*` secrets are added.
+- **Intel macOS builds.** They need an Intel (`macos-13`) or universal build
+  job; the DMG is currently labelled arm64.
+- **Fully transactional project loading.** Loads are now validated up front,
+  default missing fields and report partial failures, but a failure halfway
+  through still leaves a partly restored session instead of rolling back.
+- **Further `app.py` decomposition.** Project save and load assembly still
+  live in `app.py`. `LandmarkModel` owns the landmark state but does not yet
+  emit change signals, so views are still refreshed by explicit calls.
+- **CI on GitHub.** The consolidated workflows could only be checked locally.
+  Their first run happens on the next push.
+
 ---
 
 ## P0: Immediate
