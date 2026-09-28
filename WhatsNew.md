@@ -3,6 +3,16 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.6.1
+
+Release date: 27 September 2026
+
+### Fixed
+
+- **Show Boundary** now draws atlas region boundaries in white. Since the
+  boundary images were stored as one byte per pixel, they had been drawn
+  almost black, so the button appeared to do nothing.
+
 ## DriftlessMap 1.6.0
 
 Release date: 27 September 2026

@@ -202,7 +202,9 @@ class SliceStacks(pg.GraphicsLayoutWidget):
             self.set_boundary_data(contour)
 
     def set_boundary_data(self, contour):
-        self.boundary.setImage(contour, autoLevels=False)
+        # Contours are 0/1; without explicit levels a uint8 image is drawn
+        # on a 0-255 scale and the boundary is invisible.
+        self.boundary.setImage(contour, autoLevels=False, levels=(0, 1))
 
     def add_display_obj_to_view(self, obj_data, obj_color, obj_type):
         if obj_type == 'probe':
