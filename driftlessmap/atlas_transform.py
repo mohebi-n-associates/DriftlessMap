@@ -56,7 +56,7 @@ def validate_downsample_factor(factor, volume_shape):
     try:
         factor = int(factor)
     except (TypeError, ValueError):
-        raise ValueError("Factor must be an integer.")
+        raise ValueError("Factor must be an integer.") from None
 
     shape = np.asarray(volume_shape, dtype=int).reshape(-1)
     if factor < 2:

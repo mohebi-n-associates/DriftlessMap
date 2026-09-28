@@ -1,6 +1,6 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 1.4.42**.
+This manual applies to **DriftlessMap 1.4.43**.
 
 DriftlessMap - Histological E-data Registration in Brain Space - is a desktop
 application for aligning rodent histology with a reference atlas, reconstructing
@@ -107,7 +107,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-DriftlessMap 1.4.42 requires:
+DriftlessMap 1.4.43 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -124,7 +124,7 @@ needed.
 Download the Windows ZIP or macOS DMG from the official GitHub Releases page.
 The desktop builds include Python and all runtime dependencies. Windows users
 extract the entire ZIP and run `DriftlessMap.exe`; macOS users open the DMG and
-drag `DriftlessMap.app` to Applications. The 1.4.42 release is unsigned, so the
+drag `DriftlessMap.app` to Applications. The 1.4.43 release is unsigned, so the
 first launch may require Windows SmartScreen confirmation or Control-clicking
 the macOS app and choosing **Open**.
 
@@ -172,7 +172,7 @@ python -m pip --version
 python -c "import driftlessmap; print(driftlessmap.__version__)"
 ```
 
-The final command should print `1.4.42`.
+The final command should print `1.4.43`.
 
 ### 2.5 Launching DriftlessMap
 
@@ -1493,7 +1493,6 @@ still read when a DriftlessMap setting has not been created.
 | Crop | Crop the slice atlas with a lasso. |
 | Bregma Picker | Select the 2D Bregma point. |
 | Save Processed Slice | Write `.dmapslice`. |
-| Merge Slices | Disabled in the current release. |
 | Switch Atlas | Switch between loaded volume and slice atlases. |
 
 ### 19.5 Objects

@@ -1,9 +1,14 @@
-import os
-import sys
 import numpy as np
-from PyQt6.QtWidgets import *
-from PyQt6.QtGui import *
-from PyQt6.QtCore import *
+from PyQt6.QtWidgets import (
+    QHeaderView,
+    QPushButton,
+    QTreeWidget,
+    QTreeWidgetItem,
+    QVBoxLayout,
+    QWidget,
+)
+from PyQt6.QtGui import QColor
+from PyQt6.QtCore import QObject, Qt, pyqtSignal
 import pyqtgraph as pg
 from .utils import read_qss_file
 
@@ -134,7 +139,7 @@ class LabelTree(QWidget):
             # parent is missing/negative), registering every top-level node as a
             # root so describe() can always terminate its upward walk.
             tree_root = self.tree.invisibleRootItem()
-            for label_id, rec in self.labels_by_id.items():
+            for rec in self.labels_by_id.values():
                 item = rec['item']
                 parent = rec['parent']
                 if parent in self.labels_by_id:

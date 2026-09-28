@@ -1,12 +1,6 @@
-import os
 import numpy as np
 import math
 import pandas as pd
-import cv2
-import pickle
-import colorsys
-import pyqtgraph as pg
-from scipy.interpolate import interp1d, splprep, splev
 from .coordinate_validation import (
     coordinate_groups_in_bounds,
     coordinates_in_bounds,

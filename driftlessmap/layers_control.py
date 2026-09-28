@@ -1,48 +1,30 @@
-import os
-import sys
 import numpy as np
-import pyqtgraph as pg
-import pyqtgraph.functions as fn
-from PyQt6.QtWidgets import *
-from PyQt6.QtGui import *
-from PyQt6.QtCore import *
-
-import cv2
-
-from .wtiles import *
+from PyQt6.QtWidgets import (
+    QApplication,
+    QBoxLayout,
+    QComboBox,
+    QFrame,
+    QGridLayout,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QScrollArea,
+    QSizePolicy,
+    QSlider,
+    QVBoxLayout,
+    QWidget,
+)
+from PyQt6.QtGui import QIcon, QImage, QPixmap
+from PyQt6.QtCore import (
+    QObject,
+    QSize,
+    Qt,
+    pyqtSignal,
+)
 from .resources import resource_path
 
 
 DEFAULT_BLEND_MODE = "Overlay"
-
-
-btm_style = '''
-
-QPushButton {
-    border : None; 
-    background: transparent;
-    margin: 0px;
-    padding-top: 0px;
-    border-radius: 0px;
-    min-width: 24px;
-    min-height: 24px;
-}
-QPushButton:checked {
-    background-color: #383838; 
-    border: 1px solid #636363; 
-}
-
-QPushButton:pressed {
-    background-color: #383838; 
-    border: 1px solid #636363; 
-}
-
-QPushButton:hover {
-    background-color: #383838; 
-    border: 1px solid #636363; 
-}
-
-'''
 
 
 eye_button_style = '''
@@ -323,34 +305,11 @@ class LayersControl(QWidget):
         mid_layout.setAlignment(Qt.AlignmentFlag.AlignBottom)
         mid_layout.addWidget(self.layer_scroll, 0, 0, 1, 1)
 
-        # extra btn
-        self.add_layer_btn = QPushButton()
-        self.add_layer_btn.setFixedSize(24, 24)
-        self.add_layer_btn.setStyleSheet(btm_style)
-        self.add_layer_btn.setIcon(QIcon(resource_path('icons/layers/add.png')))
-        self.add_layer_btn.setIconSize(QSize(20, 20))
-        self.add_layer_btn.clicked.connect(lambda: self.add_layer('Layer', []))
-
-        self.delete_layer_btn = QPushButton()
-        self.delete_layer_btn.setFixedSize(24, 24)
-        self.delete_layer_btn.setStyleSheet(btm_style)
-        self.delete_layer_btn.setIcon(QIcon(resource_path('icons/layers/trash.png')))
-        self.delete_layer_btn.setIconSize(QSize(20, 20))
-        self.delete_layer_btn.clicked.connect(self.delete_current_layers)
-
-        button_frame = QFrame()
-        button_layout = QHBoxLayout(button_frame)
-        button_layout.setContentsMargins(0, 0, 0, 0)
-        button_layout.addWidget(self.add_layer_btn)
-        button_layout.addWidget(self.delete_layer_btn)
-        button_layout.addStretch()
-
         outer_layout = QVBoxLayout()
         outer_layout.setSpacing(10)
         outer_layout.addWidget(blend_frame)
         outer_layout.addWidget(opacity_frame)
         outer_layout.addWidget(mid_frame)
-        outer_layout.addWidget(button_frame)
 
         self.setLayout(outer_layout)
 

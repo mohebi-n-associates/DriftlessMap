@@ -1,7 +1,6 @@
 import cv2
 from aicspylibczi import CziFile
 from pathlib import Path
-from os.path import dirname, realpath, join
 import numpy as np
 import colorsys
 from .utils import hex2rgb

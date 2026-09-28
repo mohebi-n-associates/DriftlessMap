@@ -50,7 +50,6 @@ dependencies = [
     "PyOpenGL>=3.1.7,<4",
     "superqt>=0.8,<0.9",
     "opencv-python-headless>=4.10,<6",
-    "numba>=0.61,<1",
     "numpy>=2.0,<3",
     "scipy>=1.13,<2",
     "requests>=2.32,<3",
@@ -110,4 +109,8 @@ driftlessmap = [
 target-version = "py310"
 
 [tool.ruff.lint]
-select = ["E9", "F63", "F7", "F82"]
+# Syntax errors, all pyflakes checks (unused and undefined names, star
+# imports) and flake8-bugbear. B905 (zip strict=) is not enforced because
+# several zips pair sequences of intentionally different lengths.
+select = ["E9", "F", "B"]
+ignore = ["B905"]

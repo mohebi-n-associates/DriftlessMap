@@ -3,6 +3,34 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.4.43
+
+Release date: 27 September 2026
+
+This is a maintenance release; the only visible change is two removed menu
+items.
+
+- **Explicit imports.** Every `from ... import *` in the package, 56 in all,
+  is replaced by explicit imports. Tools, reviewers and Ruff can now see
+  where each name comes from.
+- **Unused imports and variables removed.** About 110 unused imports and 18
+  unused variables are gone.
+- **numba removed.** `numba` is no longer a dependency. It was imported but
+  never used, and it slowed installation and support for new Python
+  versions.
+- **Dead features removed.**
+  - The disabled **Atlas > Merge Slices** menu item, which did nothing.
+  - The unused **Export Atlas Overlay** action.
+  - Layer add/delete buttons that were never shown. The add button would
+    have created an invalid layer.
+  - Several unreachable methods.
+  - Write-only state that grew without limit.
+- **Stricter linting.** Ruff now enforces all pyflakes checks and
+  flake8-bugbear. A late-binding lambda and three unused loop variables it
+  found are fixed.
+
+---
+
 ## DriftlessMap 1.4.42
 
 Release date: 27 September 2026

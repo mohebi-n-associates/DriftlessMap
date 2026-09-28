@@ -1,9 +1,7 @@
-import os
-import sys
 import numpy as np
 import pyqtgraph as pg
-from PyQt6.QtCore import *
-from pyqtgraph.Qt import QtGui, QtCore
+from PyQt6.QtCore import Qt, pyqtSignal
+from pyqtgraph.Qt import QtCore
 
 
 class MovablePoints(pg.GraphItem):

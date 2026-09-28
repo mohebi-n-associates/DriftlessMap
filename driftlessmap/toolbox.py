@@ -1,9 +1,24 @@
-from PyQt6.QtGui import *
-from PyQt6.QtCore import *
-from PyQt6.QtWidgets import *
+from PyQt6.QtGui import (
+    QAction,
+    QColor,
+    QIcon,
+    QIntValidator,
+    QPixmap,
+)
+from PyQt6.QtCore import QObject, QSize, Qt
+from PyQt6.QtWidgets import (
+    QComboBox,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QSizePolicy,
+    QSlider,
+    QSpinBox,
+)
 import pyqtgraph as pg
 import numpy as np
-from pyqtgraph.Qt import QtGui, QtCore
 from .resources import resource_path
 
 

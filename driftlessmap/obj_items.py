@@ -1,5 +1,4 @@
 import os
-import pickle
 import pyqtgraph as pg
 import pyqtgraph.opengl as gl
 import numpy as np

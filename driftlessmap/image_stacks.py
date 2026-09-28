@@ -1,12 +1,8 @@
-import colorsys
-import os
-import sys
 import numpy as np
-from PyQt6.QtWidgets import *
-from PyQt6.QtCore import *
-from PyQt6.QtGui import *
+from PyQt6.QtCore import QObject, Qt, pyqtSignal
+from PyQt6.QtGui import QPainter
 import pyqtgraph as pg
-from pyqtgraph.Qt import QtGui, QtCore
+from pyqtgraph.Qt import QtCore
 from .movable_points import TriangulationPoints
 
 
@@ -40,8 +36,7 @@ class ClickableImage(pg.ImageItem):
         if event.isExit():
             return
         try:
-            pos = (event.pos())
-            id = 1  # self.label_data[int(event.pos().x()), int(event.pos().y())]
+            event.pos()
         except (IndexError, AttributeError):
             return
         self.mouseHovered.emit(event)
@@ -172,7 +167,7 @@ class SliceStack(pg.GraphicsLayoutWidget):
                 self.pre_trajectory_list[i].deleteLater()
                 del self.pre_trajectory_list[i]
         elif n_probe > exist_n_probes:
-            for i in range(exist_n_probes, n_probe):
+            for _ in range(exist_n_probes, n_probe):
                 self.pre_trajectory_list.append(pg.PlotDataItem(pen=pg.mkPen(color=(0, 0, 255), width=2), brush=None))
                 self.vb.addItem(self.pre_trajectory_list[-1])
 
@@ -199,8 +194,7 @@ class SliceStack(pg.GraphicsLayoutWidget):
         if event.isExit():
             return
         try:
-            pos = (event.pos())
-            id = 1  # self.label_data[int(event.pos().x()), int(event.pos().y())]
+            event.pos()
         except (IndexError, AttributeError):
             return
         self.sig_mouse_hovered.emit(event)
@@ -343,8 +337,7 @@ class ImageStacks(pg.GraphicsLayoutWidget):
         if event.isExit():
             return
         try:
-            pos = (event.pos())
-            id = 1  # self.label_data[int(event.pos().x()), int(event.pos().y())]
+            event.pos()
         except (IndexError, AttributeError):
             return
         self.sig_mouse_hovered.emit(event)

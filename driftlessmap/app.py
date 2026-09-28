@@ -7,28 +7,36 @@ from pathlib import Path
 import tempfile
 
 import pickle
-import csv
 
 import numpy as np
-import pandas as pd
-import math
-import scipy
-import scipy.io
-import scipy.ndimage as ndi
-from scipy.ndimage import map_coordinates
-from natsort import natsorted, ns
 
 import cv2
 
 opencv_ver = (cv2.__version__).split(".")
-from numba import jit
-import colorsys
-
-
-from PyQt6.QtWidgets import *
-from PyQt6.QtCore import *
-from PyQt6.QtGui import *
-from PyQt6.QtSql import QSqlTableModel
+from PyQt6.QtWidgets import (
+    QApplication,
+    QComboBox,
+    QDialog,
+    QFileDialog,
+    QFrame,
+    QGridLayout,
+    QHBoxLayout,
+    QLabel,
+    QMainWindow,
+    QMessageBox,
+    QPushButton,
+    QVBoxLayout,
+)
+from PyQt6.QtCore import QSize, QTimer, Qt
+from PyQt6.QtGui import (
+    QIcon,
+    QKeySequence,
+    QPainter,
+    QShortcut,
+)
+from .utils import read_qss_file
+from .layers_control import LayersControl
+from .object_control import ObjectControl
 
 # from PyQt6 import uic
 from PyQt6.uic import loadUiType
@@ -37,10 +45,6 @@ import pyqtgraph as pg
 pg.setConfigOption("imageAxisOrder", "row-major")
 pg.setConfigOption("useNumba", True)
 import pyqtgraph.opengl as gl
-from pyqtgraph.Qt import QtCore, QtGui
-
-import warnings
-
 
 from .utils import (
     tolerance_mask,
@@ -98,11 +102,8 @@ from .image_reader import (
     TIFFReader,
     read_bitmap,
 )
-from .image_curves import *
-from .image_view import ImageView
 
-from .layers_control import *
-from .object_control import *
+from .image_view import ImageView
 from .toolbox import ToolBox, read_int_field
 from .wtiles import (
     LayerSettingDialog,
@@ -112,12 +113,6 @@ from .wtiles import (
 )
 from .obj_items import (
     get_object_vis_color,
-    create_plot_points_in_3d,
-    create_probe_line_in_3d,
-    create_drawing_in_3d,
-    create_contour_line_in_3d,
-    render_volume,
-    render_small_volume,
     load_mesh_file,
     make_3d_gl_widget,
 )
@@ -298,9 +293,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.register_method = 0
 
         self.action_list = []
-        self.layer_action_after_matching = []
 
-        self.probe_lines_2d_list = []
 
         self.object_3d_list = []
 
@@ -324,8 +317,6 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.layer_shift_val = 1
         self.layer_rotate_val = 1
         self.action_id = 0
-        self.undo_count = 0
-        self.redo_count = -1
 
         self.current_atlas = "volume"
 
@@ -399,7 +390,6 @@ class DriftlessMap(QMainWindow, FORM_Main):
         )
         # self.image_view.img_stacks.image_dict['img-cells'].sigClicked.connect(self.img_cell_pnts_clicked)
         # self.image_view.img_stacks.image_dict['img-probe'].sigClicked.connect(self.img_probe_pnts_clicked)
-        # self.image_view.img_stacks.image_dict['img-drawing'].sigClicked.connect(self.img_drawing_pnts_clicked)
 
         self.atlas_view = AtlasView()
         self.atlas_view.show_boundary_btn.clicked.connect(self.vis_atlas_boundary)
@@ -1188,7 +1178,6 @@ class DriftlessMap(QMainWindow, FORM_Main):
             self.atlas_view.slice_size
         ).astype("uint8")
         # should I delete all layers ???
-        # self.check_n_trajectory()
 
     def clear_tri_inside(self):
         self.atlas_tri_inside_data.clear()  # renew tri_inside data to empty
@@ -1399,10 +1388,6 @@ class DriftlessMap(QMainWindow, FORM_Main):
         for da_link in valid_links:
             self.move_layers(da_link, moving_vec)
 
-        if self.a2h_transferred or self.h2a_transferred:
-            self.layer_action_after_matching.append(
-                {"action": "shift", "val": moving_vec}
-            )
 
     def horizontal_translation_pressed(self, moving_direction):
         valid_links = self.get_valid_layer()
@@ -1415,10 +1400,6 @@ class DriftlessMap(QMainWindow, FORM_Main):
         for da_link in valid_links:
             self.move_layers(da_link, moving_vec)
 
-        if self.a2h_transferred or self.h2a_transferred:
-            self.layer_action_after_matching.append(
-                {"action": "shift", "val": moving_vec}
-            )
 
     def layer_rotation_pressed(self, rotating_direction):
         valid_links = self.get_valid_layer()
@@ -1431,10 +1412,6 @@ class DriftlessMap(QMainWindow, FORM_Main):
         for da_link in valid_links:
             self.rotate_layers(da_link, rotating_val)
 
-        if self.a2h_transferred or self.h2a_transferred:
-            self.layer_action_after_matching.append(
-                {"action": "rotate", "val": rotating_val}
-            )
 
     def save_current_action(self, current_tool, layer_link, data, layer_tb):
         if self.action_id != 0:
@@ -2197,12 +2174,6 @@ class DriftlessMap(QMainWindow, FORM_Main):
         else:
             self.vis_eraser_symbol(False)
 
-    def rotation_btn_clicked(self):
-        self.inactive_lasso()
-        self.inactive_slice_window_lasso()
-        self.set_toolbox_btns_unchecked("rotation")
-        self.show_triangle_points("triang")
-        self.vis_eraser_symbol(False)
 
     def triang_btn_clicked(self):
         self.inactive_lasso()
@@ -2302,7 +2273,6 @@ class DriftlessMap(QMainWindow, FORM_Main):
         show_3d_button.setText("Show in 3D view")
         show_3d_button.clicked.connect(self.show_small_area_in_3d)
 
-        composition_label = QLabel("Composition: ")
         self.composition_combo = QComboBox()
         self.composition_combo.setFixedHeight(22)
         self.composition_combo.addItems(["opaque", "translucent", "additive"])
@@ -2327,8 +2297,6 @@ class DriftlessMap(QMainWindow, FORM_Main):
 
         image_panel_layout.addWidget(image_control_label)
 
-        space_item = QSpacerItem(300, 10, QSizePolicy.Policy.Expanding)
-
         image_container = QFrame()
         image_container_layout = QVBoxLayout(image_container)
         image_container_layout.setSpacing(5)
@@ -2348,20 +2316,8 @@ class DriftlessMap(QMainWindow, FORM_Main):
         layer_control_label = QLabel("Layer View Controller")
         layer_control_label.setStyleSheet(decor_label_style)
 
-        layer_btm_ctrl = QFrame()
-        layer_btm_ctrl.setStyleSheet("background-color:rgb(65, 65, 65);")
-        layer_btm_ctrl.setFixedHeight(24)
-        layer_btm_layout = QHBoxLayout(layer_btm_ctrl)
-        layer_btm_layout.setContentsMargins(0, 0, 0, 0)
-        layer_btm_layout.setSpacing(5)
-        layer_btm_layout.setAlignment(Qt.AlignmentFlag.AlignRight)
-        layer_btm_layout.addWidget(self.layer_ctrl.add_layer_btn)
-        layer_btm_layout.addWidget(self.layer_ctrl.delete_layer_btn)
-
         layer_panel_layout.addWidget(layer_control_label)
         layer_panel_layout.addWidget(self.layer_ctrl)
-        # layer_panel_layout.addWidget(layer_btm_ctrl)
-        # self.layerpanel.setEnabled(False)
 
         # ---------------------------- object panel
         object_panel_layout = QVBoxLayout(self.probecontrolpanel)
@@ -2651,23 +2607,6 @@ class DriftlessMap(QMainWindow, FORM_Main):
         else:
             self.multi_shanks = False
 
-    def check_n_trajectory(self):
-        if self.image_view.image_file is None:
-            if self.probe_settings.probe_type == 1:
-                if self.atlas_display in ["coronal", "horizontal"]:
-                    if self.site_face in [0, 1]:
-                        self.n_pre_trajectory = 4
-                    else:
-                        self.n_pre_trajectory = 1
-                else:
-                    if self.site_face in [2, 3]:
-                        self.n_pre_trajectory = 4
-                    else:
-                        self.n_pre_trajectory = 1
-            else:
-                self.n_pre_trajectory = 1
-        else:
-            self.n_pre_trajectory = 1
 
     def probe_type_changed(self, index):
         if index == 0:
@@ -2693,7 +2632,6 @@ class DriftlessMap(QMainWindow, FORM_Main):
 
         self.probe_type = index
         self.atlas_view.pre_trajectory_changed()
-        # self.check_n_trajectory()
         self.atlas_view.working_atlas.image_dict["atlas-probe"].clear()
         self.working_atlas_data["atlas-probe"].clear()
         self.multi_shanks_btn_clicked()
@@ -2725,7 +2663,6 @@ class DriftlessMap(QMainWindow, FORM_Main):
         else:
             site_face_text = self.tool_box.after_site_face_combo.currentText()
         self.probe_settings.probe_faces_changed(site_face_text)
-        # self.check_n_trajectory()
         self.atlas_view.pre_trajectory_changed()
         self.atlas_view.working_atlas.image_dict["atlas-probe"].clear()
         self.multi_shanks_btn_clicked()
@@ -2877,50 +2814,6 @@ class DriftlessMap(QMainWindow, FORM_Main):
             (self.image_view.img_size[0], self.image_view.img_size[1], 3)
         )
 
-    def img_drawing_pnts_clicked(self, points, ev):  # check mark
-        clicked_ind = ev[0].index()
-        pos = ev[0].pos()
-        if self.tool_box.checkable_btn_dict["eraser_btn"].isChecked():
-            del self.working_img_data["img-drawing"][clicked_ind]
-            if not self.working_img_data["img-drawing"]:
-                self.inactive_drawing()
-        else:
-            if clicked_ind == 0:
-                self.inactive_drawing()
-            elif clicked_ind == len(self.working_img_data["img-drawing"]) - 1:
-                self.is_pencil_allowed = False
-                self.working_img_data["img-drawing"].append([pos.x(), pos.y()])
-                if self.tool_box.is_closed:
-                    self.working_img_data["img-drawing"].append(
-                        [
-                            self.working_img_data["img-drawing"][0][0],
-                            self.working_img_data["img-drawing"][0][1],
-                        ]
-                    )
-                self.image_view.img_stacks.image_dict["img-drawing"].setData(
-                    np.asarray(self.working_img_data["img-drawing"])
-                )
-                da_img = create_vis_img(
-                    self.image_view.img_size,
-                    self.working_img_data["img-drawing"],
-                    self.pencil_color,
-                    "l",
-                    self.tool_box.is_closed,
-                )
-                res = cv2.resize(
-                    da_img, self.image_view.tb_size, interpolation=cv2.INTER_AREA
-                )
-                self.layer_ctrl.master_layers(
-                    res, layer_type="img-drawing", color=self.pencil_color
-                )
-                current_data = {
-                    "data": self.working_img_data["img-drawing"].copy(),
-                    "closed": self.tool_box.is_closed,
-                }
-                self.save_current_action("pencil_btn", "img-drawing", current_data, res)
-            else:
-                if not self.is_pencil_allowed:
-                    self.inactive_drawing()
 
     # ------------------------------------------------------------------
     #
@@ -6659,32 +6552,6 @@ class DriftlessMap(QMainWindow, FORM_Main):
         return True
 
     # load multiple images
-    def load_images(self):
-        self.statusbar.showMessage(
-            "Selecte folder to load multiple images, files can not be .czi format ..."
-        )
-        images_folder = str(
-            QFileDialog.getExistingDirectory(self, "Select Images Folder")
-        )
-        if images_folder != "":
-            # image_files_list = os.listdir(images_folder)
-            # image_files_list = natsorted(image_files_list)
-
-            with pg.BusyCursor():
-                try:
-                    image_file = ImagesReader(images_folder)
-                    self.image_view.set_data(image_file)
-                except (IOError, OSError, TypeError, ValueError) as exc:
-                    self.print_message(
-                        "Loading image folder failed: {}".format(exc),
-                        self.error_message_color,
-                    )
-                    return
-
-            self.sidebar.setCurrentIndex(3)
-            self.statusbar.showMessage("Image files loaded.")
-        else:
-            return
 
     # ------------------------------------------------------------------
     #
@@ -8838,95 +8705,6 @@ class DriftlessMap(QMainWindow, FORM_Main):
     # -------------------------------------------------------------
     #                    Export
     # -------------------------------------------------------------
-    def export_atlas_overlay_layers(self):
-        if not "atlas-overlay" in self.layer_ctrl.layer_link:
-            self.print_message(
-                "No atlas-overlay layer is created.", self.error_message_color
-            )
-            return
-        self.print_message("Export atlas overaly layers...", self.normal_color)
-        path = QFileDialog.getSaveFileName(
-            self, "Export image", self.current_img_path, "JPEG (*.jpg)"
-        )
-        if path[0] != "":
-            overlay_img = self.atlas_view.working_atlas.image_dict[
-                "atlas-overlay"
-            ].image
-
-            atlas_data = self.atlas_view.working_atlas.img.image.copy()
-
-            slice_shape = self.atlas_view.slice_size
-
-            atlas_data_temp = np.zeros((slice_shape[0], slice_shape[1], 3))
-            atlas_data_temp[:, :, 0] = atlas_data
-            atlas_data_temp[:, :, 1] = atlas_data
-            atlas_data_temp[:, :, 2] = atlas_data
-
-            max_val = int(np.max(atlas_data) * 255)
-            slice_img = cv2.normalize(
-                atlas_data_temp, None, 0, max_val, cv2.NORM_MINMAX, dtype=cv2.CV_8U
-            )
-
-            label_data = self.atlas_view.working_atlas.label_img.image.copy()
-            unique_labels = np.unique(label_data)
-
-            label_colors = self.atlas_view.label_tree.lookup_table()
-
-            valid_label = np.where(label_colors[:, 3] != 0)[0].astype(int)
-
-            label_img = np.zeros((slice_shape[0], slice_shape[1], 3))
-            for labl in valid_label:
-                if labl in unique_labels:
-                    loc_filter = np.where(label_data == labl)
-                    label_img[loc_filter[0], loc_filter[1], 0] = label_colors[labl, 0]
-                    label_img[loc_filter[0], loc_filter[1], 1] = label_colors[labl, 1]
-                    label_img[loc_filter[0], loc_filter[1], 2] = label_colors[labl, 2]
-
-            label_img = cv2.normalize(
-                label_img, None, 0, np.max(label_img), cv2.NORM_MINMAX, dtype=cv2.CV_8U
-            )
-
-            label_img = cv2.cvtColor(label_img, cv2.COLOR_RGB2BGR)
-
-            blend_img = cv2.addWeighted(slice_img, 0.8, label_img, 0.2, 0)
-            if overlay_img is not None:
-                overlay_img = cv2.cvtColor(overlay_img, cv2.COLOR_RGB2BGR)
-                blend_img = cv2.addWeighted(blend_img, 0.6, overlay_img, 0.4, 0)
-
-            point_data = self.atlas_view.working_atlas.image_dict["tri_pnts"].data
-
-            # font = cv2.FONT_HERSHEY_SIMPLEX
-            # font_scale = 0.3
-            # color = (128, 128, 128)
-            # thickness = 1
-
-            if len(point_data["pos"]) > 4:
-                for i in range(len(point_data["pos"][4:])):
-                    point = point_data["pos"][4 + i]
-                    blend_img = cv2.circle(
-                        blend_img,
-                        tuple(point),
-                        radius=3,
-                        color=(128, 128, 128),
-                        thickness=-1,
-                    )
-                    # point_image = cv2.putText(
-                    #     point_image,
-                    #     f"{i+1}",
-                    #     tuple(point),
-                    #     font,
-                    #     font_scale,
-                    #     color,
-                    #     thickness,
-                    #     cv2.LINE_AA,
-                    # )
-            cv2.imwrite(path[0], blend_img)
-
-            self.print_message(
-                "Merged image is exported successfully.", self.normal_color
-            )
-        else:
-            self.print_message("", self.normal_color)
 
     # -------------------------------------------------------------
     #                    Status

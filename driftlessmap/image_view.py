@@ -1,17 +1,24 @@
-import colorsys
-import os
-import sys
 
 import cv2
 import copy
-import pyqtgraph.functions as fn
 import numpy as np
 import pyqtgraph as pg
-from PyQt6.QtWidgets import *
-from PyQt6.QtGui import *
-from PyQt6.QtCore import *
-from pyqtgraph.Qt import QtGui, QtCore
-import scipy.ndimage as ndi
+from PyQt6.QtWidgets import (
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QSlider,
+    QVBoxLayout,
+    QWidget,
+)
+from PyQt6.QtGui import QIcon
+from PyQt6.QtCore import (
+    QObject,
+    QSize,
+    Qt,
+    pyqtSignal,
+)
 
 from .image_stacks import ImageStacks
 from .widgets_utils import ChannelSelector
@@ -20,7 +27,6 @@ from .utils import (
     make_color_lut,
     get_corner_line_from_rect,
     rotate,
-    rotate_bound,
     get_tb_size,
     read_qss_file,
 )

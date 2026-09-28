@@ -111,7 +111,6 @@ def iter_probe_contact_rows(probe_name, probe_data):
     reconstruction = _reconstruction(probe_data)
     contacts = reconstruction["coordinates"]["contacts"]
     source_axes = reconstruction["atlas"]["source_axes"]
-    count = int(contacts["count"])
     site_indexes = np.asarray(contacts["site_index"], dtype=int)
     column_indexes = np.asarray(contacts["column_index"], dtype=int)
     indexes_in_column = np.asarray(contacts["index_in_column"], dtype=int)

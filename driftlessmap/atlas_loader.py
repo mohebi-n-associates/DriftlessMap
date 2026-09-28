@@ -1,22 +1,10 @@
 import os
-from os.path import dirname, realpath, join
-import sys
-from sys import argv, exit
-from pathlib import Path
 import nrrd
-import pickle
-import csv
 import nibabel as nib
 import numpy as np
 from .persistence import write_cache_pickle
-import pandas as pd
-import cv2
-from PyQt6.QtGui import *
-from PyQt6.QtCore import *
-from PyQt6.QtWidgets import *
 
 from .utils import make_contour_img, make_atlas_label_contour
-from .obj_items import render_volume, render_small_volume
 from .atlas_transform import (
     compact_atlas_volume,
     compact_boundary_volume,
@@ -293,14 +281,6 @@ def process_atlas_raw_data(atlas_folder, data_file=None, segmentation_file=None,
     msg = 'Atlas loaded successfully.'
 
     return atlas_data, atlas_info, segmentation_data, unique_label, boundary, msg
-
-
-class AtlasMeshProcessor(object):
-    def __init__(self, atlas_folder, atlas_data, segmentation_data, factor, level):
-        meshdata = render_volume(atlas_data, atlas_folder, factor=factor, level=level)
-
-        small_meshdata_list = render_small_volume(atlas_data, segmentation_data, atlas_folder,
-                                                  factor=factor, level=level)
 
 
 PROCESSING_MARKER = ".driftlessmap-processing"
