@@ -1,6 +1,6 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 1.5.0**.
+This manual applies to **DriftlessMap 1.6.0**.
 
 DriftlessMap - Histological E-data Registration in Brain Space - is a desktop
 application for aligning rodent histology with a reference atlas, reconstructing
@@ -107,7 +107,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-DriftlessMap 1.5.0 requires:
+DriftlessMap 1.6.0 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -126,7 +126,7 @@ page. The macOS DMG (`-macOS-arm64.dmg`) is built for Apple Silicon; on an Intel
 Mac, use the developer installation below.
 The desktop builds include Python and all runtime dependencies. Windows users
 extract the entire ZIP and run `DriftlessMap.exe`; macOS users open the DMG and
-drag `DriftlessMap.app` to Applications. The 1.5.0 release is unsigned, so the
+drag `DriftlessMap.app` to Applications. The 1.6.0 release is unsigned, so the
 first launch may require Windows SmartScreen confirmation or Control-clicking
 the macOS app and choosing **Open**.
 
@@ -174,7 +174,7 @@ python -m pip --version
 python -c "import driftlessmap; print(driftlessmap.__version__)"
 ```
 
-The final command should print `1.5.0`.
+The final command should print `1.6.0`.
 
 ### 2.5 Launching DriftlessMap
 
@@ -714,7 +714,61 @@ probe, virus, cell, contour, and drawing transfer.
 4. Show **Volume + Histology** or **Slice + Histology**.
 5. Avoid resizing or rotating the source image after placing landmarks.
 
-### 8.2 Place paired landmarks
+### 8.2 Suggest the section and landmarks automatically
+
+DriftlessMap can propose a starting point for registration with a volume
+atlas. Both steps are suggestions: always review the result before
+transferring anything.
+
+**Atlas > Suggest Atlas Section...** compares the loaded histology with the
+atlas and ranks candidate sections:
+
+1. Load the volume atlas and the histology section. A single, whole section
+   on a plain background works best; the tissue outline is found by
+   thresholding.
+2. Choose **Atlas > Suggest Atlas Section...**. The comparison runs in the
+   background and usually takes a few seconds.
+3. The dialog reports the most likely plane (coronal, sagittal or horizontal)
+   and how clearly it was preferred (**clear**, **uncertain** or
+   **ambiguous**), the orientation the section needs, and up to six candidate
+   sections. Each shows your section on the left and the atlas on the right,
+   with its depth and cutting-angle tilt.
+4. Pick the candidate that looks best. Brain outlines are left-right
+   symmetric, so the hemisphere cannot be detected: choose **Other
+   hemisphere** if the section comes from the other side.
+5. Leave **Apply the suggested cutting-angle tilt** on to use the tilt, and
+   **Rotate/flip the histology to match** on to orient the image. Rotating
+   the histology resets its landmarks.
+6. Press **Apply**. DriftlessMap switches to the plane, shows the section and
+   sets the tilt. For coronal and horizontal sections the sagittal pivot is
+   moved to the midline.
+
+The plane is found from the outline, the depth mainly from internal anatomy,
+and the tilt from a small search of about ±6°. Damaged or partial sections,
+sections with more than one piece of tissue, and strongly uneven staining make
+suggestions less reliable.
+
+**Atlas > Propose Landmarks** then fits the displayed atlas slice to the
+section and fills the Triangulation tool with paired landmarks:
+
+1. Show the matching atlas slice and orient the histology to it, for example
+   with **Suggest Atlas Section...**. Remove any transform overlay first.
+2. Choose **Atlas > Propose Landmarks**. If landmarks already exist, you are
+   asked before they are replaced.
+3. DriftlessMap fits the outlines, then refines the fit on the image
+   intensities where that improves the match. It places about 36 landmarks
+   evenly inside the atlas section, and moves the boundary anchors with the
+   same fit.
+4. The status bar reports the number of pairs and the outline overlap. The
+   Triangulation tool opens so you can check the mesh. Drag any landmark that
+   is off, add more where the anatomy needs them, and check mesh quality
+   (Section 8.5) before transferring.
+
+The fit follows the outline and the overall shape well, but internal
+boundaries can still be several voxels off. Treat the proposal as a first
+draft of the manual landmarks, not as a finished registration.
+
+### 8.3 Place paired landmarks
 
 1. Activate Triangulation.
 2. Choose a point color visible in both windows.
@@ -741,7 +795,7 @@ Landmarks can be dragged. With Eraser active, clicking a numbered landmark
 deletes the corresponding point in both windows and renumbers the remaining
 pairs.
 
-### 8.3 Match boundary rectangles
+### 8.4 Match boundary rectangles
 
 The automatically generated outer points define the warp domain. After
 interior points are placed, use **Match Boundaries** when the atlas and
@@ -751,7 +805,7 @@ anchors while retaining the paired interior anatomy.
 For a volume atlas, boundary matching can derive the atlas extent from the
 nonzero label area. A slice atlas requires interior landmarks in both images.
 
-### 8.4 Evaluate mesh quality
+### 8.5 Evaluate mesh quality
 
 The Triangulation controls report:
 
@@ -773,7 +827,7 @@ To repair a mesh:
 - Confirm that pair order has not been confused.
 - Recheck the atlas slice and tilt.
 
-### 8.5 Create and refine an overlay
+### 8.6 Create and refine an overlay
 
 To overlay histology onto the atlas:
 
@@ -793,7 +847,7 @@ repeatedly warping an already transformed preview, preventing accumulated blur.
 Atlas labels and masks use nearest-neighbor mapping where discrete values must
 be preserved; histology display uses smooth interpolation.
 
-### 8.6 Transfer annotations
+### 8.7 Transfer annotations
 
 Once the registration is accepted:
 
@@ -812,7 +866,7 @@ Points outside the registration mesh cannot be assigned a valid atlas
 coordinate. DriftlessMap preserves or rejects them according to the data type and
 reports the count; do not silently treat them as registered.
 
-### 8.7 Save registration landmarks
+### 8.8 Save registration landmarks
 
 Use:
 
@@ -1488,6 +1542,8 @@ still read when a DriftlessMap setting has not been created.
 | Download Waxholm Rat Atlas | Download/process standard rat atlas. |
 | Download Allen Mice Atlas | Download/process Allen 10, 25, or 50 um atlas. |
 | Atlas Processor | Process a custom volume atlas. |
+| Suggest Atlas Section... | Rank atlas plane, section, tilt and orientation for the loaded histology. |
+| Propose Landmarks | Fit the shown atlas slice to the histology and fill in registration landmarks. |
 | Save/Load Triangulation Points | Write/read `.dmaptri`. |
 | Load Slice | Load a raw or processed 2D atlas plate. |
 | Register Slice Info | Set plane, dimensions, and Bregma distance. |

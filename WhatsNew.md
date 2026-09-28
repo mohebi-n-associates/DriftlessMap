@@ -3,6 +3,50 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.6.0
+
+Release date: 27 September 2026
+
+This release adds two assistants for volume-atlas registration. They suggest
+where a section sits in the atlas and propose starting landmarks. You review
+and confirm every suggestion; nothing is transferred automatically. Files
+saved by 1.5.0 open unchanged, and nothing needs to be re-exported.
+
+### Suggest Atlas Section
+
+**Atlas > Suggest Atlas Section...** compares the loaded histology with the
+volume atlas and suggests the section it came from:
+
+- the plane (coronal, sagittal or horizontal), found from the tissue outline,
+  with a note on how clearly it was preferred;
+- the orientation the histology needs (rotation and flip);
+- the depth, ranked mainly by internal anatomy;
+- a small cutting-angle tilt, searched within about ±6°.
+
+A dialog shows up to six candidates as side-by-side thumbnails. Choose one and
+press **Apply**: DriftlessMap switches the plane, shows the section and sets
+the tilt, and can also rotate or flip the histology to match. Because brain
+outlines are left-right symmetric, you choose the hemisphere yourself.
+
+### Propose Landmarks
+
+**Atlas > Propose Landmarks** fits the displayed atlas slice to the section.
+It first fits the outlines, then refines the fit on image intensities where
+that improves the match. It then fills the Triangulation tool with about 36
+paired landmarks and moves the boundary anchors with the same fit. Drag,
+add or delete landmarks as usual before transferring. Existing landmarks are
+replaced only after you confirm.
+
+The fit follows the outline and overall shape well. Internal boundaries can
+still be several voxels off, so treat the proposal as a first draft.
+
+### Other changes
+
+- DriftlessMap now requires SimpleITK, which the desktop builds and a normal
+  `pip install` include.
+- The Registering chapter of the manual gains Section 8.2, which describes
+  both assistants. Later sections in that chapter are renumbered.
+
 ## DriftlessMap 1.5.0
 
 Release date: 27 September 2026
