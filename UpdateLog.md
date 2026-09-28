@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th September 2026
+##### DriftlessMap 1.4.41
+
+Automatic cell detection runs in the background, so detecting cells on large sections no longer freezes the window.
+
+### 27th September 2026
 ##### DriftlessMap 1.4.40
 
 Long operations no longer freeze the window: fingerprinting inputs, writing project archives, verifying project and object atlases, and warping overlays or virus layers run in the background behind a progress dialog.

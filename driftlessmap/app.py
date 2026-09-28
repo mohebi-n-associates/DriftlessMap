@@ -3029,7 +3029,9 @@ class DriftlessMap(QMainWindow, FORM_Main):
         else:
             detector = cv2.SimpleBlobDetector_create(params)
 
-        keypoints = detector.detect(temp)
+        keypoints = run_in_background(
+            self, "Detecting cells...", detector.detect, temp
+        )
         n_keypoints = len(keypoints)
         if n_keypoints == 0:
             return
