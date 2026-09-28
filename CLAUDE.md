@@ -8,7 +8,7 @@ or important workflows change.
 
 ## Project identity
 
-- Current release: DriftlessMap 1.4.50.
+- Current release: DriftlessMap 1.4.51.
 - Desktop application for histology registration, atlas mapping, probe
   reconstruction, anatomical annotation, and data export.
 - Python package: `driftlessmap`; GUI: PyQt6 + pyqtgraph/OpenGL.
@@ -39,6 +39,9 @@ or important workflows change.
   processed atlas loading, display, coordinate transforms.
 - `driftlessmap/triangulation.py`: deterministic piecewise-affine registration,
   topology, validation, transforms, and warping.
+- `driftlessmap/landmarks.py`: `LandmarkModel` owns paired landmark lists,
+  topology, the cached registration and label items (the `DriftlessMap`
+  attributes of the same names delegate to it), plus `.dmaptri` validation.
 - `driftlessmap/probe_utiles.py`, `probe_reconstruction.py`, `probe_csv.py`:
   probe geometry, mapping, reconstruction schema, and exports.
 - `driftlessmap/object_control.py`: object pieces/merged objects, visualization,

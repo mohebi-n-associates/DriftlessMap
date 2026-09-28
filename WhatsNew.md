@@ -3,6 +3,25 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.4.51
+
+Release date: 27 September 2026
+
+This is internal restructuring with no change in behaviour.
+
+- **One owner for landmark state.** Fifteen pieces of related state are now
+  owned by a single `LandmarkModel` in `driftlessmap/landmarks.py`: the atlas
+  and histology landmark lists, boundary and corner points, triangle
+  topology, the cached registration and its cache key, and the on-screen
+  landmark labels. The window's existing attributes delegate to the model, so
+  every tool works as before, and the state can now be reset and reasoned
+  about in one place.
+- **Validation without the GUI.** The checks applied when loading a `.dmaptri`
+  file (atlas view, slice size, boundary-point count and topology) are now a
+  standalone function with their own tests and type checking.
+
+---
+
 ## DriftlessMap 1.4.50
 
 Release date: 27 September 2026
