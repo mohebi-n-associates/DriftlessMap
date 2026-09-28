@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th September 2026
+##### DriftlessMap 1.4.48
+
+Test coverage for the tool settings, the histogram curve widget and the channel colour selector, with a default channel index so the selector is safe before it is assigned a channel.
+
+### 27th September 2026
 ##### DriftlessMap 1.4.47
 
 Repository hygiene: a contributor guide is added, macOS Finder files are no longer tracked, and the source distribution includes the manual, update log, contributor guide and test suite.

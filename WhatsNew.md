@@ -3,6 +3,25 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.4.48
+
+Release date: 27 September 2026
+
+This release adds regression tests for three interface components that had
+none:
+
+- **Tool settings.** Pencil, eraser, lasso, magic wand, probe, cell and
+  triangulation settings save and restore unchanged.
+- **Histogram curve widget.** Per-channel colours and enabled channels reset
+  for each new image.
+- **Channel colour selector.** Each image's colour swatch is added and removed
+  exactly once.
+
+The channel selector now starts with a default channel index, so it no longer
+raises an error if its colour changes before it has been assigned a channel.
+
+---
+
 ## DriftlessMap 1.4.47
 
 Release date: 27 September 2026

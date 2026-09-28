@@ -85,6 +85,7 @@ class ChannelSelector(QWidget):
         QWidget.__init__(self)
 
         channel_button_style = read_qss_file('qss/channel_selector.qss')
+        self.index = 0  # replaced by set_channel_index for each channel
         self.vis = True
         self.setFixedSize(60, 60)
         self.setStyleSheet(channel_button_style)
