@@ -1,33 +1,28 @@
-#
-# Use .add_data_files and .add_data_dir methods in a appropriate
-# setup.py files to include non-python files such as documentation,
-# data, etc files to distribution (*for installation*).
-# Avoid using MANIFEST.in for that.
-#
-# Files in top-level directory:
+# Files added to the source distribution beyond the package itself.
+# Package data installed with DriftlessMap is declared in pyproject.toml.
 include AUTHOR.txt
 include CITATION.cff
+include CONTRIBUTING.md
 include CONTRIBUTORS.md
 include LICENSE.txt
 include MANIFEST.in
+include MANUAL.md
 include ORIGINS.md
 include pyproject.toml
 include README.md
-include WhatsNew.md
 include setup.py
-include THANKS.txt 
+include THANKS.txt
+include UpdateLog.md
+include WhatsNew.md
 
 include driftlessmap/main_window.ui
-
 include driftlessmap/data/query.csv
 include driftlessmap/data/atlas_labels.pkl
 
-# Included are: icons/, data/, qss/
-recursive-include driftlessmap/icons *.svg
-recursive-include driftlessmap/icons *.png
-recursive-include driftlessmap/icons *.ico
-recursive-include driftlessmap/icons *.icns
-
+recursive-include driftlessmap/icons *.svg *.png *.ico *.icns
 recursive-include driftlessmap/qss *.qss
 
-global-exclude .DS_Store
+# The regression suite, so the sdist can be tested after download.
+recursive-include tests *.py
+
+global-exclude .DS_Store *.py[cod]

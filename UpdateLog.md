@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th September 2026
+##### DriftlessMap 1.4.47
+
+Repository hygiene: a contributor guide is added, macOS Finder files are no longer tracked, and the source distribution includes the manual, update log, contributor guide and test suite.
+
+### 27th September 2026
 ##### DriftlessMap 1.4.46
 
 The GUI-free scientific and persistence core is now type-checked with mypy in CI, and pytest collects tests from the tests folder by default.

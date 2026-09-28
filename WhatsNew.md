@@ -3,6 +3,24 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.4.47
+
+Release date: 27 September 2026
+
+This release is housekeeping for contributors and packagers.
+
+- **`CONTRIBUTING.md`.** A new contributor guide covers development setup,
+  the three checks CI runs (pytest, Ruff and mypy), running GUI tests
+  headless, the persistence and provenance ground rules, and the release
+  checklist.
+- **Source distribution.** It now includes `MANUAL.md`, `UpdateLog.md`, the
+  contributor guide and the test suite, so a downloaded source package can be
+  tested. The outdated build-system comment in `MANIFEST.in` is gone.
+- **`.DS_Store` files.** macOS Finder metadata files are no longer tracked
+  and are ignored in future.
+
+---
+
 ## DriftlessMap 1.4.46
 
 Release date: 27 September 2026
