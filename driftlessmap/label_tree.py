@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import *
 from PyQt6.QtGui import *
 from PyQt6.QtCore import *
 import pyqtgraph as pg
-from .uuuuuu import read_qss_file
+from .utils import read_qss_file
 
 
 reset_button_style = '''

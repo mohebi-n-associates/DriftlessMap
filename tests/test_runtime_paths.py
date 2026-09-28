@@ -13,7 +13,7 @@ import driftlessmap
 from driftlessmap.resources import resource_path
 from driftlessmap.run_driftlessmap import run
 from driftlessmap.user_settings import load_last_atlas_path, save_last_atlas_path, settings_path
-from driftlessmap.uuuuuu import read_qss_file
+from driftlessmap.utils import read_qss_file
 
 
 class RuntimePathTests(unittest.TestCase):

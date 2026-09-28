@@ -151,7 +151,7 @@ class DrawingRoiAnalysisTests(unittest.TestCase):
 
 class VoxelFlooringTests(unittest.TestCase):
     def test_negative_fractions_fall_into_the_lower_voxel(self):
-        from driftlessmap.uuuuuu import get_region_label
+        from driftlessmap.utils import get_region_label
 
         labels = np.zeros((4, 4, 4), dtype=int)
         labels[1, 1, 1] = 5

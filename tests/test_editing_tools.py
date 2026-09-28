@@ -7,7 +7,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PyQt6.QtWidgets import QApplication, QLineEdit
 
 from driftlessmap.toolbox import read_int_field
-from driftlessmap.uuuuuu import tolerance_mask
+from driftlessmap.utils import tolerance_mask
 
 
 class ToleranceMaskTests(unittest.TestCase):

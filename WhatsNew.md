@@ -3,6 +3,28 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.4.42
+
+Release date: 27 September 2026
+
+This is a maintenance release with no change in behaviour.
+
+- **Renamed module.** The shared helper module is now `driftlessmap/utils.py`,
+  formerly `driftlessmap/uuuuuu.py`. Scripts that imported the internal module
+  must update the import; it was never a stable public API.
+- **Unused code removed.**
+  - Seventeen unused helper functions, including a superseded
+    triangulation-warp implementation, crop helpers, and several functions
+    that could not have worked.
+  - The unused `popup_message.py`, `triangulation_points.py` (a sample with
+    hard-coded developer paths) and `images_reader.py` (an empty stub).
+  - An unused test scatter item, a broken curve method, a developer-only
+    label-table generator, and unused imports.
+- **Quieter console.** Stray debug output ("Killing", "rgb", raw array
+  dumps) no longer prints to the console.
+
+---
+
 ## DriftlessMap 1.4.41
 
 Release date: 27 September 2026

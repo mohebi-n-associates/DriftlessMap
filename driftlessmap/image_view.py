@@ -16,8 +16,14 @@ import scipy.ndimage as ndi
 from .image_stacks import ImageStacks
 from .widgets_utils import ChannelSelector
 from .image_curves import CurveWidget
-from .uuuuuu import hsv2rgb, gamma_line, color_img, make_color_lut, get_corner_line_from_rect, \
-    rotate, rotate_bound, get_tb_size, read_qss_file
+from .utils import (
+    make_color_lut,
+    get_corner_line_from_rect,
+    rotate,
+    rotate_bound,
+    get_tb_size,
+    read_qss_file,
+)
 from .layer_validation import image_layer_matches
 from .resources import resource_path
 

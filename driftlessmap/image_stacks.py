@@ -210,7 +210,6 @@ class SliceStack(pg.GraphicsLayoutWidget):
 
     def keyPressEvent(self, event):
         if event.key() == QtCore.Qt.Key.Key_Backspace:
-            print("Killing")
             self.sig_key_pressed.emit('delete')
 
 
@@ -358,7 +357,6 @@ class ImageStacks(pg.GraphicsLayoutWidget):
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_Backspace or event.key() == Qt.Key.Key_Delete:
-            print("Killing")
             self.sig_key_pressed.emit('delete')
         # elif event.key() == Qt.Key.Key_Enter or event.key() == Qt.Key.Key_Return:
         #     print('enter')

@@ -8,7 +8,7 @@ or important workflows change.
 
 ## Project identity
 
-- Current release: DriftlessMap 1.4.41.
+- Current release: DriftlessMap 1.4.42.
 - Desktop application for histology registration, atlas mapping, probe
   reconstruction, anatomical annotation, and data export.
 - Python package: `driftlessmap`; GUI: PyQt6 + pyqtgraph/OpenGL.
@@ -44,6 +44,8 @@ or important workflows change.
   thread behind a modal progress dialog. Never touch widgets from that work.
 - `driftlessmap/layer_geometry.py`: pure shift/rotate helpers shared by point
   and raster layers.
+- `driftlessmap/utils.py`: shared image, label and geometry helpers (formerly
+  `uuuuuu.py`).
 - `driftlessmap/main_window.ui`: Qt menu/action definitions.
 - `driftlessmap/icons/app/`: canonical PNG plus native Windows ICO and macOS
   ICNS application artwork.

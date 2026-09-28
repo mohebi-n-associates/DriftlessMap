@@ -4,7 +4,7 @@ from pathlib import Path
 from os.path import dirname, realpath, join
 import numpy as np
 import colorsys
-from .uuuuuu import hex2rgb
+from .utils import hex2rgb
 from .image_reader import CHANNEL_COLORS, MAX_CHANNELS
 
 # czi_path = '~/Work/Kavli/Data/HERBS_DATA/abraham/Pecorino_mec_slide_1.czi'

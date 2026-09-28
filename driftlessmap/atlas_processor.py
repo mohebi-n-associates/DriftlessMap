@@ -14,7 +14,7 @@ from PyQt6.QtCore import *
 from PyQt6.QtWidgets import *
 import pyqtgraph.opengl as gl
 
-from .uuuuuu import read_qss_file, make_contour_img, read_excel_file, hex2rgb
+from .utils import read_qss_file, make_contour_img, read_excel_file, hex2rgb
 from .obj_items import load_mesh_file, render_volume, render_small_volume
 from .atlas_loader import (
     process_atlas_raw_data,

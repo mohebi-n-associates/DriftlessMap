@@ -12,7 +12,7 @@ from PyQt6.QtCore import *
 from .image_stacks import SliceStack
 from .slice_stacks import SliceStacks
 from .label_tree import LabelTree
-from .uuuuuu import read_qss_file, get_corner_line_from_rect, get_slice_atlas_coord, make_contour_img,  \
+from .utils import read_qss_file, get_corner_line_from_rect, get_slice_atlas_coord, make_contour_img,  \
     rotate_base_points, rotation_x, rotation_y, rotation_z
 from .probe_utiles import get_tilt_sign#, get_direction_rotation
 from .slice_validation import slice_info_is_ready
@@ -1381,9 +1381,7 @@ class AtlasView(QObject):
                 self.working_atlas.image_dict['atlas-probe'].setData(pos=np.asarray(temp))
         elif len(data) == 2:
             if n_pre_trajectory == 1:
-                print('data', data)
                 start_pnt, end_pnt = rotate_base_points(np.asarray(data), np.array([0]))
-                print(start_pnt, end_pnt)
                 self.working_atlas.image_dict['atlas-probe'].setData(pos=np.asarray(data))
             else:
                 base_loc = np.array([-375, -125, 125, 375]) / self.vox_size_um
@@ -1428,9 +1426,3 @@ class AtlasView(QObject):
     def clear_atlas(self):
         self.clear_volume_atlas()
         self.clear_slice_atlas()
-
-
-
-
-
-

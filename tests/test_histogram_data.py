@@ -2,7 +2,7 @@ import unittest
 
 import numpy as np
 
-from driftlessmap.uuuuuu import make_hist_data
+from driftlessmap.utils import make_hist_data
 
 
 class HistogramDataTests(unittest.TestCase):

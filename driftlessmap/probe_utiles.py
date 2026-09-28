@@ -7,7 +7,6 @@ import pickle
 import colorsys
 import pyqtgraph as pg
 from scipy.interpolate import interp1d, splprep, splev
-from .uuuuuu import rotation_z, rotation_x, rotation_y
 from .coordinate_validation import (
     coordinate_groups_in_bounds,
     coordinates_in_bounds,
