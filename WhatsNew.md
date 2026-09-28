@@ -3,6 +3,26 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.4.34
+
+Release date: 27 September 2026
+
+Loading layers and projects is more defensive.
+
+- **Imported atlas layers are checked first.** An imported atlas layer must
+  now be a known layer type with its required fields, match the current
+  atlas slice's size, keep its points inside the slice, and (for cells) have
+  metadata for every cell. Previously a mismatched or incomplete atlas layer
+  was applied as-is and could fail later. An unknown layer type used to be
+  added to the layer list as an empty entry.
+- **Older projects get defaults.** A project's working data is now combined
+  with the current defaults. Fields added in later versions therefore exist
+  even for older projects, and retired fields are ignored.
+- **Failed loads are reported.** If a project cannot be opened completely, the
+  status bar now says so, and warns not to save over the original.
+
+---
+
 ## DriftlessMap 1.4.33
 
 Release date: 27 September 2026

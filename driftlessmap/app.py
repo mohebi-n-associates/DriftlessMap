@@ -137,6 +137,7 @@ from .provenance import (
 from .version import APPLICATION_DISPLAY_NAME, APPLICATION_WINDOW_TITLE, __version__
 from .cell_detection import select_detection_channel
 from .coordinate_validation import coordinates_in_bounds
+from .layer_validation import image_layer_matches
 from .probe_reconstruction import (
     allen_ccf_to_estimated_bregma_mm,
     format_estimated_bregma_report,
@@ -237,22 +238,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
 
         self.drawing_allowed = False
 
-        self.working_img_data = {
-            "img-overlay": None,
-            "img-mask": None,
-            "img-probe": [],
-            "img-cells": [],
-            "img-contour": [],
-            "img-virus": None,
-            "img-drawing": [],
-            "img-blob": [],
-            "cell_count": [0 for i in range(5)],
-            "cell_size": [],
-            "cell_symbol": [],
-            "cell_layer_index": [],
-            "lasso_path": [],
-            "ruler_path": [],
-        }
+        self.working_img_data = self._default_working_img_data()
         self.working_img_type = {
             "img-overlay": "pixel",
             "img-mask": "pixel",
@@ -269,21 +255,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
             "ruler_path": "vector",
         }
 
-        self.working_atlas_data = {
-            "atlas-overlay": None,
-            "atlas-mask": None,
-            "atlas-probe": [],
-            "atlas-cells": [],
-            "atlas-contour": [],
-            "atlas-virus": [],
-            "atlas-drawing": [],
-            "cell_count": [0 for i in range(5)],
-            "cell_size": [],
-            "cell_symbol": [],
-            "cell_layer_index": [],
-            "lasso_path": [],
-            "ruler_path": [],
-        }
+        self.working_atlas_data = self._default_working_atlas_data()
         self.working_atlas_type = {
             "atlas-overlay": "pixel",
             "atlas-mask": "pixel",
@@ -7564,7 +7536,76 @@ class DriftlessMap(QMainWindow, FORM_Main):
         else:
             return
 
+    ATLAS_LAYER_KEYS = {
+        "atlas-slice": set(),
+        "atlas-overlay": set(),
+        "atlas-mask": {"color"},
+        "atlas-cells": {
+            "color",
+            "symbol",
+            "cell_count",
+            "cell_size",
+            "cell_symbol",
+            "cell_layer_index",
+        },
+        "atlas-drawing": {"color"},
+        "atlas-contour": {"color"},
+        "atlas-virus": {"color"},
+        "atlas-probe": {"color"},
+    }
+
+    def _atlas_layer_error(self, layer_dict):
+        """Return why an atlas layer cannot be applied, or ``None``."""
+        if not isinstance(layer_dict, dict) or not {"layer_link", "data"}.issubset(
+            layer_dict
+        ):
+            return "the file is not a layer"
+        layer_link = layer_dict["layer_link"]
+        required = self.ATLAS_LAYER_KEYS.get(layer_link)
+        if required is None:
+            return "unknown atlas layer {!r}".format(layer_link)
+        if not required.issubset(layer_dict):
+            return "the layer is missing {}".format(
+                ", ".join(sorted(required - set(layer_dict)))
+            )
+        slice_size = self.atlas_view.slice_size
+        if slice_size is None:
+            return "no atlas slice is shown"
+        height, width = int(slice_size[0]), int(slice_size[1])
+        if layer_link in ("atlas-slice", "atlas-overlay", "atlas-mask"):
+            if not image_layer_matches(layer_dict, (height, width)):
+                return "its image size does not match the current atlas slice"
+            return None
+        try:
+            points = np.asarray(layer_dict["data"], dtype=float)
+        except (TypeError, ValueError):
+            return "its points are not numeric"
+        if points.size == 0:
+            return None
+        points = points.reshape(-1, 2) if points.ndim != 2 else points
+        if points.shape[1] != 2 or not np.all(np.isfinite(points)):
+            return "its points are not two-dimensional"
+        if np.any(points < 0) or np.any(points[:, 0] > width) or np.any(
+            points[:, 1] > height
+        ):
+            return "its points lie outside the current atlas slice"
+        if layer_link == "atlas-cells":
+            count = len(points)
+            per_cell = ("cell_size", "cell_symbol", "cell_layer_index")
+            if any(len(layer_dict[key]) != count for key in per_cell):
+                return "its cell metadata does not match its cells"
+            if len(layer_dict["cell_count"]) != 5:
+                return "its cell counts are incomplete"
+        return None
+
     def set_atlas_layer_data(self, layer_dict):
+        error = self._atlas_layer_error(layer_dict)
+        if error is not None:
+            self.print_message(
+                "The atlas layer was not loaded: {}.".format(error),
+                self.error_message_color,
+            )
+            return False
         layer_link = layer_dict["layer_link"]
         if layer_link == "atlas-slice":
             self.atlas_view.processing_slice = layer_dict["data"]
@@ -7615,8 +7656,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
             self.probe_color = layer_dict["color"]
             self.tool_box.pencil_color_btn.setColor(self.probe_color)
             self.working_atlas_data[layer_link] = layer_dict["data"]
-        else:
-            return
+        return True
 
     def set_atlas_layer_to_atlas_view(self, layer_link, vis_data_2d, symbol):
         if layer_link == "atlas-slice":
@@ -7696,7 +7736,8 @@ class DriftlessMap(QMainWindow, FORM_Main):
                             "Please load atlas first.", self.error_message_color
                         )
                         return
-                    self.set_atlas_layer_data(layer_dict)
+                    if not self.set_atlas_layer_data(layer_dict):
+                        return
                     if "cells" in layer_dict["layer_link"]:
                         symbol = layer_dict["symbol"]
                     else:
@@ -8155,6 +8196,56 @@ class DriftlessMap(QMainWindow, FORM_Main):
     # -------------------------------------------------------------
     #                    load project
     # -------------------------------------------------------------
+    @staticmethod
+    def _default_working_img_data():
+        return {
+            "img-overlay": None,
+            "img-mask": None,
+            "img-probe": [],
+            "img-cells": [],
+            "img-contour": [],
+            "img-virus": None,
+            "img-drawing": [],
+            "img-blob": [],
+            "cell_count": [0 for i in range(5)],
+            "cell_size": [],
+            "cell_symbol": [],
+            "cell_layer_index": [],
+            "lasso_path": [],
+            "ruler_path": [],
+        }
+
+    @staticmethod
+    def _default_working_atlas_data():
+        return {
+            "atlas-overlay": None,
+            "atlas-mask": None,
+            "atlas-probe": [],
+            "atlas-cells": [],
+            "atlas-contour": [],
+            "atlas-virus": [],
+            "atlas-drawing": [],
+            "cell_count": [0 for i in range(5)],
+            "cell_size": [],
+            "cell_symbol": [],
+            "cell_layer_index": [],
+            "lasso_path": [],
+            "ruler_path": [],
+        }
+
+    @staticmethod
+    def _with_defaults(defaults, saved):
+        """Overlay saved working data on defaults, keeping only known keys."""
+        merged = dict(defaults)
+        if isinstance(saved, dict):
+            for key in defaults:
+                if key in saved:
+                    merged[key] = saved[key]
+        cell_count = merged.get("cell_count")
+        if not isinstance(cell_count, (list, tuple)) or len(cell_count) != 5:
+            merged["cell_count"] = [0 for _ in range(5)]
+        return merged
+
     def load_project(self, p_dict):
         self.current_atlas_path = p_dict["atlas_path"]
         self.current_img_path = p_dict["img_path"]
@@ -8189,8 +8280,14 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.atlas_view.processing_slice = p_dict["processing_slice"]
         self.image_view.processing_img = p_dict["processing_img"]
         self.overlay_img = p_dict["overlay_img"]
-        self.working_atlas_data = p_dict["working_atlas_data"]
-        self.working_img_data = p_dict["working_img_data"]
+        # Start from the current defaults so keys added in later versions
+        # exist for projects saved before them.
+        self.working_atlas_data = self._with_defaults(
+            self._default_working_atlas_data(), p_dict["working_atlas_data"]
+        )
+        self.working_img_data = self._with_defaults(
+            self._default_working_img_data(), p_dict["working_img_data"]
+        )
 
         # load atlas data
         if self.current_atlas_path is not None:
@@ -8575,7 +8672,15 @@ class DriftlessMap(QMainWindow, FORM_Main):
             #     self.delete_all
             self.layer_ctrl.clear_all()
 
-            self.load_project(p_dict)
+            try:
+                self.load_project(p_dict)
+            except (KeyError, TypeError, ValueError, IndexError) as exc:
+                self.print_message(
+                    "The project could not be opened completely ({}). The "
+                    "session may be partly restored; do not save over the "
+                    "original project.".format(exc),
+                    self.error_message_color,
+                )
 
         else:
             self.print_message("", self.normal_color)
