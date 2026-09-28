@@ -3337,15 +3337,30 @@ class DriftlessMap(QMainWindow, FORM_Main):
             and self.triangulation_topology_point_count == point_count
         ):
             simplices = self.tri_simplices
+        # One landmark edit refreshes both windows; reuse the registration
+        # when nothing it depends on has changed.
+        cache_key = (
+            np.asarray(self.atlas_tri_data, dtype=float).tobytes(),
+            np.asarray(self.histo_tri_data, dtype=float).tobytes(),
+            tuple(np.ravel(self.atlas_view.slice_size)),
+            tuple(np.ravel(self.image_view.img_size)),
+            None if simplices is None else np.asarray(simplices).tobytes(),
+        )
+        cached = self.triangulation_registration
+        if cached is not None and getattr(self, "_registration_cache_key", None) == cache_key:
+            registration = cached
+        else:
+            registration = None
         try:
-            registration = build_piecewise_affine_registration(
-                self.atlas_tri_data,
-                self.histo_tri_data,
-                atlas_shape=self.atlas_view.slice_size,
-                histology_shape=self.image_view.img_size,
-                simplices=simplices,
-                allow_unsafe=True,
-            )
+            if registration is None:
+                registration = build_piecewise_affine_registration(
+                    self.atlas_tri_data,
+                    self.histo_tri_data,
+                    atlas_shape=self.atlas_view.slice_size,
+                    histology_shape=self.image_view.img_size,
+                    simplices=simplices,
+                    allow_unsafe=True,
+                )
         except TriangulationError as error:
             # A malformed topology from an older or interrupted save should
             # not make otherwise valid landmarks unusable.
@@ -3372,6 +3387,9 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.tri_simplices = registration["simplices"].copy()
         self.triangulation_topology_point_count = point_count
         self.triangulation_registration = registration
+        self._registration_cache_key = cache_key[:4] + (
+            np.asarray(self.tri_simplices).tobytes(),
+        )
         self._set_triangulation_quality(registration=registration)
         if strict and registration["errors"]:
             error = " ".join(registration["errors"])

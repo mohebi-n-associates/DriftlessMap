@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th September 2026
+##### DriftlessMap 1.4.39
+
+Editing registration landmarks is faster: the triangulation is built once per change and reused by both the atlas and histology windows.
+
+### 27th September 2026
 ##### DriftlessMap 1.4.38
 
 Image input fixes: bitmaps and slice atlases in folders with non-ASCII names open on Windows, folders of TIFF sections keep their native bit depth and channels, and CZI files without display settings or scaling load with defaults.
