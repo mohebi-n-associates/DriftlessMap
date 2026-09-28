@@ -13,6 +13,12 @@ Release date: 27 September 2026
   boundary images were stored as one byte per pixel, they had been drawn
   almost black, so the button appeared to do nothing.
 
+### Documentation
+
+- A new tutorial, [Automatic Section Matching and Landmark Proposal](Tutorial/Registration_Related/automatic_section_and_landmarks.md),
+  walks through **Suggest Atlas Section...** and **Propose Landmarks** on a
+  real sagittal section and explains how each stage works.
+
 ## DriftlessMap 1.6.0
 
 Release date: 27 September 2026

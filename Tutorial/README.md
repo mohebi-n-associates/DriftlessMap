@@ -1,4 +1,11 @@
-# Tutorial archive
+# Tutorials
+
+## DriftlessMap tutorials
+
+- [Automatic section matching and landmark proposal](Registration_Related/automatic_section_and_landmarks.md)
+  (DriftlessMap 1.6 and later).
+
+## HERBS tutorials
 
 These tutorials and screenshots were created for the original HERBS interface
 and are preserved both for attribution and because most workflows remain
