@@ -3,6 +3,29 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.4.36
+
+Release date: 27 September 2026
+
+Atlas downloads are more robust and easier to trace.
+
+- **Unencoded transfers.** Downloads now ask servers not to apply transfer
+  compression. If a server compresses anyway, the size check no longer
+  compares decompressed bytes with the compressed `Content-Length`, which
+  used to raise spurious "Incomplete download" errors.
+- **HTTPS on every hop.** Every redirect in a download must now use HTTPS, not
+  only the final address.
+- **Content-Length.** A non-numeric `Content-Length` header is ignored
+  instead of stopping the download.
+- **Download manifest.** Each downloaded source file is recorded, with its
+  URL, size and SHA-256, in `download_manifest.json` in the atlas folder. If
+  a later download of the same file brings different bytes, because the
+  upstream "current release" changed, the download stops. Previously it was
+  silently mixed into the existing atlas. Use a new folder for a new
+  release.
+
+---
+
 ## DriftlessMap 1.4.35
 
 Release date: 27 September 2026
