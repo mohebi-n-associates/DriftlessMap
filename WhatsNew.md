@@ -3,6 +3,23 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.4.52
+
+Release date: 27 September 2026
+
+`roadmap.md` now opens with a status table showing which release (1.4.1 to
+1.4.51) addressed each item from the 1.4.0 code review. It also lists the
+items still open and why:
+
+- Moving large binaries out of Git history.
+- Adding code-signing certificates.
+- An Intel macOS build.
+- Fully transactional project loading.
+- Further decomposition of the main window.
+- The first GitHub run of the new workflows.
+
+---
+
 ## DriftlessMap 1.4.51
 
 Release date: 27 September 2026
