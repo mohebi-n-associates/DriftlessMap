@@ -8,7 +8,7 @@ or important workflows change.
 
 ## Project identity
 
-- Current release: DriftlessMap 1.4.44.
+- Current release: DriftlessMap 1.4.45.
 - Desktop application for histology registration, atlas mapping, probe
   reconstruction, anatomical annotation, and data export.
 - Python package: `driftlessmap`; GUI: PyQt6 + pyqtgraph/OpenGL.
@@ -51,8 +51,13 @@ or important workflows change.
   ICNS application artwork.
 - `packaging/DriftlessMap.spec` and `packaging/build_*`: native PyInstaller
   application bundles and release artifacts for Windows and macOS.
+- `.github/workflows/ci.yml`: the single test and lint workflow; release and
+  desktop-build workflows call it and build only after it passes. Actions are
+  pinned to commit SHAs (Dependabot proposes updates).
 - `.github/workflows/desktop-builds.yml`: builds both native desktop artifacts
-  and attaches them to published GitHub releases.
+  with `packaging/constraints-desktop.txt`, signs them when signing secrets are
+  configured, and attaches them to published GitHub releases from a separate
+  write-permitted job.
 - `MANUAL.md`, `WhatsNew.md`, `UpdateLog.md`: user behavior and release history.
 - `tests/`: unittest-compatible test suite; CI also invokes it through pytest.
 

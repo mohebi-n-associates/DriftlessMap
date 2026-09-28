@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th September 2026
+##### DriftlessMap 1.4.45
+
+Release engineering: one CI workflow gates PyPI and desktop releases, all GitHub Actions are pinned to commit SHAs with Dependabot updates, only the upload job can write to the repository, desktop bundles use exact dependency versions, build failures stop the Windows script, the macOS DMG is labelled Apple Silicon, and optional code signing activates once secrets are configured.
+
+### 27th September 2026
 ##### DriftlessMap 1.4.44
 
 Packaging cleanup: two unused label tables and the README screenshot are no longer shipped inside the package, and code adapted from pyqtgraph's examples is attributed.

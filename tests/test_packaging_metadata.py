@@ -38,6 +38,14 @@ class PackagingMetadataTests(unittest.TestCase):
         self.assertIn("windows-latest", workflow)
         self.assertIn("macos-14", workflow)
         self.assertIn("release upload", workflow)
+        self.assertIn("macOS-arm64", workflow)
+        self.assertIn("needs: tests", workflow)
+        self.assertTrue(
+            (REPOSITORY_ROOT / "packaging/constraints-desktop.txt").is_file()
+        )
+        for script in ("packaging/build_windows.ps1", "packaging/build_macos.sh"):
+            text = (REPOSITORY_ROOT / script).read_text(encoding="utf-8")
+            self.assertIn("constraints-desktop.txt", text)
 
     def test_modern_runtime_and_dependency_baseline(self):
         metadata = project_metadata()
