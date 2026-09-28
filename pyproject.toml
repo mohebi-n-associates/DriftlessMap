@@ -133,6 +133,7 @@ files = [
     "driftlessmap/probe_csv.py",
     "driftlessmap/probe_reconstruction.py",
     "driftlessmap/probe_utiles.py",
+    "driftlessmap/project_io.py",
     "driftlessmap/provenance.py",
     "driftlessmap/resources.py",
     "driftlessmap/roi_analysis.py",

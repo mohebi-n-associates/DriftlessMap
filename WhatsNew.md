@@ -3,6 +3,28 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.4.49
+
+Release date: 27 September 2026
+
+This is an internal restructuring with no change in behaviour. It removes the
+kind of duplication that caused several earlier atlas-provenance bugs.
+
+- **One place records the active atlas.** A single method now records which
+  atlas is active: its kind, path and load-time fingerprint. The volume
+  loader, the slice loader, project loading and **Switch Atlas** all go
+  through it, instead of each setting these fields itself.
+- **One registry updates the atlas views.** Nineteen blocks that repeated the
+  same pen, brush or lookup-table call on each of the coronal, sagittal,
+  horizontal and slice views now go through one helper. It updates only the
+  views that have the item, so views can no longer be missed. About 100
+  lines of duplication are gone.
+- **Tested project module.** Default working data, merging of older project
+  data, input pre-fingerprinting and export file naming now live in the
+  GUI-free `project_io` module, with their own tests and type checking.
+
+---
+
 ## DriftlessMap 1.4.48
 
 Release date: 27 September 2026

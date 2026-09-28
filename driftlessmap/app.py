@@ -1,5 +1,4 @@
 import os
-import re
 import sys
 from os.path import dirname, realpath, join
 import copy
@@ -143,6 +142,13 @@ from .probe_reconstruction import (
 )
 from .roi_analysis import build_drawing_roi_info
 from .background import run_in_background
+from .project_io import (
+    default_working_atlas_data,
+    default_working_img_data,
+    object_file_names,
+    prefingerprint_inputs,
+    with_defaults,
+)
 from .layer_geometry import layer_center, rotate_points, rotate_raster, shift_raster
 from .resources import resource_path
 from .user_settings import load_last_atlas_path, save_last_atlas_path
@@ -150,21 +156,6 @@ from .user_settings import load_last_atlas_path, save_last_atlas_path
 
 script_dir = dirname(realpath(__file__))
 FORM_Main, _ = loadUiType((join(dirname(__file__), "main_window.ui")))
-
-
-def _prefingerprint_inputs(atlas_path, histology_path):
-    """Warm the provenance checksum cache for the inputs a save will link."""
-    for path, describe in (
-        (atlas_path, describe_atlas_path),
-        (histology_path, describe_path),
-    ):
-        if not path or not os.path.exists(path):
-            continue
-        try:
-            describe(path)
-        except (OSError, ValueError):
-            # The provenance step reports the problem on the GUI thread.
-            pass
 
 
 class DriftlessMap(QMainWindow, FORM_Main):
@@ -416,15 +407,8 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.atlas_view.simg.sig_mouse_clicked.connect(self.atlas_stacks_clicked)
         self.atlas_view.himg.sig_mouse_clicked.connect(self.atlas_stacks_clicked)
         # ruler points
-        self.atlas_view.cimg.image_dict["ruler_path"].sigPointsClicked.connect(
-            self.atlas_ruler_points_clicked
-        )
-        self.atlas_view.simg.image_dict["ruler_path"].sigPointsClicked.connect(
-            self.atlas_ruler_points_clicked
-        )
-        self.atlas_view.himg.image_dict["ruler_path"].sigPointsClicked.connect(
-            self.atlas_ruler_points_clicked
-        )
+        for item in self._atlas_view_items("ruler_path", include_slice=False):
+            item.sigPointsClicked.connect(self.atlas_ruler_points_clicked)
         # triangle points moving and clicked
         self.atlas_view.cimg.image_dict["tri_pnts"].mouseDragged.connect(
             self.atlas_window_tri_pnts_moving
@@ -445,15 +429,8 @@ class DriftlessMap(QMainWindow, FORM_Main):
             self.atlas_window_tri_pnts_clicked
         )
         # probe clicked
-        self.atlas_view.cimg.image_dict["atlas-probe"].sigClicked.connect(
-            self.atlas_probe_pnts_clicked
-        )
-        self.atlas_view.simg.image_dict["atlas-probe"].sigClicked.connect(
-            self.atlas_probe_pnts_clicked
-        )
-        self.atlas_view.himg.image_dict["atlas-probe"].sigClicked.connect(
-            self.atlas_probe_pnts_clicked
-        )
+        for item in self._atlas_view_items("atlas-probe", include_slice=False):
+            item.sigClicked.connect(self.atlas_probe_pnts_clicked)
         # contour clicked
         # self.atlas_view.cimg.image_dict['atlas-contour'].sigClicked.connect(self.atlas_contour_pnts_clicked)
         # self.atlas_view.simg.image_dict['atlas-contour'].sigClicked.connect(self.atlas_contour_pnts_clicked)
@@ -475,15 +452,8 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.image_view.img_stacks.image_dict["img-mask"].setLookupTable(
             self.magic_wand_lut
         )
-        self.atlas_view.cimg.image_dict["atlas-mask"].setLookupTable(
-            self.magic_wand_lut
-        )
-        self.atlas_view.himg.image_dict["atlas-mask"].setLookupTable(
-            self.magic_wand_lut
-        )
-        self.atlas_view.simg.image_dict["atlas-mask"].setLookupTable(
-            self.magic_wand_lut
-        )
+        for item in self._atlas_view_items("atlas-mask", include_slice=False):
+            item.setLookupTable(self.magic_wand_lut)
 
         # --------------------------------------------------------
         #                 connect all menu actions
@@ -923,12 +893,8 @@ class DriftlessMap(QMainWindow, FORM_Main):
         else:
             self.is_grids_on = True
             self.actionGrids_Off.setText("Grids: On")
-        self.atlas_view.cimg.image_dict["grid_lines"].setVisible(self.is_grids_on)
-        self.atlas_view.simg.image_dict["grid_lines"].setVisible(self.is_grids_on)
-        self.atlas_view.himg.image_dict["grid_lines"].setVisible(self.is_grids_on)
-        self.atlas_view.slice_stack.image_dict["grid_lines"].setVisible(
-            self.is_grids_on
-        )
+        for item in self._atlas_view_items("grid_lines"):
+            item.setVisible(self.is_grids_on)
         self.image_view.img_stacks.image_dict["grid_lines"].setVisible(self.is_grids_on)
 
     # display mode
@@ -1798,9 +1764,8 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.delete_all_atlas_layer()
 
         if self.current_atlas == "volume":
-            self.current_atlas_path = self.slice_atlas_path
+            self._activate_atlas("slice")
             self.actionSwitch_Atlas.setText("Switch Atlas: Slice")
-            self.current_atlas = "slice"
             self.atlascontrolpanel.setEnabled(False)
             self.treeviewpanel.setEnabled(False)
             self.atlas_view.set_slice_data(self.atlas_view.slice_image_data)
@@ -1810,9 +1775,8 @@ class DriftlessMap(QMainWindow, FORM_Main):
             self.object_ctrl.add_object_btn.setEnabled(False)
             self.object_ctrl.merge_probe_btn.setEnabled(False)
         else:
-            self.current_atlas_path = self.volume_atlas_path
+            self._activate_atlas("volume")
             self.actionSwitch_Atlas.setText("Switch Atlas: Volume")
-            self.current_atlas = "volume"
             self.atlascontrolpanel.setEnabled(True)
             self.treeviewpanel.setEnabled(True)
             self.atlas_view.working_cut_changed(self.atlas_display)
@@ -2364,28 +2328,14 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.image_view.img_stacks.image_dict["ruler_path"].setPen(
             pg.mkPen(color, width=width, style=Qt.PenStyle.DashLine)
         )
-        self.atlas_view.cimg.image_dict["ruler_path"].setPen(
-            pg.mkPen(color, width=width, style=Qt.PenStyle.DashLine)
-        )
-        self.atlas_view.himg.image_dict["ruler_path"].setPen(
-            pg.mkPen(color, width=width, style=Qt.PenStyle.DashLine)
-        )
-        self.atlas_view.simg.image_dict["ruler_path"].setPen(
-            pg.mkPen(color, width=width, style=Qt.PenStyle.DashLine)
-        )
-        self.atlas_view.slice_stack.image_dict["ruler_path"].setPen(
-            pg.mkPen(color, width=width, style=Qt.PenStyle.DashLine)
-        )
+        for item in self._atlas_view_items("ruler_path"):
+            item.setPen(pg.mkPen(color, width=width, style=Qt.PenStyle.DashLine))
         self.image_view.img_stacks.image_dict["ruler_path"].setSymbolPen(color=color)
-        self.atlas_view.cimg.image_dict["ruler_path"].setSymbolPen(color=color)
-        self.atlas_view.himg.image_dict["ruler_path"].setSymbolPen(color=color)
-        self.atlas_view.simg.image_dict["ruler_path"].setSymbolPen(color=color)
-        self.atlas_view.slice_stack.image_dict["ruler_path"].setSymbolPen(color=color)
+        for item in self._atlas_view_items("ruler_path"):
+            item.setSymbolPen(color=color)
         self.image_view.img_stacks.image_dict["ruler_path"].setSymbolBrush(color=color)
-        self.atlas_view.cimg.image_dict["ruler_path"].setSymbolBrush(color=color)
-        self.atlas_view.himg.image_dict["ruler_path"].setSymbolBrush(color=color)
-        self.atlas_view.simg.image_dict["ruler_path"].setSymbolBrush(color=color)
-        self.atlas_view.slice_stack.image_dict["ruler_path"].setSymbolBrush(color=color)
+        for item in self._atlas_view_items("ruler_path"):
+            item.setSymbolBrush(color=color)
 
     def change_ruler_size(self):
         width = read_int_field(self.tool_box.ruler_size_valt, minimum=1)
@@ -2396,23 +2346,11 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.image_view.img_stacks.image_dict["ruler_path"].setPen(
             pg.mkPen(color, width=width, style=Qt.PenStyle.DashLine)
         )
-        self.atlas_view.cimg.image_dict["ruler_path"].setPen(
-            pg.mkPen(color, width=width, style=Qt.PenStyle.DashLine)
-        )
-        self.atlas_view.himg.image_dict["ruler_path"].setPen(
-            pg.mkPen(color, width=width, style=Qt.PenStyle.DashLine)
-        )
-        self.atlas_view.simg.image_dict["ruler_path"].setPen(
-            pg.mkPen(color, width=width, style=Qt.PenStyle.DashLine)
-        )
-        self.atlas_view.slice_stack.image_dict["ruler_path"].setPen(
-            pg.mkPen(color, width=width, style=Qt.PenStyle.DashLine)
-        )
+        for item in self._atlas_view_items("ruler_path"):
+            item.setPen(pg.mkPen(color, width=width, style=Qt.PenStyle.DashLine))
         self.image_view.img_stacks.image_dict["ruler_path"].setSymbolSize(width)
-        self.atlas_view.cimg.image_dict["ruler_path"].setSymbolSize(width)
-        self.atlas_view.himg.image_dict["ruler_path"].setSymbolSize(width)
-        self.atlas_view.simg.image_dict["ruler_path"].setSymbolSize(width)
-        self.atlas_view.slice_stack.image_dict["ruler_path"].setSymbolSize(width)
+        for item in self._atlas_view_items("ruler_path"):
+            item.setSymbolSize(width)
 
     def inactive_atlas_ruler(self):
         self.atlas_view.working_atlas.image_dict["ruler_path"].clear()
@@ -2677,21 +2615,13 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.image_view.img_stacks.image_dict["img-probe"].setPen(
             color=self.probe_color
         )
-        self.atlas_view.cimg.image_dict["atlas-probe"].setPen(color=self.probe_color)
-        self.atlas_view.himg.image_dict["atlas-probe"].setPen(color=self.probe_color)
-        self.atlas_view.simg.image_dict["atlas-probe"].setPen(color=self.probe_color)
-        self.atlas_view.slice_stack.image_dict["atlas-probe"].setPen(
-            color=self.probe_color
-        )
+        for item in self._atlas_view_items("atlas-probe"):
+            item.setPen(color=self.probe_color)
         self.image_view.img_stacks.image_dict["img-probe"].setBrush(
             color=self.probe_color
         )
-        self.atlas_view.cimg.image_dict["atlas-probe"].setBrush(color=self.probe_color)
-        self.atlas_view.himg.image_dict["atlas-probe"].setBrush(color=self.probe_color)
-        self.atlas_view.simg.image_dict["atlas-probe"].setBrush(color=self.probe_color)
-        self.atlas_view.slice_stack.image_dict["atlas-probe"].setBrush(
-            color=self.probe_color
-        )
+        for item in self._atlas_view_items("atlas-probe"):
+            item.setBrush(color=self.probe_color)
 
         self.atlas_view.cimg.pre_trajectory_color_changed(self.probe_color, 2)
         self.atlas_view.simg.pre_trajectory_color_changed(self.probe_color, 2)
@@ -2733,18 +2663,8 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.image_view.img_stacks.image_dict["img-drawing"].setPen(
             pg.mkPen(color=self.pencil_color, width=self.pencil_size)
         )
-        self.atlas_view.cimg.image_dict["atlas-drawing"].setPen(
-            pg.mkPen(color=self.pencil_color, width=self.pencil_size)
-        )
-        self.atlas_view.simg.image_dict["atlas-drawing"].setPen(
-            pg.mkPen(color=self.pencil_color, width=self.pencil_size)
-        )
-        self.atlas_view.himg.image_dict["atlas-drawing"].setPen(
-            pg.mkPen(color=self.pencil_color, width=self.pencil_size)
-        )
-        self.atlas_view.slice_stack.image_dict["atlas-drawing"].setPen(
-            pg.mkPen(color=self.pencil_color, width=self.pencil_size)
-        )
+        for item in self._atlas_view_items("atlas-drawing"):
+            item.setPen(pg.mkPen(color=self.pencil_color, width=self.pencil_size))
         if self.working_img_data["img-drawing"] and self.tool_box.is_closed:
             self.image_view.img_stacks.image_dict["img-drawing"].setFillBrush(
                 color=self.pencil_color
@@ -2793,18 +2713,8 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.image_view.img_stacks.image_dict["img-drawing"].setPen(
             pg.mkPen(color=self.pencil_color, width=self.pencil_size)
         )
-        self.atlas_view.cimg.image_dict["atlas-drawing"].setPen(
-            pg.mkPen(color=self.pencil_color, width=self.pencil_size)
-        )
-        self.atlas_view.simg.image_dict["atlas-drawing"].setPen(
-            pg.mkPen(color=self.pencil_color, width=self.pencil_size)
-        )
-        self.atlas_view.himg.image_dict["atlas-drawing"].setPen(
-            pg.mkPen(color=self.pencil_color, width=self.pencil_size)
-        )
-        self.atlas_view.slice_stack.image_dict["atlas-drawing"].setPen(
-            pg.mkPen(color=self.pencil_color, width=self.pencil_size)
-        )
+        for item in self._atlas_view_items("atlas-drawing"):
+            item.setPen(pg.mkPen(color=self.pencil_color, width=self.pencil_size))
 
     def inactive_drawing(self):
         self.working_img_data["img-drawing"] = []
@@ -2841,12 +2751,10 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.image_view.img_stacks.image_dict["img-cells"].setBrush(
             color=self.cell_color
         )
-        self.atlas_view.cimg.image_dict["atlas-cells"].setPen(color=self.cell_color)
-        self.atlas_view.himg.image_dict["atlas-cells"].setPen(color=self.cell_color)
-        self.atlas_view.simg.image_dict["atlas-cells"].setPen(color=self.cell_color)
-        self.atlas_view.cimg.image_dict["atlas-cells"].setBrush(color=self.cell_color)
-        self.atlas_view.himg.image_dict["atlas-cells"].setBrush(color=self.cell_color)
-        self.atlas_view.simg.image_dict["atlas-cells"].setBrush(color=self.cell_color)
+        for item in self._atlas_view_items("atlas-cells", include_slice=False):
+            item.setPen(color=self.cell_color)
+        for item in self._atlas_view_items("atlas-cells", include_slice=False):
+            item.setBrush(color=self.cell_color)
 
     def cell_select_btn_clicked(self):
         if self.tool_box.cell_aim_btn.isChecked():
@@ -2965,23 +2873,11 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.image_view.img_stacks.image_dict["img-mask"].setLookupTable(
             self.magic_wand_lut
         )
-        self.atlas_view.cimg.image_dict["atlas-mask"].setLookupTable(
-            self.magic_wand_lut
-        )
-        self.atlas_view.himg.image_dict["atlas-mask"].setLookupTable(
-            self.magic_wand_lut
-        )
-        self.atlas_view.simg.image_dict["atlas-mask"].setLookupTable(
-            self.magic_wand_lut
-        )
-        self.atlas_view.slice_stack.image_dict["atlas-mask"].setLookupTable(
-            self.magic_wand_lut
-        )
+        for item in self._atlas_view_items("atlas-mask"):
+            item.setLookupTable(self.magic_wand_lut)
         self.image_view.img_stacks.image_dict["img-mask"].updateImage()
-        self.atlas_view.cimg.image_dict["atlas-mask"].updateImage()
-        self.atlas_view.himg.image_dict["atlas-mask"].updateImage()
-        self.atlas_view.simg.image_dict["atlas-mask"].updateImage()
-        self.atlas_view.slice_stack.image_dict["atlas-mask"].updateImage()
+        for item in self._atlas_view_items("atlas-mask"):
+            item.updateImage()
 
     def get_virus_img(self):
         if "img-mask" not in self.layer_ctrl.layer_link:
@@ -3596,24 +3492,10 @@ class DriftlessMap(QMainWindow, FORM_Main):
         if self.working_img_text:
             for i in range(len(self.working_img_text)):
                 self.working_img_text[i].setColor(self.triangle_color)
-        self.atlas_view.cimg.image_dict["tri_pnts"].scatter.setPen(
-            color=self.triangle_color
-        )
-        self.atlas_view.simg.image_dict["tri_pnts"].scatter.setPen(
-            color=self.triangle_color
-        )
-        self.atlas_view.himg.image_dict["tri_pnts"].scatter.setPen(
-            color=self.triangle_color
-        )
-        self.atlas_view.cimg.image_dict["tri_pnts"].scatter.setBrush(
-            color=self.triangle_color
-        )
-        self.atlas_view.simg.image_dict["tri_pnts"].scatter.setBrush(
-            color=self.triangle_color
-        )
-        self.atlas_view.himg.image_dict["tri_pnts"].scatter.setBrush(
-            color=self.triangle_color
-        )
+        for item in self._atlas_view_items("tri_pnts", include_slice=False):
+            item.scatter.setPen(color=self.triangle_color)
+        for item in self._atlas_view_items("tri_pnts", include_slice=False):
+            item.scatter.setBrush(color=self.triangle_color)
         if self.working_atlas_text:
             for i in range(len(self.working_atlas_text)):
                 self.working_atlas_text[i].setColor(self.triangle_color)
@@ -5851,6 +5733,13 @@ class DriftlessMap(QMainWindow, FORM_Main):
             return
         self.object_ctrl.compare_obj_called()
 
+    def _atlas_view_items(self, key, include_slice=True):
+        """Return the ``key`` display item of every atlas view that has one."""
+        stacks = [self.atlas_view.cimg, self.atlas_view.simg, self.atlas_view.himg]
+        if include_slice:
+            stacks.append(self.atlas_view.slice_stack)
+        return [stack.image_dict[key] for stack in stacks if key in stack.image_dict]
+
     def _atlas_raster(self, da_link):
         """Return the editable pixels behind a raster atlas layer."""
         if da_link == "atlas-slice":
@@ -6586,9 +6475,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 )
                 return False
 
-        self.slice_atlas_path = atlas_path
-        self.current_atlas_path = atlas_path
-        self._loaded_atlas_signatures[os.path.abspath(atlas_path)] = atlas_signature
+        self._commit_atlas("slice", atlas_path, atlas_signature)
         self.atlas_view.clear_slice_info()
         if slice_data is None:
             self.atlas_view.set_slice_data(img_data)
@@ -6600,7 +6487,6 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.show_only_slice_window()
 
         self.actionSwitch_Atlas.setText("Switch Atlas: Slice")
-        self.current_atlas = "slice"
         self.atlascontrolpanel.setEnabled(False)
         self.treeviewpanel.setEnabled(False)
         self.actionBregma_Picker.setEnabled(True)
@@ -6685,6 +6571,33 @@ class DriftlessMap(QMainWindow, FORM_Main):
             self.normal_color,
         )
 
+    def _commit_atlas(self, kind, path, signature):
+        """Record a loaded atlas as the active one.
+
+        This is the single place that pairs an atlas with its kind, path and
+        load-time fingerprint, so saves always describe the atlas on screen.
+        ``signature`` is ``None`` when the pixels did not come from ``path``
+        (for example a slice restored from a project), which leaves the file
+        unverified.
+        """
+        if kind == "volume":
+            self.volume_atlas_path = path
+        else:
+            self.slice_atlas_path = path
+        key = os.path.abspath(path)
+        if signature is None:
+            self._loaded_atlas_signatures.pop(key, None)
+        else:
+            self._loaded_atlas_signatures[key] = signature
+        self._activate_atlas(kind)
+
+    def _activate_atlas(self, kind):
+        """Show the already-loaded ``kind`` atlas and make it current."""
+        self.current_atlas = kind
+        self.current_atlas_path = (
+            self.volume_atlas_path if kind == "volume" else self.slice_atlas_path
+        )
+
     def _set_volume_atlas_axis_info(self, atlas_folder):
         self.volume_atlas_axis_info = None
         if not atlas_folder:
@@ -6749,16 +6662,11 @@ class DriftlessMap(QMainWindow, FORM_Main):
             return False
 
         # The atlas is complete; commit it to the session.
-        self.volume_atlas_path = atlas_folder
-        self.current_atlas_path = atlas_folder
-        self._loaded_atlas_signatures[os.path.abspath(atlas_folder)] = (
-            atlas_signature
-        )
+        self._commit_atlas("volume", atlas_folder, atlas_signature)
         self._set_volume_atlas_axis_info(atlas_folder)
         self.atlascontrolpanel.setEnabled(True)
         self.treeviewpanel.setEnabled(True)
         self.actionSwitch_Atlas.setText("Switch Atlas: Volume")
-        self.current_atlas = "volume"
         self.actionBregma_Picker.setEnabled(False)
         self.actionCreate_Slice_Layer.setEnabled(False)
 
@@ -7002,22 +6910,6 @@ class DriftlessMap(QMainWindow, FORM_Main):
         absolute = np.floor(points + np.asarray(self.atlas_view.origin_3d))
         return coordinates_in_bounds(absolute, herbs_shape)
 
-    @staticmethod
-    def _object_file_names(names):
-        """Return unique, filesystem-safe file stems for object names."""
-        stems = []
-        used = set()
-        for name in names:
-            stem = re.sub(r'[\\/:*?"<>|\x00-\x1f]+', "_", str(name)).strip(" .")
-            stem = stem or "object"
-            candidate = stem
-            counter = 2
-            while candidate.lower() in used:
-                candidate = "{} ({})".format(stem, counter)
-                counter += 1
-            used.add(candidate.lower())
-            stems.append(candidate)
-        return stems
 
     # --------------------------------------------------------------------
     #                         Load object
@@ -7805,7 +7697,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
             run_in_background(
                 self,
                 "Fingerprinting project inputs...",
-                _prefingerprint_inputs,
+                prefingerprint_inputs,
                 self.current_atlas_path if self.current_atlas == "volume" else None,
                 self.current_img_path
                 if self._loaded_histology_signature is not None
@@ -8135,55 +8027,13 @@ class DriftlessMap(QMainWindow, FORM_Main):
     # -------------------------------------------------------------
     #                    load project
     # -------------------------------------------------------------
-    @staticmethod
-    def _default_working_img_data():
-        return {
-            "img-overlay": None,
-            "img-mask": None,
-            "img-probe": [],
-            "img-cells": [],
-            "img-contour": [],
-            "img-virus": None,
-            "img-drawing": [],
-            "img-blob": [],
-            "cell_count": [0 for i in range(5)],
-            "cell_size": [],
-            "cell_symbol": [],
-            "cell_layer_index": [],
-            "lasso_path": [],
-            "ruler_path": [],
-        }
 
-    @staticmethod
-    def _default_working_atlas_data():
-        return {
-            "atlas-overlay": None,
-            "atlas-mask": None,
-            "atlas-probe": [],
-            "atlas-cells": [],
-            "atlas-contour": [],
-            "atlas-virus": [],
-            "atlas-drawing": [],
-            "cell_count": [0 for i in range(5)],
-            "cell_size": [],
-            "cell_symbol": [],
-            "cell_layer_index": [],
-            "lasso_path": [],
-            "ruler_path": [],
-        }
 
-    @staticmethod
-    def _with_defaults(defaults, saved):
-        """Overlay saved working data on defaults, keeping only known keys."""
-        merged = dict(defaults)
-        if isinstance(saved, dict):
-            for key in defaults:
-                if key in saved:
-                    merged[key] = saved[key]
-        cell_count = merged.get("cell_count")
-        if not isinstance(cell_count, (list, tuple)) or len(cell_count) != 5:
-            merged["cell_count"] = [0 for _ in range(5)]
-        return merged
+    # Project-assembly helpers live in ``project_io``; kept here as aliases.
+    _default_working_img_data = staticmethod(default_working_img_data)
+    _default_working_atlas_data = staticmethod(default_working_atlas_data)
+    _with_defaults = staticmethod(with_defaults)
+    _object_file_names = staticmethod(object_file_names)
 
     def load_project(self, p_dict):
         self.current_atlas_path = p_dict["atlas_path"]
@@ -8256,10 +8106,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 self.atlas_view.set_slice_data_and_info(atlas_ctrl_data)
                 # Slice pixels come from the project, not from the file at
                 # ``atlas_path``, so that file is not treated as verified.
-                self.slice_atlas_path = self.current_atlas_path
-                self._loaded_atlas_signatures.pop(
-                    os.path.abspath(self.current_atlas_path), None
-                )
+                self._commit_atlas("slice", self.current_atlas_path, None)
                 if self.atlas_view.processing_slice is not None:
                     self.atlas_view.slice_stack.set_data(
                         self.atlas_view.processing_slice
