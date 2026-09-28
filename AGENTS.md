@@ -43,6 +43,11 @@ or important workflows change.
   `DriftlessMap.apply_section_suggestion` sets the view, page, tilt and
   histology orientation. Tilted matches use `tilted_slice`, which must stay
   identical to `AtlasView.rotate_*_current_slice`.
+- `driftlessmap/auto_registration.py`: SimpleITK registration (moment-based
+  affine on silhouettes, then a B-spline on intensities with Mattes MI) that
+  proposes atlas-to-histology landmark pairs in DriftlessMap pixel-edge
+  coordinates. The B-spline is kept only if it improves the intensity match
+  without degrading the outline.
 - `driftlessmap/atlas_loader.py`, `atlas_view.py`, `atlas_transform.py`:
   processed atlas loading, display, coordinate transforms.
 - `driftlessmap/triangulation.py`: deterministic piecewise-affine registration,
