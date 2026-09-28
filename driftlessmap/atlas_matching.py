@@ -280,9 +280,7 @@ def rank_depths(histology, label_volume, intensity_volume, plane, orientation,
     boundaries. The three measures are combined as z-scores across the
     compared slices. Returns :class:`DepthMatch` objects, best first.
     """
-    section_mask = orientation.apply(tissue_mask(histology))
-    section_gray = orientation.apply(histology_gray(histology)).astype(np.float32)
-    h_mask, h_gray = normalise(section_mask, section_gray)
+    h_mask, h_gray = _prepared_section(histology, orientation)
     length = plane_length(label_volume.shape, plane)
     if indexes is None:
         step = max(1, int(np.ceil(length / MAX_SLICES_PER_PLANE)))
@@ -290,38 +288,56 @@ def rank_depths(histology, label_volume, intensity_volume, plane, orientation,
     indexes = list(indexes)
     rows = []
     for count, index in enumerate(indexes, start=1):
-        labels = atlas_slice(label_volume, plane, index)
-        atlas_mask = labels > 0
-        if atlas_mask.sum() < 50:
-            continue
-        a_mask, a_image, a_labels = normalise(
-            atlas_mask, atlas_slice(intensity_volume, plane, index).astype(np.float32),
-            labels=labels,
+        measures = _measure(
+            h_mask, h_gray, atlas_slice(label_volume, plane, index),
+            atlas_slice(intensity_volume, plane, index),
         )
-        warp = align_silhouettes(h_mask, a_mask)
-        flags = cv2.INTER_LINEAR + cv2.WARP_INVERSE_MAP
-        size = (CANVAS, CANVAS)
-        warped_gray = cv2.warpAffine(h_gray, warp, size, flags=flags)
-        warped_mask = cv2.warpAffine(h_mask.astype(np.float32), warp, size, flags=flags) > 0.5
-        both = warped_mask & a_mask
-        section_edges, inner = _edges(warped_gray, both)
-        template_edges, _ = _edges(a_image, both)
-        rows.append((
-            index,
-            _iou(warped_mask, a_mask),
-            _ncc(section_edges, template_edges, inner),
-            _ncc(section_edges, _label_boundaries(a_labels), inner),
-        ))
+        if measures is not None:
+            rows.append((index,) + measures)
         if progress is not None:
             progress(count / len(indexes))
+    scores = _combined_scores(rows)
+    matches = [DepthMatch(row[0], row[1], row[2], row[3], score)
+               for row, score in zip(rows, scores)]
+    matches.sort(key=lambda match: match.score, reverse=True)
+    return matches
+
+
+def _prepared_section(histology, orientation):
+    section_mask = orientation.apply(tissue_mask(histology))
+    section_gray = orientation.apply(histology_gray(histology)).astype(np.float32)
+    return normalise(section_mask, section_gray)
+
+
+def _measure(h_mask, h_gray, labels, intensity):
+    """Silhouette overlap and internal-edge agreement for one atlas slice."""
+    atlas_mask = labels > 0
+    if atlas_mask.sum() < 50:
+        return None
+    a_mask, a_image, a_labels = normalise(
+        atlas_mask, np.asarray(intensity, dtype=np.float32), labels=labels
+    )
+    warp = align_silhouettes(h_mask, a_mask)
+    flags = cv2.INTER_LINEAR + cv2.WARP_INVERSE_MAP
+    size = (CANVAS, CANVAS)
+    warped_gray = cv2.warpAffine(h_gray, warp, size, flags=flags)
+    warped_mask = cv2.warpAffine(h_mask.astype(np.float32), warp, size, flags=flags) > 0.5
+    both = warped_mask & a_mask
+    section_edges, inner = _edges(warped_gray, both)
+    template_edges, _ = _edges(a_image, both)
+    return (
+        _iou(warped_mask, a_mask),
+        _ncc(section_edges, template_edges, inner),
+        _ncc(section_edges, _label_boundaries(a_labels), inner),
+    )
+
+
+def _combined_scores(rows):
     if not rows:
         return []
     columns = list(zip(*rows))
     combined = _zscores(columns[1]) + _zscores(columns[2]) + _zscores(columns[3])
-    matches = [DepthMatch(index, silhouette, template, label, float(score))
-               for (index, silhouette, template, label), score in zip(rows, combined)]
-    matches.sort(key=lambda match: match.score, reverse=True)
-    return matches
+    return [float(value) for value in combined]
 
 
 def hemisphere_indexes(plane, length, midline):
@@ -334,3 +350,97 @@ def hemisphere_indexes(plane, length, midline):
 def mirrored_index(index, midline):
     """The sagittal slice at the same distance on the other side of midline."""
     return int(round(2 * midline - index))
+
+
+def _rotation_x(theta):
+    c, s = np.cos(theta), np.sin(theta)
+    return np.array([[1, 0, 0], [0, c, -s], [0, s, c]])
+
+
+def _rotation_y(theta):
+    c, s = np.cos(theta), np.sin(theta)
+    return np.array([[c, 0, s], [0, 1, 0], [-s, 0, c]])
+
+
+def _rotation_z(theta):
+    c, s = np.cos(theta), np.sin(theta)
+    return np.array([[c, -s, 0], [s, c, 0], [0, 0, 1]])
+
+
+def tilted_slice(volume, plane, index, tilt_degrees, pivot, order=1):
+    """Sample the tilted slice ``AtlasView`` shows for these rotation controls.
+
+    ``tilt_degrees`` is the (horizontal, vertical) pair of the view's rotation
+    spinboxes; ``pivot`` is the current (coronal, sagittal, horizontal)
+    indices, about which the view rotates. Mirrors
+    ``AtlasView.rotate_*_current_slice``.
+    """
+    from scipy.ndimage import map_coordinates
+
+    h_rad, v_rad = np.deg2rad(tilt_degrees)
+    size0, size1, size2 = volume.shape
+    c_id, s_id, h_index = pivot
+    o_rot = np.array([size0 - 1 - h_index, s_id, c_id], dtype=float)
+    if plane == "coronal":
+        rotation = _rotation_x(h_rad) @ _rotation_y(v_rad)
+        o_val = np.array([0, 0, index], dtype=float)
+        axes, shape = ((1, 0, 0), (0, 1, 0)), (size0, size1)
+    elif plane == "sagittal":
+        rotation = _rotation_x(h_rad) @ _rotation_z(v_rad)
+        o_val = np.array([0, index, 0], dtype=float)
+        axes, shape = ((1, 0, 0), (0, 0, 1)), (size0, size2)
+    elif plane == "horizontal":
+        rotation = _rotation_z(v_rad) @ _rotation_y(h_rad)
+        o_val = np.array([size0 - 1 - index, 0, 0], dtype=float)
+        axes, shape = ((0, 1, 0), (0, 0, 1)), (size1, size2)
+    else:
+        raise ValueError("Unknown atlas plane {!r}.".format(plane))
+    first = rotation @ np.array(axes[0], dtype=float)
+    second = rotation @ np.array(axes[1], dtype=float)
+    origin = o_rot + rotation @ (o_val - o_rot)
+    rows, columns = np.meshgrid(np.arange(shape[0]), np.arange(shape[1]), indexing="ij")
+    coordinates = (origin[:, None, None] + first[:, None, None] * rows
+                   + second[:, None, None] * columns)
+    return map_coordinates(volume, coordinates, order=order, mode="constant", cval=0)
+
+
+@dataclass(frozen=True)
+class TiltMatch:
+    """A depth and cutting-angle candidate, in rotation-control degrees."""
+
+    index: int
+    tilt_degrees: tuple
+    silhouette: float
+    template_edges: float
+    label_edges: float
+    score: float
+
+
+def refine_tilt(histology, label_volume, intensity_volume, plane, orientation,
+                indexes, pivot, angles=(-6, -3, 0, 3, 6), progress=None):
+    """Score each depth in ``indexes`` at every (h, v) tilt in ``angles``.
+
+    Returns :class:`TiltMatch` objects, best first. Scores are comparable only
+    within one call.
+    """
+    h_mask, h_gray = _prepared_section(histology, orientation)
+    grid = [(index, (h, v)) for index in indexes for h in angles for v in angles]
+    rows, keys = [], []
+    for count, (index, tilt) in enumerate(grid, start=1):
+        if tilt == (0, 0):
+            labels = atlas_slice(label_volume, plane, index)
+            intensity = atlas_slice(intensity_volume, plane, index)
+        else:
+            labels = tilted_slice(label_volume, plane, index, tilt, pivot, order=0)
+            intensity = tilted_slice(intensity_volume, plane, index, tilt, pivot, order=1)
+        measures = _measure(h_mask, h_gray, labels, intensity)
+        if measures is not None:
+            rows.append((index,) + measures)
+            keys.append(tilt)
+        if progress is not None:
+            progress(count / len(grid))
+    scores = _combined_scores(rows)
+    matches = [TiltMatch(row[0], tuple(float(a) for a in tilt), row[1], row[2], row[3], score)
+               for row, tilt, score in zip(rows, keys, scores)]
+    matches.sort(key=lambda match: match.score, reverse=True)
+    return matches
