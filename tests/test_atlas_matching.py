@@ -14,6 +14,8 @@ from driftlessmap.atlas_matching import (
     rank_depths,
     refine_tilt,
     tilted_slice,
+    mirror_hemisphere,
+    mirrored_tilt,
     same_up_to_hemisphere,
     search_planes,
     tissue_mask,
@@ -151,10 +153,12 @@ class TiltTests(unittest.TestCase):
 
     def test_tilted_slices_match_the_atlas_view(self):
         _, intensity = brain_with_depth_cues()
-        pivot = (40, 25, 20)
         for plane, index in (("coronal", 38), ("sagittal", 30), ("horizontal", 18)):
             with self.subTest(plane=plane):
-                ours = tilted_slice(intensity, plane, index, (5.0, -4.0), pivot)
+                # The view rotates about its own page, so that pivot is ``index``.
+                pivot = {"coronal": (index, 25, 20), "sagittal": (40, index, 20),
+                         "horizontal": (40, 25, index)}[plane]
+                ours = tilted_slice(intensity, plane, index, (5.0, -4.0), (40, 25, 20))
                 expected = self.reference_slice(intensity, plane, index, (5.0, -4.0), pivot)
                 np.testing.assert_allclose(ours, expected, atol=1e-3)
 
@@ -169,6 +173,41 @@ class TiltTests(unittest.TestCase):
         by_key = {(m.index, m.tilt_degrees): m.score for m in matches}
         self.assertGreater(by_key[(34, (6.0, 0.0))], by_key[(34, (0.0, 0.0))])
         self.assertEqual(matches[0].tilt_degrees[0], 6.0)
+
+
+class HemisphereTests(unittest.TestCase):
+    def test_mirroring_differs_only_by_the_ml_axis_and_is_an_involution(self):
+        for plane in ("coronal", "horizontal"):
+            for orientation in ORIENTATIONS:
+                mirrored = mirror_hemisphere(plane, orientation)
+                self.assertNotEqual(mirrored, orientation)
+                self.assertTrue(same_up_to_hemisphere(plane, orientation, mirrored))
+                self.assertEqual(mirror_hemisphere(plane, mirrored), orientation)
+        self.assertEqual(mirror_hemisphere("sagittal", ORIENTATIONS[3]), ORIENTATIONS[3])
+
+
+class MirroredTiltTests(unittest.TestCase):
+    def test_mirrored_tilt_reproduces_the_mirror_image_cut(self):
+        rng = np.random.default_rng(4)
+        volume = rng.random((24, 31, 36))   # odd ML size: exact midline 15
+        mirrored_volume = volume[:, ::-1, :]
+        midline = 15
+        pivot = (18, midline, 12)
+        tilt = (5.0, -4.0)
+        cases = {
+            "coronal": (20, 1),       # image axis 1 is ML
+            "horizontal": (10, 0),    # image axis 0 is ML
+        }
+        for plane, (index, ml_axis) in cases.items():
+            with self.subTest(plane=plane):
+                original = tilted_slice(volume, plane, index, tilt, pivot)
+                other = tilted_slice(mirrored_volume, plane, index,
+                                     mirrored_tilt(plane, tilt), pivot)
+                np.testing.assert_allclose(np.flip(original, ml_axis), other, atol=1e-6)
+        original = tilted_slice(volume, "sagittal", 19, tilt, pivot)
+        other = tilted_slice(mirrored_volume, "sagittal", mirrored_index(19, midline),
+                             mirrored_tilt("sagittal", tilt), pivot)
+        np.testing.assert_allclose(original, other, atol=1e-6)
 
 
 SAMPLE = Path(os.environ.get("DRIFTLESSMAP_SAMPLE_SECTION", ""))

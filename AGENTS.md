@@ -39,6 +39,10 @@ or important workflows change.
   orientation and slice that match a histology section (silhouette search on
   slices exactly as `AtlasView` displays them). Coronal/horizontal matches are
   ambiguous up to a left-right mirror; the user chooses the hemisphere.
+  `section_suggestion_dialog.py` shows ranked candidates for confirmation and
+  `DriftlessMap.apply_section_suggestion` sets the view, page, tilt and
+  histology orientation. Tilted matches use `tilted_slice`, which must stay
+  identical to `AtlasView.rotate_*_current_slice`.
 - `driftlessmap/atlas_loader.py`, `atlas_view.py`, `atlas_transform.py`:
   processed atlas loading, display, coordinate transforms.
 - `driftlessmap/triangulation.py`: deterministic piecewise-affine registration,

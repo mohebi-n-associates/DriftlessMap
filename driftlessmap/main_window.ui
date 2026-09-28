@@ -328,6 +328,8 @@ border-color: rgb(75, 78, 84);</string>
     <addaction name="separator"/>
     <addaction name="actionAtlas_Processor"/>
     <addaction name="separator"/>
+    <addaction name="actionSuggest_Atlas_Section"/>
+    <addaction name="separator"/>
     <addaction name="actionSave_Triangulation_Points"/>
     <addaction name="actionLoad_Triangulation_Points"/>
     <addaction name="separator"/>
@@ -713,6 +715,14 @@ selection-background-color: rgb(50, 50, 50);</string>
    </property>
    <property name="toolTip">
     <string>Crop off the area not slected</string>
+   </property>
+  </action>
+  <action name="actionSuggest_Atlas_Section">
+   <property name="text">
+    <string>Suggest Atlas Section...</string>
+   </property>
+   <property name="toolTip">
+    <string>Find the atlas plane, slice and tilt that best match the histology section</string>
    </property>
   </action>
   <action name="actionSwitch_Atlas">
