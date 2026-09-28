@@ -126,9 +126,13 @@ def atlas_slice(volume, plane, index):
     raise ValueError("Unknown atlas plane {!r}.".format(plane))
 
 
-def normalise(mask, *images, canvas=CANVAS, fit=FIT):
+def normalise(mask, *images, canvas=CANVAS, fit=FIT, labels=None):
     """Crop to the mask's bounding box, scale its longest side to ``fit`` and
-    centre on a ``canvas`` x ``canvas`` grid. Returns the mask then images."""
+    centre on a ``canvas`` x ``canvas`` grid.
+
+    Returns the mask, then each image, then ``labels`` (resampled with
+    nearest-neighbour interpolation) when given.
+    """
     ys, xs = np.nonzero(mask)
     if not len(ys):
         raise ValueError("The mask is empty.")
@@ -137,10 +141,11 @@ def normalise(mask, *images, canvas=CANVAS, fit=FIT):
     width = max(1, int(round((x1 - x0) * scale)))
     height = max(1, int(round((y1 - y0) * scale)))
     oy, ox = (canvas - height) // 2, (canvas - width) // 2
+    arrays = [(mask, cv2.INTER_NEAREST)] + [(image, cv2.INTER_AREA) for image in images]
+    if labels is not None:
+        arrays.append((labels, cv2.INTER_NEAREST))
     outputs = []
-    for array, interpolation in [(mask, cv2.INTER_NEAREST)] + [
-        (image, cv2.INTER_AREA) for image in images
-    ]:
+    for array, interpolation in arrays:
         crop = cv2.resize(np.asarray(array[y0:y1, x0:x1], dtype=np.float32),
                           (width, height), interpolation=interpolation)
         placed = np.zeros((canvas, canvas), np.float32)
@@ -193,3 +198,139 @@ def best_by_plane(candidates):
     for candidate in candidates:
         best.setdefault(candidate.plane, candidate)
     return sorted(best.values(), key=lambda c: c.silhouette, reverse=True)
+
+
+@dataclass(frozen=True)
+class DepthMatch:
+    """How well one slice of the chosen plane matches the section."""
+
+    index: int
+    silhouette: float
+    template_edges: float
+    label_edges: float
+    score: float
+
+
+def histology_gray(image):
+    """Luminance with local contrast equalised, as 8-bit."""
+    image = np.asarray(image)
+    if image.ndim == 3:
+        gray = image[..., :3].astype(np.float32).mean(axis=2)
+    else:
+        gray = image.astype(np.float32)
+    gray = cv2.normalize(gray, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+    return cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8)).apply(gray)
+
+
+def _edges(image, mask):
+    blurred = cv2.GaussianBlur(image.astype(np.float32), (0, 0), 1.5)
+    magnitude = np.hypot(cv2.Sobel(blurred, cv2.CV_32F, 1, 0),
+                         cv2.Sobel(blurred, cv2.CV_32F, 0, 1))
+    inner = cv2.erode(mask.astype(np.uint8), np.ones((9, 9), np.uint8)) > 0
+    magnitude[~inner] = 0  # compare internal anatomy, not the outline
+    return magnitude, inner
+
+
+def _label_boundaries(labels):
+    labels = np.round(labels).astype(np.int64)
+    edge = np.zeros(labels.shape, np.float32)
+    edge[:-1] += labels[:-1] != labels[1:]
+    edge[:, :-1] += labels[:, :-1] != labels[:, 1:]
+    return cv2.GaussianBlur(edge, (0, 0), 1.5)
+
+
+def _ncc(a, b, mask):
+    a, b = a[mask].astype(np.float64), b[mask].astype(np.float64)
+    if a.size < 10:
+        return 0.0
+    a -= a.mean()
+    b -= b.mean()
+    denominator = np.sqrt((a * a).sum() * (b * b).sum())
+    return float((a * b).sum() / denominator) if denominator > 0 else 0.0
+
+
+def align_silhouettes(moving, fixed):
+    """Affine warp (for ``cv2.warpAffine`` with ``WARP_INVERSE_MAP``) that
+    maps the ``moving`` silhouette onto the ``fixed`` one."""
+    warp = np.eye(2, 3, dtype=np.float32)
+    criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 100, 1e-5)
+    try:
+        cv2.findTransformECC(
+            cv2.GaussianBlur(fixed.astype(np.float32), (0, 0), 3),
+            cv2.GaussianBlur(moving.astype(np.float32), (0, 0), 3),
+            warp, cv2.MOTION_AFFINE, criteria, None, 5,
+        )
+    except cv2.error:
+        pass  # keep the bounding-box alignment
+    return warp
+
+
+def _zscores(values):
+    values = np.asarray(values, dtype=float)
+    spread = values.std()
+    return (values - values.mean()) / spread if spread > 0 else np.zeros_like(values)
+
+
+def rank_depths(histology, label_volume, intensity_volume, plane, orientation,
+                indexes=None, progress=None):
+    """Rank slices of ``plane`` by silhouette and internal anatomy.
+
+    After an affine fit of the silhouettes, the section's internal edges are
+    correlated with the atlas template's edges and with the atlas region
+    boundaries. The three measures are combined as z-scores across the
+    compared slices. Returns :class:`DepthMatch` objects, best first.
+    """
+    section_mask = orientation.apply(tissue_mask(histology))
+    section_gray = orientation.apply(histology_gray(histology)).astype(np.float32)
+    h_mask, h_gray = normalise(section_mask, section_gray)
+    length = plane_length(label_volume.shape, plane)
+    if indexes is None:
+        step = max(1, int(np.ceil(length / MAX_SLICES_PER_PLANE)))
+        indexes = range(0, length, step)
+    indexes = list(indexes)
+    rows = []
+    for count, index in enumerate(indexes, start=1):
+        labels = atlas_slice(label_volume, plane, index)
+        atlas_mask = labels > 0
+        if atlas_mask.sum() < 50:
+            continue
+        a_mask, a_image, a_labels = normalise(
+            atlas_mask, atlas_slice(intensity_volume, plane, index).astype(np.float32),
+            labels=labels,
+        )
+        warp = align_silhouettes(h_mask, a_mask)
+        flags = cv2.INTER_LINEAR + cv2.WARP_INVERSE_MAP
+        size = (CANVAS, CANVAS)
+        warped_gray = cv2.warpAffine(h_gray, warp, size, flags=flags)
+        warped_mask = cv2.warpAffine(h_mask.astype(np.float32), warp, size, flags=flags) > 0.5
+        both = warped_mask & a_mask
+        section_edges, inner = _edges(warped_gray, both)
+        template_edges, _ = _edges(a_image, both)
+        rows.append((
+            index,
+            _iou(warped_mask, a_mask),
+            _ncc(section_edges, template_edges, inner),
+            _ncc(section_edges, _label_boundaries(a_labels), inner),
+        ))
+        if progress is not None:
+            progress(count / len(indexes))
+    if not rows:
+        return []
+    columns = list(zip(*rows))
+    combined = _zscores(columns[1]) + _zscores(columns[2]) + _zscores(columns[3])
+    matches = [DepthMatch(index, silhouette, template, label, float(score))
+               for (index, silhouette, template, label), score in zip(rows, combined)]
+    matches.sort(key=lambda match: match.score, reverse=True)
+    return matches
+
+
+def hemisphere_indexes(plane, length, midline):
+    """Slices of one hemisphere for sagittal search (the other mirrors it)."""
+    if plane != "sagittal" or midline is None:
+        return range(length)
+    return range(int(midline), length)
+
+
+def mirrored_index(index, midline):
+    """The sagittal slice at the same distance on the other side of midline."""
+    return int(round(2 * midline - index))
