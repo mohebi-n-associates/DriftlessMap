@@ -3,6 +3,37 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.4.45
+
+Release date: 27 September 2026
+
+This release changes how DriftlessMap itself is tested, built and published.
+
+- **One CI workflow that gates releases.** The two workflows that ran the same
+  Python 3.10–3.14 matrix on every push are merged into one. It skips
+  documentation-only changes and cancels superseded pull-request runs. PyPI
+  publishing and the desktop builds now run the full test suite first and
+  build only if it passes.
+- **Supply-chain hardening.**
+  - Every GitHub Action is pinned to a commit SHA, and Dependabot proposes
+    updates for actions and Python dependencies.
+  - The desktop-build jobs can only read the repository. A separate job that
+    runs no build code attaches the installers to the release.
+- **Reproducible bundles.** Desktop bundles install exact dependency versions
+  from `packaging/constraints-desktop.txt`.
+- **Build failures stop the build.** The Windows build script now stops if
+  `pip` or PyInstaller fails, instead of packaging whatever was left.
+- **Apple Silicon naming.** The macOS DMG is now named `...-macOS-arm64.dmg`,
+  because it is built for Apple Silicon. Intel Macs should use the Conda/pip
+  installation.
+- **Optional code signing.** Authenticode signing on Windows, and Developer ID
+  signing plus notarization on macOS, run automatically once the maintainers
+  add the signing secrets. Until then, builds remain unsigned as before.
+
+The workflow changes take effect on the next push to GitHub.
+
+---
+
 ## DriftlessMap 1.4.44
 
 Release date: 27 September 2026

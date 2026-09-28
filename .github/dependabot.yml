@@ -1,0 +1,13 @@
+version: 2
+updates:
+  # Proposes updates for the SHA-pinned GitHub Actions.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+  # Proposes updates to Python dependency ranges.
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
