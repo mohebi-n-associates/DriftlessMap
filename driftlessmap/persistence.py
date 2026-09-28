@@ -549,6 +549,33 @@ def _fsync_directory(path):
         os.close(descriptor)
 
 
+def write_cache_pickle(file_path, value):
+    """Atomically write a processed-atlas cache file.
+
+    The pickle is written to a temporary file in the same folder, flushed,
+    and then renamed over the destination, so an interrupted run never
+    leaves a truncated cache behind.
+    """
+    destination = Path(file_path)
+    with tempfile.NamedTemporaryFile(
+        dir=str(destination.parent),
+        prefix=".driftlessmap-cache-",
+        suffix=".tmp",
+        delete=False,
+    ) as temporary:
+        temporary_path = Path(temporary.name)
+    try:
+        with open(temporary_path, "wb") as stream:
+            pickle.dump(value, stream, protocol=pickle.HIGHEST_PROTOCOL)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.chmod(str(temporary_path), _target_mode(destination))
+        os.replace(str(temporary_path), str(destination))
+    except BaseException:
+        temporary_path.unlink(missing_ok=True)
+        raise
+
+
 def save_driftlessmap_file(file_path, data, kind):
     """Atomically save data in the versioned DriftlessMap archive format."""
     destination = Path(file_path)

@@ -6,6 +6,7 @@ import nrrd
 import csv
 import nibabel as nib
 import numpy as np
+from .persistence import write_cache_pickle
 import pandas as pd
 import cv2
 from PyQt6.QtGui import *
@@ -15,7 +16,13 @@ import pyqtgraph.opengl as gl
 
 from .uuuuuu import read_qss_file, make_contour_img, read_excel_file, hex2rgb
 from .obj_items import load_mesh_file, render_volume, render_small_volume
-from .atlas_loader import process_atlas_raw_data, AtlasLoader, check_data_path_and_load
+from .atlas_loader import (
+    process_atlas_raw_data,
+    AtlasLoader,
+    check_data_path_and_load,
+    begin_atlas_processing,
+    finish_atlas_processing,
+)
 from .atlas_transform import (
     compact_boundary_volume,
     compact_label_volume,
@@ -152,8 +159,10 @@ class CustomerAtlasWorker(QObject):
             "level_indicator": levels,
         }
 
-        with open(os.path.join(self.saving_folder, "atlas_labels.pkl"), "wb") as handle:
-            pickle.dump(label_info, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        # From the first cache write until success, mark the folder as
+        # incomplete so a stopped run is never loaded as a whole atlas.
+        begin_atlas_processing(self.saving_folder)
+        write_cache_pickle(os.path.join(self.saving_folder, "atlas_labels.pkl"), label_info)
         self.progress.emit(9)
 
         # laod atlas
@@ -230,9 +239,7 @@ class CustomerAtlasWorker(QObject):
 
         segment = {"data": segmentation_data, "unique_label": unique_label}
 
-        outfile = open(os.path.join(self.saving_folder, "segment_pre_made.pkl"), "wb")
-        pickle.dump(segment, outfile)
-        outfile.close()
+        write_cache_pickle(os.path.join(self.saving_folder, "segment_pre_made.pkl"), segment)
         self.progress.emit(42)
 
         atlas_info = [
@@ -256,9 +263,7 @@ class CustomerAtlasWorker(QObject):
         self.progress.emit(45)
         atlas = {"data": atlas_data, "info": atlas_info}
 
-        outfile = open(os.path.join(self.saving_folder, "atlas_pre_made.pkl"), "wb")
-        pickle.dump(atlas, outfile)
-        outfile.close()
+        write_cache_pickle(os.path.join(self.saving_folder, "atlas_pre_made.pkl"), atlas)
         self.progress.emit(50)
 
         mesh_data = render_volume(
@@ -297,11 +302,7 @@ class CustomerAtlasWorker(QObject):
                 small_mesh_list[str(da_name)] = md
 
         self.progress.emit(69)
-        outfile = open(
-            os.path.join(self.saving_folder, "atlas_small_meshdata.pkl"), "wb"
-        )
-        pickle.dump(small_mesh_list, outfile)
-        outfile.close()
+        write_cache_pickle(os.path.join(self.saving_folder, "atlas_small_meshdata.pkl"), small_mesh_list)
         self.progress.emit(70)
 
         segment_data_shape = segmentation_data.shape
@@ -318,11 +319,7 @@ class CustomerAtlasWorker(QObject):
             contour_img = make_contour_img(da_slice)
             sagital_contour_img[i, :, :] = compact_boundary_volume(contour_img)
 
-        outfile_ct = open(
-            os.path.join(self.saving_folder, "sagital_contour_pre_made.pkl"), "wb"
-        )
-        pickle.dump(sagital_contour_img, outfile_ct)
-        outfile_ct.close()
+        write_cache_pickle(os.path.join(self.saving_folder, "sagital_contour_pre_made.pkl"), sagital_contour_img)
         self.progress.emit(80)
 
         process_index = np.linspace(80, 88, segment_data_shape[1])
@@ -332,11 +329,7 @@ class CustomerAtlasWorker(QObject):
             contour_img = make_contour_img(da_slice)
             coronal_contour_img[:, i, :] = compact_boundary_volume(contour_img)
 
-        outfile_ct = open(
-            os.path.join(self.saving_folder, "coronal_contour_pre_made.pkl"), "wb"
-        )
-        pickle.dump(coronal_contour_img, outfile_ct)
-        outfile_ct.close()
+        write_cache_pickle(os.path.join(self.saving_folder, "coronal_contour_pre_made.pkl"), coronal_contour_img)
         self.progress.emit(90)
 
         process_index = np.linspace(90, 98, segment_data_shape[2])
@@ -346,21 +339,14 @@ class CustomerAtlasWorker(QObject):
             contour_img = make_contour_img(da_slice)
             horizontal_contour_img[:, :, i] = compact_boundary_volume(contour_img)
 
-        outfile_ct = open(
-            os.path.join(self.saving_folder, "horizontal_contour_pre_made.pkl"), "wb"
-        )
-        pickle.dump(horizontal_contour_img, outfile_ct)
-        outfile_ct.close()
+        write_cache_pickle(os.path.join(self.saving_folder, "horizontal_contour_pre_made.pkl"), horizontal_contour_img)
 
         # saving atlas axis changing information
         self.axis_info["size"] = tuple(atlas_size)
-        outfile_axis = open(
-            os.path.join(self.saving_folder, "atlas_axis_info.pkl"), "wb"
-        )
-        pickle.dump(self.axis_info, outfile_axis)
-        outfile_axis.close()
+        write_cache_pickle(os.path.join(self.saving_folder, "atlas_axis_info.pkl"), self.axis_info)
 
         self.progress.emit(100)
+        finish_atlas_processing(self.saving_folder)
 
         self.finished.emit()
 

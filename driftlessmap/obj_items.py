@@ -3,6 +3,7 @@ import pickle
 import pyqtgraph as pg
 import pyqtgraph.opengl as gl
 import numpy as np
+from .persistence import write_cache_pickle
 import scipy.ndimage as ndi
 
 from .persistence import PickledMeshState, load_mesh_pickle
@@ -95,9 +96,7 @@ def render_volume(atlas_data, atlas_folder, factor=2, level=0.1):
 
     md = gl.MeshData(vertexes=verts * factor, faces=faces)
 
-    outfile = open(os.path.join(atlas_folder, 'atlas_meshdata.pkl'), 'wb')
-    pickle.dump(md, outfile)
-    outfile.close()
+    write_cache_pickle(os.path.join(atlas_folder, 'atlas_meshdata.pkl'), md)
 
     return md
 
@@ -133,9 +132,7 @@ def render_small_volume(
 
     if progress is not None:
         progress(0.9, "saving the generated mesh")
-    outfile = open(os.path.join(save_path, '{}.pkl'.format(label_id)), 'wb')
-    pickle.dump(md, outfile)
-    outfile.close()
+    write_cache_pickle(os.path.join(save_path, '{}.pkl'.format(label_id)), md)
     if progress is not None:
         progress(1.0, "mesh complete")
 

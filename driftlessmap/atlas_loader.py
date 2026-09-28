@@ -8,6 +8,7 @@ import pickle
 import csv
 import nibabel as nib
 import numpy as np
+from .persistence import write_cache_pickle
 import pandas as pd
 import cv2
 from PyQt6.QtGui import *
@@ -120,9 +121,7 @@ def _make_label_info_data_waxholm_rat(label_file_path, excel_file_path):
     label['parent'] = parent
     label['level_indicator'] = np.ravel(level)
 
-    outfile = open('atlas_labels.pkl', 'wb')
-    pickle.dump(label, outfile)
-    outfile.close()
+    write_cache_pickle('atlas_labels.pkl', label)
 
 
 def check_data_path_and_load(file_path):
@@ -214,9 +213,7 @@ def process_segmentation_data(atlas_folder, segmentation_path, mask_data):
 
         segment = {'data': segmentation_data, 'unique_label': unique_label}
 
-        outfile = open(os.path.join(atlas_folder, 'segment_pre_made.pkl'), 'wb')
-        pickle.dump(segment, outfile)
-        outfile.close()
+        write_cache_pickle(os.path.join(atlas_folder, 'segment_pre_made.pkl'), segment)
 
         msg = 'Segmentation data processed successfully.'
         msg_flag = 1
@@ -257,9 +254,7 @@ def process_atlas_data(atlas_folder, atlas_path, mask_data,
         atlas_data = atlas['data']
         atlas_info = atlas['info']
 
-        outfile = open(os.path.join(atlas_folder, 'atlas_pre_made.pkl'), 'wb')
-        pickle.dump(atlas, outfile)
-        outfile.close()
+        write_cache_pickle(os.path.join(atlas_folder, 'atlas_pre_made.pkl'), atlas)
 
         msg = 'Volume Atlas data processed successfully.'
         msg_flag = 1
@@ -389,10 +384,8 @@ def process_atlas_raw_data(atlas_folder, data_file=None, segmentation_file=None,
     atlas_data = atlas['data']
     atlas_info = atlas['info']
 
-    with open(os.path.join(atlas_folder, 'segment_pre_made.pkl'), 'wb') as outfile:
-        pickle.dump(segment, outfile)
-    with open(os.path.join(atlas_folder, 'atlas_pre_made.pkl'), 'wb') as outfile:
-        pickle.dump(atlas, outfile)
+    write_cache_pickle(os.path.join(atlas_folder, 'segment_pre_made.pkl'), segment)
+    write_cache_pickle(os.path.join(atlas_folder, 'atlas_pre_made.pkl'), atlas)
 
     boundary = make_atlas_label_contour(atlas_folder, segmentation_data)
 
@@ -411,6 +404,26 @@ class AtlasMeshProcessor(object):
 
         small_meshdata_list = render_small_volume(atlas_data, segmentation_data, atlas_folder,
                                                   factor=factor, level=level)
+
+
+PROCESSING_MARKER = ".driftlessmap-processing"
+
+
+def begin_atlas_processing(atlas_folder):
+    """Mark a folder as being (re)processed until processing succeeds."""
+    marker = os.path.join(atlas_folder, PROCESSING_MARKER)
+    with open(marker, "w", encoding="utf-8") as stream:
+        stream.write("Atlas processing started; remove only if it completed.\n")
+
+
+def finish_atlas_processing(atlas_folder):
+    marker = os.path.join(atlas_folder, PROCESSING_MARKER)
+    if os.path.exists(marker):
+        os.remove(marker)
+
+
+def atlas_processing_incomplete(atlas_folder):
+    return os.path.exists(os.path.join(atlas_folder, PROCESSING_MARKER))
 
 
 class AtlasLoader(object):
@@ -433,6 +446,15 @@ class AtlasLoader(object):
         pre_h_boundary_path = os.path.join(atlas_folder, 'horizontal_contour_pre_made.pkl')
 
         pre_made_label_info_path = os.path.join(atlas_folder, 'atlas_labels.pkl')
+
+        if atlas_processing_incomplete(atlas_folder):
+            # A run that stopped part-way can leave new and old cache files
+            # side by side; refuse them rather than pair mismatched data.
+            self.msg = (
+                'Atlas processing in this folder did not finish. Process or '
+                'download the atlas again.'
+            )
+            return
 
         required_paths = (
             pre_made_label_info_path,
