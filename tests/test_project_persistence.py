@@ -711,5 +711,40 @@ class ProjectPersistenceIntegrationTests(unittest.TestCase):
             np.testing.assert_allclose(sagittal_x, [start[1] + origin[1]] * 2)
             np.testing.assert_allclose(coronal_x, [start[0] + origin[0]] * 2)
 
+    @isolated_gui_test
+    def test_atlas_layer_files_are_checked_against_the_current_slice(self):
+        with tempfile.TemporaryDirectory() as folder:
+            window = self._window_with_volume_atlas(Path(folder))
+            height, width = (int(v) for v in window.atlas_view.slice_size)
+            good_probe = {"layer_link": "atlas-probe", "data": [[1.0, 2.0]], "color": (1, 2, 3)}
+            self.assertIsNone(window._atlas_layer_error(good_probe))
+            cases = {
+                "unknown": {"layer_link": "atlas-thing", "data": []},
+                "missing": {"layer_link": "atlas-probe", "data": [[1.0, 2.0]]},
+                "size": {"layer_link": "atlas-overlay",
+                         "data": np.zeros((height + 3, width), dtype=np.uint8)},
+                "outside": dict(good_probe, data=[[width + 5.0, 1.0]]),
+                "cells": {"layer_link": "atlas-cells", "data": [[1.0, 1.0], [2.0, 2.0]],
+                          "color": (1, 2, 3), "symbol": ["o"], "cell_count": [2, 0, 0, 0, 0],
+                          "cell_size": [5], "cell_symbol": ["o", "o"],
+                          "cell_layer_index": [0, 0]},
+            }
+            for name, layer in cases.items():
+                with self.subTest(name):
+                    self.assertIsNotNone(window._atlas_layer_error(layer))
+                    self.assertFalse(window.set_atlas_layer_data(layer))
+
+    def test_saved_working_data_is_merged_with_current_defaults(self):
+        from driftlessmap.app import DriftlessMap
+
+        defaults = DriftlessMap._default_working_atlas_data()
+        merged = DriftlessMap._with_defaults(
+            defaults, {"atlas-probe": [[1, 2]], "retired-key": 1, "cell_count": []}
+        )
+        self.assertEqual(merged["atlas-probe"], [[1, 2]])
+        self.assertNotIn("retired-key", merged)
+        self.assertEqual(merged["cell_count"], [0] * 5)
+        self.assertEqual(merged["ruler_path"], [])
+
 if __name__ == "__main__":
     unittest.main()

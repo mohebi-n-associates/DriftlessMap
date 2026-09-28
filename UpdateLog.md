@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th September 2026
+##### DriftlessMap 1.4.34
+
+Imported atlas layers are validated before use, projects from older versions get defaults for newer working-data fields, and a project that fails partway through loading is reported instead of silently left half-open.
+
+### 27th September 2026
 ##### DriftlessMap 1.4.33
 
 Merged probes now record the SHA-256 content identity of the atlas they were reconstructed in, and probe trajectory CSVs include it as atlas_sha256.
