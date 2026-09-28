@@ -56,6 +56,7 @@ class PackagingMetadataTests(unittest.TestCase):
         self.assertIn("superqt>=0.8,<0.9", metadata["dependencies"])
         self.assertIn("numpy>=2.0,<3", metadata["dependencies"])
         self.assertIn("opencv-python-headless>=4.10,<6", metadata["dependencies"])
+        self.assertIn("SimpleITK>=2.3,<3", metadata["dependencies"])
         self.assertFalse(
             any(
                 requirement.startswith("opencv-python>=")

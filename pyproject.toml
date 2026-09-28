@@ -59,6 +59,7 @@ dependencies = [
     "pandas>=2.2,<4",
     "natsort>=8.4,<9",
     "imagecodecs>=2024.6",
+    "SimpleITK>=2.3,<3",
 ]
 
 [project.optional-dependencies]
@@ -122,6 +123,7 @@ files = [
     "driftlessmap/atlas_loader.py",
     "driftlessmap/atlas_matching.py",
     "driftlessmap/atlas_transform.py",
+    "driftlessmap/auto_registration.py",
     "driftlessmap/background.py",
     "driftlessmap/cell_detection.py",
     "driftlessmap/coordinate_validation.py",

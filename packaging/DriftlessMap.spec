@@ -18,7 +18,7 @@ ICON = PACKAGE / "icons" / "app" / (
 )
 
 datas = collect_data_files("driftlessmap")
-hiddenimports = collect_submodules("pyqtgraph.opengl")
+hiddenimports = collect_submodules("pyqtgraph.opengl") + collect_submodules("SimpleITK")
 
 a = Analysis(
     [str(ROOT / "packaging" / "launcher.py")],
