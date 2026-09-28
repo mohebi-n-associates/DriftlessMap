@@ -841,5 +841,43 @@ class ProjectPersistenceIntegrationTests(unittest.TestCase):
             # the histology was turned back to the atlas orientation
             self.assertEqual(window.image_view.current_img.shape[:2], before[:2][::-1])
 
+    @isolated_gui_test
+    def test_proposed_landmarks_fill_the_triangulation_tool(self):
+        from PyQt6.QtWidgets import QMessageBox
+
+        from driftlessmap.atlas_matching import atlas_slice
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window = self._window_with_volume_atlas(root)
+            view = window.atlas_view
+            view.section_rabnt2.setChecked(True)
+            index = int(view.origin_3d[0])
+            view.spage_ctrl.set_val(index)
+            slice_ = atlas_slice(view.atlas_data, "sagittal", index).astype(np.float32)
+            section = cv2.resize(slice_, None, fx=6, fy=6, interpolation=cv2.INTER_LINEAR)
+            path = root / "section.png"
+            cv2.imwrite(str(path), np.dstack([section] * 3).astype(np.uint8))
+            self.assertTrue(window.load_single_image_file(str(path), ".png"))
+            window.reset_corners_hist()
+            window.reset_tri_points_atlas()
+
+            window.propose_registration_landmarks()
+            atlas = np.asarray(window.atlas_tri_inside_data)
+            histology = np.asarray(window.histo_tri_inside_data)
+            self.assertGreaterEqual(len(atlas), 3)
+            self.assertEqual(len(atlas), len(histology))
+            errors = np.linalg.norm(histology - atlas * 6, axis=1)
+            self.assertLess(np.median(errors), 6.0)  # within one atlas pixel
+            self.assertTrue(window.tool_box.checkable_btn_dict["triang_btn"].isChecked())
+            self.assertEqual(len(window.working_atlas_text), len(atlas))
+            self.assertIsNotNone(window.triangulation_registration)
+
+            # Existing landmarks are only replaced after confirmation.
+            before = list(window.atlas_tri_inside_data)
+            with patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.No):
+                window.propose_registration_landmarks()
+            self.assertEqual(window.atlas_tri_inside_data, before)
+
 if __name__ == "__main__":
     unittest.main()

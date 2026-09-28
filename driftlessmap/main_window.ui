@@ -329,6 +329,7 @@ border-color: rgb(75, 78, 84);</string>
     <addaction name="actionAtlas_Processor"/>
     <addaction name="separator"/>
     <addaction name="actionSuggest_Atlas_Section"/>
+    <addaction name="actionPropose_Landmarks"/>
     <addaction name="separator"/>
     <addaction name="actionSave_Triangulation_Points"/>
     <addaction name="actionLoad_Triangulation_Points"/>
@@ -723,6 +724,14 @@ selection-background-color: rgb(50, 50, 50);</string>
    </property>
    <property name="toolTip">
     <string>Find the atlas plane, slice and tilt that best match the histology section</string>
+   </property>
+  </action>
+  <action name="actionPropose_Landmarks">
+   <property name="text">
+    <string>Propose Landmarks</string>
+   </property>
+   <property name="toolTip">
+    <string>Register the section to the shown atlas slice and propose editable landmark pairs</string>
    </property>
   </action>
   <action name="actionSwitch_Atlas">

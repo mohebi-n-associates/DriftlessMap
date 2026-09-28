@@ -33,6 +33,8 @@ class LandmarkProposal:
     overlap_affine: float          # silhouette Dice after the affine stage
     overlap_final: float           # silhouette Dice after the B-spline stage
     deformable_used: bool
+    boundary_points: np.ndarray    # extra atlas points mapped into the section,
+                                   # clamped to the section image
 
 
 def _as_image(array, scale):
@@ -144,11 +146,14 @@ def _grid_points(mask, count):
 
 
 def propose_landmarks(atlas_intensity, atlas_labels, section, count=36,
-                      deformable=True, mesh_size=6):
+                      deformable=True, mesh_size=6, boundary_points=None):
     """Propose paired landmarks mapping an atlas slice onto a section.
 
     ``section`` must already be in the atlas orientation (see
-    ``atlas_matching``). Returns a :class:`LandmarkProposal`.
+    ``atlas_matching``). ``boundary_points`` are further atlas points (such
+    as the mesh's frame points) to carry through the same transform; they are
+    clamped into the section image so they remain valid landmarks.
+    Returns a :class:`LandmarkProposal`.
     """
     atlas_mask = np.asarray(atlas_labels) > 0
     if atlas_mask.sum() < 100:
@@ -199,5 +204,12 @@ def propose_landmarks(atlas_intensity, atlas_labels, section, count=36,
         keep = np.flatnonzero(inside)[on_tissue]
     else:
         keep = np.array([], dtype=int)
+    boundary = np.asarray(boundary_points if boundary_points is not None else [],
+                          dtype=float).reshape(-1, 2)
+    carried = np.array([transform.TransformPoint((float(x), float(y)))
+                        for x, y in boundary]).reshape(-1, 2)
+    if len(carried):
+        carried[:, 0] = np.clip(carried[:, 0], 0, width - 1)
+        carried[:, 1] = np.clip(carried[:, 1], 0, height - 1)
     return LandmarkProposal(atlas_points[keep], mapped[keep], overlap_affine,
-                            overlap_final, used)
+                            overlap_final, used, carried)
