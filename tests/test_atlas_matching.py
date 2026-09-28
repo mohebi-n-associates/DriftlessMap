@@ -12,6 +12,8 @@ from driftlessmap.atlas_matching import (
     hemisphere_indexes,
     mirrored_index,
     rank_depths,
+    refine_tilt,
+    tilted_slice,
     same_up_to_hemisphere,
     search_planes,
     tissue_mask,
@@ -120,6 +122,53 @@ class DepthRankingTests(unittest.TestCase):
         self.assertEqual(mirrored_index(130, 114), 98)
         self.assertEqual(list(hemisphere_indexes("coronal", 5, 2)), [0, 1, 2, 3, 4])
         self.assertEqual(list(hemisphere_indexes("sagittal", 5, 2)), [2, 3, 4])
+
+
+class TiltTests(unittest.TestCase):
+    def reference_slice(self, volume, plane, index, tilt, pivot):
+        """AtlasView's own formula, via pyqtgraph.affineSlice."""
+        import pyqtgraph.functions as fn
+
+        from driftlessmap.utils import rotation_x, rotation_y, rotation_z
+
+        h, v = np.deg2rad(tilt)
+        size0, size1, size2 = volume.shape
+        c_id, s_id, h_index = pivot
+        o_rot = np.array([size0 - 1 - h_index, s_id, c_id])
+        if plane == "coronal":
+            r = np.dot(rotation_x(h), rotation_y(v))
+            o_val, axes, shape = np.array([0, 0, index]), ([1, 0, 0], [0, 1, 0]), (size0, size1)
+        elif plane == "sagittal":
+            r = np.dot(rotation_x(h), rotation_z(v))
+            o_val, axes, shape = np.array([0, index, 0]), ([1, 0, 0], [0, 0, 1]), (size0, size2)
+        else:
+            r = np.dot(rotation_z(v), rotation_y(h))
+            o_val = np.array([size0 - 1 - index, 0, 0])
+            axes, shape = ([0, 1, 0], [0, 0, 1]), (size1, size2)
+        origin = o_rot + np.dot(r, o_val - o_rot)
+        return fn.affineSlice(volume, shape=shape, vectors=[r @ axes[0], r @ axes[1]],
+                              origin=tuple(origin), axes=(0, 1, 2), order=1)
+
+    def test_tilted_slices_match_the_atlas_view(self):
+        _, intensity = brain_with_depth_cues()
+        pivot = (40, 25, 20)
+        for plane, index in (("coronal", 38), ("sagittal", 30), ("horizontal", 18)):
+            with self.subTest(plane=plane):
+                ours = tilted_slice(intensity, plane, index, (5.0, -4.0), pivot)
+                expected = self.reference_slice(intensity, plane, index, (5.0, -4.0), pivot)
+                np.testing.assert_allclose(ours, expected, atol=1e-3)
+
+    def test_known_tilt_scores_above_an_untilted_slice(self):
+        labels, intensity = brain_with_depth_cues()
+        pivot = (40, 25, 20)
+        truth = tilted_slice(intensity, "sagittal", 34, (6.0, 0.0), pivot)
+        section = cv2.resize(truth.astype(np.uint8), None, fx=4, fy=4)
+        section = np.dstack([section] * 3)
+        matches = refine_tilt(section, labels, intensity, "sagittal", ORIENTATIONS[0],
+                              indexes=[33, 34, 35], pivot=pivot, angles=(-6, 0, 6))
+        by_key = {(m.index, m.tilt_degrees): m.score for m in matches}
+        self.assertGreater(by_key[(34, (6.0, 0.0))], by_key[(34, (0.0, 0.0))])
+        self.assertEqual(matches[0].tilt_degrees[0], 6.0)
 
 
 SAMPLE = Path(os.environ.get("DRIFTLESSMAP_SAMPLE_SECTION", ""))
