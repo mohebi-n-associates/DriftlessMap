@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th September 2026
+##### DriftlessMap 1.6.0
+
+Adds **Atlas > Suggest Atlas Section...**, which suggests the atlas plane, section, tilt and histology orientation for a loaded section. Also adds **Atlas > Propose Landmarks**, which fits the shown atlas slice to the histology and fills in registration landmarks for review. SimpleITK is now a required dependency.
+
+### 27th September 2026
 ##### DriftlessMap 1.5.0
 
 Review release: corrects probe site faces, source-voxel mirroring, brain-entry detection, region path lengths, image scale, pixel-centre warps, voxel flooring and surface depth; closes a mesh-cache code-execution hole and an allocation bomb; stops several ways of losing work; fixes many crashes; and runs long operations in the background. See the "re-export if…" list in [What’s New](WhatsNew.md) before reusing results from earlier versions.
