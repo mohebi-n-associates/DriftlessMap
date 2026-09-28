@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th September 2026
+##### DriftlessMap 1.4.44
+
+Packaging cleanup: two unused label tables and the README screenshot are no longer shipped inside the package, and code adapted from pyqtgraph's examples is attributed.
+
+### 27th September 2026
 ##### DriftlessMap 1.4.43
 
 Code-health release: every wildcard import is replaced by explicit imports, unused imports and variables are removed, the unused numba dependency is dropped, dead menu actions and hidden layer buttons are removed, and Ruff now enforces all pyflakes and bugbear checks.

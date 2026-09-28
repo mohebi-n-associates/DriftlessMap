@@ -102,7 +102,6 @@ driftlessmap = [
     "icons/*/*.ico",
     "icons/*/*.icns",
     "qss/*.qss",
-    "herbs.png",
 ]
 
 [tool.ruff]

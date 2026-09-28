@@ -3,6 +3,24 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.4.44
+
+Release date: 27 September 2026
+
+This release makes the installed package smaller and documents where adapted
+code comes from.
+
+- **Unused label tables removed.** `WHS_atlas_labels.pkl` and
+  `allen_mice_atlas_labels.pkl` were shipped with the package but never read.
+  They are deleted.
+- **Screenshot left out of the package.** The 1 MB `herbs.png` screenshot is
+  used only by the README. It stays in the repository but is no longer
+  installed with the package.
+- **Attribution.** `MovablePoints` adapts an example from pyqtgraph. That is
+  now credited in the code and in `ORIGINS.md`, as its MIT license requires.
+
+---
+
 ## DriftlessMap 1.4.43
 
 Release date: 27 September 2026
