@@ -768,6 +768,10 @@ The fit follows the outline and the overall shape well, but internal
 boundaries can still be several voxels off. Treat the proposal as a first
 draft of the manual landmarks, not as a finished registration.
 
+The tutorial [Automatic Section Matching and Landmark Proposal](Tutorial/Registration_Related/automatic_section_and_landmarks.md)
+walks through both steps on a real section, with screenshots, and explains
+how each stage works.
+
 ### 8.3 Place paired landmarks
 
 1. Activate Triangulation.
