@@ -9,6 +9,9 @@ from driftlessmap.atlas_matching import (
     ORIENTATIONS,
     atlas_slice,
     best_by_plane,
+    hemisphere_indexes,
+    mirrored_index,
+    rank_depths,
     same_up_to_hemisphere,
     search_planes,
     tissue_mask,
@@ -83,6 +86,42 @@ class PlaneSearchTests(unittest.TestCase):
         self.assertGreater(ranked[0].silhouette, ranked[1].silhouette + 0.05)
 
 
+def brain_with_depth_cues():
+    """Synthetic brain whose internal structure moves with ML depth."""
+    labels = synthetic_brain()
+    dv, ml, ap = labels.shape
+    intensity = np.where(labels > 0, 90.0, 0.0)
+    z, y = np.meshgrid(np.arange(dv), np.arange(ap), indexing="ij")
+    for x in range(ml):
+        offset = abs(x - ml // 2)
+        inside = ((z - 20) / 5) ** 2 + ((y - (30 + offset)) / 6) ** 2 <= 1
+        inside &= labels[:, x, :] > 0
+        labels[:, x, :][inside] = 40
+        intensity[:, x, :][inside] = 200.0
+    return labels, intensity
+
+
+class DepthRankingTests(unittest.TestCase):
+    def test_depth_is_recovered_from_internal_anatomy(self):
+        labels, intensity = brain_with_depth_cues()
+        midline = labels.shape[1] // 2
+        for index in (midline + 3, midline + 9, midline + 15):
+            with self.subTest(index=index):
+                slice_ = atlas_slice(intensity, "sagittal", index).astype(np.uint8)
+                section = cv2.resize(slice_, None, fx=4, fy=4, interpolation=cv2.INTER_LINEAR)
+                section = np.dstack([section] * 3)
+                ranked = rank_depths(
+                    section, labels, intensity, "sagittal", ORIENTATIONS[0],
+                    indexes=hemisphere_indexes("sagittal", labels.shape[1], midline),
+                )
+                self.assertLessEqual(abs(ranked[0].index - index), 1, ranked[:3])
+
+    def test_mirrored_sagittal_index(self):
+        self.assertEqual(mirrored_index(130, 114), 98)
+        self.assertEqual(list(hemisphere_indexes("coronal", 5, 2)), [0, 1, 2, 3, 4])
+        self.assertEqual(list(hemisphere_indexes("sagittal", 5, 2)), [2, 3, 4])
+
+
 SAMPLE = Path(os.environ.get("DRIFTLESSMAP_SAMPLE_SECTION", ""))
 ATLAS = Path(os.environ.get("DRIFTLESSMAP_SAMPLE_ATLAS", ""))
 
@@ -101,6 +140,18 @@ class RealSectionTests(unittest.TestCase):
         ranked = best_by_plane(search_planes(section, labels))
         self.assertEqual(ranked[0].plane, "sagittal")
         self.assertGreater(ranked[0].silhouette, ranked[1].silhouette + 0.1)
+
+        intensity = np.transpose(loaded.atlas_data, [2, 0, 1])[::-1, :, :]
+        midline = int(loaded.atlas_info[3]["Bregma"][0])
+        voxel_um = float(loaded.atlas_info[3]["vxsize"])
+        depths = rank_depths(
+            section, labels, intensity, "sagittal", ranked[0].orientation,
+            indexes=hemisphere_indexes("sagittal", labels.shape[1], midline),
+        )
+        lateral_mm = abs(depths[0].index - midline) * voxel_um / 1000
+        # Visual comparison places this section ~0.3-0.6 mm from the midline.
+        self.assertGreater(lateral_mm, 0.1)
+        self.assertLess(lateral_mm, 0.8)
 
 
 if __name__ == "__main__":
