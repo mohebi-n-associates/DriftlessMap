@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th September 2026
+##### DriftlessMap 1.6.1
+
+Fixes **Show Boundary**, which drew atlas region boundaries almost black and therefore invisibly.
+
+### 27th September 2026
 ##### DriftlessMap 1.6.0
 
 Adds **Atlas > Suggest Atlas Section...**, which suggests the atlas plane, section, tilt and histology orientation for a loaded section. Also adds **Atlas > Propose Landmarks**, which fits the shown atlas slice to the histology and fills in registration landmarks for review. SimpleITK is now a required dependency.
