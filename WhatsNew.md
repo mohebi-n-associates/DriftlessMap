@@ -3,6 +3,27 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.4.37
+
+Release date: 27 September 2026
+
+The custom Atlas Processor works again and handles file choices correctly.
+
+- **The dialog opens again.** **Atlas > Process Raw Atlas Data** failed as
+  soon as the dialog opened, because of a call that PyQt6 rejects.
+  Double-clicking an object to rename it failed for the same reason.
+- **Full paths are kept.** Only file names were stored, so a file chosen from
+  another folder was looked up in the folder of the first file. That found
+  the wrong file or none. Full paths are now kept, and processed files are
+  written next to the atlas volume.
+- **Cancelled picks are ignored.** Cancelling a file picker no longer counts
+  as a selection, and a missing file is now named in the status message.
+- **Allen-style label tables.** Tables whose parent column is
+  `parent_structure_id` are accepted as well as `parent_id`, and the error
+  message now names the columns required.
+
+---
+
 ## DriftlessMap 1.4.36
 
 Release date: 27 September 2026

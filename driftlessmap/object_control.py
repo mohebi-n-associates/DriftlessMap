@@ -1026,7 +1026,7 @@ class SinglePiece(QWidget):
         self.l_line_edit.setText(self.text_btn.text())
         self.l_line_edit.setVisible(True)
         self.text_btn.setVisible(False)
-        self.l_line_edit.setFocus(True)
+        self.l_line_edit.setFocus()
         self.set_checked(True)
         self.sig_clicked.emit(self.id)
 

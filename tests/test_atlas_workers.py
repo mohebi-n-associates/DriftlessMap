@@ -52,5 +52,49 @@ class WorkerFailureTests(unittest.TestCase):
         self.assertFalse(thread_is_running(DeletedThread()))
 
 
+
+class AtlasProcessorFileChoiceTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
+    def test_files_from_different_folders_keep_their_full_paths(self):
+        from unittest.mock import patch
+
+        from PyQt6.QtWidgets import QFileDialog
+
+        from driftlessmap.atlas_processor import AtlasProcessor
+
+        dialog = AtlasProcessor()
+        with tempfile.TemporaryDirectory() as first, tempfile.TemporaryDirectory() as second:
+            volume = os.path.join(first, "volume.nii.gz")
+            labels = os.path.join(second, "labels.nii.gz")
+            with patch.object(QFileDialog, "getOpenFileName", return_value=(volume, "")):
+                dialog.get_data_file()
+            with patch.object(QFileDialog, "getOpenFileName", return_value=(labels, "")):
+                dialog.get_seg_file()
+            with patch.object(QFileDialog, "getOpenFileName", return_value=("", "")):
+                dialog.get_seg_file()  # cancelled: keeps the previous choice
+                dialog.get_info_file()
+            self.assertEqual(dialog.data_local, os.path.abspath(volume))
+            self.assertEqual(dialog.segmentation_local, os.path.abspath(labels))
+            self.assertEqual(dialog.folder_path, os.path.abspath(first))
+            self.assertIsNone(dialog.label_local)
+            self.assertEqual(dialog.check_empty_file(), "Please select label information file.")
+            self.assertEqual(
+                os.path.join(dialog.folder_path, dialog.segmentation_local),
+                os.path.abspath(labels),
+            )
+
+    def test_every_atlas_dialog_opens(self):
+        from driftlessmap.allen_downloader import AllenDownloader
+        from driftlessmap.atlas_downloader import AtlasDownloader
+        from driftlessmap.atlas_processor import AtlasProcessor
+
+        for dialog_class in (AtlasProcessor, AllenDownloader, AtlasDownloader):
+            with self.subTest(dialog_class.__name__):
+                dialog = dialog_class()
+                dialog.deleteLater()
+
 if __name__ == "__main__":
     unittest.main()

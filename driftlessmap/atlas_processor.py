@@ -141,12 +141,21 @@ class CustomerAtlasWorker(QObject):
             rgb_colors = np.asarray(rgb_colors)
         self.progress.emit(6)
 
+        # Allen ontology exports name the parent column "parent_structure_id";
+        # other tables use "parent_id".
+        parent_column = next(
+            (name for name in ("parent_id", "parent_structure_id") if name in df),
+            None,
+        )
         try:
-            parent = df["parent_id"].fillna(0).to_numpy(dtype=int, copy=True)
+            if parent_column is None:
+                raise KeyError(parent_column)
+            parent = df[parent_column].fillna(0).to_numpy(dtype=int, copy=True)
             ids = df["id"].to_numpy(dtype=int, copy=True)
         except KeyError:
             self.error_occur.emit(
-                'Label file missing columns "parent_structure_id" or "id".'
+                'Label file needs an "id" column and a "parent_id" or '
+                '"parent_structure_id" column.'
             )
             return
 
@@ -392,28 +401,24 @@ class AtlasProcessor(QDialog):
         data_label = QLabel("Volume File:")
         self.data_btn = QPushButton("Select File")
         self.data_btn.setAutoDefault(False)
-        self.data_btn.setFocus(False)
         self.data_line = QLabel()
         self.data_line.setStyleSheet(box_label_style)
 
         seg_label = QLabel("Segmentation File: ")
         self.seg_btn = QPushButton("Select File")
         self.seg_btn.setAutoDefault(False)
-        self.seg_btn.setFocus(False)
         self.seg_line = QLabel()
         self.seg_line.setStyleSheet(box_label_style)
 
         mask_label = QLabel("Mask File (optional): ")
         self.mask_btn = QPushButton("Select File")
         self.mask_btn.setAutoDefault(False)
-        self.mask_btn.setFocus(False)
         self.mask_line = QLabel()
         self.mask_line.setStyleSheet(box_label_style)
 
         labinf_label = QLabel("Label Information File:")
         self.labinf_btn = QPushButton("Select File")
         self.labinf_btn.setAutoDefault(False)
-        self.labinf_btn.setFocus(False)
         self.labinf_line = QLabel()
         self.labinf_line.setStyleSheet(box_label_style)
 
@@ -473,7 +478,6 @@ class AtlasProcessor(QDialog):
 
         self.process_btn = QPushButton("Start Process")
         self.process_btn.setAutoDefault(False)
-        self.process_btn.setFocus(False)
         self.process_info = QLabel(
             "The whole process takes some time. \n"
             "This window will be closed automatically when processing finished."
@@ -580,74 +584,49 @@ class AtlasProcessor(QDialog):
                 "direction_change": tuple(direction_change),
             }
 
-            print(self.axis_info)
 
-    def get_folder_path(self, file_path):
-        self.folder_path = os.path.dirname(file_path)
+    def _pick_file(self, title):
+        """Return the chosen absolute path, or ``None`` if cancelled."""
+        file_options = QFileDialog.Option(0)
+        file_options |= QFileDialog.Option.DontUseNativeDialog
+        start = self.folder_path or ""
+        path = QFileDialog.getOpenFileName(self, title, start, options=file_options)[0]
+        if not path:
+            return None
+        path = os.path.abspath(path)
+        if self.folder_path is None:
+            self.folder_path = os.path.dirname(path)
+        return path
 
     def get_data_file(self):
-        file_options = QFileDialog.Option(0)
-        file_options |= QFileDialog.Option.DontUseNativeDialog
-        dlg = QFileDialog()
-        if self.folder_path is not None:
-            data_path = dlg.getOpenFileName(
-                self, "Select Atlas Volume File", self.folder_path, options=file_options
-            )
-        else:
-            data_path = dlg.getOpenFileName(
-                self, "Select Atlas Volume File", options=file_options
-            )
-            self.get_folder_path(data_path[0])
-        self.data_local = os.path.basename(data_path[0])
-        self.data_line.setText(self.data_local)
+        path = self._pick_file("Select Atlas Volume File")
+        if path is None:
+            return
+        # Processed files are written next to the atlas volume.
+        self.folder_path = os.path.dirname(path)
+        self.data_local = path
+        self.data_line.setText(os.path.basename(path))
 
     def get_seg_file(self):
-        file_options = QFileDialog.Option(0)
-        file_options |= QFileDialog.Option.DontUseNativeDialog
-        dlg = QFileDialog()
-        if self.folder_path is not None:
-            seg_path = dlg.getOpenFileName(
-                self, "Select Segmentation File", self.folder_path, options=file_options
-            )
-        else:
-            seg_path = dlg.getOpenFileName(
-                self, "Select Segmentation File", options=file_options
-            )
-            self.get_folder_path(seg_path[0])
-        self.segmentation_local = os.path.basename(seg_path[0])
-        self.seg_line.setText(self.segmentation_local)
+        path = self._pick_file("Select Segmentation File")
+        if path is None:
+            return
+        self.segmentation_local = path
+        self.seg_line.setText(os.path.basename(path))
 
     def get_mask_file(self):
-        file_options = QFileDialog.Option(0)
-        file_options |= QFileDialog.Option.DontUseNativeDialog
-        dlg = QFileDialog()
-        if self.folder_path is not None:
-            mask_path = dlg.getOpenFileName(
-                self, "Select Mask File", self.folder_path, options=file_options
-            )
-        else:
-            mask_path = dlg.getOpenFileName(
-                self, "Select Mask File", options=file_options
-            )
-            self.get_folder_path(mask_path[0])
-        self.mask_local = os.path.basename(mask_path[0])
-        self.mask_line.setText(self.mask_local)
+        path = self._pick_file("Select Mask File")
+        if path is None:
+            return
+        self.mask_local = path
+        self.mask_line.setText(os.path.basename(path))
 
     def get_info_file(self):
-        file_options = QFileDialog.Option(0)
-        file_options |= QFileDialog.Option.DontUseNativeDialog
-        dlg = QFileDialog()
-        if self.folder_path is not None:
-            info_path = dlg.getOpenFileName(
-                self, "Select Label File", self.folder_path, options=file_options
-            )
-        else:
-            info_path = dlg.getOpenFileName(
-                self, "Select Label File", options=file_options
-            )
-            self.get_folder_path(info_path[0])
-        self.label_local = os.path.basename(info_path[0])
-        self.labinf_line.setText(os.path.basename(self.label_local))
+        path = self._pick_file("Select Label File")
+        if path is None:
+            return
+        self.label_local = path
+        self.labinf_line.setText(os.path.basename(path))
 
     def bregma_input1_changed(self, text):
         if text == "":
@@ -690,15 +669,12 @@ class AtlasProcessor(QDialog):
         self.factor_val = int(text)
 
     def check_empty_file(self):
-        if self.data_local is None:
-            msg = "Please select atlas data."
-            return msg
-        if self.segmentation_local is None:
-            msg = "Please select segmentation file."
-            return msg
-        if self.label_local is None:
-            msg = "Please select label information file."
-            return msg
+        if not self.data_local:
+            return "Please select atlas data."
+        if not self.segmentation_local:
+            return "Please select segmentation file."
+        if not self.label_local:
+            return "Please select label information file."
         return None
 
     def process_data_called(self):
@@ -714,7 +690,7 @@ class AtlasProcessor(QDialog):
 
         msg = self.check_empty_file()
         if msg is not None:
-            self.process_info.setText("Please select file path.")
+            self.process_info.setText(msg)
             return
 
         dir_goal = ["Post. --> Ant.", "Inf. --> Sup.", "L.H. --> R.H."]

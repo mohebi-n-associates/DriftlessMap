@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th September 2026
+##### DriftlessMap 1.4.37
+
+The custom Atlas Processor opens again, keeps full paths for files chosen from different folders, ignores cancelled file picks, accepts Allen-style parent_structure_id label tables, and double-click renaming of objects no longer fails.
+
+### 27th September 2026
 ##### DriftlessMap 1.4.36
 
 Atlas downloads request unencoded transfers, verify every redirect hop uses HTTPS, tolerate unusual Content-Length headers, and record each file's SHA-256 in download_manifest.json so a changed upstream file is detected instead of silently mixed into an existing atlas.
