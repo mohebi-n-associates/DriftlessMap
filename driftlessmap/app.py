@@ -148,6 +148,7 @@ from .probe_reconstruction import (
     source_vox_to_herbs_vox,
 )
 from .roi_analysis import build_drawing_roi_info
+from .background import run_in_background
 from .layer_geometry import layer_center, rotate_points, rotate_raster, shift_raster
 from .resources import resource_path
 from .user_settings import load_last_atlas_path, save_last_atlas_path
@@ -155,6 +156,21 @@ from .user_settings import load_last_atlas_path, save_last_atlas_path
 
 script_dir = dirname(realpath(__file__))
 FORM_Main, _ = loadUiType((join(dirname(__file__), "main_window.ui")))
+
+
+def _prefingerprint_inputs(atlas_path, histology_path):
+    """Warm the provenance checksum cache for the inputs a save will link."""
+    for path, describe in (
+        (atlas_path, describe_atlas_path),
+        (histology_path, describe_path),
+    ):
+        if not path or not os.path.exists(path):
+            continue
+        try:
+            describe(path)
+        except (OSError, ValueError):
+            # The provenance step reports the problem on the GUI thread.
+            pass
 
 
 class DriftlessMap(QMainWindow, FORM_Main):
@@ -3746,7 +3762,10 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 if self.current_atlas == "volume"
                 else cv2.INTER_CUBIC
             )
-            img_wrap = warp_image_piecewise(
+            img_wrap = run_in_background(
+                self,
+                "Warping the atlas onto the histology...",
+                warp_image_piecewise,
                 input_img,
                 registration,
                 "atlas_to_histology",
@@ -3820,7 +3839,10 @@ class DriftlessMap(QMainWindow, FORM_Main):
             registration = self._build_triangulation_registration()
             if registration is None:
                 return
-            img_wrap = warp_image_piecewise(
+            img_wrap = run_in_background(
+                self,
+                "Warping the histology onto the atlas...",
+                warp_image_piecewise,
                 working_img,
                 registration,
                 "histology_to_atlas",
@@ -4024,7 +4046,10 @@ class DriftlessMap(QMainWindow, FORM_Main):
 
         if self.working_img_data["img-virus"] is not None:
             input_virus_img = self.working_img_data["img-virus"].copy()
-            img_wrap = warp_image_piecewise(
+            img_wrap = run_in_background(
+                self,
+                "Transferring virus pixels...",
+                warp_image_piecewise,
                 input_virus_img,
                 registration,
                 "histology_to_atlas",
@@ -6181,8 +6206,9 @@ class DriftlessMap(QMainWindow, FORM_Main):
             return None, "Unable to load atlas axis metadata: {}".format(error)
 
         try:
-            with pg.BusyCursor():
-                reference = describe_atlas_path(atlas_path)
+            reference = run_in_background(
+                self, "Fingerprinting the atlas...", describe_atlas_path, atlas_path
+            )
         except (OSError, ValueError) as exc:
             return None, "Unable to fingerprint the atlas: {}".format(exc)
 
@@ -7183,10 +7209,13 @@ class DriftlessMap(QMainWindow, FORM_Main):
                         object_reference.get("sha256"),
                     )
                     if identity not in verified_atlas_references:
-                        with pg.BusyCursor():
-                            verified_atlas_references[identity] = verify_reference(
-                                self.current_atlas_path, object_reference
-                            )
+                        verified_atlas_references[identity] = run_in_background(
+                            self,
+                            "Verifying the objects' atlas...",
+                            verify_reference,
+                            self.current_atlas_path,
+                            object_reference,
+                        )
                     matches, reason = verified_atlas_references[identity]
                     if not matches:
                         problem_obj_name.append(
@@ -7904,6 +7933,17 @@ class DriftlessMap(QMainWindow, FORM_Main):
         )
         if file_name[0] != "":
             project_path = file_name[0]
+            # Hash large inputs off the GUI thread; the provenance helpers
+            # below then reuse the cached fingerprints.
+            run_in_background(
+                self,
+                "Fingerprinting project inputs...",
+                _prefingerprint_inputs,
+                self.current_atlas_path if self.current_atlas == "volume" else None,
+                self.current_img_path
+                if self._loaded_histology_signature is not None
+                else None,
+            )
             try:
                 with pg.BusyCursor():
                     atlas_provenance = self._atlas_provenance_for_save(project_path)
@@ -8056,7 +8096,14 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 "object_data": object_data,
             }
 
-            success, error = save_driftlessmap_file(file_name[0], project_data, "project")
+            success, error = run_in_background(
+                self,
+                "Saving project...",
+                save_driftlessmap_file,
+                file_name[0],
+                project_data,
+                "project",
+            )
             if not success:
                 self.print_message(error, self.error_message_color)
                 return False
@@ -8128,10 +8175,13 @@ class DriftlessMap(QMainWindow, FORM_Main):
         ):
             resolved_atlas = None
             if atlas_reference is not None:
-                with pg.BusyCursor():
-                    resolved_atlas, _ = resolve_reference(
-                        atlas_reference, project_path=project_path
-                    )
+                resolved_atlas, _ = run_in_background(
+                    self,
+                    "Verifying the project's atlas...",
+                    resolve_reference,
+                    atlas_reference,
+                    project_path=project_path,
+                )
                 if resolved_atlas is None:
                     resolved_atlas = self._ask_for_verified_input(
                         atlas_reference, "Locate Volume Atlas Folder"
@@ -8157,10 +8207,13 @@ class DriftlessMap(QMainWindow, FORM_Main):
         if prepared.get("img_ctrl_data") is not None:
             resolved_histology = None
             if histology_reference is not None:
-                with pg.BusyCursor():
-                    resolved_histology, _ = resolve_reference(
-                        histology_reference, project_path=project_path
-                    )
+                resolved_histology, _ = run_in_background(
+                    self,
+                    "Verifying the project's histology...",
+                    resolve_reference,
+                    histology_reference,
+                    project_path=project_path,
+                )
                 if resolved_histology is None and prepared.get("portable_sources"):
                     try:
                         resolved_histology = self._extract_portable_histology(prepared)

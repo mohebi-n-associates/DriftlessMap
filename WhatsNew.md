@@ -3,6 +3,27 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.4.40
+
+Release date: 27 September 2026
+
+DriftlessMap now stays responsive during long operations. These steps run on
+a background thread behind a progress dialog, so the window keeps repainting
+instead of freezing under a busy cursor:
+
+- Fingerprinting the atlas and histology (SHA-256) when saving a project.
+- Writing the project archive, including streaming a multi-gigabyte CZI into
+  a portable project.
+- Verifying a project's atlas and histology when it is opened.
+- Verifying an atlas when importing objects or merging probes.
+- Warping overlays between the atlas and histology, and transferring virus
+  pixels.
+
+The progress dialog blocks other input to the window while the work runs, so
+the project cannot change halfway through a save.
+
+---
+
 ## DriftlessMap 1.4.39
 
 Release date: 27 September 2026

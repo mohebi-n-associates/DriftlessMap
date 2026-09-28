@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th September 2026
+##### DriftlessMap 1.4.40
+
+Long operations no longer freeze the window: fingerprinting inputs, writing project archives, verifying project and object atlases, and warping overlays or virus layers run in the background behind a progress dialog.
+
+### 27th September 2026
 ##### DriftlessMap 1.4.39
 
 Editing registration landmarks is faster: the triangulation is built once per change and reused by both the atlas and histology windows.
