@@ -10,7 +10,7 @@ from PyQt6.QtCore import *
 from .wtiles import QDoubleButton
 from .probe_csv import write_probe_csv_files
 from .roi_analysis import write_roi_csv
-from .uuuuuu import read_qss_file
+from .utils import read_qss_file
 from .resources import resource_path
 
 

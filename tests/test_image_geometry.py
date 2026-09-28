@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import QApplication
 
 from driftlessmap.image_reader import EmbeddedImageReader
 from driftlessmap.image_view import ImageView
-from driftlessmap.uuuuuu import rotate
+from driftlessmap.utils import rotate
 
 
 class ImageGeometryTests(unittest.TestCase):

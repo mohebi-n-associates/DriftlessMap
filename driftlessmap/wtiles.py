@@ -3,7 +3,7 @@ from PyQt6.QtWidgets import *
 from PyQt6.QtCore import *
 from PyQt6.QtGui import *
 import numpy as np
-from .uuuuuu import read_qss_file
+from .utils import read_qss_file
 from .resources import resource_path
 
 dialog_style = '''
@@ -696,6 +696,3 @@ class MultiProbePlanningDialog(QDialog):
         w_id = obj[0]
         index_val = obj[1]
         self.multi_settings['faces'][w_id] = index_val
-
-
-

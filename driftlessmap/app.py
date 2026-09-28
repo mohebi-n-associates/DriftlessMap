@@ -42,7 +42,7 @@ from pyqtgraph.Qt import QtCore, QtGui
 import warnings
 
 
-from .uuuuuu import (
+from .utils import (
     tolerance_mask,
     get_cell_count,
     num_side_pnt_changed,
@@ -59,7 +59,6 @@ from .uuuuuu import (
     calculate_cells_info,
     calculate_virus_info,
     calculate_drawing_info,
-    calculate_contour_line,
     check_loading_pickle_file,
     check_loaded_project,
     check_bounding_contains,
@@ -7355,7 +7354,6 @@ class DriftlessMap(QMainWindow, FORM_Main):
         if layer_link in ["img-process", "img-mask", "img-overlay"]:
             if layer_link == "img-process":
                 if "rgb" in self.image_view.image_file.pixel_type:
-                    print("rgb")
                     image_to_be_saved = self.image_view.processing_img.copy()
                     if self.image_view.image_file.pixel_type != "rgb24":
                         image_to_be_saved = cv2.normalize(

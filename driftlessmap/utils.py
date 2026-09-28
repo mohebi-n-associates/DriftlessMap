@@ -37,29 +37,6 @@ def read_excel_file(file_path):
     return df, msg
 
 
-def read_label(file):
-    lines = []
-    for line in file:
-        lines.append(line)
-
-    n_lines = len(lines)
-    label_index = np.zeros(n_lines - 14, "i")
-    label_index[:] = np.nan
-    label_colors = np.zeros((n_lines - 14, 3), "i")
-    label_colors[:] = np.nan
-    label_names = []
-    for i in range(n_lines - 14):
-        split_lines = lines[i + 14].split()
-        label_index[i] = int(split_lines[0])
-        label_colors[i] = np.array(
-            [split_lines[1], split_lines[2], split_lines[3]]
-        ).astype(int)
-        split_lines2 = lines[i + 14].split('"')
-        label_names.append(split_lines2[1])
-
-    return label_index, label_names, label_colors
-
-
 def rotation_x(theta):
     ct = np.cos(theta)
     st = np.sin(theta)
@@ -79,11 +56,6 @@ def rotation_z(theta):
     st = np.sin(theta)
     rz = np.array([[ct, -st, 0], [st, ct, 0], [0, 0, 1]])
     return rz
-
-
-def d2td3(pos2d, ax, ay, o):
-    pos3d = pos2d[0] * ax + pos2d[1] * ay + o
-    return pos3d
 
 
 def get_region_label(data, label_data, bregma):
@@ -227,30 +199,6 @@ def calculate_drawing_info(
     return res_dict
 
 
-def order_contour_pnt(pnt):
-    order_ind = []
-    x_min = np.min(pnt[:, 0])
-    left_ind = np.where(pnt[:, 0] == x_min)[0]
-    if len(left_ind) > 1:
-        low_ind = np.where(pnt[left_ind, :] == np.min(pnt[left_ind, :]))[0]
-        left_ind = left_ind[low_ind]
-    left_pnt = pnt[left_ind, :]
-    lower_inds = np.where(pnt[:, 1] <= left_pnt[1])[0]
-    lower_pnts = pnt[:, lower_inds]
-
-
-def calculate_contour_line(data):
-    data = np.asarray(data)
-    res = splprep([data[:, 0], data[:, 1], data[:, 2]], s=2)
-    tck = res[0]
-    # x_knots, y_knots, z_knots = splev(tck[0], tck)
-    u_fine = np.linspace(0, 1, len(data))
-    x_fine, y_fine, z_fine = splev(u_fine, tck)
-    pnts = np.stack([x_fine, y_fine, z_fine], axis=1)
-    # print(pnts)
-    return pnts
-
-
 def hex2rgb(hex):
     """Convert ``#RRGGBB`` or ``RRGGBB`` to an ``(r, g, b)`` tuple."""
     value = str(hex).lstrip("#")
@@ -341,47 +289,6 @@ def gamma_line(input, lims, gamma, depth_level):
     return y
 
 
-def crop_landscape(image, dim):
-    r = (dim[0] / image.shape[0]) / (dim[0] / dim[1])
-    nw = int(image.shape[1] * r)
-
-    resized = cv2.resize(image, (nw, int(dim[1])), interpolation=cv2.INTER_AREA)
-
-    half_width = int(dim[0]) / 2
-    half_shape_width = int(resized.shape[1]) / 2
-
-    start_x = half_shape_width - half_width
-    end_x = half_width + half_shape_width
-    cropped = resized[0 : dim[1], start_x:end_x]
-
-    return cropped
-
-
-def crop_portrait(image, dim):
-    r = dim[1] / image.shape[1] / (dim[1] / dim[0])
-    nh = int(image.shape[0] * r)
-
-    resized = cv2.resize(image, (int(dim[0]), nh), interpolation=cv2.INTER_AREA)
-    half_height = int(dim[1]) / 2
-    half_shape_height = int(resized.shape[0]) / 2
-
-    start_y = half_shape_height - half_height
-    end_y = half_height + half_shape_height
-    cropped = resized[start_y:end_y, 0 : dim[0]]
-
-    return cropped
-
-
-def create_other_size(image, file_name, dim, location):
-    # 1 => width index, 0 => height index
-    if image.shape[0] > image.shape[1]:
-        cropped = crop_portrait(image, dim)
-    else:
-        cropped = crop_landscape(image, dim)
-
-    cv2.imwrite(os.path.join(location, file_name), cropped)
-
-
 def make_hist_data(image_data, max_val):
     hist_data_list = []
     for i in range(image_data.shape[2]):
@@ -415,223 +322,6 @@ def rect_contains(rect, point):
     elif point[1] > rect[3] + rect[1]:
         return False
     return True
-
-
-def get_warp_matrix(src_tri_pnts, dst_tri_pnts):
-    # Given a pair of triangles, find the affine transform.
-    warp_mat = cv2.getAffineTransform(
-        np.float32(src_tri_pnts), np.float32(dst_tri_pnts)
-    )
-    return warp_mat
-
-
-def apply_affine_transform(src_img, warp_mat, size_dst):
-    # Apply the Affine Transform just found to the src image
-    dst = cv2.warpAffine(
-        src_img.astype(np.float32),
-        warp_mat,
-        (size_dst[0], size_dst[1]),
-        None,
-        flags=cv2.INTER_LINEAR,
-        borderMode=cv2.BORDER_REFLECT_101,
-    )
-    return dst
-
-
-def warp_triangle(img1, img2, t1, t2, is_rgb=False):
-    # Find bounding rectangle for each triangle
-    r1 = cv2.boundingRect(t1.astype(np.float32))
-    r2 = cv2.boundingRect(t2.astype(np.float32))
-
-    # Offset points by left top corner of the respective rectangles
-    t1_rect = t1 - r1[:2]
-    t2_rect = t2 - r2[:2]
-    t2_rect_int = t2_rect.astype(int)
-
-    # Get mask by filling triangle
-    if is_rgb:
-        mask = np.zeros((r2[3], r2[2], img1.shape[2]), dtype=np.float32)
-        cv2.fillConvexPoly(
-            mask, np.int32(t2_rect_int), tuple(np.repeat(1.0, img1.shape[2])), 16, 0
-        )
-    else:
-        mask = np.zeros((r2[3], r2[2]), dtype=np.float32)
-        cv2.fillConvexPoly(mask, np.int32(t2_rect_int), 1, 16, 0)
-
-    # Apply warpImage to small rectangular patches
-    img1_rect = img1[r1[1] : r1[1] + r1[3], r1[0] : r1[0] + r1[2]]
-    # img2Rect = np.zeros((r2[3], r2[2]), dtype = img1Rect.dtype)
-
-    size = (r2[2], r2[3])
-
-    warp_mat = get_warp_matrix(t1_rect, t2_rect)
-    img2_rect = apply_affine_transform(img1_rect, warp_mat, size)
-    img2_rect = img2_rect * mask
-
-    # Copy triangular region of the rectangular patch to the output image
-    yr = (r2[0], r2[0] + r2[2])
-    xr = (r2[1], r2[1] + r2[3])
-    if is_rgb:
-        img2[xr[0] : xr[1], yr[0] : yr[1]] = img2[xr[0] : xr[1], yr[0] : yr[1]] * (
-            tuple(np.repeat(1.0, img1.shape[2])) - mask
-        )
-    else:
-        img2[xr[0] : xr[1], yr[0] : yr[1]] = img2[xr[0] : xr[1], yr[0] : yr[1]] * (
-            1 - mask
-        )
-    img2[xr[0] : xr[1], yr[0] : yr[1]] = img2[xr[0] : xr[1], yr[0] : yr[1]] + img2_rect
-
-
-def warp_points(pnts, t1, t2):
-    # Find bounding rectangle for each triangle
-    # r1 = cv2.boundingRect(t1.astype(np.float32))
-    # r2 = cv2.boundingRect(t2.astype(np.float32))
-    # print(r1)
-    # print(r2)
-
-    # pnts =
-
-    da_pnts = np.hstack([pnts, np.ones((len(pnts), 1))])
-    # Offset points by left top corner of the respective rectangles
-    # t1_rect = t1 - r1[:2]
-    # t2_rect = t2 - r2[:2]
-
-    warp_mat = get_warp_matrix(t1, t2)
-    output = np.dot(warp_mat, da_pnts.T).T
-
-    return output
-
-
-# calculate delanauy triangle
-def calculateDelaunayTriangles(rect, points):
-    # create subdiv
-    subdiv = cv2.Subdiv2D(rect)
-
-    # Insert points into subdiv
-    for p in points:
-        subdiv.insert(p)
-
-    triangleList = subdiv.getTriangleList()
-
-    delaunayTri = []
-
-    pt = []
-
-    for t in triangleList:
-        pt.append((t[0], t[1]))
-        pt.append((t[2], t[3]))
-        pt.append((t[4], t[5]))
-
-        pt1 = (t[0], t[1])
-        pt2 = (t[2], t[3])
-        pt3 = (t[4], t[5])
-
-        if (
-            rect_contains(rect, pt1)
-            and rect_contains(rect, pt2)
-            and rect_contains(rect, pt3)
-        ):
-            ind = []
-            for j in range(0, 3):
-                for k in range(0, len(points)):
-                    if (
-                        abs(pt[j][0] - points[k][0]) < 1.0
-                        and abs(pt[j][1] - points[k][1]) < 1.0
-                    ):
-                        ind.append(k)
-            if len(ind) == 3:
-                delaunayTri.append((ind[0], ind[1], ind[2]))
-
-        pt = []
-
-    return delaunayTri
-
-
-def get_vertex_ind_in_triangle(subdiv):
-    triangles = subdiv.getTriangleList()
-    n_triangles = len(triangles)
-    tri_vet_inds = []
-    for i in range(n_triangles):
-        da_triangle = triangles[i]
-        p1 = [da_triangle[0], da_triangle[1]]
-        p2 = [da_triangle[2], da_triangle[3]]
-        p3 = [da_triangle[4], da_triangle[5]]
-        tri_vet_inds.append(
-            [subdiv.locate(p1)[2], subdiv.locate(p2)[2], subdiv.locate(p3)[2]]
-        )
-    tri_vet_inds = np.asarray(tri_vet_inds) - 4
-    return tri_vet_inds
-
-
-def get_pnts_triangle_ind(tri_vet_inds, tri_data, size, pnts):
-    # import cv2
-    # import numpy as np
-    # img_rec = (0, 0, 100, 200)
-    # da_triangle = np.array([[0, 0], [0, 50], [100, 100]])
-    # size = (200, 100)
-    # pnts = np.array([[0, 1], [0, 2], [60, 200]])
-
-    update_pnts = pnts.copy()
-    n_pnts = len(pnts)
-    loc = np.zeros(n_pnts)
-    loc[:] = np.nan
-    da_order = []
-
-    ct_list = []
-    for i in range(len(tri_vet_inds)):
-        da_inds = tri_vet_inds[i]
-        da_triangle = np.array(
-            [tri_data[da_inds[0]], tri_data[da_inds[1]], tri_data[da_inds[2]]]
-        )
-        mask = np.zeros(size, dtype=np.uint8)
-        cv2.fillPoly(mask, pts=[da_triangle], color=255)
-        ct, hc = cv2.findContours(
-            image=mask, mode=cv2.RETR_TREE, method=cv2.CHAIN_APPROX_NONE
-        )
-        ct_list.append(ct[0])
-
-        # range_y = (np.min(da_triangle[:, 1]), np.max(da_triangle[:, 1]))
-        # range_x = (np.min(da_triangle[:, 0]), np.max(da_triangle[:, 0]))
-        #
-        # valid_pnts_ind = [ind for ind in range(n_pnts) if range_x[0] <= pnts[ind][0] <= range_x[1] and range_y[0] <= pnts[ind][1] <= range_y[1]]
-        # valid_pnts_ind = [ind for ind in valid_pnts_ind if ind not in da_order]
-        # valid_pnts = pnts[valid_pnts_ind]
-        # for j in range(len(valid_pnts)):
-        #     res = cv2.pointPolygonTest(ct_list[i], (int(pnts[j][0]), int(pnts[j][1])), True)
-        #     if res >= 0:
-        #         loc.append(i)
-        #         da_order.append(valid_pnts_ind[j])
-
-    #     temp = np.zeros(len(update_pnts))
-    #
-    #
-    # for i in range(len(tri_vet_inds)):
-    #     da_
-    #
-    for i in range(len(pnts)):
-        for j in range(len(ct_list)):
-            da_ct = ct_list[j]
-            res = cv2.pointPolygonTest(da_ct, (int(pnts[i][0]), int(pnts[i][1])), False)
-            if res >= 0:
-                loc[i] = j
-                break
-
-    return loc
-
-
-def get_sides_points(img_size):
-    size0 = img_size[1] - 1
-    size1 = img_size[0] - 1
-    side_lines = np.asarray(
-        [
-            [[0, 0], [size0, 0]],
-            [[size0, 0], [size0, size1]],
-            [[0, size1], [size0, size1]],
-            [[0, 0], [0, size1]],
-        ]
-    )
-    corner_points = [[0, 0], [size0, 0], [size0, size1], [0, size1]]
-    return side_lines, corner_points
 
 
 def num_side_pnt_changed(num_pnt, corner_points, side_lines):
@@ -884,26 +574,6 @@ def rotate_bound(image, angle):
     return cv2.warpAffine(image, rot_mat, (bound_w, bound_h))
 
 
-def center_resize(img, dim):
-    img_shape = img.shape
-    width, height = img_shape[1], img_shape[0]
-    scale_factor = np.min(np.array([dim[0] / width, dim[1] / height]))
-    resize_dim = (int(width * scale_factor), int(height * scale_factor))
-    resize_img = cv2.resize(img, resize_dim, interpolation=cv2.INTER_LINEAR)
-
-    y = int(0.5 * (dim[0] - resize_dim[0]))
-    x = int(0.5 * (dim[1] - resize_dim[1]))
-
-    if len(img_shape) == 3:
-        center_img = np.zeros((dim[1], dim[0], img.shape[2])).astype(img.dtype)
-    else:
-        center_img = np.zeros((dim[1], dim[0])).astype(img.dtype)
-
-    center_img[x : (x + resize_dim[1]), y : (y + resize_dim[0])] = resize_img
-
-    return center_img
-
-
 def get_tb_size(img_size):
     scale_factor = np.max(np.ravel(img_size) / 80)
     tb_size = (int(img_size[1] / scale_factor), int(img_size[0] / scale_factor))
@@ -956,17 +626,6 @@ def delete_points_inside_eraser(points, ct, r):
     remain_inds[real_del_ind] = False
     remain_points = points[remain_inds]
     return remain_points, real_del_ind
-
-
-def interpolate_contour_points(points):
-    if not np.all(points[-1] == points[0]):
-        points[:, 0] = np.r_[points[:, 0], points[:, 0]]
-        points[:, 1] = np.r_[points[:, 1], points[:, 1]]
-
-    tck = splprep([points[:, 0], points[:, 1]], s=0, per=True)
-
-    xi, yi = splev(np.linspace(0, 1, 1000), tck[0])
-    return xi, yi
 
 
 def create_vis_img(size, point_data, color, vis_type="p", closed=False):

@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th September 2026
+##### DriftlessMap 1.4.42
+
+Code cleanup: the shared helper module is renamed from uuuuuu.py to utils.py, seventeen unused helper functions and three unused modules are removed, and stray debug output is gone.
+
+### 27th September 2026
 ##### DriftlessMap 1.4.41
 
 Automatic cell detection runs in the background, so detecting cells on large sections no longer freezes the window.

@@ -18,7 +18,7 @@ from .atlas_loader import (
     finish_atlas_processing,
     process_atlas_raw_data,
 )
-from .uuuuuu import hex2rgb, obj_data_to_mesh3d, make_contour_img
+from .utils import hex2rgb, obj_data_to_mesh3d, make_contour_img
 from .obj_items import load_mesh_file, render_volume, render_small_volume
 from .atlas_downloader import DownloadThread
 from .atlas_transform import (
@@ -297,7 +297,6 @@ class WorkerProcessAllen(QObject):
         self.segmentation_data = np.transpose(label_data[::-1, ::-1, :], (2, 0, 1))
         self.segmentation_data = compact_label_volume(self.segmentation_data)
         del label_data
-        print(self.segmentation_data.shape)
 
         self.progress.emit(54)
 

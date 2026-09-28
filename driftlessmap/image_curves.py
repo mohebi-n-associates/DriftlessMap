@@ -15,7 +15,7 @@ import cv2
 
 from .image_stacks import ImageStacks
 from .image_reader import ImageReader
-from .uuuuuu import hsv2rgb, gamma_line, get_qhsv_from_czi_hsv, make_hist_data, read_qss_file
+from .utils import gamma_line, get_qhsv_from_czi_hsv, make_hist_data, read_qss_file
 from .widgets_utils import BWSpin, GammaSpin
 from .movable_points import MovablePoints
 
@@ -196,12 +196,6 @@ class CurvesPlot(pg.PlotWidget):
 
     def set_lut_points(self, point_data, ind):
         self.lut_points[ind].setData(pos=point_data)
-
-    def set_plot(self, points, table):
-        # self.pnts = points
-        # self.table_output = table
-        self.line.setData(self.table_input, table)
-        self.points.setData(pos=points)
 
     def on_mouse_dragged(self, vec):
         if self.line_type == 'gamma' or self.active_index is None:
@@ -582,8 +576,3 @@ class CurveWidget(QWidget):
     def set_channel_enable(self, ind, is_enable):
         self.curve_plot.set_enable(ind, is_enable)
         self.set_enable_induced_slider()
-
-
-
-
-
