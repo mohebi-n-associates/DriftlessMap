@@ -67,7 +67,9 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-      - run: python -m pip install ruff==0.12.4
+      - run: python -m pip install ruff==0.12.4 "mypy>=1.10" numpy
       - run: ruff check .
+      - name: Type-check the scientific core
+        run: mypy
       - name: Agent guides are identical
         run: cmp AGENTS.md CLAUDE.md

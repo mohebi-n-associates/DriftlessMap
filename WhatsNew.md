@@ -3,6 +3,22 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.4.46
+
+Release date: 27 September 2026
+
+This release adds type checking to development.
+
+- **mypy in CI.** Twenty-two modules are now checked with mypy on every CI
+  run. They cover persistence, provenance, triangulation, probe
+  reconstruction and export, ROI analysis, the image readers and the atlas
+  loader. The check found one missing annotation, which is fixed. Qt widget
+  modules will be added as they gain annotations. The test extra now installs
+  mypy, and the manual lists `python -m mypy` with the other developer checks.
+- **pytest defaults.** pytest is configured to collect tests from `tests/`.
+
+---
+
 ## DriftlessMap 1.4.45
 
 Release date: 27 September 2026
