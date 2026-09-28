@@ -6,14 +6,21 @@ from unittest.mock import patch
 import numpy as np
 
 
+_CZI_READER = None
+
+
 def import_czi_reader():
-    """Import ``czi_reader`` even where the optional CZI wheel is absent."""
-    stub = types.ModuleType("aicspylibczi")
-    stub.CziFile = object
-    with patch.dict(sys.modules, {"aicspylibczi": sys.modules.get("aicspylibczi", stub)}):
-        sys.modules.pop("driftlessmap.czi_reader", None)
-        import driftlessmap.czi_reader as czi_reader
-    return czi_reader
+    """Import ``czi_reader`` once, even where the optional CZI wheel is absent."""
+    global _CZI_READER
+    if _CZI_READER is None:
+        stub = types.ModuleType("aicspylibczi")
+        stub.CziFile = object
+        with patch.dict(
+            sys.modules, {"aicspylibczi": sys.modules.get("aicspylibczi", stub)}
+        ):
+            import driftlessmap.czi_reader as czi_reader
+        _CZI_READER = czi_reader
+    return _CZI_READER
 
 
 class FakeCzi:
@@ -61,6 +68,40 @@ class CziScaleTests(unittest.TestCase):
         self.assertEqual(reader.data["scene 0"].shape[:2], (20, 30))
         self.assertEqual(reader.scale["scene 0"], 0.5)
 
+
+
+class CziMetadataTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.czi_reader = import_czi_reader()
+
+    def parse(self, xml, n_channels=2, is_rgb=False):
+        import xml.etree.ElementTree as ElementTree
+
+        return self.czi_reader.parse_czi_metadata(
+            ElementTree.fromstring(xml), n_channels, is_rgb
+        )
+
+    def test_complete_metadata_is_read(self):
+        scaling, colours, _hsv, names, gammas = self.parse(
+            "<Metadata><Scaling><Items><Distance Id='X'><Value>6.5e-07</Value>"
+            "</Distance></Items></Scaling><DisplaySetting><Channels>"
+            "<Channel><Color>#FFFF0000</Color><ShortName>DAPI</ShortName>"
+            "<Gamma>1.2</Gamma></Channel>"
+            "<Channel><Color>#FF00FF00</Color><ShortName>GFP</ShortName></Channel>"
+            "</Channels></DisplaySetting></Metadata>"
+        )
+        self.assertAlmostEqual(scaling, 0.65)
+        self.assertEqual(colours, [(255, 0, 0), (0, 255, 0)])
+        self.assertEqual(names, ["DAPI", "GFP"])
+        self.assertEqual(gammas, ["1.2"])
+
+    def test_missing_scaling_and_display_settings_fall_back(self):
+        scaling, colours, hsv, names, gammas = self.parse("<Metadata/>")
+        self.assertIsNone(scaling)
+        self.assertEqual(len(colours), 2)
+        self.assertEqual(names, ["Channel 1", "Channel 2"])
+        self.assertEqual(len(hsv), 2)
 
 if __name__ == "__main__":
     unittest.main()

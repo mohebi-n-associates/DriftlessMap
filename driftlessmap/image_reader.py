@@ -30,6 +30,22 @@ def _hsv_colors(rgb_colors):
     return result
 
 
+def read_bitmap(path, flags=cv2.IMREAD_COLOR):
+    """Decode an image file with OpenCV, including non-ASCII paths.
+
+    ``cv2.imread`` cannot open paths outside the system code page on Windows,
+    so the bytes are read with NumPy and decoded in memory. Returns ``None``
+    when the file is unreadable or not an image.
+    """
+    try:
+        buffer = np.fromfile(str(path), dtype=np.uint8)
+    except OSError:
+        return None
+    if buffer.size == 0:
+        return None
+    return cv2.imdecode(buffer, flags)
+
+
 def _set_channel_metadata(reader, rgb_colors, channel_names):
     reader.rgb_colors = list(rgb_colors)
     reader.channel_name = list(channel_names)
@@ -54,7 +70,7 @@ class ImageReader(object):
         self.data_type = "uint8"
         _set_channel_metadata(self, RGB_COLORS, ["Red", "Green", "Blue"])
 
-        image = cv2.imread(str(image_file_path), cv2.IMREAD_COLOR)
+        image = read_bitmap(image_file_path, cv2.IMREAD_COLOR)
         if image is None:
             raise ValueError("OpenCV could not decode the selected image.")
         self.data = {"scene 0": cv2.cvtColor(image, cv2.COLOR_BGR2RGB)}
@@ -227,8 +243,12 @@ class ImagesReader(object):
         if not paths:
             raise ValueError("The selected folder contains no supported images.")
 
+        if all(path.suffix.lower() in (".tif", ".tiff") for path in paths):
+            self._read_tiff_scenes(paths)
+            return
+
         for scene_id, path in enumerate(paths):
-            image = cv2.imread(str(path), cv2.IMREAD_COLOR)
+            image = read_bitmap(path, cv2.IMREAD_COLOR)
             if image is None:
                 raise ValueError("Could not decode image: {}".format(path.name))
             self.file_name_list.append(path.stem)
@@ -237,4 +257,44 @@ class ImagesReader(object):
             )
             self.scale["scene {}".format(scene_id)] = 1.0
 
+        self.n_scenes = len(self.data)
+
+    def _read_tiff_scenes(self, paths):
+        """Read a TIFF folder at its native bit depth and channel layout.
+
+        Every file must share one layout, because the scenes share channel
+        controls; otherwise the folder is rejected rather than silently
+        reduced to eight-bit RGB.
+        """
+        layout = None
+        for scene_id, path in enumerate(paths):
+            tiff = TIFFReader(path)
+            if tiff.error_index != 0 or tiff.n_pages != 1:
+                raise ValueError(
+                    "{} is not a single-page grayscale, channel or RGB TIFF.".format(
+                        path.name
+                    )
+                )
+            current = (
+                tiff.data_type,
+                tiff.n_channels,
+                tiff.is_rgb,
+                tiff.data["scene 0"].shape[2:],
+            )
+            if layout is None:
+                layout = current
+                self.is_rgb = tiff.is_rgb
+                self.n_channels = tiff.n_channels
+                self.level = tiff.level
+                self.data_type = tiff.data_type
+                self.pixel_type = tiff.pixel_type
+                _set_channel_metadata(self, tiff.rgb_colors, tiff.channel_name)
+            elif current != layout:
+                raise ValueError(
+                    "{} has a different bit depth or channel layout from the "
+                    "other TIFF files in the folder.".format(path.name)
+                )
+            self.file_name_list.append(path.stem)
+            self.data["scene {}".format(scene_id)] = tiff.data["scene 0"]
+            self.scale["scene {}".format(scene_id)] = 1.0
         self.n_scenes = len(self.data)

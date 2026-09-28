@@ -45,7 +45,7 @@ See [CITATION.cff](CITATION.cff) for machine-readable citation metadata.
 
 ## Installation
 
-DriftlessMap 1.4.37 is available as a desktop application for end users and as
+DriftlessMap 1.4.38 is available as a desktop application for end users and as
 a Python package for developers.
 
 ### Mode 1: desktop application for end users
@@ -53,10 +53,10 @@ a Python package for developers.
 No Python or Conda installation is required. Download the asset for your
 computer from [GitHub Releases](https://github.com/mohebi-n-associates/DriftlessMap/releases):
 
-- **Windows 64-bit:** download `DriftlessMap-1.4.37-Windows-x64.zip`, extract
+- **Windows 64-bit:** download `DriftlessMap-1.4.38-Windows-x64.zip`, extract
   the complete folder, and double-click `DriftlessMap.exe`. Do not move the
   executable out of its extracted folder.
-- **macOS:** download `DriftlessMap-1.4.37-macOS.dmg`, open it, and drag
+- **macOS:** download `DriftlessMap-1.4.38-macOS.dmg`, open it, and drag
   `DriftlessMap.app` to Applications. The application bundle includes the
   DriftlessMap icon and all Python dependencies.
 
@@ -79,7 +79,7 @@ malware:
    required only for the first launch.
 
 Only use **Open Anyway** for a copy downloaded from the
-[official DriftlessMap 1.4.37 release](https://github.com/mohebi-n-associates/DriftlessMap/releases/tag/v1.4.37).
+[official DriftlessMap 1.4.38 release](https://github.com/mohebi-n-associates/DriftlessMap/releases/tag/v1.4.38).
 The official macOS DMG has this SHA-256 digest:
 
 ```text

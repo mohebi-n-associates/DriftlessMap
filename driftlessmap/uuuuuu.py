@@ -252,12 +252,11 @@ def calculate_contour_line(data):
 
 
 def hex2rgb(hex):
-    if "#" in hex:
-        hex = hex.lstrip("#")
-        rgb_color = [int(hex[i : i + 2], 16) for i in (0, 2, 4)]
-    else:
-        if len(hex) == 6:
-            rgb_color = [int(hex[i : i + 2], 16) for i in (0, 2, 4)]
+    """Convert ``#RRGGBB`` or ``RRGGBB`` to an ``(r, g, b)`` tuple."""
+    value = str(hex).lstrip("#")
+    if len(value) != 6:
+        raise ValueError("Expected a six-digit hex colour, got {!r}.".format(hex))
+    rgb_color = [int(value[i : i + 2], 16) for i in (0, 2, 4)]
     return rgb_color[0], rgb_color[1], rgb_color[2]
 
 

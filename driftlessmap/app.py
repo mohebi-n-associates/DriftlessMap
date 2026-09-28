@@ -97,6 +97,7 @@ from .image_reader import (
     ImageReader,
     ImagesReader,
     TIFFReader,
+    read_bitmap,
 )
 from .image_curves import *
 from .image_view import ImageView
@@ -6653,7 +6654,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
         slice_data = None
         img_data = None
         if os.path.splitext(atlas_path)[1].lower() in self.SLICE_IMAGE_EXTENSIONS:
-            img_data = cv2.imread(atlas_path, cv2.IMREAD_COLOR)
+            img_data = read_bitmap(atlas_path, cv2.IMREAD_COLOR)
             if img_data is None:
                 msg = (
                     "Loading slice atlas failed. The image could not be read: "
