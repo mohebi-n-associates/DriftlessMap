@@ -3,1089 +3,170 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
-## DriftlessMap 1.4.52
+## DriftlessMap 1.5.0
 
 Release date: 27 September 2026
 
-`roadmap.md` now opens with a status table showing which release (1.4.1 to
-1.4.51) addressed each item from the 1.4.0 code review. It also lists the
-items still open and why:
-
-- Moving large binaries out of Git history.
-- Adding code-signing certificates.
-- An Intel macOS build.
-- Fully transactional project loading.
-- Further decomposition of the main window.
-- The first GitHub run of the new workflows.
-
----
-
-## DriftlessMap 1.4.51
-
-Release date: 27 September 2026
-
-This is internal restructuring with no change in behaviour.
-
-- **One owner for landmark state.** Fifteen pieces of related state are now
-  owned by a single `LandmarkModel` in `driftlessmap/landmarks.py`: the atlas
-  and histology landmark lists, boundary and corner points, triangle
-  topology, the cached registration and its cache key, and the on-screen
-  landmark labels. The window's existing attributes delegate to the model, so
-  every tool works as before, and the state can now be reset and reasoned
-  about in one place.
-- **Validation without the GUI.** The checks applied when loading a `.dmaptri`
-  file (atlas view, slice size, boundary-point count and topology) are now a
-  standalone function with their own tests and type checking.
-
----
-
-## DriftlessMap 1.4.50
-
-Release date: 27 September 2026
-
-This is internal restructuring with no change in behaviour.
-
-The click handlers for the histology window (about 490 lines) and the atlas
-window (about 270 lines) were each one long `if`/`elif` chain over every
-tool. Each tool now has its own method: ruler, eraser, magic wand, lasso,
-triangulation, cell locator and probe in the histology window; ruler,
-triangulation, eraser, lasso, probe, magic wand and Bregma picker in the
-atlas window. The handlers themselves are now short dispatchers. A new test
-drives the ruler, triangulation and probe tools through the real handlers.
-
----
-
-## DriftlessMap 1.4.49
-
-Release date: 27 September 2026
-
-This is an internal restructuring with no change in behaviour. It removes the
-kind of duplication that caused several earlier atlas-provenance bugs.
-
-- **One place records the active atlas.** A single method now records which
-  atlas is active: its kind, path and load-time fingerprint. The volume
-  loader, the slice loader, project loading and **Switch Atlas** all go
-  through it, instead of each setting these fields itself.
-- **One registry updates the atlas views.** Nineteen blocks that repeated the
-  same pen, brush or lookup-table call on each of the coronal, sagittal,
-  horizontal and slice views now go through one helper. It updates only the
-  views that have the item, so views can no longer be missed. About 100
-  lines of duplication are gone.
-- **Tested project module.** Default working data, merging of older project
-  data, input pre-fingerprinting and export file naming now live in the
-  GUI-free `project_io` module, with their own tests and type checking.
-
----
-
-## DriftlessMap 1.4.48
-
-Release date: 27 September 2026
-
-This release adds regression tests for three interface components that had
-none:
-
-- **Tool settings.** Pencil, eraser, lasso, magic wand, probe, cell and
-  triangulation settings save and restore unchanged.
-- **Histogram curve widget.** Per-channel colours and enabled channels reset
-  for each new image.
-- **Channel colour selector.** Each image's colour swatch is added and removed
-  exactly once.
-
-The channel selector now starts with a default channel index, so it no longer
-raises an error if its colour changes before it has been assigned a channel.
-
----
-
-## DriftlessMap 1.4.47
-
-Release date: 27 September 2026
-
-This release is housekeeping for contributors and packagers.
-
-- **`CONTRIBUTING.md`.** A new contributor guide covers development setup,
-  the three checks CI runs (pytest, Ruff and mypy), running GUI tests
-  headless, the persistence and provenance ground rules, and the release
-  checklist.
-- **Source distribution.** It now includes `MANUAL.md`, `UpdateLog.md`, the
-  contributor guide and the test suite, so a downloaded source package can be
-  tested. The outdated build-system comment in `MANIFEST.in` is gone.
-- **`.DS_Store` files.** macOS Finder metadata files are no longer tracked
-  and are ignored in future.
-
----
-
-## DriftlessMap 1.4.46
-
-Release date: 27 September 2026
-
-This release adds type checking to development.
-
-- **mypy in CI.** Twenty-two modules are now checked with mypy on every CI
-  run. They cover persistence, provenance, triangulation, probe
-  reconstruction and export, ROI analysis, the image readers and the atlas
-  loader. The check found one missing annotation, which is fixed. Qt widget
-  modules will be added as they gain annotations. The test extra now installs
-  mypy, and the manual lists `python -m mypy` with the other developer checks.
-- **pytest defaults.** pytest is configured to collect tests from `tests/`.
-
----
-
-## DriftlessMap 1.4.45
-
-Release date: 27 September 2026
-
-This release changes how DriftlessMap itself is tested, built and published.
-
-- **One CI workflow that gates releases.** The two workflows that ran the same
-  Python 3.10–3.14 matrix on every push are merged into one. It skips
-  documentation-only changes and cancels superseded pull-request runs. PyPI
-  publishing and the desktop builds now run the full test suite first and
-  build only if it passes.
-- **Supply-chain hardening.**
-  - Every GitHub Action is pinned to a commit SHA, and Dependabot proposes
-    updates for actions and Python dependencies.
-  - The desktop-build jobs can only read the repository. A separate job that
-    runs no build code attaches the installers to the release.
-- **Reproducible bundles.** Desktop bundles install exact dependency versions
-  from `packaging/constraints-desktop.txt`.
-- **Build failures stop the build.** The Windows build script now stops if
-  `pip` or PyInstaller fails, instead of packaging whatever was left.
-- **Apple Silicon naming.** The macOS DMG is now named `...-macOS-arm64.dmg`,
-  because it is built for Apple Silicon. Intel Macs should use the Conda/pip
-  installation.
-- **Optional code signing.** Authenticode signing on Windows, and Developer ID
-  signing plus notarization on macOS, run automatically once the maintainers
-  add the signing secrets. Until then, builds remain unsigned as before.
-
-The workflow changes take effect on the next push to GitHub.
-
----
-
-## DriftlessMap 1.4.44
-
-Release date: 27 September 2026
-
-This release makes the installed package smaller and documents where adapted
-code comes from.
-
-- **Unused label tables removed.** `WHS_atlas_labels.pkl` and
-  `allen_mice_atlas_labels.pkl` were shipped with the package but never read.
-  They are deleted.
-- **Screenshot left out of the package.** The 1 MB `herbs.png` screenshot is
-  used only by the README. It stays in the repository but is no longer
-  installed with the package.
-- **Attribution.** `MovablePoints` adapts an example from pyqtgraph. That is
-  now credited in the code and in `ORIGINS.md`, as its MIT license requires.
-
----
-
-## DriftlessMap 1.4.43
-
-Release date: 27 September 2026
-
-This is a maintenance release; the only visible change is two removed menu
-items.
-
-- **Explicit imports.** Every `from ... import *` in the package, 56 in all,
-  is replaced by explicit imports. Tools, reviewers and Ruff can now see
-  where each name comes from.
-- **Unused imports and variables removed.** About 110 unused imports and 18
-  unused variables are gone.
-- **numba removed.** `numba` is no longer a dependency. It was imported but
-  never used, and it slowed installation and support for new Python
-  versions.
-- **Dead features removed.**
-  - The disabled **Atlas > Merge Slices** menu item, which did nothing.
-  - The unused **Export Atlas Overlay** action.
-  - Layer add/delete buttons that were never shown. The add button would
-    have created an invalid layer.
-  - Several unreachable methods.
-  - Write-only state that grew without limit.
-- **Stricter linting.** Ruff now enforces all pyflakes checks and
-  flake8-bugbear. A late-binding lambda and three unused loop variables it
-  found are fixed.
-
----
-
-## DriftlessMap 1.4.42
-
-Release date: 27 September 2026
-
-This is a maintenance release with no change in behaviour.
-
-- **Renamed module.** The shared helper module is now `driftlessmap/utils.py`,
-  formerly `driftlessmap/uuuuuu.py`. Scripts that imported the internal module
-  must update the import; it was never a stable public API.
-- **Unused code removed.**
-  - Seventeen unused helper functions, including a superseded
-    triangulation-warp implementation, crop helpers, and several functions
-    that could not have worked.
-  - The unused `popup_message.py`, `triangulation_points.py` (a sample with
-    hard-coded developer paths) and `images_reader.py` (an empty stub).
-  - An unused test scatter item, a broken curve method, a developer-only
-    label-table generator, and unused imports.
-- **Quieter console.** Stray debug output ("Killing", "rgb", raw array
-  dumps) no longer prints to the console.
-
----
-
-## DriftlessMap 1.4.41
-
-Release date: 27 September 2026
-
-Automatic cell detection now runs on a background thread behind a progress
-dialog. Detecting cells on a large histology section no longer freezes the
-window. The detected cells are unchanged.
-
----
-
-## DriftlessMap 1.4.40
-
-Release date: 27 September 2026
-
-DriftlessMap now stays responsive during long operations. These steps run on
-a background thread behind a progress dialog, so the window keeps repainting
-instead of freezing under a busy cursor:
-
-- Fingerprinting the atlas and histology (SHA-256) when saving a project.
-- Writing the project archive, including streaming a multi-gigabyte CZI into
-  a portable project.
-- Verifying a project's atlas and histology when it is opened.
-- Verifying an atlas when importing objects or merging probes.
-- Warping overlays between the atlas and histology, and transferring virus
-  pixels.
-
-The progress dialog blocks other input to the window while the work runs, so
-the project cannot change halfway through a save.
-
----
-
-## DriftlessMap 1.4.39
-
-Release date: 27 September 2026
-
-Moving, adding or deleting a registration landmark with the triangle mesh
-shown is faster. Each change rebuilt the full piecewise-affine registration
-twice, once for the atlas window and once for the histology window. The
-registration is now built once and reused while the landmarks, image sizes
-and triangle topology are unchanged, which roughly halves the work per edit.
-
----
-
-## DriftlessMap 1.4.38
-
-Release date: 27 September 2026
-
-Several image-input problems have been fixed.
-
-- **Non-ASCII paths.** PNG, JPEG, BMP and slice-atlas images in folders with
-  non-ASCII names, such as `Müller/slide.png`, now open on Windows. They used
-  to fail with "could not decode".
-- **TIFF folders keep their bit depth.** Opening a folder of TIFF sections
-  used to convert every image to 8-bit RGB, discarding 16-bit intensity and
-  separate channels. All-TIFF folders are now read at their native bit depth
-  and channel layout. Sections must share one layout; otherwise the folder is
-  rejected with the name of the file that differs.
-- **CZI files with sparse metadata.** CZI files without display settings or
-  pixel scaling no longer fail to open. Missing channel colours and names get
-  defaults, and missing scaling means lengths are shown in pixels.
-  `#RRGGBB` colours are also read correctly.
-
----
-
-## DriftlessMap 1.4.37
-
-Release date: 27 September 2026
-
-The custom Atlas Processor works again and handles file choices correctly.
-
-- **The dialog opens again.** **Atlas > Process Raw Atlas Data** failed as
-  soon as the dialog opened, because of a call that PyQt6 rejects.
-  Double-clicking an object to rename it failed for the same reason.
-- **Full paths are kept.** Only file names were stored, so a file chosen from
-  another folder was looked up in the folder of the first file. That found
-  the wrong file or none. Full paths are now kept, and processed files are
-  written next to the atlas volume.
-- **Cancelled picks are ignored.** Cancelling a file picker no longer counts
-  as a selection, and a missing file is now named in the status message.
-- **Allen-style label tables.** Tables whose parent column is
-  `parent_structure_id` are accepted as well as `parent_id`, and the error
-  message now names the columns required.
-
----
-
-## DriftlessMap 1.4.36
-
-Release date: 27 September 2026
-
-Atlas downloads are more robust and easier to trace.
-
-- **Unencoded transfers.** Downloads now ask servers not to apply transfer
-  compression. If a server compresses anyway, the size check no longer
-  compares decompressed bytes with the compressed `Content-Length`, which
-  used to raise spurious "Incomplete download" errors.
-- **HTTPS on every hop.** Every redirect in a download must now use HTTPS, not
-  only the final address.
-- **Content-Length.** A non-numeric `Content-Length` header is ignored
-  instead of stopping the download.
-- **Download manifest.** Each downloaded source file is recorded, with its
-  URL, size and SHA-256, in `download_manifest.json` in the atlas folder. If
-  a later download of the same file brings different bytes, because the
-  upstream "current release" changed, the download stops. Previously it was
-  silently mixed into the existing atlas. Use a new folder for a new
-  release.
-
----
-
-## DriftlessMap 1.4.35
-
-Release date: 27 September 2026
-
-Interrupted atlas processing can no longer produce a mismatched atlas.
-
-- **Atomic cache writes.** Every processed-atlas cache file is now written to a
-  temporary file, flushed, and renamed into place. This covers volumes,
-  labels, meshes, contours and axis metadata. A crash, a full disk or a forced
-  quit leaves the previous file intact instead of a truncated one.
-- **Unfinished runs are detected.** Atlas processing, the Allen downloader and
-  the Waxholm downloader mark their folder from the first cache write until
-  they succeed. A folder left marked by an interrupted run is refused with
-  "Atlas processing in this folder did not finish". Previously a new
-  `segment_pre_made.pkl` could be loaded together with a stale
-  `atlas_pre_made.pkl` from an earlier atlas. Atlases processed before this
-  release carry no mark and load as usual.
-
----
-
-## DriftlessMap 1.4.34
-
-Release date: 27 September 2026
-
-Loading layers and projects is more defensive.
-
-- **Imported atlas layers are checked first.** An imported atlas layer must
-  now be a known layer type with its required fields, match the current
-  atlas slice's size, keep its points inside the slice, and (for cells) have
-  metadata for every cell. Previously a mismatched or incomplete atlas layer
-  was applied as-is and could fail later. An unknown layer type used to be
-  added to the layer list as an empty entry.
-- **Older projects get defaults.** A project's working data is now combined
-  with the current defaults. Fields added in later versions therefore exist
-  even for older projects, and retired fields are ignored.
-- **Failed loads are reported.** If a project cannot be opened completely, the
-  status bar now says so, and warns not to save over the original.
-
----
-
-## DriftlessMap 1.4.33
-
-Release date: 27 September 2026
-
-Merged probes and their exports now identify their atlas by content, not only
-by name and path. Each newly merged probe stores the SHA-256 content
-reference of the volume atlas it was reconstructed in, covering the atlas's
-identity files and shape metadata. The probe `_trajectory.csv` export
-includes it as `atlas_sha256`. A probe's coordinates can therefore be traced
-to the exact atlas data even after the atlas folder is renamed or moved.
-
-Probes merged with earlier versions keep working; re-merge them to add the
-reference.
-
----
-
-## DriftlessMap 1.4.32
-
-Release date: 27 September 2026
-
-Reference checks now cover the remaining gaps.
-
-- **Portable projects verify what they pack.** **Save Portable Project** now
-  checks the SHA-256 of the histology bytes while streaming them into the
-  archive. If the file changed after it was fingerprinted, including during
-  the copy, the save stops with an explanation. Previously a changed file
-  could be packed under the old checksum.
-- **Atlas verification is stricter.** When a project's atlas folder is
-  verified, identity files that appeared after the atlas was recorded (for
-  example meshes processed later) now count as a change. The recorded file
-  list must also match its own combined checksum, so an edited list cannot
-  pass.
-- **Single-file sources extract correctly.** A portable single-file source
-  now reports the path it was written to, even when that differs from the
-  source's recorded name.
-
----
-
-## DriftlessMap 1.4.31
-
-Release date: 27 September 2026
-
-Saving is safer, and saved files can be shared normally.
-
-- **Permissions.** Projects, layers, objects and other DriftlessMap files
-  were written readable only by their owner, because the temporary file
-  used for atomic saving was private. That broke shared lab folders and
-  tightened the permissions of any file that was overwritten. New files now
-  use your normal default permissions, and overwritten files keep the
-  permissions they had.
-- **Crash safety.** Each save is flushed to disk before it replaces the
-  previous version, and the rename is flushed too on macOS and Linux. A power
-  loss or crash can no longer leave a truncated project in place of the good
-  one.
-- **Interrupted saves.** A save stopped by Ctrl-C or a forced quit now
-  removes its temporary file.
-- **NumPy compatibility.** Reading older HERBS pickles no longer goes through
-  NumPy's deprecated `numpy.core` module, which future NumPy releases will
-  remove.
-
----
-
-## DriftlessMap 1.4.30
-
-Release date: 27 September 2026
-
-**Drawing mode is stored with each drawing.** Whether a drawing piece
-outlines an area or traces a line is now saved with the piece, in projects
-and when the piece is unmerged. Previously it was read from the piece's
-name, so renaming an area drawing made its ROI report show a line length:
-the summed distance between filled pixels, which has no meaning. Older
-projects and objects take the mode from the name, as before.
-
-**Shanks pair with the right settings.** Pieces are now grouped by object
-name in natural order ("probe 2" before "probe 10"). Alphabetical order
-paired multi-probe face settings with the wrong shanks once there were more
-than ten probes.
-
----
-
-## DriftlessMap 1.4.29
-
-Release date: 27 September 2026
-
-**Scientific correction.** Two probe measurements have changed.
-
-- **Brain surface entry.** The entry point used to be the first labelled
-  voxel met along the fitted line, extended across the whole atlas. For
-  tilted tracks under an overhang, such as tissue beneath the cortex near the
-  colliculi or cerebellum, the extended line could cross unrelated tissue
-  first. That inflated the probe length and shifted every contact depth. The
-  entry is now the edge of the tissue that runs continuously from the most
-  dorsal traced point. If that point lies above the brain, the first tissue
-  below it is used.
-- **Region path length.** Path length per region was averaged over every
-  site column, including columns that never enter the region. A region
-  crossed by one of four columns was reported at a quarter of its length. It
-  is now averaged only over the columns that pass through it.
-
-The description of the path length has been corrected: it is the length
-along the shank, excluding the tip, not the fitted centreline length. The
-labelled track in `_track.csv` still covers the full insertion-to-tip length.
-
-**Action:** re-merge probes and re-export their CSV files, especially tilted
-tracks and multi-column probes near region borders.
-
----
-
-## DriftlessMap 1.4.28
-
-Release date: 27 September 2026
-
-**Scientific correction.** Region assignment and surface depth now follow the
-voxel-edge convention used elsewhere, in which voxel `k` spans `[k, k + 1)`.
-
-- **Coordinates are floored, not truncated.** Several places truncated
-  coordinates toward zero instead of flooring them. A point at −0.4 was
-  therefore treated as voxel 0, so points just outside the atlas received an
-  edge label. For virus objects, truncation happened before Bregma was
-  added, so fractional points on the negative side of Bregma were counted in
-  the neighbouring voxel. This affected probe contacts, track labels, cell,
-  virus and drawing regions, and ROI reports.
-- **Surface depth.** Drawing ROI depths are now measured from the top face of
-  the dorsal-most labelled voxel. Previously they were measured from its
-  lower face: every depth was up to one voxel too shallow, and points inside
-  that top voxel got no depth at all.
-- **Unknown labels.** Cell, virus and drawing summaries now list structure
-  IDs missing from the ontology as `Unknown [ID]` instead of failing.
-- **Speed.** Counting the voxels of each region no longer builds an index of
-  the whole atlas, so large atlases are faster.
-
-**Action:** re-merge virus, cell and drawing objects and re-export ROI CSVs
-where exact region counts near boundaries or surface depths matter.
-
----
-
-## DriftlessMap 1.4.27
-
-Release date: 27 September 2026
-
-When a merged probe with no mediolateral tilt was shown on the atlas, the
-sagittal view drew it at its mediolateral coordinate instead of its
-anteroposterior one, so the line appeared at the wrong AP position. The
-sagittal view's horizontal axis is AP, and the line now uses it. Tilted
-probes, and the coronal view, were already drawn correctly. Stored
-coordinates and exports were not affected.
-
----
-
-## DriftlessMap 1.4.26
-
-Release date: 27 September 2026
-
-**Scientific correction.** Warped images and transferred points now use the
-same pixel convention.
-
-- **Warped overlays line up with transferred points.** Transferred cells,
-  probes and drawings are placed at pixel centres. The dense image warp,
-  used for overlays and virus layers, sampled at pixel corners instead. The
-  two were offset by (scale − 1) / 2 pixels, for example about 4.5 histology
-  pixels (half an atlas voxel) at a 10× resolution difference. Warped
-  overlays and virus pixels now agree with point-transferred annotations to
-  within one pixel.
-- **The last pixel row and column are kept.** Annotations there were
-  reported as outside the registration mesh and dropped, because the mesh
-  ends at the centre of the last pixel. They are now assigned to the nearest
-  triangle and transferred.
-
-**Action:** re-transfer virus layers or overlays used for quantification
-when the histology and atlas resolutions differ substantially.
-
----
-
-## DriftlessMap 1.4.25
-
-Release date: 27 September 2026
-
-Flipping and rotating the histology image is now consistent.
-
-- **Every page of a stack.** Flips and rotations now apply to every page of
-  a multi-page stack. Previously only the page on screen changed, and moving
-  to another page brought back its unflipped, unrotated pixels.
-- **No cumulative blur.** Repeated 1° rotations now re-rotate the unrotated
-  image by the total angle, so the image is resampled once. Previously each
-  step resampled the result of the last one, adding blur and cropping the
-  corners each time. That degraded image was then embedded in saved
-  projects.
-- **Landmarks follow every change.** Flips and 180° rotations now reset the
-  histology landmark frame, as 90° rotations already did. The thumbnail size
-  also follows the new orientation.
-
----
-
-## DriftlessMap 1.4.24
-
-Release date: 27 September 2026
-
-This release fixes several places where the application's records drifted
-out of step with what was on screen.
-
-- **All atlas layers are cleared.** Switching atlases, reloading an atlas or
-  opening a project skipped every other atlas layer, leaving layers that
-  pointed at data that had already been cleared.
-- **Object links stay with their objects.** Linked objects were remembered by
-  list position. Deleting or merging another object shifted those positions,
-  so **Compare** showed the wrong probes or failed. Links now follow the
-  objects themselves.
-- **Cell counts reset.** Deleting the `atlas-cells` layer left the per-layer
-  cell counts in an invalid state instead of resetting them to zero.
-- **Landmark labels match after reopening a project.** Restored labels were
-  numbered from 0, while landmarks placed by hand are numbered from 1. They
-  also stayed hidden even when the triangulation tool was active.
-
----
-
-## DriftlessMap 1.4.23
-
-Release date: 27 September 2026
-
-Settings dialogs and probe-planning restores are safer.
-
-- **Slice Settings.** The dialog now opens with the slice's current cut,
-  width, height and distance from Bregma, and has a **Cancel** button.
-  Previously it always opened at zero and Coronal, and closing it with Esc
-  still applied those values, wiping the calibration.
-- **Layer shift and rotate settings.** These now have **Cancel** buttons.
-  They also no longer display values above 99 as 99.
-- **Probe planning from projects and `.dmapprobe` files.** Loaded planning is
-  checked before anything changes. An unknown probe type or an unknown site
-  face is rejected with a message, instead of leaving the controls in an
-  inconsistent state. Linear-silicon geometry is re-checked. Unaccepted
-  probe points on the atlas are kept.
-
----
-
-## DriftlessMap 1.4.22
-
-Release date: 27 September 2026
-
-Background atlas work now fails cleanly.
-
-- **Unexpected errors are reported.** In the Waxholm download and the custom
-  Atlas Processor, an unexpected error in the background step (for example a
-  corrupt NIfTI file or running out of memory) escaped the worker thread. The
-  dialog then waited forever, refused to close, and could take the
-  application down with it. The error is now shown in the dialog, and the
-  dialog can be closed.
-- **Closing after a finished step.** Closing the Allen or Waxholm downloader
-  after its mesh or processing step had finished could raise "wrapped C/C++
-  object has been deleted". A finished background step is now treated as
-  stopped.
-
----
-
-## DriftlessMap 1.4.21
-
-Release date: 27 September 2026
-
-Undo and redo now behave predictably.
-
-- **History cannot change after the fact.** Snapshots are now independent
-  copies. Previously some cell sizes, symbols and layer indexes, and the lasso
-  path, were stored by reference, so later edits changed what an undo would
-  restore.
-- **Deleting a layer is safe.** Deleting a layer now removes its undo
-  history. Undoing a step for a deleted layer used to raise an error.
-- **Atlas edits can be undone.** Undo and redo now restore edits to the atlas
-  mask, the atlas slice and atlas probe points. Previously these steps printed
-  a placeholder message and changed only the layer thumbnail.
-- **Atlas eraser.** Erasing on the atlas slice layer no longer fails while
-  recording the undo step.
-
----
-
-## DriftlessMap 1.4.20
-
-Release date: 27 September 2026
-
-Several problems with how histology images are displayed have been fixed.
-
-- **Nearly black images load.** Images whose brightest pixel in a channel is
-  1 or 2, such as binary masks, failed to load while their histogram curve
-  was being built.
-- **Hidden channels stay hidden.** A channel hidden with its visibility
-  button reappeared after reopening a project, flipping, rotating, or
-  changing page or scene, even though its button still showed it as hidden.
-- **Histogram state resets per image.** Curve colours and the set of enabled
-  channels are reset for each new image. Previously a second image could use
-  the first image's colours, and a one-channel image opened after a
-  four-channel one could not use point editing.
-- **Colour swatches no longer pile up.** Each project load added another copy
-  of the image's own colour swatch to every channel's colour list.
-
----
-
-## DriftlessMap 1.4.19
-
-Release date: 27 September 2026
-
-Importing and exporting objects is more reliable.
-
-- **Import requires the volume atlas.** Importing objects while only a slice
-  atlas was loaded raised an error. Import now asks you to show the volume
-  atlas the objects belong to.
-- **Import checks coordinates correctly.** The bounds check compared
-  Bregma-relative coordinates with the atlas size in display axis order. It
-  allowed a coordinate equal to the axis size and never rejected negative
-  coordinates. Objects are now checked point by point against the volume they
-  will be drawn in.
-- **Export uses safe, unique file names.** Bulk export used object names
-  directly as file names. A name containing `/` or `:` could fail or write
-  elsewhere, and two objects with the same name overwrote each other. Unsafe
-  characters are now replaced, duplicates get a numbered suffix, and the
-  status bar confirms how many objects were exported.
-
----
-
-## DriftlessMap 1.4.18
-
-Release date: 27 September 2026
-
-Probe reconstruction now copes with three edge cases that used to stop the
-merge with an internal error.
-
-- **Short tracks.** When the track inside the brain was too short to hold the
-  tip and at least one recording site in every column, the merge raised an
-  index error. It now reports "the track inside the brain is too short to hold
-  the tip and a recording site in every column", and the probe pieces are
-  kept.
-- **Unknown structure IDs.** A structure ID present in the atlas volume but
-  missing from its ontology, as can happen with custom or trimmed atlases,
-  raised an error. Such regions are now named `Unknown [ID]`, shown in grey.
-- **Horizontal probe directions.** A direction exactly along the ML or AP
-  axis produced undefined (NaN) tilt angles. It now produces finite angles.
-
----
-
-## DriftlessMap 1.4.17
-
-Release date: 27 September 2026
-
-Several histology editing tools no longer fail in ordinary use.
-
-- **Eraser.** Erasing on the `img-overlay` layer, or on an empty mask or
-  virus layer, raised an error. The eraser now edits only layers it can
-  erase and ignores the rest.
-- **Magic wand.** The magic wand selected every pixel brighter than the lower
-  tolerance bound, instead of only pixels within the tolerance of the clicked
-  intensity. On 16-bit images, some tolerance values produced an empty
-  selection because the upper bound wrapped around. The wand now selects the
-  band on both sides of the clicked value at any bit depth.
-- **Number fields.** Clearing the eraser, pencil or ruler size, or the
-  magic-wand tolerance, while typing no longer raises an error on each
-  keystroke. Tolerance values below 0 are no longer accepted, and the
-  boundary-point count accepts only 2 to 99.
-
----
-
-## DriftlessMap 1.4.16
-
-Release date: 27 September 2026
-
-**Edit > Rotate** and the layer shift controls now move transferred layers
-correctly.
-
-- **Rotating point layers** (probe, cell, virus or drawing layers) failed
-  with a matrix-shape error unless the layer held exactly two points. With
-  two points, the result was wrong.
-- **Rotation direction and centre.** Point layers turned the opposite way to
-  image layers. Atlas layers were rotated about the centre of the histology
-  landmark frame instead of the atlas frame.
-- **Shifting image layers** produced an image with its width and height
-  swapped on any non-square slice, so the layer no longer lined up with the
-  atlas.
-
-Point layers are now rotated with the same transform as image layers, about
-the centre of their own frame, and shifted images keep their size.
-
----
-
-## DriftlessMap 1.4.15
-
-Release date: 27 September 2026
-
-Several tools stopped with an error because they looked up an annotation layer
-that did not exist.
-
-- **Slice atlas and virus data.** With a slice atlas, **Virus register**,
-  **Accept and Transfer** of virus data, and **Edit > Clear** all failed,
-  because the slice view had no layer for virus points. It now has one.
-- **Editing the slice layer.** The eraser, lasso delete and mask delete now
-  work on the `atlas-slice` layer. They edit the slice pixels that projects
-  save; previously they looked for those pixels in the wrong place and
-  failed.
-- **Pencil colour and size.** Changing the pencil colour while a closed atlas
-  drawing was present failed because the wrong layer name was used. Pencil
-  size changes now also apply to drawings on the slice atlas.
-
----
-
-## DriftlessMap 1.4.14
-
-Release date: 27 September 2026
-
-Changing a region's colour in the label tree no longer crashes DriftlessMap on
-atlases whose structure IDs are sparse, such as the Allen CCF. There, most IDs
-(for example 997) are larger than the number of labels. The colour sent to
-the 3D view was looked up by structure ID rather than by the label's position
-in the colour table. Large IDs raised an error inside Qt, which can close the
-application. Small IDs sent the colour of an unrelated region to the 3D mesh.
-
----
-
-## DriftlessMap 1.4.13
-
-Release date: 27 September 2026
-
-**Scientific correction.** **Make Pieces** now builds every object piece from
-annotations that are in atlas coordinates. Previously, several piece types
-could be built from annotations still in the histology window, using their
-raw pixel positions as if they were atlas positions and without applying the
-registration:
-
-- **Virus pixels** were also put in (row, column) order, transposing them
-  relative to every other annotation.
-- **Histology cells** (with the atlas overlay transferred to histology) were
-  counted using the atlas cell counts, so they were silently dropped or
-  paired with the wrong layers.
-- **Histology contours** made **Make Pieces** crash.
-
-Annotations drawn in the histology window must now be moved into the atlas
-with **Transform to Atlas Slice Window** and then **Accept and Transfer**, as
-the manual describes. If any are waiting, **Make Pieces** lists them in the
-status bar and leaves them in place.
-
-**Action:** if you made virus, cell, contour, probe or drawing pieces directly
-from histology annotations, recreate them after transferring the annotations
-to the atlas.
-
----
-
-## DriftlessMap 1.4.12
-
-Release date: 27 September 2026
-
-Saving no longer ties your work to a file it was not derived from. Suppose a
-project's histology file had changed, and you declined to locate the original
-so the project fell back to its embedded raster. The next save used to
-fingerprint the changed file and record it as the source of the embedded
-work, which the persistence contract forbids. Slice atlases restored from a
-project had the same problem, because they were never fingerprinted.
-
-Now a histology or slice-atlas file is linked only if its fingerprint was
-taken as it was loaded. When the embedded raster is in use, the project keeps
-the reference it was opened with. That reference still describes the original
-file, so the original can be verified and relinked later.
-
----
-
-## DriftlessMap 1.4.11
-
-Release date: 27 September 2026
-
-Projects now record the atlas that was actually in use.
-
-- **Switch Atlas.** Switching from the volume atlas to the slice atlas
-  recorded the volume atlas as current, and switching back recorded the
-  slice atlas. The next save could then fail with a false "atlas files
-  changed" error. It could also store the slice image as the project's volume
-  atlas, and such a project then failed to reopen.
-- **Waxholm download.** The downloaded atlas was displayed but never
-  recorded. After an Allen atlas had been loaded, saving recorded
-  Waxholm-space work against the Allen atlas's checksums.
-
-Finished Waxholm and Allen downloads now open through the same verified
-loader as **Load Atlas**. The downloaded folder is fingerprinted, its axis
-metadata is read, existing atlas layers are cleared, and the folder is
-remembered as the last-used atlas.
-
----
-
-## DriftlessMap 1.4.10
-
-Release date: 27 September 2026
-
-**Scientific correction.** Exported source-atlas voxel coordinates now refer
-to the voxel whose label DriftlessMap reported. This applies to Allen
-`allen_DV_vox` and `allen_AP_vox` in probe, cell and drawing CSVs and in
-information windows. On source axes that are mirrored during atlas
-processing (Allen DV and AP), fractional coordinates were mirrored as if they
-were voxel indices. The exported value was therefore about one voxel away
-from the voxel that was labelled: 25 µm dorsal at 25 µm resolution, and it
-could fall in a different structure. The Bregma-estimated millimetre values
-derived from those voxels shifted by the same amount.
-
-One mirroring rule is now used for export, hover readouts and imported
-points. `floor(value)` of an exported coordinate is always the source voxel
-that was sampled. Fractional coordinates are mirrored about the axis extent,
-and integer coordinates are treated as voxel indices. The rule is documented
-in the manual's coordinate section.
-
-External point files with an integer dtype (for example `int64` NumPy arrays)
-are no longer rejected as the "wrong type". Imported points are checked
-against the source atlas volume before they are added.
-
-**Action:** re-export any probe, cell or drawing CSV that uses source-atlas
-or Allen voxel columns.
-
----
-
-## DriftlessMap 1.4.9
-
-Release date: 27 September 2026
-
-**Scientific correction.** Histology ruler measurements are correct again in
-two situations.
-
-- **After reopening a project.** Projects stored the scale slider's
-  percentage (for example `10`) where the fraction of full resolution was
-  expected (for example `0.1`). After a reload, every ruler length was
-  divided by that number, so it read 10 to 100 times too short.
-- **Non-mosaic CZI images.** These are always decoded at full resolution, but
-  the slider value was recorded as their scale. At 10%, ruler lengths read
-  10 times too long.
-
-Projects now store the true fraction of full resolution under
-`image_scale`. The slider percentage is still kept for older readers. Older
-projects take their scale from the image as it is reloaded. When a project
-falls back to its embedded raster, the raster keeps the scale it was read at,
-so a CZI saved at 10% still measures correctly. Scene switching on CZI files
-no longer fails when the stored scale is fractional.
-
-**Action:** repeat any ruler measurements taken after reopening a project,
-or on a non-mosaic CZI read below 100%.
-
----
-
-## DriftlessMap 1.4.8
-
-Release date: 27 September 2026
-
-**Scientific correction.** Recording-site coordinates are now correct for
-probes reconstructed after surgery with the site face set to **In** (1) or
-**Right** (3) and a track that is not perfectly vertical. For these faces the
-across-shank direction was built from a vector that is not perpendicular to
-the shank. Lateral site offsets (x bias) therefore leaked into the depth
-direction, and the thickness offset shrank. For example, on a probe tilted
-45° in both axes, 71% of each lateral offset was added to the site depth.
-Contact coordinates, and the atlas regions assigned to contacts near region
-borders, were affected.
-
-All four faces now use one reference frame for the shank, rotated by 180° or
-90° as the face requires. Every face is now perpendicular to the shank and
-right-handed at any tilt. Faces **Out** (0) and **Left** (2), vertical
-probes, and pre-surgery plans are unchanged.
-
-**Action:** re-merge any after-surgery probe that used face In or Right on a
-tilted track, then re-export its CSV files.
-
----
-
-## DriftlessMap 1.4.7
-
-Release date: 27 September 2026
-
-Several fixes to the Linear Silicon and Multi-Probe setting dialogs protect
-probe geometry from silent corruption.
-
-- **Cancel now discards your edits.** The dialogs used to edit the live probe
-  settings directly, so adding columns or probes, or changing a value, took
-  effect even when the dialog was cancelled.
-- **Added columns are laid out correctly.** In columns added with the column
-  spinbox, the "Number of Sites" and "Sites Distance" fields were in each
-  other's rows. Values typed into those fields were stored as the wrong
-  quantity.
-- **OK reflects every field.** OK is enabled only while every field holds a
-  valid value; previously only the most recently edited field was checked.
-  Clearing Site Height no longer hides the OK and Cancel buttons for good.
-- **Probe faces display correctly.** Saved multi-probe faces are shown, where
-  previously every face showed as "Out".
-- **Validity is checked on every accept.** The probe geometry is re-checked
-  each time the dialog is accepted, so correcting an invalid entry makes the
-  probe usable again. The check now requires each column to start within the
-  shank above the tip. It replaces the old site-height times site-distance
-  comparison, which did not measure anything physical. A zero tip length is
-  reported as a reminder and no longer stops the other checks.
-
----
-
-## DriftlessMap 1.4.6
-
-Release date: 27 September 2026
-
-Loading triangulation points no longer throws away the landmarks just loaded.
-When a `.dmaptri` file was saved in a different atlas view (for example
-coronal while sagittal was showing), switching to that view reset the atlas
-landmarks. This happened after the file's points had been applied, so the
-interior landmarks and triangle topology were silently lost. The view is now
-switched first and the points applied afterwards.
-
-Triangulation files are now checked before they replace anything. A file is
-rejected with an explanation if it:
-
-- was saved for an atlas slice of a different size;
-- uses a different number of boundary points per side;
-- has missing fields or invalid coordinates;
-- has a triangle topology that references missing points.
-
-Loaded landmark labels are numbered from 1, matching landmarks placed by
-hand, and old labels are removed from every view.
-
----
-
-## DriftlessMap 1.4.5
-
-Release date: 27 September 2026
-
-A failed atlas load no longer damages the current session. Previously the
-atlas path and fingerprint were replaced, and atlas layers were deleted,
-before DriftlessMap had checked that the atlas could be read. The next save
-could then record the failed atlas as the source of work done in the
-previous one. The same was true for a missing or unreadable mesh cache, and
-for a slice-atlas image that could not be decoded.
-
-Both loaders now read and validate the whole atlas first, and change the
-session only after it is complete. The last-used atlas is remembered only
-after a successful load. If a project's volume atlas cannot be loaded, the
-project is no longer opened on top of the old atlas.
-
-Loading a slice atlas from an image works again; it had been failing because
-of an internal channel check. The slice-atlas dialog now also accepts
-`.jpeg`, `.tif`, `.tiff` and `.bmp` images, and extensions are matched
-regardless of case.
-
----
-
-## DriftlessMap 1.4.4
-
-Release date: 27 September 2026
-
-A failed merge no longer destroys the pieces being merged. Previously all
-probe, virus, cell, drawing or contour pieces were removed before the merge
-was attempted. Any failure then lost them: the slice atlas being active, a
-probe with a single point, a pre-surgery probe made of several pieces, or a
-fitted track that leaves the atlas. If several objects were being merged,
-every object after the failing one was lost as well.
-
-Merging now works in two steps. Every merged object is calculated first, and
-the pieces are replaced only when all of them succeed. If anything fails, the
-status bar names the object and the reason and confirms that no pieces were
-removed. The opaque "Error index: 16, please contact maintainers" message now
-reads "the fitted probe track leaves the atlas volume or never reaches labeled
-brain tissue".
-
----
-
-## DriftlessMap 1.4.3
-
-Release date: 27 September 2026
-
-Load Project no longer deletes the objects in the current session before a
-replacement project is ready. Previously, every object piece and merged object
-was removed as soon as the "save the current project?" prompt was answered.
-This happened even if the file picker was then cancelled, the chosen file
-could not be read, or its sources could not be verified.
-
-Objects and their 3D views are now removed only after the new project has
-been read and verified. The prompt now offers **Cancel**. Choosing **Yes**
-and then cancelling or failing the save leaves the current session untouched,
-instead of loading over unsaved work.
-
----
-
-## DriftlessMap 1.4.2
-
-Release date: 27 September 2026
-
-A small crafted file can no longer exhaust memory when opened. Before this
-release, a project, layer or object archive of a few hundred bytes could
-declare an array of any size. When the file was opened, DriftlessMap tried to
-reserve that much memory (for example about 137 GB) before discovering the
-data was missing.
-
-Each stored array's declared size is now checked against the bytes actually
-present in the archive before any memory is reserved. Legitimate files,
-including very compressible masks, load as before.
-
-Arrays that were shared when a file was saved are now loaded once and stay
-shared. Previously each reference was decoded into a separate copy, which used
-extra memory.
-
----
-
-## DriftlessMap 1.4.1
-
-Release date: 27 September 2026
-
-Opening an atlas folder no longer runs Python code hidden in its mesh cache
-files. Before this release, `atlas_meshdata.pkl`, `atlas_small_meshdata.pkl`
-and the per-region files in `meshes/` were read with Python's unrestricted
-pickle loader. A crafted atlas folder shared alongside a project could
-therefore run arbitrary code when the project or atlas was opened. The same
-applied to the most recently used atlas, which loads at startup.
-
-These files are now read with a restricted reader that accepts only mesh
-vertex and face arrays. It checks their shapes and face indices before
-building the 3D mesh. Existing processed atlases load unchanged and do not
-need to be reprocessed. Atlas downloads and the Atlas Processor use the same
-safe reader.
+This release comes from a full review of DriftlessMap 1.4.0. It corrects
+several scientific calculations and closes two security holes. It stops
+several ways of losing work, fixes many crashes, and keeps the window
+responsive during long operations. Projects, layers, objects and legacy
+HERBS files saved by earlier versions still open.
+
+### Action required: re-export if…
+
+Some corrected calculations change reported numbers. Regenerate results made
+with an earlier version if they fall into any of these cases:
+
+| If you… | Then… |
+| --- | --- |
+| Reconstructed probes **after surgery** with site face **In** or **Right** on a tilted track | Re-merge the probe and re-export its CSVs. Contact positions were wrong. |
+| Exported probe, cell or drawing CSVs using **source-atlas or Allen voxel columns** (`allen_DV_vox`, `allen_AP_vox`, `source_axis_*_vox`) or the Bregma-estimated mm derived from them | Re-export. On mirrored axes the values were about one voxel off the labelled voxel. |
+| Merged **tilted probes**, especially under overhanging tissue such as the cortex near the colliculi or cerebellum | Re-merge. The brain entry point, and with it probe length and contact depths, could come from the wrong tissue. |
+| Used **per-region path lengths** (`_regions.csv`) for multi-column probes | Re-merge. Regions crossed by only some columns were under-reported. |
+| Measured with the **histology ruler** after reopening a project, or on a **non-mosaic CZI** read below 100% | Repeat the measurement. Lengths were off by 10× to 100×. |
+| Made **virus, cell, contour, probe or drawing pieces directly from histology annotations** without Accept and Transfer | Transfer the annotations to the atlas and make the pieces again. Virus pixels were transposed and cells could be dropped. |
+| Quantified **warped overlays or virus layers** where histology and atlas resolutions differ a lot | Re-transfer. Warps were offset by up to half an atlas voxel from transferred points. |
+| Relied on exact **region counts near boundaries**, or on **drawing ROI surface depths** | Re-merge virus, cell and drawing objects and re-export ROI CSVs. Coordinates on the negative side of Bregma were rounded toward it, and depths were up to one voxel too shallow. |
+
+Results not listed here are unaffected.
+
+### Scientific corrections
+
+- **Site-face frames.** Site faces **In** and **Right** now use frames
+  perpendicular to the shank at any tilt. Lateral site offsets used to leak
+  into contact depth.
+- **Voxel mirroring.** Coordinates on mirrored source axes follow one rule
+  everywhere: `floor(exported value)` is always the voxel whose label was
+  reported. This applies to exports, hover readouts and imported points, and
+  is documented in the manual.
+- **Brain entry.** The surface entry follows the tissue continuous with the
+  traced track, not the first tissue the extended line touches.
+- **Region path length.** It is averaged only over the site columns that pass
+  through the region. The value is now correctly described as the length
+  along the shank, excluding the tip.
+- **Image scale.** Projects store the true image scale; the ruler, embedded
+  rasters and non-mosaic CZI files use it.
+- **Pixel centres.** Image warps and point transfers use the same convention.
+  Points in the last pixel row or column are no longer dropped.
+- **Flooring.** Voxel indexes are floored, not truncated, so points just
+  outside the atlas no longer take edge labels.
+- **Surface depth.** It is measured from the top face of the brain surface.
+- **Pieces from atlas data only.** **Make Pieces** uses atlas-frame
+  annotations only, and lists any histology annotations still waiting to be
+  transferred.
+- **Probe display.** Untilted probes are drawn at their AP position in the
+  sagittal view.
+- **Multi-probe faces.** Face settings pair with the right shank when there
+  are more than ten probes.
+- **Drawing mode.** Drawings remember whether they are areas or lines, so a
+  renamed area still reports an area.
+
+### Security
+
+- **Mesh caches.** Mesh cache files in atlas folders are read with a
+  restricted reader. Opening a crafted atlas folder, including one shared
+  with a project, could previously run arbitrary code.
+- **Archive sizes.** Array sizes declared in project, layer and object files
+  are checked before memory is reserved. A file of a few hundred bytes could
+  demand about 137 GB.
+- **Downloads.** Every download redirect must use HTTPS. Each downloaded file
+  is recorded with its SHA-256 in `download_manifest.json`, so a changed
+  upstream file is detected instead of being mixed into an existing atlas.
+
+### Protecting your work and provenance
+
+- **Load Project** no longer deletes the current objects before a new project
+  has been chosen and verified. Its save prompt now offers **Cancel**.
+- A failed merge no longer deletes the pieces being merged; the reason is
+  shown in plain language.
+- A failed atlas load no longer replaces the current atlas's path,
+  fingerprint or layers.
+- Loading triangulation points no longer wipes the landmarks just loaded.
+  Files for a different slice size, boundary-point setting or topology are
+  rejected with an explanation.
+- Cancel in the probe-geometry dialogs discards edits. Added linear-silicon
+  columns no longer put site count and spacing in each other's rows.
+- The correct atlas is recorded after **Switch Atlas** and after a Waxholm or
+  Allen download. A changed or unverified histology or slice file is never
+  linked on save.
+- Merged probes record the atlas's SHA-256 content identity, exported as
+  `atlas_sha256`.
+- **Save Portable Project** verifies the checksum of the bytes it packs.
+  Atlas verification also catches identity files added later and tampered
+  file lists.
+- Saves keep normal file permissions, are flushed to disk before replacing
+  the old file, and clean up after interruption.
+- Atlas cache files are written atomically. An interrupted processing run
+  marks its folder so mismatched caches are never loaded together.
+- Imported objects and atlas layers are validated against the current atlas.
+  Older projects get defaults for newer fields.
+- Undo history holds independent snapshots and survives layer deletion.
+
+### Crashes and broken features fixed
+
+- Features that did not work at all now work again:
+  - Loading a slice atlas from an image.
+  - The **Process Raw Atlas Data** dialog.
+  - Double-click renaming of objects.
+- Fixed crashes:
+  - Changing a region colour on atlases with sparse IDs, such as the Allen
+    CCF.
+  - Changing the pencil colour or size.
+  - Virus registration and **Edit > Clear** with a slice atlas.
+  - Rotating point layers.
+  - The eraser on overlay layers.
+  - Clearing a size or tolerance field while typing.
+  - Merging short tracks or atlases with unknown labels.
+  - Importing objects with only a slice atlas loaded.
+  - Loading nearly black images.
+  - Switching CZI scenes.
+  - Unexpected errors in atlas workers.
+- Other fixes:
+  - Shifting layers on non-square slices.
+  - A two-sided magic-wand band.
+  - Hidden channels staying hidden after reload.
+  - Histogram state carried over between images.
+  - Accumulating colour swatches.
+  - Stack-wide flips and rotations without cumulative blur.
+  - Settings dialogs that now prefill their values and honour Cancel.
+- Input:
+  - Non-ASCII paths on Windows.
+  - Folders of TIFF sections keep their native bit depth.
+  - CZI files with sparse metadata open.
+  - The Atlas Processor keeps full file paths.
+
+### Responsiveness
+
+Fingerprinting inputs, writing project archives, verifying atlases, warping
+overlays and detecting cells now run in the background behind a progress
+dialog, so the window no longer freezes. The registration is built once per
+landmark change, and region volumes are counted without indexing the whole
+atlas.
+
+### Other changes
+
+- **Downloads.** The macOS download is now `DriftlessMap-1.5.0-macOS-arm64.dmg`,
+  built for Apple Silicon. Intel Macs should use the Conda/pip installation.
+- **Menus.** The disabled **Atlas > Merge Slices** item and an unused export
+  action are removed.
+- **Dependencies.** `numba` is no longer required. Two unused label tables and
+  the README screenshot are no longer installed with the package.
+- **For developers:**
+  - `driftlessmap/uuuuuu.py` is renamed `driftlessmap/utils.py`.
+  - All wildcard imports are replaced.
+  - New modules: `landmarks.py`, `project_io.py`, `background.py` and
+    `layer_geometry.py`.
+  - Ruff enforces all pyflakes and bugbear checks, and mypy checks the
+    scientific core.
+  - The test suite grew from 126 to 233 tests.
+- **Release process.**
+  - One CI workflow now gates PyPI and desktop releases.
+  - Actions are pinned to commit SHAs and kept current by Dependabot.
+  - Only a separate upload job can write to the repository.
+  - Desktop bundles use exact dependency versions.
+  - Code signing runs once signing secrets are configured.
+  - `CONTRIBUTING.md` describes the development workflow.
 
 ---
 

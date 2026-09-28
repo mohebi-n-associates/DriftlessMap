@@ -20,10 +20,12 @@ Priority levels:
 Every fix should come with a regression test (CLAUDE.md rule 2). Items marked
 ✔ were reproduced or checked directly against the code during review.
 
-## Status (updated for 1.4.52)
+## Status (released as 1.5.0)
 
-Each item was fixed in its own release, 1.4.1 to 1.4.51, with regression
-tests. The suite grew from 126 to 233 tests. The detailed item list below is
+Each item was fixed in its own commit with regression tests. The commits
+were numbered 1.4.1 to 1.4.52 during development and are published together as
+DriftlessMap 1.5.0; the table keeps the development numbers so each fix can be
+found in the history. The suite grew from 126 to 233 tests. The detailed item list below is
 kept as the original review record; line numbers refer to 1.4.0.
 
 | Items | Release |
