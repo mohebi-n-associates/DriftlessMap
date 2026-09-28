@@ -70,6 +70,25 @@ class ProposeLandmarkTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             propose_landmarks(intensity, np.zeros_like(labels), section)
 
+    def test_frame_points_are_carried_and_clamped(self):
+        intensity, labels = synthetic_slice()
+        section = warped_section(intensity, labels)
+        height, width = labels.shape
+        frame = np.array([[0.0, 0.0], [width, 0.0], [width, height], [0.0, height],
+                          [width / 2, height / 2]])
+        proposal = propose_landmarks(intensity, labels, section, deformable=False,
+                                     boundary_points=frame)
+        self.assertEqual(proposal.boundary_points.shape, (5, 2))
+        sh, sw = section.shape[:2]
+        self.assertTrue(np.all(proposal.boundary_points >= 0))
+        self.assertTrue(np.all(proposal.boundary_points[:, 0] <= sw - 1))
+        self.assertTrue(np.all(proposal.boundary_points[:, 1] <= sh - 1))
+        # the centre point follows the fit rather than being clamped
+        truth = known_warp(frame[4:])
+        self.assertLess(np.linalg.norm(proposal.boundary_points[4] - truth[0]), 10.0)
+        self.assertEqual(propose_landmarks(intensity, labels, section, deformable=False)
+                         .boundary_points.shape, (0, 2))
+
 
 SAMPLE = Path(os.environ.get("DRIFTLESSMAP_SAMPLE_SECTION", ""))
 ATLAS = Path(os.environ.get("DRIFTLESSMAP_SAMPLE_ATLAS", ""))

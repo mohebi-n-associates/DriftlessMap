@@ -142,6 +142,7 @@ from .probe_reconstruction import (
 )
 from .roi_analysis import build_drawing_roi_info
 from .atlas_matching import suggest_sections
+from .auto_registration import propose_landmarks
 from .background import run_in_background
 from .section_suggestion_dialog import SectionSuggestionDialog
 from .landmarks import LANDMARK_FIELDS, LandmarkModel, triangulation_payload_error
@@ -528,6 +529,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.actionSave_Slice.triggered.connect(self.save_processed_slice)
         self.actionSwitch_Atlas.triggered.connect(self.switch_atlas)
         self.actionSuggest_Atlas_Section.triggered.connect(self.suggest_atlas_section)
+        self.actionPropose_Landmarks.triggered.connect(self.propose_registration_landmarks)
         self.actionBregma_Picker.setCheckable(True)
         self.actionBregma_Picker.triggered.connect(self.pick_bregma)
         self.actionCreate_Slice_Layer.triggered.connect(self.process_slice)
@@ -1845,6 +1847,111 @@ class DriftlessMap(QMainWindow, FORM_Main):
             self.normal_color,
         )
 
+    def propose_registration_landmarks(self):
+        """Register the section to the displayed atlas slice and propose
+        paired landmarks, which the user reviews with the triangulation tool."""
+        if (
+            self.current_atlas != "volume"
+            or self.atlas_view.atlas_data is None
+            or self.atlas_view.working_atlas.label_data is None
+        ):
+            self.print_message(
+                "Show a volume atlas slice before proposing landmarks.",
+                self.error_message_color,
+            )
+            return
+        if self.image_view.current_img is None:
+            self.print_message(
+                "Load a histology section before proposing landmarks.",
+                self.error_message_color,
+            )
+            return
+        if self.a2h_transferred or self.h2a_transferred:
+            self.print_message(
+                "Remove the current transform overlay before proposing landmarks.",
+                self.error_message_color,
+            )
+            return
+        if self.atlas_tri_inside_data or self.histo_tri_inside_data:
+            reply = QMessageBox.question(
+                self,
+                "Propose Landmarks",
+                "Replace the current registration landmarks with proposed ones?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+        stack = self.atlas_view.working_atlas
+        try:
+            proposal = run_in_background(
+                self,
+                "Registering the section to the atlas slice...",
+                propose_landmarks,
+                np.asarray(stack.img.image),
+                np.asarray(stack.label_data),
+                np.asarray(self.image_view.current_img),
+                boundary_points=np.asarray(self.atlas_tri_onside_data, dtype=float),
+            )
+        except (ValueError, RuntimeError) as exc:
+            self.print_message(
+                "Landmarks could not be proposed: {}".format(exc),
+                self.error_message_color,
+            )
+            return
+        if len(proposal.atlas_points) < 3:
+            self.print_message(
+                "Too few landmarks could be proposed; place them by hand.",
+                self.error_message_color,
+            )
+            return
+        self.apply_landmark_proposal(proposal)
+
+    def apply_landmark_proposal(self, proposal):
+        """Replace interior landmarks with a proposal and show them."""
+        self._invalidate_triangulation(clear_topology=True)
+        self.atlas_tri_inside_data = [
+            [round(float(x), 2), round(float(y), 2)] for x, y in proposal.atlas_points
+        ]
+        self.histo_tri_inside_data = [
+            [round(float(x), 2), round(float(y), 2)] for x, y in proposal.histology_points
+        ]
+        if len(proposal.boundary_points) == len(self.atlas_tri_onside_data):
+            # Carry the mesh frame through the fit too, so the fixed frame
+            # points do not contradict the interior landmarks.
+            self.histo_tri_onside_data = [
+                [round(float(x), 2), round(float(y), 2)]
+                for x, y in proposal.boundary_points
+            ]
+        self.atlas_tri_data = self.atlas_tri_onside_data + self.atlas_tri_inside_data
+        self.histo_tri_data = self.histo_tri_onside_data + self.histo_tri_inside_data
+        self.atlas_view.working_atlas.image_dict["tri_pnts"].setData(
+            pos=np.asarray(self.atlas_tri_data)
+        )
+        self.image_view.img_stacks.image_dict["tri_pnts"].setData(
+            pos=np.asarray(self.histo_tri_data)
+        )
+        self._refresh_triangulation_text("atlas")
+        self._refresh_triangulation_text("image")
+        # Show the proposal in the triangulation tool, ready for editing.
+        button = self.tool_box.checkable_btn_dict["triang_btn"]
+        if not button.isChecked():
+            button.setChecked(True)
+            self.triang_btn_clicked()
+        if self.tool_box.triang_vis_btn.isChecked():
+            self.update_atlas_tri_lines()
+            self.update_histo_tri_lines()
+        else:
+            self._build_triangulation_registration(strict=False, show_error=False)
+        stage = "outline and intensity" if proposal.deformable_used else "outline"
+        self.print_message(
+            "Proposed {} landmark pairs from the {} fit (outline overlap {:.2f}). "
+            "Review them and drag any that are off before transferring.".format(
+                len(proposal.atlas_points), stage, proposal.overlap_final
+            ),
+            self.normal_color,
+        )
+
     def switch_atlas(self):
         if (
             self.atlas_view.atlas_data is None
@@ -3018,7 +3125,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
                         True
                     )
                 if (
-                    self.atlas_tri_inside_data
+                    self.working_atlas_text
                     and not self.working_atlas_text[0].isVisible()
                 ):
                     for i in range(len(self.working_atlas_text)):
@@ -3027,7 +3134,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 if not self.image_view.img_stacks.image_dict["tri_pnts"].isVisible():
                     self.image_view.img_stacks.image_dict["tri_pnts"].setVisible(True)
                 if (
-                    self.histo_tri_inside_data
+                    self.working_img_text
                     and not self.working_img_text[0].isVisible()
                 ):
                     for i in range(len(self.working_img_text)):
@@ -3039,7 +3146,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
                         False
                     )
                 if (
-                    self.atlas_tri_inside_data
+                    self.working_atlas_text
                     and self.working_atlas_text[0].isVisible()
                 ):
                     for i in range(len(self.working_atlas_text)):
@@ -3047,7 +3154,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
             if self.histo_tri_data:
                 if self.image_view.img_stacks.image_dict["tri_pnts"].isVisible():
                     self.image_view.img_stacks.image_dict["tri_pnts"].setVisible(False)
-                if self.histo_tri_inside_data and self.working_img_text[0].isVisible():
+                if self.working_img_text and self.working_img_text[0].isVisible():
                     for i in range(len(self.working_img_text)):
                         self.working_img_text[i].setVisible(False)
 
