@@ -1,14 +1,29 @@
-import os
-import sys
 import numpy as np
 import pyqtgraph as pg
 # from pyqtgraph.Qt import QtGui, QtCore
 import pyqtgraph.functions as fn
 import pyqtgraph.opengl as gl
-from PyQt6.QtWidgets import *
-from PyQt6.QtGui import *
-from PyQt6.QtCore import *
-
+from PyQt6.QtWidgets import (
+    QDoubleSpinBox,
+    QFrame,
+    QGridLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QRadioButton,
+    QSlider,
+    QVBoxLayout,
+    QWidget,
+)
+from PyQt6.QtGui import QIcon, QPixmap
+from PyQt6.QtCore import (
+    QObject,
+    QSize,
+    QTimer,
+    Qt,
+    pyqtSignal,
+)
 from .image_stacks import SliceStack
 from .slice_stacks import SliceStacks
 from .label_tree import LabelTree
@@ -1172,8 +1187,6 @@ class AtlasView(QObject):
         self.has_display_objects = False
 
 
-
-
     def get_atlas_angles(self):
         c_ang = (self.crotation_ctrl.h_spinbox.value(), self.crotation_ctrl.v_spinbox.value())
         s_ang = (self.srotation_ctrl.h_spinbox.value(), self.srotation_ctrl.v_spinbox.value())
@@ -1338,17 +1351,6 @@ class AtlasView(QObject):
     #
     #     return points3_list
 
-    def get_multi_probe_2d_vis_data(self, data, multi_settings):
-        x_vals = multi_settings['x_vals']
-        y_vals = multi_settings['y_vals']
-        n_probes = len(x_vals)
-
-        vind = np.where(y_vals == 0)[0]
-        if len(vind) == 0:
-            vis_data = [data]
-        else:
-            vis_data = []
-            base_loc = np.ravel(x_vals)[vind]
 
     def get_plane_norm_vector(self, atlas_display):
         if atlas_display == 'coronal':

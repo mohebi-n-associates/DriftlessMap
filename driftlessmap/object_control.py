@@ -1,12 +1,41 @@
-import os
-import sys
 import numpy as np
 from natsort import natsorted
 from random import randint
 import pyqtgraph as pg
-from PyQt6.QtWidgets import *
-from PyQt6.QtGui import *
-from PyQt6.QtCore import *
+from PyQt6.QtWidgets import (
+    QAbstractItemView,
+    QBoxLayout,
+    QColorDialog,
+    QComboBox,
+    QDialog,
+    QDialogButtonBox,
+    QFileDialog,
+    QFormLayout,
+    QFrame,
+    QGridLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QHeaderView,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QScrollArea,
+    QSizePolicy,
+    QSlider,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+    QWidget,
+)
+from PyQt6.QtGui import QColor, QIcon, QPixmap
+from PyQt6.QtCore import (
+    QObject,
+    QSize,
+    Qt,
+    pyqtSignal,
+    pyqtSlot,
+)
 from .wtiles import QDoubleButton
 from .probe_csv import write_probe_csv_files
 from .roi_analysis import write_roi_csv

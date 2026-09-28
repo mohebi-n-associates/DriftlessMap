@@ -2,11 +2,17 @@ import numpy as np
 from .persistence import write_cache_pickle
 import os
 from os.path import dirname, join
-from PyQt6.QtWidgets import *
-from PyQt6.QtGui import *
-from PyQt6.QtCore import *
-
-import pickle
+from PyQt6.QtWidgets import (
+    QDialog,
+    QDialogButtonBox,
+    QFileDialog,
+    QLabel,
+    QMessageBox,
+    QProgressBar,
+    QPushButton,
+    QVBoxLayout,
+)
+from PyQt6.QtCore import QObject, QThread, pyqtSignal
 import shutil
 from .atlas_loader import (
     begin_atlas_processing,

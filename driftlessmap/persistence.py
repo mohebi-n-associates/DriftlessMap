@@ -1,7 +1,6 @@
 """Versioned, non-executable persistence for DriftlessMap user data."""
 
 import hashlib
-import io
 import importlib
 import json
 import os

@@ -337,7 +337,6 @@ border-color: rgb(75, 78, 84);</string>
     <addaction name="actionCrop"/>
     <addaction name="actionBregma_Picker"/>
     <addaction name="actionSave_Slice"/>
-    <addaction name="actionMerge_Slices"/>
     <addaction name="separator"/>
     <addaction name="actionSwitch_Atlas"/>
    </widget>
@@ -688,17 +687,6 @@ selection-background-color: rgb(50, 50, 50);</string>
     <string>Load Image as Atlas Slice</string>
    </property>
   </action>
-  <action name="actionMerge_Slices">
-   <property name="enabled">
-    <bool>false</bool>
-   </property>
-   <property name="text">
-    <string>Merge Slices</string>
-   </property>
-   <property name="toolTip">
-    <string>Currently not valid</string>
-   </property>
-  </action>
   <action name="actionCut">
    <property name="text">
     <string>Crop</string>
@@ -871,11 +859,6 @@ selection-background-color: rgb(50, 50, 50);</string>
   <action name="actionExternal_Cells">
    <property name="text">
     <string>Cells</string>
-   </property>
-  </action>
-  <action name="actionExport_Atlas_Overlay">
-   <property name="text">
-    <string>Export Atlas Overlay</string>
    </property>
   </action>
  </widget>

@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th September 2026
+##### DriftlessMap 1.4.43
+
+Code-health release: every wildcard import is replaced by explicit imports, unused imports and variables are removed, the unused numba dependency is dropped, dead menu actions and hidden layer buttons are removed, and Ruff now enforces all pyflakes and bugbear checks.
+
+### 27th September 2026
 ##### DriftlessMap 1.4.42
 
 Code cleanup: the shared helper module is renamed from uuuuuu.py to utils.py, seventeen unused helper functions and three unused modules are removed, and stray debug output is gone.

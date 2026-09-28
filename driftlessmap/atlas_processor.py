@@ -1,24 +1,30 @@
 import os
-
-
-import pickle
-import nrrd
-import csv
-import nibabel as nib
 import numpy as np
 from .persistence import write_cache_pickle
-import pandas as pd
-import cv2
-from PyQt6.QtGui import *
-from PyQt6.QtCore import *
-from PyQt6.QtWidgets import *
-import pyqtgraph.opengl as gl
+from PyQt6.QtGui import QIntValidator, QRegularExpressionValidator
+from PyQt6.QtCore import (
+    QObject,
+    QRegularExpression,
+    QThread,
+    Qt,
+    pyqtSignal,
+)
+from PyQt6.QtWidgets import (
+    QComboBox,
+    QDialog,
+    QFileDialog,
+    QFrame,
+    QGridLayout,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QProgressBar,
+    QPushButton,
+)
 
 from .utils import read_qss_file, make_contour_img, read_excel_file, hex2rgb
 from .obj_items import load_mesh_file, render_volume, render_small_volume
 from .atlas_loader import (
-    process_atlas_raw_data,
-    AtlasLoader,
     check_data_path_and_load,
     begin_atlas_processing,
     finish_atlas_processing,
@@ -135,7 +141,7 @@ class CustomerAtlasWorker(QObject):
             rgb_colors = np.asarray(rgb_colors)
         except KeyError:
             rgb_colors = []
-            for i in range(len(da_short_label)):
+            for _ in range(len(da_short_label)):
                 r, g, b = np.random.randint(0, 255, 3)
                 rgb_colors.append([r, g, b])
             rgb_colors = np.asarray(rgb_colors)
@@ -275,7 +281,7 @@ class CustomerAtlasWorker(QObject):
         write_cache_pickle(os.path.join(self.saving_folder, "atlas_pre_made.pkl"), atlas)
         self.progress.emit(50)
 
-        mesh_data = render_volume(
+        render_volume(
             atlas_data, self.saving_folder, factor=self.factor, level=0.1
         )
         self.progress.emit(55)
@@ -701,8 +707,6 @@ class AtlasProcessor(QDialog):
             direction_change[1] = True
         if self.z_axis_combo.currentText() not in dir_goal:
             direction_change[2] = True
-
-        transpose_order = dir_groups - 1
 
         self.process_btn.setVisible(False)
         self.process_info.setText(

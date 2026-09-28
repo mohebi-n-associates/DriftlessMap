@@ -1,9 +1,16 @@
-import os
-import sys
 import numpy as np
-from PyQt6.QtWidgets import *
-from PyQt6.QtGui import *
-from PyQt6.QtCore import *
+from PyQt6.QtWidgets import (
+    QComboBox,
+    QDoubleSpinBox,
+    QLabel,
+    QListView,
+    QPushButton,
+    QSpinBox,
+    QVBoxLayout,
+    QWidget,
+)
+from PyQt6.QtGui import QColor, QIcon, QPixmap
+from PyQt6.QtCore import QObject, Qt, pyqtSignal
 from .utils import get_qhsv_from_czi_hsv, read_qss_file
 
 

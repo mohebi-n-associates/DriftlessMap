@@ -1,15 +1,12 @@
 import os
 import numpy as np
 from .persistence import write_cache_pickle
-import math
 import pandas as pd
 import cv2
 import pickle
 import colorsys
 import pyqtgraph as pg
-import pyqtgraph.opengl as gl
-import scipy.ndimage as ndi
-from scipy.interpolate import interp1d, splprep, splev
+from scipy.interpolate import interp1d
 from .coordinate_validation import coordinates_in_bounds
 from .persistence import load_driftlessmap_file
 from .resources import resource_path, resolve_qss_resource_urls
@@ -278,7 +275,6 @@ def get_qhsv_from_czi_hsv(hsv_color: tuple):
 
 
 def gamma_line(input, lims, gamma, depth_level):
-    inv_gamma = 1.0 / gamma
     y = np.zeros(len(input))
     inds = np.logical_and(input >= lims[0], input <= lims[1])
     y[inds] = (
