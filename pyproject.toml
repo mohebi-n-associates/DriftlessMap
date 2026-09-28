@@ -120,6 +120,7 @@ ignore = ["B905"]
 # are left out until they gain annotations.
 files = [
     "driftlessmap/atlas_loader.py",
+    "driftlessmap/atlas_matching.py",
     "driftlessmap/atlas_transform.py",
     "driftlessmap/background.py",
     "driftlessmap/cell_detection.py",

@@ -35,6 +35,10 @@ or important workflows change.
 - `driftlessmap/image_reader.py`: conventional, TIFF, folder, and embedded
   active-raster readers. `czi_reader.py` handles optional CZI input.
 - `driftlessmap/image_view.py`: image scene/page/channel/LUT state.
+- `driftlessmap/atlas_matching.py`: GUI-free suggestion of the atlas plane,
+  orientation and slice that match a histology section (silhouette search on
+  slices exactly as `AtlasView` displays them). Coronal/horizontal matches are
+  ambiguous up to a left-right mirror; the user chooses the hemisphere.
 - `driftlessmap/atlas_loader.py`, `atlas_view.py`, `atlas_transform.py`:
   processed atlas loading, display, coordinate transforms.
 - `driftlessmap/triangulation.py`: deterministic piecewise-affine registration,
