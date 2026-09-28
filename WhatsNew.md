@@ -5,7 +5,7 @@ releases are added at the top; earlier release notes remain below them.
 
 ## DriftlessMap 1.6.1
 
-Release date: 27 September 2026
+Release date: 28 September 2026
 
 ### Fixed
 
