@@ -3,6 +3,27 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.4.38
+
+Release date: 27 September 2026
+
+Several image-input problems have been fixed.
+
+- **Non-ASCII paths.** PNG, JPEG, BMP and slice-atlas images in folders with
+  non-ASCII names, such as `Müller/slide.png`, now open on Windows. They used
+  to fail with "could not decode".
+- **TIFF folders keep their bit depth.** Opening a folder of TIFF sections
+  used to convert every image to 8-bit RGB, discarding 16-bit intensity and
+  separate channels. All-TIFF folders are now read at their native bit depth
+  and channel layout. Sections must share one layout; otherwise the folder is
+  rejected with the name of the file that differs.
+- **CZI files with sparse metadata.** CZI files without display settings or
+  pixel scaling no longer fail to open. Missing channel colours and names get
+  defaults, and missing scaling means lengths are shown in pixels.
+  `#RRGGBB` colours are also read correctly.
+
+---
+
 ## DriftlessMap 1.4.37
 
 Release date: 27 September 2026

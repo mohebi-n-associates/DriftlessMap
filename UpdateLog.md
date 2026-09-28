@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th September 2026
+##### DriftlessMap 1.4.38
+
+Image input fixes: bitmaps and slice atlases in folders with non-ASCII names open on Windows, folders of TIFF sections keep their native bit depth and channels, and CZI files without display settings or scaling load with defaults.
+
+### 27th September 2026
 ##### DriftlessMap 1.4.37
 
 The custom Atlas Processor opens again, keeps full paths for files chosen from different folders, ignores cancelled file picks, accepts Allen-style parent_structure_id label tables, and double-click renaming of objects no longer fails.
