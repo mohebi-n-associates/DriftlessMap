@@ -133,36 +133,57 @@ The fit has two stages:
    is kept only if it improves the intensity match without making the outline
    match noticeably worse; otherwise the outline fit is used.
 
-DriftlessMap then chooses 10 landmarks. It scores every point inside the
-atlas section by how distinctive it is: corner-like structure in the atlas
-template, and places where several region boundaries meet. Points like these
-can be matched in both directions, unlike a point on a straight edge or in
-uniform tissue. It picks the most distinctive point first, then keeps picking
-while discounting points close to those already chosen, so the landmarks
-spread over the section instead of clustering. Points that the fit maps off
-the tissue are skipped. The landmarks are numbered from the most distinctive.
+DriftlessMap then suggests up to 10 landmarks of two kinds. Both are
+features you can see and check in both images:
+
+- **Outline points (up to 5):** the sharpest tips and notches of the brain
+  outline, such as the notch between the olfactory bulb and the cortex. Each is
+  placed on the atlas outline and moved onto the nearest point of the section
+  outline. Places where the slice cuts the brain at the image edge are
+  skipped, and so are places where the atlas labels extend past the visible
+  template.
+- **Internal points (the rest):** strong edges in the atlas template that the
+  fitted section shows too, such as the corpus callosum and the ventricles.
+  An edge seen in only one image scores nothing. Examples are an atlas
+  region border in uniform-looking tissue, or a dye track in the section.
+  Internal points are kept about a tenth of the section apart.
+
 The fixed frame points around the mesh are carried through the same transform,
 so they agree with the interior landmarks.
+
+Choosing good points does not make the fit itself more accurate; the points
+are samples of the fitted transform. Their purpose is that each one sits on
+something you can judge and correct.
 
 <p align="center">
 <img src="../../image/automation/04_proposed_landmarks.png" width="90%">
 </p>
 
-For the sample, the status bar reports 10 landmark pairs from the outline fit,
-with an outline overlap of 0.96. Here the deformable refinement did not
-improve the match, so it was not used. The landmarks fall on the cerebellar
-folia, the edges of the hippocampus and ventricles, and deep structures. The
-olfactory bulb and frontal cortex get none, because the atlas template is
-smooth there; the frame points still anchor that end. The Triangulation tool
-is switched on, and its status shows **Mesh: review (22 triangles)**: some
-triangles are narrow and worth a look (see Section 8.5 of the manual).
+For the sample, the status bar reports 10 suggested pairs: 5 on the outline
+and 5 on internal edges, from the outline fit with an outline overlap of 0.96.
+Here the deformable refinement did not improve the match, so it was not used.
+
+- Points 1 to 5 are on the outline: the notch between the olfactory bulb and
+  the frontal cortex, the notch between the cortex and the cerebellum, two
+  notches on the ventral surface, and the dorsal crest of the cortex.
+- Points 6 to 10 are on internal edges, along the corpus callosum and the
+  ventricles.
+- Point 8 lies where the dye track crosses the corpus callosum. The track is
+  a strong edge that exists only in the section, so check this point
+  carefully.
+- The cerebellum gets no point: its outline is cut by the image edge, and its
+  folia do not line up after the outline fit.
+
+The Triangulation tool is switched on, and its status shows **Mesh: review
+(22 triangles)**: some triangles are narrow and worth a look (see Section 8.5
+of the manual).
 
 ### 5. Review, correct and transfer
 
-Treat the proposal as a first draft. Check each numbered pair against the
-anatomy and drag any point that is off. Ten landmarks give a coarse mesh, so
-add points where the anatomy needs more detail, as you would when placing
-landmarks by hand. Then transfer the
+The landmarks are suggestions: confirm each numbered pair against the anatomy
+and drag any point that is off. Ten landmarks give a coarse mesh, so add
+points where the anatomy needs more detail, such as the cerebellum here, as
+you would when placing landmarks by hand. Then transfer the
 section to the atlas as usual.
 
 <p align="center">

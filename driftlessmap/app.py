@@ -1944,10 +1944,13 @@ class DriftlessMap(QMainWindow, FORM_Main):
         else:
             self._build_triangulation_registration(strict=False, show_error=False)
         stage = "outline and intensity" if proposal.deformable_used else "outline"
+        on_outline = sum(kind == "outline" for kind in proposal.kinds)
         self.print_message(
-            "Proposed {} landmark pairs from the {} fit (outline overlap {:.2f}). "
-            "Review them and drag any that are off before transferring.".format(
-                len(proposal.atlas_points), stage, proposal.overlap_final
+            "Suggested {} landmark pairs ({} on the outline, {} on internal edges) "
+            "from the {} fit (outline overlap {:.2f}). Confirm or drag each one "
+            "before transferring.".format(
+                len(proposal.atlas_points), on_outline,
+                len(proposal.atlas_points) - on_outline, stage, proposal.overlap_final
             ),
             self.normal_color,
         )

@@ -47,9 +47,10 @@ or important workflows change.
   affine on silhouettes, then a B-spline on intensities with Mattes MI) that
   proposes atlas-to-histology landmark pairs in DriftlessMap pixel-edge
   coordinates. The B-spline is kept only if it improves the intensity match
-  without degrading the outline. Landmarks (10 by default) are chosen
-  greedily by distinctiveness (template corners, region-boundary junctions)
-  with a spacing discount so they spread over the section.
+  without degrading the outline. Up to 10 landmarks are suggested:
+  outline tips/notches (skipping image-edge cuts and label-only outline) and
+  internal edges scored by local agreement between atlas and resampled
+  section edges, so single-image edges are never chosen.
 - `driftlessmap/atlas_loader.py`, `atlas_view.py`, `atlas_transform.py`:
   processed atlas loading, display, coordinate transforms.
 - `driftlessmap/triangulation.py`: deterministic piecewise-affine registration,

@@ -1,9 +1,10 @@
 """Automatic landmark proposal between an atlas slice and a histology section.
 
 The atlas slice is the fixed image, so the fitted SimpleITK transform maps an
-atlas point directly to the matching section point; sampling it at a few
-distinctive, well-spread atlas points yields landmark pairs for DriftlessMap's
-piecewise-affine registration, which the user then reviews and edits.
+atlas point directly to the matching section point; sampling it at the tips
+and notches of the outline and at edges that both images show yields landmark
+pairs for DriftlessMap's piecewise-affine registration. They are suggestions
+that the user confirms and edits.
 
 Both images are given physical coordinates in DriftlessMap's convention
 (pixel ``k`` spans ``[k, k + 1)``; its centre is ``k + 0.5``), so points need
@@ -35,6 +36,7 @@ class LandmarkProposal:
     deformable_used: bool
     boundary_points: np.ndarray    # extra atlas points mapped into the section,
                                    # clamped to the section image
+    kinds: tuple = ()              # "outline" or "internal" for each landmark
 
 
 def _as_image(array, scale):
@@ -131,58 +133,135 @@ def _bspline_on_intensities(fixed, moving, fixed_mask, affine, mesh_size):
     return composite, after < before
 
 
+OUTLINE_LANDMARKS = 5   # tips and notches of the outline
+EDGE_MARGIN = 8         # atlas pixels; the slice may cut the brain at the image edge
+MIN_AGREEMENT = 0.2     # internal edges must show clearly in both images
+
+
 def _spacing(mask, count):
     """Typical distance between ``count`` points spread over ``mask``."""
     return max(2.0, float(np.sqrt(mask.sum() / max(count, 1))))
 
 
-def _importance(atlas_image, atlas_labels, inner):
-    """How distinctive each atlas pixel is as a landmark, in [0, 2].
+def _outer_contour(mask):
+    contours, _ = cv2.findContours(mask.astype(np.uint8), cv2.RETR_EXTERNAL,
+                                   cv2.CHAIN_APPROX_NONE)
+    if not contours:
+        return np.zeros((0, 2))
+    return max(contours, key=cv2.contourArea)[:, 0, :].astype(float)
 
-    Corner-like structure in the template image plus junctions of region
-    boundaries; both are places that can be matched in two directions,
-    unlike points along a straight edge or in uniform tissue.
+
+def _outline_points(atlas_mask, atlas_image, count):
+    """The sharpest tips and notches of the atlas outline, most pronounced first.
+
+    Points where the slice cuts the brain at the image edge are skipped, as
+    are points where the labels extend past the visible template (the
+    template can be dark at the brain surface), because neither is an
+    outline that can be seen in the section.
     """
-    def normalised(response):
-        response = np.where(inner, response, 0.0)
-        top = np.percentile(response[inner], 99) if inner.any() else 0.0
-        return np.clip(response / top, 0.0, 1.0) if top > 0 else np.zeros_like(response)
+    contour = _outer_contour(atlas_mask)
+    n = len(contour)
+    if n < 20 or count <= 0:
+        return np.zeros((0, 2))
+    def turning(step):
+        before = contour - np.roll(contour, step, axis=0)
+        after = np.roll(contour, -step, axis=0) - contour
+        return np.arctan2(before[:, 0] * after[:, 1] - before[:, 1] * after[:, 0],
+                          (before * after).sum(axis=1))
 
-    image = cv2.GaussianBlur(np.asarray(atlas_image, dtype=np.float32), (0, 0), 1.0)
-    labels = np.asarray(atlas_labels).astype(np.int64)
-    edge = np.zeros(labels.shape, np.float32)
-    edge[:-1] += labels[:-1] != labels[1:]
-    edge[:, :-1] += labels[:, :-1] != labels[:, 1:]
-    edge = cv2.GaussianBlur(edge, (0, 0), 1.5)
-    return (normalised(cv2.cornerMinEigenVal(image, 5, 3))
-            + normalised(cv2.cornerMinEigenVal(edge, 5, 3)))
+    # A wide window finds the pronounced tips and notches; a narrow one then
+    # places each at its sharpest point.
+    k = max(4, n // 40)
+    turn = turning(k)
+    turn = np.convolve(np.r_[turn[-3:], turn, turn[:3]], np.ones(7) / 7, "valid")
+    fine = turning(max(2, k // 3))
 
-
-def _candidate_points(inner, spacing):
-    """A fine grid of pixel-centre points inside ``inner``."""
-    step = max(1, int(spacing / 6))
-    rows, cols = np.nonzero(inner[::step, ::step])
-    return np.column_stack([cols * step + 0.5, rows * step + 0.5]).astype(float)
-
-
-def _select(points, weights, count, spacing):
-    """Greedily pick up to ``count`` important points that are spread out.
-
-    A point's weight is discounted while it is closer than ``spacing`` to an
-    already chosen point, so the choice covers the whole section rather than
-    clustering on the most distinctive region. Returns indexes, most
-    distinctive first.
-    """
+    def sharpest(index):
+        window = (index + np.arange(-k, k + 1)) % n
+        same_sign = window[np.sign(fine[window]) == np.sign(turn[index])]
+        if not len(same_sign):
+            return index
+        return int(same_sign[np.argmax(np.abs(fine[same_sign]))])
+    height, width = atlas_mask.shape
+    visible = np.percentile(atlas_image[atlas_mask], 5)
     chosen = []
-    nearest = np.full(len(points), np.inf)
-    for _ in range(min(count, len(points))):
-        score = weights * np.minimum(nearest / spacing, 1.0)
-        index = int(np.argmax(score))
-        if score[index] <= 0:
+    for index in np.argsort(-np.abs(turn)):
+        if len(chosen) == count:
             break
-        chosen.append(index)
-        nearest = np.minimum(nearest, np.linalg.norm(points - points[index], axis=1))
-    return np.asarray(chosen, dtype=int)
+        index = sharpest(int(index))
+        x, y = contour[index]
+        if not (EDGE_MARGIN <= x < width - EDGE_MARGIN and EDGE_MARGIN <= y < height - EDGE_MARGIN):
+            continue
+        if atlas_image[int(y) - 1:int(y) + 2, int(x) - 1:int(x) + 2].mean() < visible:
+            continue
+        if all(min(abs(index - j), n - abs(index - j)) > n / 10 for j in chosen):
+            chosen.append(index)
+    return contour[chosen] + 0.5
+
+
+def _edge_magnitude(image):
+    blurred = cv2.GaussianBlur(np.asarray(image, dtype=np.float32), (0, 0), 1.0)
+    return np.hypot(cv2.Sobel(blurred, cv2.CV_32F, 1, 0), cv2.Sobel(blurred, cv2.CV_32F, 0, 1))
+
+
+def _local_correlation(a, b, radius=5):
+    size = (2 * radius + 1, 2 * radius + 1)
+    mean_a, mean_b = cv2.boxFilter(a, -1, size), cv2.boxFilter(b, -1, size)
+    covariance = cv2.boxFilter(a * b, -1, size) - mean_a * mean_b
+    var_a = cv2.boxFilter(a * a, -1, size) - mean_a ** 2
+    var_b = cv2.boxFilter(b * b, -1, size) - mean_b ** 2
+    return covariance / np.sqrt(np.maximum(var_a * var_b, 1e-12))
+
+
+def _shared_edge_score(atlas_image, section_in_atlas, inner):
+    """Strong atlas edges that the registered section shows too, in [0, 1].
+
+    An edge seen in only one image (an atlas region border in uniform
+    tissue, or a dye track in the section) scores near zero.
+    """
+    atlas_edges = _edge_magnitude(atlas_image)
+    section_edges = _edge_magnitude(section_in_atlas)
+    agreement = np.clip(_local_correlation(atlas_edges, section_edges), 0.0, 1.0)
+    top = np.percentile(atlas_edges[inner], 99) if inner.any() else 0.0
+    strength = np.clip(atlas_edges / top, 0.0, 1.0) if top > 0 else np.zeros_like(atlas_edges)
+    return np.where(inner, agreement * strength, 0.0)
+
+
+def _peaks(score, count, radius, taken=()):
+    """Up to ``count`` score maxima above MIN_AGREEMENT, ``radius`` apart."""
+    score = score.copy()
+    for x, y in taken:
+        cv2.circle(score, (int(x), int(y)), int(radius), 0, -1)
+    points = []
+    while len(points) < count:
+        row, col = np.unravel_index(np.argmax(score), score.shape)
+        if score[row, col] < MIN_AGREEMENT:
+            break
+        points.append((col + 0.5, row + 0.5))
+        cv2.circle(score, (int(col), int(row)), int(radius), 0, -1)
+    return np.asarray(points, dtype=float).reshape(-1, 2)
+
+
+def _section_in_atlas(section_gray, atlas_shape, transform):
+    """The section resampled onto the atlas slice's pixels."""
+    reference = sitk.GetImageFromArray(np.zeros(atlas_shape, np.float32))
+    reference.SetOrigin((0.5, 0.5))
+    moving = sitk.GetImageFromArray(np.ascontiguousarray(section_gray, dtype=np.float32))
+    moving.SetOrigin((0.5, 0.5))
+    return sitk.GetArrayFromImage(sitk.Resample(moving, reference, transform, sitk.sitkLinear, 0.0))
+
+
+def _snap_to_outline(points, contour, limit):
+    """Move each point to the nearest point of ``contour`` if within ``limit``."""
+    if not len(contour):
+        return points
+    snapped = points.copy()
+    for i, point in enumerate(points):
+        distances = np.linalg.norm(contour - point, axis=1)
+        nearest = int(np.argmin(distances))
+        if distances[nearest] <= limit:
+            snapped[i] = contour[nearest] + 0.5
+    return snapped
 
 
 def propose_landmarks(atlas_intensity, atlas_labels, section, count=10,
@@ -190,12 +269,13 @@ def propose_landmarks(atlas_intensity, atlas_labels, section, count=10,
     """Propose paired landmarks mapping an atlas slice onto a section.
 
     ``section`` must already be in the atlas orientation (see
-    ``atlas_matching``). Up to ``count`` landmarks are chosen at the most
-    distinctive atlas points that land on tissue, spread over the section,
-    most distinctive first. ``boundary_points`` are further atlas points (such
-    as the mesh's frame points) to carry through the same transform; they are
-    clamped into the section image so they remain valid landmarks.
-    Returns a :class:`LandmarkProposal`.
+    ``atlas_matching``). Up to ``count`` landmarks are proposed: the sharpest
+    tips and notches of the outline, snapped onto the section outline, then
+    internal points on strong edges that both images show. They are
+    suggestions for the user to confirm and edit. ``boundary_points`` are
+    further atlas points (such as the mesh's frame points) to carry through
+    the same transform; they are clamped into the section image so they
+    remain valid landmarks. Returns a :class:`LandmarkProposal`.
     """
     atlas_mask = np.asarray(atlas_labels) > 0
     if atlas_mask.sum() < 100:
@@ -231,34 +311,38 @@ def propose_landmarks(atlas_intensity, atlas_labels, section, count=10,
         except RuntimeError:
             pass  # optimiser failure: fall back to the affine fit
 
-    spacing = _spacing(atlas_mask, count)
-    inner = cv2.erode(atlas_mask.astype(np.uint8), np.ones((3, 3), np.uint8),
-                      iterations=max(1, int(spacing / 5))) > 0
-    importance = _importance(atlas_image, atlas_labels, inner)
-    atlas_points = _candidate_points(inner, spacing)
-    mapped = np.array([transform.TransformPoint((float(x), float(y)))
-                       for x, y in atlas_points]).reshape(-1, 2)
+    def to_section(points):
+        return np.array([transform.TransformPoint((float(x), float(y)))
+                         for x, y in points]).reshape(-1, 2)
+
     height, width = section_mask.shape
-    inside = (
-        (mapped[:, 0] >= 0) & (mapped[:, 0] < width)
-        & (mapped[:, 1] >= 0) & (mapped[:, 1] < height)
-    )
-    on_tissue = np.zeros(len(mapped), dtype=bool)
-    rows = np.clip(mapped[inside, 1].astype(int), 0, height - 1)
-    cols = np.clip(mapped[inside, 0].astype(int), 0, width - 1)
-    on_tissue[inside] = section_mask[rows, cols]
-    valid = np.flatnonzero(on_tissue)
-    # A small floor keeps featureless regions eligible, so every part of the
-    # section can still receive a landmark when it is far from the others.
-    weights = 0.05 + importance[atlas_points[valid, 1].astype(int),
-                                atlas_points[valid, 0].astype(int)]
-    keep = valid[_select(atlas_points[valid], weights, count, spacing)]
+    spacing = _spacing(atlas_mask, count)
+
+    outline_atlas = _outline_points(atlas_mask, atlas_image, min(OUTLINE_LANDMARKS, count))
+    outline_section = _snap_to_outline(to_section(outline_atlas), _outer_contour(section_mask),
+                                       limit=0.05 * np.hypot(height, width))
+
+    inner = cv2.erode(atlas_mask.astype(np.uint8), np.ones((3, 3), np.uint8), iterations=4) > 0
+    score = _shared_edge_score(atlas_image, _section_in_atlas(section_gray / 255.0,
+                                                              atlas_mask.shape, transform), inner)
+    radius = 0.45 * spacing  # keeps internal points about a tenth of the section apart
+    internal_atlas = _peaks(score, count - len(outline_atlas), radius, taken=outline_atlas)
+    internal_section = to_section(internal_atlas)
+    if len(internal_section):
+        rows = np.clip(internal_section[:, 1].astype(int), 0, height - 1)
+        cols = np.clip(internal_section[:, 0].astype(int), 0, width - 1)
+        inside = ((internal_section[:, 0] >= 0) & (internal_section[:, 0] < width)
+                  & (internal_section[:, 1] >= 0) & (internal_section[:, 1] < height))
+        keep = inside & section_mask[rows, cols]
+        internal_atlas, internal_section = internal_atlas[keep], internal_section[keep]
+
     boundary = np.asarray(boundary_points if boundary_points is not None else [],
                           dtype=float).reshape(-1, 2)
-    carried = np.array([transform.TransformPoint((float(x), float(y)))
-                        for x, y in boundary]).reshape(-1, 2)
+    carried = to_section(boundary)
     if len(carried):
         carried[:, 0] = np.clip(carried[:, 0], 0, width - 1)
         carried[:, 1] = np.clip(carried[:, 1], 0, height - 1)
-    return LandmarkProposal(atlas_points[keep], mapped[keep], overlap_affine,
-                            overlap_final, used, carried)
+    kinds = ("outline",) * len(outline_atlas) + ("internal",) * len(internal_atlas)
+    return LandmarkProposal(np.vstack([outline_atlas, internal_atlas]),
+                            np.vstack([outline_section, internal_section]),
+                            overlap_affine, overlap_final, used, carried, kinds)
