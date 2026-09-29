@@ -641,12 +641,21 @@ work needs more detail. Higher scale increases time and memory use.
 A grayscale TIFF page stack shows page navigation under the image. RGB TIFF,
 multi-channel TIFF, and page-stack TIFF are intentionally distinct:
 
-- RGB samples display as three color channels.
-- A channel axis displays up to 16 independent grayscale channels.
-- A page axis displays one grayscale section at a time.
+- RGB samples display as three color channels. An alpha channel is not shown,
+  and DriftlessMap says so when it loads the file.
+- A channel axis displays up to 16 independent grayscale channels, at their
+  native bit depth.
+- A page axis displays one section at a time. In a hyperstack (for example
+  ZCYX from ImageJ or OME-TIFF), Z is browsed as pages and every channel is
+  kept. If the file has a further axis, such as time, its first plane is used
+  and DriftlessMap reports it.
+- Several series in one file become scenes, read when first shown. They must
+  share one bit depth and channel layout.
+- Channel names and colours are read from OME-TIFF or ImageJ metadata when the
+  file has them.
 
-If a TIFF is rejected, inspect its axes, series count, sample type, and channel
-count in the exporting microscopy software.
+If a TIFF is rejected, the message names the reason. Inspect the file's axes,
+series, sample type and channel count in the exporting microscopy software.
 
 ### 7.4 Display adjustments
 

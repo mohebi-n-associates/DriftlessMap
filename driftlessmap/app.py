@@ -6596,7 +6596,8 @@ class DriftlessMap(QMainWindow, FORM_Main):
                     return False
                 if image_file.error_index != 0:
                     self.print_message(
-                        "Error Index: {}".format(image_file.error_index),
+                        image_file.error_message
+                        or "Error Index: {}".format(image_file.error_index),
                         self.error_message_color,
                     )
                     return False
@@ -6628,7 +6629,11 @@ class DriftlessMap(QMainWindow, FORM_Main):
             self.registration_input = None
             self.reset_corners_hist()
             self.layerpanel.setEnabled(True)
-        self.statusbar.showMessage("Image file loaded.")
+        notes = getattr(image_file, "notes", None)
+        if notes:
+            self.print_message("Image file loaded. " + " ".join(notes), self.reminder_color)
+        else:
+            self.statusbar.showMessage("Image file loaded.")
 
         # if self.image_view.image_file.n_pages > 1:
         #     da_data = self.image_view.volume_img.copy()

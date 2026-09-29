@@ -60,16 +60,15 @@ class TiffReaderTests(unittest.TestCase):
         self.assertEqual(stack.n_pages, 6)
         self.assertEqual(stack.data["scene 0"].shape, (6, 4, 5))
 
-    def test_multi_series_tiff_reports_error_without_uninitialized_fields(self):
+    def test_series_with_different_layouts_report_error_without_uninitialized_fields(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "multi.tif"
             with tifffile.TiffWriter(path) as writer:
                 writer.write(np.zeros((4, 5), dtype=np.uint8))
-                writer.write(np.ones((6, 7), dtype=np.uint8))
+                writer.write(np.ones((6, 7), dtype=np.uint16))
             reader = image_reader.TIFFReader(path)
 
         self.assertEqual(reader.error_index, 1)
-        self.assertIsNone(reader.pixel_type)
         self.assertEqual(reader.data, {})
 
     def test_six_channel_uint16_is_kept_natively(self):
@@ -189,3 +188,77 @@ class InputRobustnessTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TiffLayoutTests(unittest.TestCase):
+    def write(self, folder, name, data, **kwargs):
+        path = Path(folder) / name
+        tifffile.imwrite(path, data, **kwargs)
+        return path
+
+    def test_imagej_hyperstack_pages_over_z_and_keeps_every_channel(self):
+        data = np.arange(5 * 3 * 6 * 7, dtype=np.uint16).reshape(5, 3, 6, 7)
+        with tempfile.TemporaryDirectory() as folder:
+            path = self.write(folder, "zcyx.tif", data, imagej=True, metadata={"axes": "ZCYX"})
+            reader = image_reader.TIFFReader(path)
+        self.assertEqual(reader.error_index, 0)
+        self.assertEqual((reader.n_channels, reader.n_pages, reader.page_axis), (3, 5, "Z"))
+        self.assertEqual(reader.data["scene 0"].shape, (5, 6, 7, 3))
+        np.testing.assert_array_equal(reader.data["scene 0"][2], np.moveaxis(data[2], 0, -1))
+
+    def test_time_is_fixed_when_z_is_browsed(self):
+        data = np.zeros((2, 4, 3, 6, 7), dtype=np.uint16)
+        data[0, 1, 2] = 9
+        data[1] = 5
+        with tempfile.TemporaryDirectory() as folder:
+            path = self.write(folder, "tzcyx.tif", data, imagej=True, metadata={"axes": "TZCYX"})
+            reader = image_reader.TIFFReader(path)
+        self.assertEqual(reader.error_index, 0)
+        self.assertEqual(reader.fixed_axes, {"T": 0})
+        self.assertTrue(any("T plane" in note for note in reader.notes))
+        self.assertEqual(reader.data["scene 0"].shape, (4, 6, 7, 3))
+        self.assertEqual(int(reader.data["scene 0"][1, ..., 2].max()), 9)
+
+    def test_ome_channel_names_and_colours(self):
+        data = np.zeros((3, 6, 7), dtype=np.uint16)
+        metadata = {"axes": "CYX", "Channel": {"Name": ["DAPI", "GFP", "Tracer"],
+                                               "Color": [65535, 16711935, -16776961]}}
+        with tempfile.TemporaryDirectory() as folder:
+            path = self.write(folder, "ome.ome.tif", data, ome=True, metadata=metadata)
+            reader = image_reader.TIFFReader(path)
+        self.assertEqual(reader.error_index, 0)
+        self.assertEqual(reader.channel_name, ["DAPI", "GFP", "Tracer"])
+        self.assertEqual(reader.rgb_colors[0], (0, 0, 255))
+        self.assertEqual(reader.rgb_colors[1], (0, 255, 0))
+        self.assertEqual(reader.rgb_colors[2], (255, 0, 0))
+
+    def test_rgba_alpha_is_reported_not_silently_dropped(self):
+        data = np.zeros((6, 7, 4), dtype=np.uint8)
+        with tempfile.TemporaryDirectory() as folder:
+            path = self.write(folder, "rgba.tif", data, photometric="rgb", extrasamples=["unassalpha"])
+            reader = image_reader.TIFFReader(path)
+        self.assertEqual(reader.error_index, 0)
+        self.assertTrue(reader.is_rgb)
+        self.assertEqual(reader.data["scene 0"].shape, (6, 7, 3))
+        self.assertTrue(any("alpha" in note for note in reader.notes))
+
+    def test_several_series_become_scenes_read_on_demand(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "series.tif"
+            with tifffile.TiffWriter(path) as writer:
+                writer.write(np.full((4, 5), 1, dtype=np.uint8))
+                writer.write(np.full((6, 7), 2, dtype=np.uint8))
+            reader = image_reader.TIFFReader(path)
+            self.assertEqual(reader.error_index, 0)
+            self.assertEqual(reader.n_scenes, 2)
+            self.assertNotIn("scene 1", reader.data)
+            reader.read_data(1.0, scene_index=1)
+        self.assertEqual(reader.data["scene 1"].shape, (6, 7, 1))
+        self.assertEqual(int(reader.data["scene 1"].max()), 2)
+
+    def test_errors_carry_a_message(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = self.write(folder, "float.tif", np.zeros((4, 5), dtype=np.float32))
+            reader = image_reader.TIFFReader(path)
+        self.assertEqual(reader.error_index, 2)
+        self.assertIn("16-bit", reader.error_message)

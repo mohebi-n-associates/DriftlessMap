@@ -141,12 +141,78 @@ class EmbeddedImageReader(object):
         self.scale = {"scene 0": image_scale}
 
 
+TIFF_ERRORS = {
+    1: "The TIFF's series do not share one bit depth and channel layout, so "
+       "they cannot be shown as scenes of one image.",
+    2: "Only unsigned 8- and 16-bit TIFF data is supported.",
+    7: "This TIFF's axis layout is not supported.",
+    8: "The TIFF has more than {} channels.".format(MAX_CHANNELS),
+}
+# Axes browsed as pages, in order of preference; other extra axes are fixed.
+PAGE_AXES = ("Z", "T", "I", "Q", "R", "H", "E", "A", "V", "L", "P", "M")
+
+
+def _ome_channels(tiff_file, n_channels):
+    """Channel names and RGB colours from OME-XML, or ``(None, None)``."""
+    xml = tiff_file.ome_metadata
+    if not xml:
+        return None, None
+    try:
+        import xml.etree.ElementTree as ElementTree
+        root = ElementTree.fromstring(xml)
+    except Exception:
+        return None, None
+    pixels = [element for element in root.iter() if element.tag.endswith("Pixels")]
+    if not pixels:
+        return None, None
+    channels = [element for element in pixels[0] if element.tag.endswith("Channel")]
+    if len(channels) != n_channels:
+        return None, None
+    names, colours = [], []
+    for index, channel in enumerate(channels):
+        names.append(channel.get("Name") or "Channel {}".format(index + 1))
+        colour = channel.get("Color")
+        if colour is None:
+            colours.append(None)
+            continue
+        value = int(colour) & 0xFFFFFFFF  # signed 32-bit RGBA
+        colours.append(((value >> 24) & 255, (value >> 16) & 255, (value >> 8) & 255))
+    return names, colours
+
+
+def _imagej_channels(tiff_file, n_channels):
+    """Channel names and LUT colours from ImageJ metadata, or ``(None, None)``."""
+    metadata = tiff_file.imagej_metadata or {}
+    names = None
+    labels = metadata.get("Labels")
+    if isinstance(labels, (list, tuple)) and len(labels) == n_channels:
+        names = [str(label) or "Channel {}".format(i + 1) for i, label in enumerate(labels)]
+    colours = None
+    luts = metadata.get("LUTs")
+    if isinstance(luts, (list, tuple)) and len(luts) == n_channels:
+        colours = []
+        for lut in luts:
+            lut = np.asarray(lut)
+            colours.append(tuple(int(v) for v in lut[:, -1]) if lut.shape[:1] == (3,) else None)
+    return names, colours
+
+
 class TIFFReader(object):
-    """Read grayscale, RGB, channel, or page-stack TIFF data."""
+    """Read grayscale, RGB, channel, page-stack and hyperstack TIFF data.
+
+    Samples keep their native dtype. A channel axis (C) becomes the channel
+    dimension; one further axis (Z preferred, then T and others) is browsed as
+    pages; any remaining extra axes are fixed at index 0 and reported in
+    :attr:`notes`. Several series become scenes, read when first shown, and
+    must share one bit depth and channel layout. Channel names and colours
+    come from OME or ImageJ metadata when present.
+    """
 
     def __init__(self, image_file_path):
         self.error_index = 0
+        self.error_message = None
         self.is_czi = False
+        self.path = str(image_file_path)
         self.file_name_list = [str(Path(image_file_path).with_suffix(""))]
         self.n_scenes = 0
         self.n_pages = 1
@@ -160,6 +226,10 @@ class TIFFReader(object):
         self.data_type = None
         self.data = {}
         self.scale = {}
+        self.notes = []
+        self.axes = None
+        self.page_axis = None
+        self.fixed_axes = {}
         _set_channel_metadata(self, [], [])
 
         with tifffile.TiffFile(image_file_path) as tiff_file:
@@ -167,59 +237,136 @@ class TIFFReader(object):
             self.is_imagej = tiff_file.is_imagej
             if tiff_file.pages:
                 self.software = tiff_file.pages[0].software
-            if self.n_scenes != 1:
-                self.error_index = 1
+            if self.n_scenes == 0:
+                self._fail(7)
                 return
-
             series = tiff_file.series[0]
             image = np.asarray(series.asarray())
             axes = series.axes
+            layout = self._interpret(image, axes)
+            if layout is None:
+                return
+            for other in tiff_file.series[1:]:
+                other_layout = self._layout_of(other.dtype, other.axes, other.shape)
+                if other_layout != self._layout_key:
+                    self._fail(1)
+                    return
+            names, colours = _ome_channels(tiff_file, self.n_channels)
+            if names is None and self.is_imagej:
+                names, colours = _imagej_channels(tiff_file, self.n_channels)
+        if self.n_scenes > 1:
+            self.file_name_list = [
+                "{} (series {})".format(self.file_name_list[0], i + 1)
+                for i in range(self.n_scenes)
+            ]
+        if not self.is_rgb:
+            default_colours = [CHANNEL_COLORS[i % len(CHANNEL_COLORS)]
+                               for i in range(self.n_channels)]
+            default_names = CHANNEL_NAMES[: self.n_channels]
+            colours = [c if c is not None else default_colours[i]
+                       for i, c in enumerate(colours or default_colours)]
+            _set_channel_metadata(self, colours, names or default_names)
+        self.data["scene 0"] = layout
+        self.scale["scene 0"] = 1.0
 
+    def _fail(self, index):
+        self.error_index = index
+        self.error_message = TIFF_ERRORS.get(index)
+        return None
+
+    def _layout_of(self, dtype, axes, shape):
+        """The part of a series' layout that must match across scenes."""
+        sizes = dict(zip(axes, shape))
+        channels = sizes.get("C", 1) * (sizes.get("S", 1) if sizes.get("S", 1) not in (3, 4) else 1)
+        rgb = sizes.get("S", 1) in (3, 4) and "C" not in sizes
+        return (np.dtype(dtype).name, rgb, channels)
+
+    def _interpret(self, image, axes):
         if image.dtype not in (np.dtype("uint8"), np.dtype("uint16")):
-            self.error_index = 2
-            return
-
+            return self._fail(2)
         self.data_type = image.dtype.name
         self.level = int(np.iinfo(image.dtype).max)
         bit_depth = image.dtype.itemsize * 8
+        self.axes = axes
+        self._layout_key = self._layout_of(image.dtype, axes, image.shape)
+        if "Y" not in axes or "X" not in axes or len(axes) != image.ndim:
+            return self._fail(7)
 
-        if image.ndim == 2:
-            image = image[..., None]
-            self._set_grayscale(image, bit_depth, 1)
-        elif image.ndim == 3 and image.shape[-1] in (3, 4) and axes.endswith("S"):
+        # Drop singleton axes other than Y and X.
+        keep = [i for i, axis in enumerate(axes) if image.shape[i] > 1 or axis in "YX"]
+        image = image.reshape([image.shape[i] for i in keep])
+        axes = "".join(axes[i] for i in keep)
+
+        if "S" in axes:
+            size = image.shape[axes.index("S")]
+            if "C" in axes or size not in (3, 4):
+                return self._fail(7)
+            image = np.moveaxis(image, axes.index("S"), -1)
+            axes = axes.replace("S", "") + "S"
+            if size == 4:
+                image = image[..., :3]
+                self.notes.append("The alpha channel of this RGBA TIFF is not shown.")
             self.is_rgb = True
             self.pixel_type = "rgb{}".format(bit_depth * 3)
             self.n_channels = 3
-            image = image[..., :3]
             _set_channel_metadata(self, RGB_COLORS, ["Red", "Green", "Blue"])
-        elif image.ndim == 3 and "C" in axes:
-            channel_axis = axes.index("C")
-            image = np.moveaxis(image, channel_axis, -1)
-            self._set_grayscale(image, bit_depth, image.shape[-1])
-        elif image.ndim == 3 and axes.endswith("YX"):
-            self.n_pages = image.shape[0]
+        elif "C" in axes:
+            image = np.moveaxis(image, axes.index("C"), -1)
+            axes = axes.replace("C", "") + "C"
+            self.is_rgb = False
+            self.pixel_type = "gray{}".format(bit_depth)
+            self.n_channels = image.shape[-1]
+        else:
             self.is_rgb = False
             self.pixel_type = "gray{}".format(bit_depth)
             self.n_channels = 1
-            _set_channel_metadata(self, CHANNEL_COLORS[:1], CHANNEL_NAMES[:1])
-        else:
-            self.error_index = 7
-            return
 
         if self.n_channels > MAX_CHANNELS:
-            self.error_index = 8
-            return
+            return self._fail(8)
 
-        self.data["scene 0"] = image
-        self.scale["scene 0"] = 1.0
+        extra = [axis for axis in axes if axis not in "YXCS"]
+        page_axis = next((axis for axis in PAGE_AXES if axis in extra), extra[0] if extra else None)
+        for axis in extra:
+            if axis == page_axis:
+                continue
+            size = image.shape[axes.index(axis)]
+            image = np.take(image, 0, axis=axes.index(axis))
+            axes = axes.replace(axis, "")
+            self.fixed_axes[axis] = 0
+            self.notes.append(
+                "Only the first {} plane of {} is shown.".format(axis, size))
+        if page_axis is not None:
+            image = np.moveaxis(image, axes.index(page_axis), 0)
+            axes = page_axis + axes.replace(page_axis, "")
+            self.page_axis = page_axis
+            self.n_pages = image.shape[0]
+        # Channel data is H x W x C (pages: P x H x W x C); a single channel
+        # stays H x W x 1, or P x H x W for page stacks as in 1.x.
+        if self.n_channels == 1 and not self.is_rgb:
+            if page_axis is None:
+                image = image.reshape(image.shape[:2] + (1,))
+            else:
+                image = image.reshape(image.shape[:3])
+        return np.ascontiguousarray(image)
 
-    def _set_grayscale(self, image, bit_depth, n_channels):
-        self.is_rgb = False
-        self.pixel_type = "gray{}".format(bit_depth)
-        self.n_channels = n_channels
-        _set_channel_metadata(
-            self, CHANNEL_COLORS[:n_channels], CHANNEL_NAMES[:n_channels]
-        )
+    def read_data(self, scale=None, scene_index=0):
+        """Read the series of ``scene_index`` (TIFF scenes are full size)."""
+        indices = range(self.n_scenes) if scene_index is None else [scene_index]
+        for index in indices:
+            key = "scene {}".format(index)
+            if key in self.data:
+                continue
+            with tifffile.TiffFile(self.path) as tiff_file:
+                series = tiff_file.series[index]
+                image = np.asarray(series.asarray())
+                axes = series.axes
+            notes, fixed = list(self.notes), dict(self.fixed_axes)
+            layout = self._interpret(image, axes)
+            self.notes, self.fixed_axes = notes, fixed
+            if layout is None:
+                raise ValueError(self.error_message or "The TIFF series could not be read.")
+            self.data[key] = layout
+            self.scale[key] = 1.0
 
 
 class ImagesReader(object):
