@@ -79,9 +79,13 @@ class V2Window(QMainWindow):
         self.engine.hide()
         self._wrap_engine_messages()
 
+        engine = self.engine
         self.registry = CommandRegistry()
         self._saved_digest = None
         self._last_message_kind = None
+        # The V2 atlas download dialog replaces the 1.x one in this window.
+        engine.actionDownload_Allen_Mice_Atlas.triggered.disconnect()
+        engine.actionDownload_Allen_Mice_Atlas.triggered.connect(self.download_allen_atlas)
         self._build_ui()
         self._register_commands()
         self._build_menus()
@@ -623,6 +627,15 @@ class V2Window(QMainWindow):
         event.accept()
 
     # ------------------------------------------------------------- helpers
+    def download_allen_atlas(self):
+        from .allen_download_dialog import AllenDownloadDialog
+
+        dialog = AllenDownloadDialog(self)
+        dialog.exec()
+        if dialog.continue_process and dialog.process_finished:
+            self.engine._open_downloaded_atlas(dialog)
+            self.set_view("compare")
+
     def open_palette(self):
         palette = CommandPalette(self.registry, self)
         if palette.exec() and palette.chosen:

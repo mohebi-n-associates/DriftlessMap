@@ -91,7 +91,9 @@ or important workflows change.
   the unsaved-change digest, which ignores navigation), `channel_display.py`
   (per-channel display range/gamma written into the 1.x curve state so saves
   restore it) and `theme.py` (design tokens and stylesheet). Preview
-  preferences use a separate QSettings namespace.
+  preferences use a separate QSettings namespace. V2 dialogs subclass the
+  1.x ones and only rebuild the layout (`allen_download_dialog.py`), so
+  download, validation and processing code stays shared.
 - `driftlessmap/main_window.ui`: Qt menu/action definitions.
 - `driftlessmap/icons/app/`: canonical PNG plus native Windows ICO and macOS
   ICNS application artwork.

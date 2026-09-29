@@ -162,5 +162,42 @@ class V2ShellTests(unittest.TestCase):
             self.assertEqual(engine.registration_input.channel_names, ("Hoechst", "NeuN"))
 
 
+    @isolated_gui_test
+    def test_allen_download_dialog_reuses_verified_files(self):
+        import json
+        from unittest.mock import patch
+
+        from driftlessmap.v2.allen_download_dialog import AllenDownloadDialog
+
+        with tempfile.TemporaryDirectory() as folder:
+            dialog = AllenDownloadDialog()
+            self.addCleanup(dialog.deleteLater)
+            dialog.vs_rabnt3.setChecked(True)
+            dialog.vs_rabnt2.setChecked(True)
+            radios = (dialog.vs_rabnt1, dialog.vs_rabnt2, dialog.vs_rabnt3)
+            self.assertEqual([r.isChecked() for r in radios], [False, True, False])
+            self.assertEqual(dialog.voxel_size, 25)
+            # Only files recorded in the manifest for the same URL count as done.
+            for local in (dialog.data_local, dialog.segmentation_local):
+                Path(folder, local).write_bytes(b"x")
+            Path(folder, "download_manifest.json").write_text(json.dumps(
+                {dialog.data_local: {"url": dialog.data_url},
+                 dialog.segmentation_local: {"url": "https://example.org/other"}}))
+            dialog.saving_folder = folder
+            dialog._scan_folder()
+            self.assertEqual(dialog.finish[:2], [True, False])
+            started = []
+            with patch.object(dialog, "start_thread",
+                              side_effect=lambda url, local, setter: started.append(local)), \
+                    patch.object(dialog, "download_mesh_start") as meshes:
+                dialog.download_everything()
+                self.assertEqual(started, [dialog.segmentation_local])
+                dialog.set_segmentation_bar_value(100)
+                dialog._refresh()
+                meshes.assert_called_once()
+            dialog.process_finished = True
+            dialog.close()
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -147,6 +147,17 @@ QFrame#CanvasHeader {{ background: {surface}; border-bottom: 1px solid {border};
 QFrame#ToolOptions {{ background: {surface_alt}; border-bottom: 1px solid {border}; }}
 QWidget#Canvas {{ background: {canvas}; }}
 QSplitter::handle {{ background: {border}; }}
+QFrame#Tile {{
+    background: {surface_alt}; border: 1px solid {border}; border-radius: {radius}px;
+}}
+QFrame#Tile:hover {{ border-color: {accent}; }}
+QFrame#Tile[selected="true"] {{ background: {accent_soft}; border: 2px solid {accent}; }}
+QLabel#TileTitle {{ font-size: {heading}px; font-weight: 700; }}
+QProgressBar {{
+    background: {raised}; border: none; border-radius: 4px; height: 8px;
+    max-height: 8px; text-align: center;
+}}
+QProgressBar::chunk {{ background: {accent}; border-radius: 4px; }}
 QToolTip {{
     background: {surface}; color: {text}; border: 1px solid {border}; padding: 4px;
 }}
