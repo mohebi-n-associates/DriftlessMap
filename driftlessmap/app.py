@@ -1661,7 +1661,6 @@ class DriftlessMap(QMainWindow, FORM_Main):
         else:
             file_path = self.atlas_img_path
         file_options = QFileDialog.Option(0)
-        file_options |= QFileDialog.Option.DontUseNativeDialog
         file_dialog = QFileDialog()
         file_dialog.setFileMode(QFileDialog.FileMode.ExistingFiles)
         image_file_path = file_dialog.getOpenFileName(
@@ -6581,7 +6580,6 @@ class DriftlessMap(QMainWindow, FORM_Main):
         else:
             file_path = self.current_img_path
         file_options = QFileDialog.Option(0)
-        file_options |= QFileDialog.Option.DontUseNativeDialog
         file_dialog = QFileDialog()
         file_dialog.setFileMode(QFileDialog.FileMode.ExistingFiles)
         image_file_path = file_dialog.getOpenFileName(
@@ -7017,7 +7015,6 @@ class DriftlessMap(QMainWindow, FORM_Main):
         else:
             file_path = self.current_atlas_path
         file_options = QFileDialog.Option(0)
-        file_options |= QFileDialog.Option.DontUseNativeDialog
         atlas_folder = str(
             QFileDialog.getExistingDirectory(
                 self, dialog_title, file_path, options=file_options
@@ -7243,7 +7240,6 @@ class DriftlessMap(QMainWindow, FORM_Main):
             self.print_message(msg, self.error_message_color)
             return
         file_options = QFileDialog.Option(0)
-        file_options |= QFileDialog.Option.DontUseNativeDialog
         dlg = QFileDialog()
         dlg.setFileMode(QFileDialog.FileMode.ExistingFiles)
         object_file_path = dlg.getOpenFileNames(
@@ -7799,7 +7795,6 @@ class DriftlessMap(QMainWindow, FORM_Main):
     def load_layers_called(self):
         self.print_message("Loading layers ...", self.normal_color)
         file_options = QFileDialog.Option(0)
-        file_options |= QFileDialog.Option.DontUseNativeDialog
         dlg = QFileDialog()
         dlg.setFileMode(QFileDialog.FileMode.ExistingFiles)
         layer_files_path = dlg.getOpenFileNames(
@@ -8726,7 +8721,6 @@ class DriftlessMap(QMainWindow, FORM_Main):
 
         self.print_message("Loading project....", self.normal_color)
         file_options = QFileDialog.Option(0)
-        file_options |= QFileDialog.Option.DontUseNativeDialog
         dlg = QFileDialog()
         dlg.setFileMode(QFileDialog.FileMode.ExistingFiles)
         project_path = dlg.getOpenFileName(
@@ -8825,7 +8819,6 @@ class DriftlessMap(QMainWindow, FORM_Main):
             return
 
         file_options = QFileDialog.Option(0)
-        file_options |= QFileDialog.Option.DontUseNativeDialog
         dlg = QFileDialog()
         dlg.setFileMode(QFileDialog.FileMode.ExistingFiles)
         data_file_path = dlg.getOpenFileName(

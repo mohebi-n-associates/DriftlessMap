@@ -53,6 +53,14 @@ class BrightnessContrastTests(unittest.TestCase):
         self.assertEqual(channel_display.brightness_contrast(0, 255, 255), (50.0, 50.0))
 
 
+class NativeDialogTests(unittest.TestCase):
+    def test_file_dialogs_use_the_operating_system_dialog(self):
+        package = Path(__file__).resolve().parent.parent / "driftlessmap"
+        offenders = [str(path.relative_to(package)) for path in package.rglob("*.py")
+                     if "DontUseNativeDialog" in path.read_text(encoding="utf-8")]
+        self.assertEqual(offenders, [])
+
+
 class V2ShellTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
