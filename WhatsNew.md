@@ -3,6 +3,28 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.0 preview (unreleased, `v2-redesign` branch)
+
+A development preview of the redesigned interface. It is not a release; the
+stable application is unchanged.
+
+- **New interface:** `driftlessmap-v2` opens a task-oriented window organised
+  as Project, Section, Match, Register, Annotate and Results, with a command
+  search (Ctrl/Cmd+K), light and dark themes and clear status. It runs on the
+  same engine and saves the same project files. See Section 4.5 of the manual.
+- **Register on chosen channels:** automatic matching and landmark
+  suggestion can use DAPI (or any chosen channels) alone, independent of what
+  is visible. Also in the stable interface: Atlas > Registration Channels….
+- **Native multichannel microscopy input:** up to 16 channels at 8 or 16 bits,
+  ImageJ/OME hyperstacks, several series as scenes, and channel names and
+  colours from the file's metadata.
+- **Brightness and contrast per channel,** with ImageJ-style Auto, without
+  changing the pixel values.
+- **Registration review:** mark a registration reviewed; any change to its
+  landmarks or plane clears the review.
+- Projects are saved with payload schema 3. DriftlessMap 1.x refuses them with
+  a clear message rather than opening them without the new information.
+
 ## DriftlessMap 1.6.1
 
 Release date: 28 September 2026

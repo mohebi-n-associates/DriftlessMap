@@ -433,6 +433,65 @@ invalid inputs, unmatched landmarks, unavailable tools, current pixel
 coordinates, atlas voxels, region hierarchy, configured Bregma coordinates,
 estimated Allen AP/ML coordinates, and surface depth can all appear there.
 
+
+### 4.5 The 2.0 preview interface
+
+A development preview of the redesigned interface is available on the
+`v2-redesign` branch. It runs on the same engine, reads and writes the same
+project files, and keeps its preferences separate from the stable interface.
+Start it with:
+
+```bash
+driftlessmap-v2
+# or
+python -m driftlessmap.v2
+```
+
+The window has four areas:
+
+- **Steps** on the left: Project, Section, Match, Register, Annotate and
+  Results. Each step shows its current state under its name (for example
+  "registers on DAPI only" or "10 pairs · review pending"). Steps are not a
+  wizard; move between them freely. Keys 1 to 6 switch steps.
+- **The canvas** in the middle, with Compare, Atlas, Section, 3D and
+  Multi-plane views. When a tool is active, its options appear in the row
+  above the image.
+- **Objects, Layers and Regions** on the right.
+- **The status line** at the bottom: the last message, the atlas and section,
+  and whether there are unsaved changes. Changing views, zooming or selecting
+  never counts as a change.
+
+What each step does:
+
+| Step | Main actions |
+| --- | --- |
+| Project | Load atlas, load or replace the section, open, save, save a portable copy, atlas download and slice-atlas tools |
+| Section | Per-channel name, colour, visibility and display range; brightness, contrast, gamma and Auto (ImageJ-style, saturating 0.35% of samples); **Register** ticks that choose the registration channels, with a preview of the registration input; rotation, flips, crop and clean-up |
+| Match | Find atlas section with the chosen channels; the plane, depth and tilt controls of the 1.x Atlasing Controller |
+| Register | Suggest landmarks; add, move and delete pairs; a list of pairs marked Outline, Internal, Edited or Manual; mesh check; **Mark review complete**; warp preview in either direction |
+| Annotate | Probe, cells, colour detection, drawing, erasing, lasso and measuring; probe settings; **Map to atlas**; make parts and build 3D objects |
+| Results | Region tables, show on plane, compare, 3D options, export and import |
+
+Display settings (colour, visibility, brightness, contrast, gamma, curves)
+change only how the image looks; the pixel values, registration input and
+coordinates stay the same. Mapping without a review is allowed and is recorded
+as not reviewed.
+
+**Ctrl+K** (Cmd+K on macOS) opens a command search. It finds every 2.0
+command and every 1.x menu command by its old name, for example "merge" or
+"triangulation". Single-key shortcuts (P add or move landmark points,
+M measure, V no tool, Delete remove the selected landmark pair) do not fire
+while you type in a field; Escape stops the current tool.
+
+Known limits of the preview:
+
+- Mapping and building keep their 1.x behaviour: mapping moves section marks
+  to the atlas, and building replaces parts with the object (Edit parts
+  restores them). The interface says so before you act.
+- The hemisphere choice in Find atlas section still uses the 1.x wording.
+- A few adopted 1.x controls keep their dark styling in the light theme.
+- The desktop application bundles still start the stable interface.
+
 ## 5. Downloading, processing, and loading atlases
 
 ### 5.1 Atlas storage rules

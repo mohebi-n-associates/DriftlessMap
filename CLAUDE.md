@@ -80,6 +80,18 @@ or important workflows change.
   and raster layers.
 - `driftlessmap/utils.py`: shared image, label and geometry helpers (formerly
   `uuuuuu.py`).
+- `driftlessmap/v2/`: the 2.0 preview interface (`driftlessmap-v2`,
+  `python -m driftlessmap.v2`). `shell.V2Window` hosts a hidden
+  `DriftlessMap` as its engine: it moves the engine's view splitter,
+  toolbar (tool options only), object/layer panels and label tree into its
+  own layout and calls engine methods and QActions for every operation. The
+  shell must never hold its own copy of scientific state. Panels per step
+  (`*_panel.py`), `commands.py` (registry and Ctrl/Cmd+K palette; every 1.x
+  QAction is registered under its old name), `state.py` (read-only status and
+  the unsaved-change digest, which ignores navigation), `channel_display.py`
+  (per-channel display range/gamma written into the 1.x curve state so saves
+  restore it) and `theme.py` (design tokens and stylesheet). Preview
+  preferences use a separate QSettings namespace.
 - `driftlessmap/main_window.ui`: Qt menu/action definitions.
 - `driftlessmap/icons/app/`: canonical PNG plus native Windows ICO and macOS
   ICNS application artwork.

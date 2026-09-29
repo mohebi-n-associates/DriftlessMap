@@ -31,7 +31,12 @@ class MatchPanel(StepPanel):
             "changes; it is off by default, as in 1.x. Navigation makes the other "
             "planes follow the cursor in the multi-plane view."))
         self.plane = manual.add(QLabel(""))
-        manual.add(engine.atlas_view.sidebar_wrap)
+        view = engine.atlas_view
+        # The 1.x panel sets white text inline; let the V2 theme style it.
+        for radio in (view.section_rabnt1, view.section_rabnt2, view.section_rabnt3):
+            radio.setStyleSheet("")
+        view.radio_group.setStyleSheet("")
+        manual.add(view.sidebar_wrap)
 
     def refresh(self):
         engine = self.engine

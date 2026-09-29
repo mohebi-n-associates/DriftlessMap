@@ -21,6 +21,37 @@ register → annotate → inspect → export → save/reopen**. Expand only afte
 that workflow works through the new shell with representative data. A new
 shell does not authorize silent changes to scientific results.
 
+## Implementation status (first preview, `v2-redesign` branch)
+
+Done, with tests:
+
+- Registration-input recipe (Legacy exactly as 1.6, or chosen channels) used
+  by both automatic stages; chosen in the Section step or Atlas > Registration
+  Channels…; saved in payload schema 3.
+- Up to 16 channels at native 8/16-bit depth; 1.x four-element display lists
+  and five-entry cell counts padded on load.
+- TIFF hyperstacks (Z browsed as pages, further axes fixed and reported),
+  several series as scenes read on demand, OME/ImageJ channel names and
+  colours, readable errors and an alpha-channel note.
+- Human registration review tied to a fingerprint of landmarks, frame points,
+  plane, page, tilt and image size; mapping records whether it was reviewed.
+- The V2 shell: step rail with concrete status, Compare/Atlas/Section/3D/
+  Multi-plane views, tool options, objects/layers/regions column, status line
+  with navigation-proof unsaved-change detection, light and dark themes,
+  command palette covering every 1.x menu command, single-key shortcuts that
+  never fire while typing.
+- Section step: per-channel rows, brightness/contrast, gamma, Auto, registration
+  input preview; Register step: landmark list by kind, mesh check, review and
+  warp preview; Annotate and Results steps wrapping the 1.x operations.
+- End-to-end check on a 16-bit DAPI/GFP/tracer OME-TIFF: DAPI-only match and
+  landmarks, review, warp, probe mapping, build, save and reopen.
+
+Not yet done (see Sections 3, 6 and 15): source retention and staleness,
+undo for mapping and building, named anatomical sides for the hemisphere
+choice, series/Z/T selectors beyond the page slider, pyramid levels, a fully
+themed restyle of adopted 1.x controls, and a desktop bundle that starts the
+preview.
+
 ## Contents
 
 1. [Scope and priorities](#1-scope-and-priorities)
