@@ -49,6 +49,10 @@ or important workflows change.
   settings never enter it. `DriftlessMap.registration_section()` applies it
   for Suggest Atlas Section and Propose Landmarks; a new multichannel image
   has no recipe until the user chooses (`registration_channels_dialog.py`).
+- `driftlessmap/registration_review.py`: human review of the current
+  registration, tied to a fingerprint of landmarks, frame points, plane, page,
+  tilt and image size; any change makes it lapse. Pre-schema-3 work is
+  "not recorded", never "reviewed". Saved as `registration_review`.
 - `driftlessmap/auto_registration.py`: SimpleITK registration (moment-based
   affine on silhouettes, then a B-spline on intensities with Mattes MI) that
   proposes atlas-to-histology landmark pairs in DriftlessMap pixel-edge
@@ -96,7 +100,8 @@ or important workflows change.
 - New files are never executable pickle payloads. They are atomic ZIP archives
   containing `manifest.json`, `.npy` arrays, and optional streamed attachments.
 - Archive format version is currently 1. Project payload schema is version 3
-  (`project_io.PROJECT_SCHEMA_VERSION`); schema 3 adds `registration_input`.
+  (`project_io.PROJECT_SCHEMA_VERSION`); schema 3 adds `registration_input`,
+  `registration_review` and `mapping_review_state`, and up to 16 channels.
   Schemas 1 and 2 load with Legacy registration input.
   Do not bump either without a backward-compatible reader/migration path.
 - Supported primary extensions:

@@ -147,6 +147,11 @@ from .background import run_in_background
 from .section_suggestion_dialog import SectionSuggestionDialog
 from .registration_channels_dialog import RegistrationChannelsDialog
 from . import registration_input
+from .registration_review import (
+    REVIEWED,
+    RegistrationReview,
+    registration_fingerprint,
+)
 from .landmarks import LANDMARK_FIELDS, LandmarkModel, triangulation_payload_error
 from .project_io import (
     CELL_COUNT_SLOTS,
@@ -187,6 +192,10 @@ class DriftlessMap(QMainWindow, FORM_Main):
         # Channels used by Suggest Atlas Section and Propose Landmarks; None
         # until chosen (multichannel images) or defaulted (RGB, one channel).
         self.registration_input = None
+        # The user's review of the current registration, and whether the last
+        # mapping to the atlas used a reviewed registration.
+        self.registration_review = RegistrationReview()
+        self.mapping_review_state = None
         self.atlas_provenance = None
         self.histology_provenance = None
         self._portable_source_directories = []
@@ -1774,6 +1783,54 @@ class DriftlessMap(QMainWindow, FORM_Main):
             if np.asarray(self.image_view.current_img).ndim == 3 else 1
         names += ["Channel {}".format(i + 1) for i in range(len(names), count)]
         return names[:count], bool(getattr(image_file, "is_rgb", False))
+
+    def current_registration_fingerprint(self):
+        """Fingerprint of the registration inputs a review applies to."""
+        view = self.atlas_view
+        plane = self.atlas_display
+        pages = {"coronal": view.current_coronal_index,
+                 "sagittal": view.current_sagital_index,
+                 "horizontal": view.current_horizontal_index}
+        tilts = dict(zip(("coronal", "sagittal", "horizontal"), view.get_atlas_angles()))
+        image = self.image_view.current_img
+        return registration_fingerprint(
+            self.atlas_tri_inside_data, self.histo_tri_inside_data,
+            self.atlas_tri_onside_data, self.histo_tri_onside_data,
+            plane, pages.get(plane), tilts.get(plane, ()),
+            np.shape(image) if image is not None else (),
+        )
+
+    def registration_review_state(self):
+        """"reviewed", "not reviewed" or "not recorded" for the registration."""
+        return self.registration_review.state(self.current_registration_fingerprint())
+
+    def mark_registration_reviewed(self):
+        """Record that the user reviewed the current landmarks and warp."""
+        if len(self.atlas_tri_inside_data) < 3 or (
+            len(self.atlas_tri_inside_data) != len(self.histo_tri_inside_data)
+        ):
+            self.print_message(
+                "Place at least three landmark pairs before marking the "
+                "registration as reviewed.",
+                self.error_message_color,
+            )
+            return False
+        self.registration_review = RegistrationReview(
+            self.current_registration_fingerprint(), utc_now_iso())
+        self.print_message(
+            "Registration marked as reviewed. Editing landmarks or the atlas "
+            "plane clears the review.",
+            self.normal_color,
+        )
+        return True
+
+    def _saved_registration_review(self, p_dict):
+        if int(p_dict.get("project_schema_version", 1)) < 3:
+            return RegistrationReview(recorded=False)
+        try:
+            return RegistrationReview.from_dict(p_dict.get("registration_review"))
+        except (TypeError, ValueError):
+            return RegistrationReview(recorded=False)
 
     def _saved_registration_input(self, p_dict):
         """The saved recipe; projects before schema 3 used Legacy input."""
@@ -3897,8 +3954,13 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 "Please transfer image to atlas first", self.error_message_color
             )
             return
+        self.mapping_review_state = self.registration_review_state()
         self.print_message(
-            "Transform accepted, start transferring...", self.normal_color
+            "Transform accepted, start transferring..."
+            if self.mapping_review_state == REVIEWED else
+            "Transferring with a registration that has not been reviewed; the "
+            "mapped results are marked not reviewed.",
+            self.normal_color,
         )
         self.sidebar_tab_state(3)
         self.atlas_tri_data = list(
@@ -6627,6 +6689,8 @@ class DriftlessMap(QMainWindow, FORM_Main):
 
             self.image_view.set_data(image_file)
             self.registration_input = None
+            self.registration_review = RegistrationReview()
+            self.mapping_review_state = None
             self.reset_corners_hist()
             self.layerpanel.setEnabled(True)
         notes = getattr(image_file, "notes", None)
@@ -8083,6 +8147,8 @@ class DriftlessMap(QMainWindow, FORM_Main):
                     self.registration_input.to_dict()
                     if self.registration_input is not None else None
                 ),
+                "registration_review": self.registration_review.to_dict(),
+                "mapping_review_state": self.mapping_review_state,
                 "np_onside": self.np_onside,
                 "processing_slice": self.atlas_view.processing_slice,
                 "processing_img": self.image_view.processing_img,
@@ -8414,6 +8480,8 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 self.show_only_image_window()
 
         self.registration_input = self._saved_registration_input(p_dict)
+        self.registration_review = self._saved_registration_review(p_dict)
+        self.mapping_review_state = p_dict.get("mapping_review_state")
 
         # tool
         self.tool_box.bound_pnts_num.setText(str(self.np_onside))

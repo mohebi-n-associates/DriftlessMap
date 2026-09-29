@@ -188,6 +188,11 @@ class ProjectPersistenceIntegrationTests(unittest.TestCase):
             window.current_img_path = str(source)
             window._loaded_histology_signature = path_stat_signature(source)
             window.registration_input = RegistrationInput.from_channels((4,), ["Channel 5"])
+            window.atlas_tri_inside_data = [[1.0, 2.0], [3.0, 4.0], [5.0, 1.0]]
+            window.histo_tri_inside_data = [[2.0, 3.0], [6.0, 8.0], [10.0, 2.0]]
+            self.assertEqual(window.registration_review_state(), "not reviewed")
+            self.assertTrue(window.mark_registration_reviewed())
+            self.assertEqual(window.registration_review_state(), "reviewed")
             with patch.object(
                 QFileDialog,
                 "getSaveFileName",
@@ -208,6 +213,14 @@ class ProjectPersistenceIntegrationTests(unittest.TestCase):
             self.assertEqual(restored.image_view.channel_visible[:6],
                              [True] * 5 + [False])
             self.assertEqual(restored.registration_input.channels, (4,))
+            self.assertEqual(restored.atlas_tri_inside_data, window.atlas_tri_inside_data)
+            self.assertEqual(restored.registration_review_state(), "reviewed")
+            restored.histo_tri_inside_data[0] = [2.5, 3.0]
+            self.assertEqual(restored.registration_review_state(), "not reviewed")
+            old_payload = dict(payload, project_schema_version=2)
+            self.assertEqual(
+                restored._saved_registration_review(old_payload).state("x" * 64),
+                "not recorded")
 
     @isolated_gui_test
     def test_portable_project_streams_and_reopens_original_histology(self):
