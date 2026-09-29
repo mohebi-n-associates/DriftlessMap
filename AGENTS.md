@@ -93,7 +93,10 @@ or important workflows change.
   restore it) and `theme.py` (design tokens and stylesheet). Preview
   preferences use a separate QSettings namespace. V2 dialogs subclass the
   1.x ones and only rebuild the layout (`allen_download_dialog.py`), so
-  download, validation and processing code stays shared.
+  download, validation and processing code stays shared. `probes.py` manages
+  named probes on top of the engine's name-prefix grouping of probe pieces
+  (`"<probe> - piece"`, `"<probe> shank N - piece"`); `merge_probes(only=...)`
+  builds selected groups only.
 - `driftlessmap/main_window.ui`: Qt menu/action definitions.
 - `driftlessmap/icons/app/`: canonical PNG plus native Windows ICO and macOS
   ICNS application artwork.

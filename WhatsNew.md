@@ -20,6 +20,9 @@ stable application is unchanged.
   colours from the file's metadata.
 - **Brightness and contrast per channel,** with ImageJ-style Auto, without
   changing the pixel values.
+- **Probes by name:** create named probes, add each section's track to the
+  right probe in one step, and build one probe at a time. No more renaming
+  parts by hand to keep probes apart.
 - **Registration review:** mark a registration reviewed; any change to its
   landmarks or plane clears the review.
 - Projects are saved with payload schema 3. DriftlessMap 1.x refuses them with

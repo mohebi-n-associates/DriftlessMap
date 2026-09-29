@@ -1,10 +1,9 @@
 """Annotate step: marking tools, mapping to the atlas and building 3D objects."""
 
+from .probe_card import ProbeCard
 from .widgets import Card, StepPanel, button, grid_of, hint_label, set_status, status_label
 
 TOOLS = (
-    ("probe", "Probe track", "Click points along a probe track (probe type and site face "
-                             "appear under Tool options)."),
     ("loc", "Cells", "Click cells, select one cell body, or detect similar cells."),
     ("magic_wand", "Detect by colour", "Expression or contour: click a colour; set tolerance "
                                        "under Tool options, then register it."),
@@ -24,7 +23,10 @@ class AnnotatePanel(StepPanel):
     def build(self):
         engine, shell = self.engine, self.shell
         self.tool_buttons = {}
-        tools = self.add(Card("Tools"))
+        self.probes = self.add(ProbeCard(shell))
+        tools = self.add(Card("Other annotations",
+                              "Cells, expression, contours and drawings. Map them to the "
+                              "atlas and make parts below."))
         widgets = []
         for key, label, tip in TOOLS:
             widget = button(label, lambda k=key: shell.toggle_tool(k), checkable=True,
@@ -32,16 +34,6 @@ class AnnotatePanel(StepPanel):
             self.tool_buttons[key] = widget
             widgets.append(widget)
         tools.add(grid_of(widgets, columns=2))
-        probe = self.add(Card("Probe settings"))
-        probe.add(grid_of([
-            button("Multi-probe…", engine.actionMulti_Probe_Planning.trigger),
-            button("Save settings…", engine.actionSave_Probe_Setting.trigger),
-            button("Load settings…", engine.actionLoad_Probe_Setting.trigger),
-        ], columns=2))
-        probe.add(hint_label(
-            "Probe settings files restore geometry, faces and multi-probe offsets. Save "
-            "Project keeps the complete plan with atlas and objects."))
-
         mapping = self.add(Card("Map annotations to atlas"))
         self.review = mapping.add(status_label(""))
         self.map_button = mapping.add_row(
@@ -60,7 +52,6 @@ class AnnotatePanel(StepPanel):
         o = engine.object_ctrl
         objects.add(grid_of([
             button("Make parts", lambda: shell.run("annotate.parts")),
-            button("Build probe", o.merge_probe_btn.click),
             button("Build cells", o.merge_cell_btn.click),
             button("Build expression", o.merge_virus_btn.click),
             button("Build contour", o.merge_contour_btn.click),
@@ -72,6 +63,7 @@ class AnnotatePanel(StepPanel):
 
     def refresh(self):
         engine = self.engine
+        self.probes.refresh()
         for key, widget in self.tool_buttons.items():
             widget.setChecked(engine.tool_box.checkable_btn_dict["{}_btn".format(key)].isChecked())
         review = engine.registration_review_state()

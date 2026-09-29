@@ -448,8 +448,18 @@ class V2Window(QMainWindow):
         add(Command("annotate.parts", "Make parts from atlas marks",
                     engine.object_ctrl.add_object_btn.click, "Annotate",
                     ("add piece", "pieces", "add object")))
+        probes = self.panels["annotate"].probes
+        add(Command("probe.new", "New probe", lambda: (self.go_to("annotate"), probes.new_probe()),
+                    "Probes", ("add probe", "probe track")))
+        add(Command("probe.mark", "Mark probe track", lambda: (self.go_to("annotate"),
+                                                               probes.toggle_marking()),
+                    "Probes", ("probe marker", "probe tool")))
+        add(Command("probe.add_section", "Add this section to the probe",
+                    lambda: (self.go_to("annotate"), probes.add_section()), "Probes",
+                    ("make probe piece", "add piece", "transfer probe")))
         add(Command("annotate.build_probe", "Build 3D probe",
-                    engine.object_ctrl.merge_probe_btn.click, "Annotate", ("merge probe", "merge")))
+                    lambda: (self.go_to("annotate"), probes.build_probe()), "Probes",
+                    ("merge probe", "merge")))
         add(Command("annotate.unmerge", "Edit parts (unmerge)", engine.object_ctrl.unmerge_btn.click,
                     "Annotate", ("unmerge", "split object")))
         add(Command("tool.measure", "Measure", lambda: self.toggle_tool("ruler"), "Tools",

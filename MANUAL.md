@@ -469,8 +469,13 @@ What each step does:
 | Section | Per-channel name, colour, visibility and display range; brightness, contrast, gamma and Auto (ImageJ-style, saturating 0.35% of samples); **Register** ticks that choose the registration channels, with a preview of the registration input; rotation, flips, crop and clean-up |
 | Match | Find atlas section with the chosen channels; the plane, depth and tilt controls of the 1.x Atlasing Controller |
 | Register | Suggest landmarks; add, move and delete pairs; a list of pairs marked Outline, Internal, Edited or Manual; mesh check; **Mark review complete**; warp preview in either direction |
-| Annotate | Probe, cells, colour detection, drawing, erasing, lasso and measuring; probe settings; **Map to atlas**; make parts and build 3D objects |
+| Annotate | **Probes:** a list of named, coloured probes. For each section that shows a track: **Mark track**, click along it, **Add this section to** the probe (this maps the marks with the current registration). **Build** one probe from all its sections; **Rebuild** after adding more. Cells, colour detection, drawing, erasing, lasso and measuring; **Map to atlas**; make parts and build other 3D objects |
 | Results | Region tables, show on plane, compare, 3D options, export and import |
+
+Probes are grouped by name, so the sections of one probe combine and different
+probes stay separate without renaming parts. Probe names cannot contain "-".
+In pre-surgical planning (no section loaded), click the entry point and the tip
+on the atlas instead.
 
 Display settings (colour, visibility, brightness, contrast, gamma, curves)
 change only how the image looks; the pixel values, registration input and

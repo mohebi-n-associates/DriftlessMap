@@ -6342,7 +6342,12 @@ class DriftlessMap(QMainWindow, FORM_Main):
             self.error_message_color,
         )
 
-    def merge_probes(self):
+    def merge_probes(self, only=None):
+        """Build 3D probes from probe pieces, grouped by name.
+
+        ``only`` limits the build to probes with these names; other probes'
+        pieces are left untouched.
+        """
         if self.num_windows == 4:
             msg = "Can not merge probe pieces with all slice windows turned on."
             self.print_message(msg, self.error_message_color)
@@ -6362,6 +6367,20 @@ class DriftlessMap(QMainWindow, FORM_Main):
         data, obj_names, pieces_names, piece_indexes = self.object_ctrl.collect_pieces(
             "probe piece"
         )
+        if only is not None:
+            wanted = set(only)
+            keep = [i for i, name in enumerate(obj_names) if name in wanted]
+            if not keep:
+                self.print_message("There are no parts to build for {}.".format(
+                    ", ".join(sorted(wanted))), self.reminder_color)
+                return
+            data = [data[i] for i in keep]
+            pieces_names = [pieces_names[i] for i in keep]
+            obj_names = [obj_names[i] for i in keep]
+            piece_indexes = [
+                index for index in piece_indexes
+                if self.object_ctrl.obj_name[index].split("-")[0].strip() in wanted
+            ]
         probe_setting_data = self.probe_settings.get_settings()
         merge_sites = self.tool_box.merge_sites
         pre_surgery = self.image_view.image_file is None
