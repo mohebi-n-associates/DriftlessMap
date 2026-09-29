@@ -5,6 +5,7 @@ import numpy as np
 import pyqtgraph as pg
 from PyQt6.QtWidgets import (
     QFrame,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QPushButton,
@@ -21,6 +22,7 @@ from PyQt6.QtCore import (
 )
 
 from .image_stacks import ImageStacks
+from .image_reader import MAX_CHANNELS
 from .widgets_utils import ChannelSelector
 from .image_curves import CurveWidget
 from .utils import (
@@ -33,6 +35,12 @@ from .utils import (
 from .layer_validation import image_layer_matches
 from .resources import resource_path
 
+
+
+def _padded(values, fill):
+    """A per-channel list extended to MAX_CHANNELS entries."""
+    values = list(values)
+    return values + [fill] * (MAX_CHANNELS - len(values))
 
 class ImagePageController(QWidget):
     class SignalProxy(QObject):
@@ -137,10 +145,10 @@ class ImageView(QObject):
         self.color_lut_list = []
         self.original_lut_list = []
         self.scene_index = 0
-        self.max_num_channels = 4
-        self.channel_visible = [False, False, False, False]
-        self.channel_color = [None, None, None, None]
-        self.color_combo_index = [-1, -1, -1, -1]
+        self.max_num_channels = MAX_CHANNELS
+        self.channel_visible = [False] * MAX_CHANNELS
+        self.channel_color = [None] * MAX_CHANNELS
+        self.color_combo_index = [-1] * MAX_CHANNELS
 
         self.side_lines = None
         self.corner_points = None
@@ -205,14 +213,14 @@ class ImageView(QObject):
         # channel buttons
         self.chn_widget_wrap = QFrame()
         self.chn_widget_wrap.setStyleSheet('QFrame{border: 1px solid #747a80; border-radius: 5px;}')
-        chn_widget_layout = QHBoxLayout(self.chn_widget_wrap)
+        chn_widget_layout = QGridLayout(self.chn_widget_wrap)
         self.chn_widget_list = []
         for i in range(self.max_num_channels):
             self.chn_widget_list.append(ChannelSelector())
             self.chn_widget_list[i].set_channel_index(i)
             self.chn_widget_list[i].sig_vis_channels.connect(self.set_channel_visible)
             self.chn_widget_list[i].sig_change_color.connect(self.channel_color_changed)
-            chn_widget_layout.addWidget(self.chn_widget_list[i])
+            chn_widget_layout.addWidget(self.chn_widget_list[i], i // 4, i % 4)
             self.chn_widget_list[i].setVisible(False)
         # self.chn_widget_wrap.setVisible(False)
 
@@ -533,8 +541,9 @@ class ImageView(QObject):
     def load_img_ctrl_data(self, img_ctrl_data):
         self.current_img = img_ctrl_data['current_img']
         self.current_scale = self._restored_scale(img_ctrl_data)
-        self.channel_color = img_ctrl_data['channel_color']
-        self.color_combo_index = img_ctrl_data['color_combo_index']
+        # Projects before 2.0 saved four-element lists.
+        self.channel_color = _padded(img_ctrl_data['channel_color'], None)
+        self.color_combo_index = _padded(img_ctrl_data['color_combo_index'], -1)
         saved_channel_visible = img_ctrl_data.get(
             'channel_visible', [True] * self.image_file.n_channels
         )
@@ -554,7 +563,7 @@ class ImageView(QObject):
         self.scene_label.setText('{}/{}'.format(img_ctrl_data['current_scene'] + 1, self.image_file.n_scenes))
         self.scene_slider.blockSignals(False)
 
-        self.curve_widget.gamma = img_ctrl_data['gamma_vals']
+        self.curve_widget.gamma = _padded(img_ctrl_data['gamma_vals'], 1)
         self.curve_widget.table_output = img_ctrl_data['table_output']
         self.curve_widget.original_table = img_ctrl_data['original_table']
         self.curve_widget.line_type = img_ctrl_data['line_type']

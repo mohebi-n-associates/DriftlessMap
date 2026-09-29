@@ -1,4 +1,6 @@
 import numpy as np
+
+from .image_reader import MAX_CHANNELS
 from PyQt6.QtCore import QObject, Qt, pyqtSignal
 from PyQt6.QtGui import QPainter
 import pyqtgraph as pg
@@ -276,7 +278,9 @@ class ImageStacks(pg.GraphicsLayoutWidget):
         virus_img = pg.ImageItem()
         virus_img.setLevels(levels=(0, 1))
 
-        self.image_list = [img1, img2, img3, img4]
+        self.image_list = [img1, img2, img3, img4] + [
+            pg.ImageItem() for _ in range(4, MAX_CHANNELS)
+        ]
         self.image_dict = {'img-overlay': overlay_img,
                            'overlay_contour': overlay_contour,
                            'img-virus': virus_img,
@@ -295,7 +299,7 @@ class ImageStacks(pg.GraphicsLayoutWidget):
         self.image_dict_keys = list(self.image_dict.keys())
 
         self.vb.addItem(self.base_layer)
-        for i in range(4):
+        for i in range(len(self.image_list)):
             self.vb.addItem(self.image_list[i])
             self.image_list[i].setVisible(False)
 

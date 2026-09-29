@@ -8,10 +8,20 @@ import numpy as np
 import tifffile
 
 
-MAX_CHANNELS = 4
+# Channels per image. The display, curves and saved state are sized to this;
+# images with more channels are refused with a clear error, never truncated.
+MAX_CHANNELS = 16
 RGB_COLORS = [(255, 0, 0), (0, 255, 0), (0, 0, 255)]
-CHANNEL_COLORS = [(128, 128, 128), (255, 0, 0), (0, 255, 0), (0, 0, 255)]
-CHANNEL_NAMES = ["Gray", "Red", "Green", "Blue"]
+# The first four colours and names are those of DriftlessMap 1.x.
+CHANNEL_COLORS = [
+    (128, 128, 128), (255, 0, 0), (0, 255, 0), (0, 0, 255),
+    (255, 0, 255), (0, 255, 255), (255, 255, 0), (255, 128, 0),
+    (128, 0, 255), (0, 255, 128), (255, 0, 128), (128, 255, 0),
+    (0, 128, 255), (255, 128, 128), (128, 255, 255), (255, 255, 128),
+]
+CHANNEL_NAMES = ["Gray", "Red", "Green", "Blue"] + [
+    "Channel {}".format(i + 1) for i in range(4, MAX_CHANNELS)
+]
 HISTOLOGY_IMAGE_FILTERS = (
     "TIFF (*.tif *.tiff)",
     "CZI (*.czi)",

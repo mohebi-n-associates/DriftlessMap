@@ -149,10 +149,12 @@ from .registration_channels_dialog import RegistrationChannelsDialog
 from . import registration_input
 from .landmarks import LANDMARK_FIELDS, LandmarkModel, triangulation_payload_error
 from .project_io import (
+    CELL_COUNT_SLOTS,
     PROJECT_SCHEMA_VERSION,
     default_working_atlas_data,
     default_working_img_data,
     object_file_names,
+    padded_cell_count,
     prefingerprint_inputs,
     with_defaults,
 )
@@ -1260,8 +1262,8 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 self.working_atlas_data[da_key] = []
             else:
                 self.working_atlas_data[da_key] = None
-        self.working_img_data["cell_count"] = [0 for _ in range(5)]
-        self.working_atlas_data["cell_count"] = [0 for _ in range(5)]
+        self.working_img_data["cell_count"] = [0] * CELL_COUNT_SLOTS
+        self.working_atlas_data["cell_count"] = [0] * CELL_COUNT_SLOTS
         self.remove_h2a_transferred_layers()
         self.remove_a2h_transferred_layers()
 
@@ -1459,15 +1461,12 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 self.working_img_data["cell_size"] = current_data["size"]
                 self.working_img_data["cell_symbol"] = current_data["symbol"]
                 self.working_img_data["cell_layer_index"] = current_data["index"]
-                self.working_img_data["cell_count"] = current_data["count"]
+                self.working_img_data["cell_count"] = padded_cell_count(current_data["count"])
                 self.image_view.img_stacks.image_dict[layer_link].setData(
                     pos=np.asarray(self.working_img_data[layer_link]),
                     symbol=self.working_img_data["cell_symbol"],
                 )
-                for i in range(5):
-                    self.tool_box.cell_count_val_list[i].setText(
-                        str(self.working_img_data["cell_count"][i])
-                    )
+                self.tool_box.update_cell_count_label(self.working_img_data["cell_count"])
             elif layer_link == "img-drawing":
                 self.working_img_data[layer_link] = current_data["data"]
                 if current_data["closed"]:
@@ -4029,7 +4028,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
             self.working_img_data["cell_size"].clear()
             self.working_img_data["cell_symbol"].clear()
             self.working_img_data["cell_layer_index"].clear()
-            self.working_img_data["cell_count"] = [0 for _ in range(5)]
+            self.working_img_data["cell_count"] = [0] * CELL_COUNT_SLOTS
             self.print_message("Cells transferred.", self.normal_color)
 
         if self.working_img_data["img-virus"] is not None:
@@ -4502,7 +4501,9 @@ class DriftlessMap(QMainWindow, FORM_Main):
             else:
                 # only one layer is allowed to work on
                 da_layer = [
-                    ind for ind in range(4) if self.image_view.channel_visible[ind]
+                    ind
+                    for ind in range(self.image_view.image_file.n_channels)
+                    if self.image_view.channel_visible[ind]
                 ]
                 n_layers = len(da_layer)
                 if n_layers == 0:
@@ -5856,10 +5857,9 @@ class DriftlessMap(QMainWindow, FORM_Main):
                     "cell_layer_index",
                 ]:
                     self.working_img_data[da_key] = []
-                self.working_img_data["cell_count"] = [0 for i in range(5)]
+                self.working_img_data["cell_count"] = [0] * CELL_COUNT_SLOTS
                 if self.a2h_transferred or not self.h2a_transferred:
-                    for i in range(5):
-                        self.tool_box.cell_count_val_list[i].setText("0")
+                    self.tool_box.update_cell_count_label([])
 
             if da_link == "atlas-cells":
                 for da_key in [
@@ -5869,9 +5869,8 @@ class DriftlessMap(QMainWindow, FORM_Main):
                     "cell_layer_index",
                 ]:
                     self.working_atlas_data[da_key] = []
-                self.working_atlas_data["cell_count"] = [0 for _ in range(5)]
-                for i in range(5):
-                    self.tool_box.cell_count_val_list[i].setText("0")
+                self.working_atlas_data["cell_count"] = [0] * CELL_COUNT_SLOTS
+                self.tool_box.update_cell_count_label([])
 
             if da_link == "atlas-overlay":
                 self.remove_h2a_transferred_layers()
@@ -6120,12 +6119,13 @@ class DriftlessMap(QMainWindow, FORM_Main):
         data = self.atlas_view.get_3d_data_from_2d_view(
             processing_data, self.atlas_display
         )
-        for i in range(5):
+        cell_count = padded_cell_count(self.working_atlas_data["cell_count"])
+        for i in range(CELL_COUNT_SLOTS):
             if i == 0:
                 object_type = "cells - piece"
             else:
                 object_type = "cells {} - piece".format(i)
-            if self.working_atlas_data["cell_count"][i] != 0:
+            if cell_count[i] != 0:
                 piece_data = data[
                     np.where(
                         np.ravel(self.working_atlas_data["cell_layer_index"]) == i
@@ -6143,7 +6143,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.working_atlas_data["cell_size"].clear()
         self.working_atlas_data["cell_symbol"].clear()
         self.working_atlas_data["cell_layer_index"].clear()
-        self.working_atlas_data["cell_count"] = [0 for _ in range(5)]
+        self.working_atlas_data["cell_count"] = [0] * CELL_COUNT_SLOTS
         self.tool_box.update_cell_count_label(self.working_atlas_data["cell_count"])
 
     def make_object_pieces(self):
@@ -7547,7 +7547,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
             self.working_img_data["cell_size"] = layer_dict["cell_size"]
             self.working_img_data["cell_symbol"] = layer_dict["cell_symbol"]
             self.working_img_data["cell_layer_index"] = layer_dict["cell_layer_index"]
-            self.working_img_data["cell_count"] = layer_dict["cell_count"]
+            self.working_img_data["cell_count"] = padded_cell_count(layer_dict["cell_count"])
             self.tool_box.update_cell_count_label(self.working_img_data["cell_count"])
         elif layer_link == "img-overlay":
             if not np.all(layer_dict["data"].shape[:2] == self.image_view.img_size):
@@ -7662,15 +7662,14 @@ class DriftlessMap(QMainWindow, FORM_Main):
         elif layer_link == "atlas-cells":
             self.tool_box.cell_color_btn.setColor(layer_dict["color"])
             self.working_atlas_data[layer_link] = layer_dict["data"]
-            self.working_atlas_data["cell_count"] = layer_dict["cell_count"]
+            self.working_atlas_data["cell_count"] = padded_cell_count(layer_dict["cell_count"])
             self.working_atlas_data["cell_size"] = layer_dict["cell_size"]
             self.working_atlas_data["cell_symbol"] = layer_dict["cell_symbol"]
             self.working_atlas_data["cell_layer_index"] = layer_dict["cell_layer_index"]
             if not self.working_img_data["img-cells"]:
-                for i in range(5):
-                    self.tool_box.cell_count_val_list[i].setText(
-                        str(self.working_atlas_data["cell_count"][i])
-                    )
+                self.tool_box.update_cell_count_label(
+                    self.working_atlas_data["cell_count"]
+                )
         elif layer_link == "atlas-drawing":
             self.tool_box.pencil_color_btn.setColor(layer_dict["color"])
             self.working_atlas_data[layer_link] = layer_dict["data"]

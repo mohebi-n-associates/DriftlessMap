@@ -1,4 +1,6 @@
 import numpy as np
+
+from .image_reader import MAX_CHANNELS
 import pyqtgraph as pg
 from PyQt6.QtWidgets import (
     QComboBox,
@@ -61,11 +63,11 @@ class CurvesPlot(pg.PlotWidget):
         self.scene().sigMouseClicked.connect(self.on_mouse_clicked)
 
         self.adding_allowed = False
-        self.enable_channel = [False, False, False, False]
+        self.enable_channel = [False] * MAX_CHANNELS
         self.line_type = 'gamma'
         self.depth_level = 65535
-        self.start_point = [np.array([0, 0]) for i in range(4)]
-        self.end_point = [np.array([self.depth_level, self.depth_level]) for i in range(4)]
+        self.start_point = [np.array([0, 0]) for i in range(MAX_CHANNELS)]
+        self.end_point = [np.array([self.depth_level, self.depth_level]) for i in range(MAX_CHANNELS)]
         self.table_input = np.arange(self.depth_level + 1)
         self.hist_data = None
         self.active_index = None
@@ -79,18 +81,18 @@ class CurvesPlot(pg.PlotWidget):
         self.hist_list = []
         self.lut_line = []
         self.lut_points = []
-        for i in range(4):
+        for i in range(MAX_CHANNELS):
             self.hist_list.append(pg.PlotDataItem())
             self.lut_line.append(pg.PlotCurveItem(fillLevel=None))
             self.lut_points.append(MovablePoints())
             self.lut_points[i].mouseDragged.connect(self.on_mouse_dragged)
 
-        for i in range(4):
+        for i in range(MAX_CHANNELS):
             self.addItem(self.hist_list[i])
-        for i in range(4):
+        for i in range(MAX_CHANNELS):
             self.addItem(self.lut_line[i])
             self.lut_line[i].setVisible(False)
-        for i in range(4):
+        for i in range(MAX_CHANNELS):
             self.addItem(self.lut_points[i])
             self.lut_points[i].setVisible(False)
 
@@ -103,15 +105,15 @@ class CurvesPlot(pg.PlotWidget):
         :return: None
         """
         if self.hist_data is not None:
-            for i in range(4):
+            for i in range(MAX_CHANNELS):
                 self.hist_list[i].clear()
                 self.lut_line[i].clear()
                 self.lut_points[i]. clear()
             self.hist_data = None
 
         if self.depth_level != depth_level:
-            self.start_point = [np.array([0, 0]) for i in range(4)]
-            self.end_point = [np.array([depth_level, depth_level]) for i in range(4)]
+            self.start_point = [np.array([0, 0]) for i in range(MAX_CHANNELS)]
+            self.end_point = [np.array([depth_level, depth_level]) for i in range(MAX_CHANNELS)]
             self.table_input = np.arange(0, depth_level + 1)
             self.depth_level = depth_level
 
@@ -120,7 +122,7 @@ class CurvesPlot(pg.PlotWidget):
         # colours and enabled channels never carry over from the last image.
         self.active_pen = []
         self.active_brush = []
-        self.enable_channel = [False, False, False, False]
+        self.enable_channel = [False] * MAX_CHANNELS
         self.active_index = None
         for i in range(len(self.hist_data), len(self.hist_list)):
             self.hist_list[i].setVisible(False)
@@ -288,7 +290,7 @@ class CurveWidget(QWidget):
         QWidget.__init__(self)
 
         self.gray_max = 65535
-        self.gamma = [1, 1, 1, 1]
+        self.gamma = [1] * MAX_CHANNELS
         self.n_channels = None
         self.table_output = []
         self.original_table = []

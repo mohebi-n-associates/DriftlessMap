@@ -15,6 +15,7 @@ import numpy as np
 
 from driftlessmap.persistence import load_driftlessmap_file
 from driftlessmap.provenance import path_stat_signature
+from driftlessmap.project_io import CELL_COUNT_SLOTS
 
 if PROJECT_TEST_CHILD:
     from PyQt6.QtWidgets import QApplication, QFileDialog
@@ -160,6 +161,53 @@ class ProjectPersistenceIntegrationTests(unittest.TestCase):
                 ],
                 fresh_counts,
             )
+
+    @isolated_gui_test
+    def test_six_channel_uint16_section_displays_saves_and_reopens(self):
+        import tifffile
+
+        from driftlessmap.registration_input import RegistrationInput
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            source = root / "six.tif"
+            project = root / "six.dmap"
+            rng = np.random.default_rng(5)
+            data = rng.integers(0, 60000, (6, 24, 30), dtype=np.uint16)
+            tifffile.imwrite(source, data, imagej=True, metadata={"axes": "CYX"})
+
+            window = self.create_window()
+            self.assertTrue(window.load_single_image_file(str(source), ".tif"))
+            view = window.image_view
+            self.assertEqual(view.current_img.shape, (24, 30, 6))
+            self.assertEqual(view.current_img.dtype, np.uint16)
+            self.assertEqual(sum(w.isVisibleTo(view.chn_widget_wrap)
+                                 for w in view.chn_widget_list), 6)
+            view.set_channel_visible(False, 5)
+            self.assertFalse(view.img_stacks.image_list[5].isVisible())
+            window.current_img_path = str(source)
+            window._loaded_histology_signature = path_stat_signature(source)
+            window.registration_input = RegistrationInput.from_channels((4,), ["Channel 5"])
+            with patch.object(
+                QFileDialog,
+                "getSaveFileName",
+                return_value=(str(project), "DriftlessMap Project (*.dmap)"),
+            ):
+                window.save_project_called(portable=False)
+
+            payload, error = load_driftlessmap_file(project, "project")
+            self.assertIsNone(error)
+            source.unlink()  # reopen from the embedded raster
+            restored = self.create_window()
+            with patch.object(restored, "_ask_for_verified_input", return_value=None):
+                prepared = restored.prepare_project_sources(payload, str(project))
+            restored.current_project_path = str(project)
+            restored.load_project(prepared)
+            np.testing.assert_array_equal(
+                restored.image_view.current_img, np.moveaxis(data, 0, -1))
+            self.assertEqual(restored.image_view.channel_visible[:6],
+                             [True] * 5 + [False])
+            self.assertEqual(restored.registration_input.channels, (4,))
 
     @isolated_gui_test
     def test_portable_project_streams_and_reopens_original_histology(self):
@@ -695,7 +743,7 @@ class ProjectPersistenceIntegrationTests(unittest.TestCase):
             self.assertEqual(
                 [link for link in window.layer_ctrl.layer_link if "atlas" in link], []
             )
-            self.assertEqual(window.working_atlas_data["cell_count"], [0] * 5)
+            self.assertEqual(window.working_atlas_data["cell_count"], [0] * CELL_COUNT_SLOTS)
 
     @isolated_gui_test
     def test_vertical_probe_is_drawn_at_its_ap_position_in_sagittal_view(self):
@@ -753,8 +801,14 @@ class ProjectPersistenceIntegrationTests(unittest.TestCase):
         )
         self.assertEqual(merged["atlas-probe"], [[1, 2]])
         self.assertNotIn("retired-key", merged)
-        self.assertEqual(merged["cell_count"], [0] * 5)
+        from driftlessmap.project_io import CELL_COUNT_SLOTS
+
+        self.assertEqual(merged["cell_count"], [0] * CELL_COUNT_SLOTS)
         self.assertEqual(merged["ruler_path"], [])
+        # Five-entry counts from 1.x projects are kept and padded.
+        old_counts = DriftlessMap._with_defaults(defaults, {"cell_count": [1, 2, 3, 4, 5]})
+        self.assertEqual(old_counts["cell_count"][:5], [1, 2, 3, 4, 5])
+        self.assertEqual(len(old_counts["cell_count"]), CELL_COUNT_SLOTS)
 
     @isolated_gui_test
     def test_registration_is_built_once_per_landmark_state(self):

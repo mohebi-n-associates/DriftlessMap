@@ -72,12 +72,26 @@ class TiffReaderTests(unittest.TestCase):
         self.assertIsNone(reader.pixel_type)
         self.assertEqual(reader.data, {})
 
-    def test_more_than_four_channels_is_rejected_before_ui_indexing(self):
+    def test_six_channel_uint16_is_kept_natively(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "channels.tif"
+            data = np.arange(6 * 5 * 4, dtype=np.uint16).reshape(6, 5, 4) * 500
+            tifffile.imwrite(path, data, imagej=True, metadata={"axes": "CYX"})
+            reader = image_reader.TIFFReader(path)
+
+        self.assertEqual(reader.error_index, 0)
+        self.assertEqual(reader.n_channels, 6)
+        self.assertEqual(reader.data["scene 0"].dtype, np.uint16)
+        np.testing.assert_array_equal(reader.data["scene 0"], np.moveaxis(data, 0, -1))
+        self.assertEqual(len(reader.rgb_colors), 6)
+        self.assertEqual(len(reader.channel_name), 6)
+
+    def test_more_channels_than_the_limit_is_rejected_before_ui_indexing(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "channels.tif"
             tifffile.imwrite(
                 path,
-                np.zeros((5, 4, 6), dtype=np.uint8),
+                np.zeros((image_reader.MAX_CHANNELS + 1, 4, 6), dtype=np.uint8),
                 imagej=True,
                 metadata={"axes": "CYX"},
             )

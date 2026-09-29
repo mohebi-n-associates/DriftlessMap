@@ -619,8 +619,10 @@ Use **File > Load Image** or the histology-image toolbar button.
 | PNG `.png` | Loaded as 8-bit RGB. |
 | BMP `.bmp` | Loaded as 8-bit RGB. |
 
-DriftlessMap supports at most four non-RGB image channels. An RGB image has three
-display channels but is treated as one RGB cell-count category.
+DriftlessMap supports up to 16 non-RGB image channels, kept at their native 8-
+or 16-bit depth. Images with more channels are refused rather than truncated.
+An RGB image has three display channels but is treated as one RGB cell-count
+category.
 
 ### 7.2 CZI scenes and scale
 
@@ -640,7 +642,7 @@ A grayscale TIFF page stack shows page navigation under the image. RGB TIFF,
 multi-channel TIFF, and page-stack TIFF are intentionally distinct:
 
 - RGB samples display as three color channels.
-- A channel axis displays up to four independent grayscale channels.
+- A channel axis displays up to 16 independent grayscale channels.
 - A page axis displays one grayscale section at a time.
 
 If a TIFF is rejected, inspect its axes, series count, sample type, and channel

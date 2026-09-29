@@ -1,6 +1,7 @@
 import unittest
 
 from driftlessmap.project_io import (
+    CELL_COUNT_SLOTS,
     default_working_atlas_data,
     default_working_img_data,
     object_file_names,
@@ -13,7 +14,7 @@ class ProjectIoTests(unittest.TestCase):
         first = default_working_img_data()
         first["img-probe"].append([1, 2])
         self.assertEqual(default_working_img_data()["img-probe"], [])
-        self.assertEqual(default_working_atlas_data()["cell_count"], [0] * 5)
+        self.assertEqual(default_working_atlas_data()["cell_count"], [0] * CELL_COUNT_SLOTS)
 
     def test_older_payloads_gain_new_fields_and_lose_retired_ones(self):
         merged = with_defaults(
