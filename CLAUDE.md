@@ -43,6 +43,12 @@ or important workflows change.
   `DriftlessMap.apply_section_suggestion` sets the view, page, tilt and
   histology orientation. Tilted matches use `tilted_slice`, which must stay
   identical to `AtlasView.rotate_*_current_slice`.
+- `driftlessmap/registration_input.py`: GUI-free registration-input recipe
+  (Legacy = unchanged raw image, 1.6 behaviour; or explicit channels, each
+  percentile-normalised and averaged into one analysis plane). Display
+  settings never enter it. `DriftlessMap.registration_section()` applies it
+  for Suggest Atlas Section and Propose Landmarks; a new multichannel image
+  has no recipe until the user chooses (`registration_channels_dialog.py`).
 - `driftlessmap/auto_registration.py`: SimpleITK registration (moment-based
   affine on silhouettes, then a B-spline on intensities with Mattes MI) that
   proposes atlas-to-histology landmark pairs in DriftlessMap pixel-edge
@@ -89,7 +95,9 @@ or important workflows change.
 
 - New files are never executable pickle payloads. They are atomic ZIP archives
   containing `manifest.json`, `.npy` arrays, and optional streamed attachments.
-- Archive format version is currently 1. Project payload schema is version 2.
+- Archive format version is currently 1. Project payload schema is version 3
+  (`project_io.PROJECT_SCHEMA_VERSION`); schema 3 adds `registration_input`.
+  Schemas 1 and 2 load with Legacy registration input.
   Do not bump either without a backward-compatible reader/migration path.
 - Supported primary extensions:
   - `.dmap`: project.

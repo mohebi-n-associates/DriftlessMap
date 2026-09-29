@@ -124,6 +124,7 @@ files = [
     "driftlessmap/atlas_matching.py",
     "driftlessmap/atlas_transform.py",
     "driftlessmap/auto_registration.py",
+    "driftlessmap/registration_input.py",
     "driftlessmap/background.py",
     "driftlessmap/cell_detection.py",
     "driftlessmap/coordinate_validation.py",

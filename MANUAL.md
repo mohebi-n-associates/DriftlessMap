@@ -720,6 +720,16 @@ DriftlessMap can propose a starting point for registration with a volume
 atlas. Both steps are suggestions: always review the result before
 transferring anything.
 
+**Choosing the registration channels.** Both assistants use the channels chosen
+with **Atlas > Registration Channels...**, not what is visible on screen. For a
+multichannel image, choose them before the first run (DriftlessMap asks if you
+have not): for example DAPI only, so a bright tracer channel does not change
+the tissue outline or the match. Each chosen channel is scaled between its
+0.5th and 99.5th percentile and the chosen channels are averaged. **Legacy**
+uses every channel exactly as DriftlessMap 1.6 did, and is used for RGB images
+and for projects saved before this option existed. The choice is saved with
+the project.
+
 **Atlas > Suggest Atlas Section...** compares the loaded histology with the
 atlas and ranks candidate sections:
 

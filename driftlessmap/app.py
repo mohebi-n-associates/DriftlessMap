@@ -145,8 +145,11 @@ from .atlas_matching import suggest_sections
 from .auto_registration import propose_landmarks
 from .background import run_in_background
 from .section_suggestion_dialog import SectionSuggestionDialog
+from .registration_channels_dialog import RegistrationChannelsDialog
+from . import registration_input
 from .landmarks import LANDMARK_FIELDS, LandmarkModel, triangulation_payload_error
 from .project_io import (
+    PROJECT_SCHEMA_VERSION,
     default_working_atlas_data,
     default_working_img_data,
     object_file_names,
@@ -179,6 +182,9 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.save_path = self.home_path
         self.current_project_path = None
         self.project_created_at = None
+        # Channels used by Suggest Atlas Section and Propose Landmarks; None
+        # until chosen (multichannel images) or defaulted (RGB, one channel).
+        self.registration_input = None
         self.atlas_provenance = None
         self.histology_provenance = None
         self._portable_source_directories = []
@@ -530,6 +536,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.actionSwitch_Atlas.triggered.connect(self.switch_atlas)
         self.actionSuggest_Atlas_Section.triggered.connect(self.suggest_atlas_section)
         self.actionPropose_Landmarks.triggered.connect(self.propose_registration_landmarks)
+        self.actionRegistration_Channels.triggered.connect(self.choose_registration_channels)
         self.actionBregma_Picker.setCheckable(True)
         self.actionBregma_Picker.triggered.connect(self.pick_bregma)
         self.actionCreate_Slice_Layer.triggered.connect(self.process_slice)
@@ -1761,6 +1768,68 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 "Current Slice is saved successfully.", self.normal_color
             )
 
+    def _histology_channels(self):
+        image_file = self.image_view.image_file
+        names = list(getattr(image_file, "channel_name", []) or [])
+        count = int(np.asarray(self.image_view.current_img).shape[2]) \
+            if np.asarray(self.image_view.current_img).ndim == 3 else 1
+        names += ["Channel {}".format(i + 1) for i in range(len(names), count)]
+        return names[:count], bool(getattr(image_file, "is_rgb", False))
+
+    def _saved_registration_input(self, p_dict):
+        """The saved recipe; projects before schema 3 used Legacy input."""
+        if int(p_dict.get("project_schema_version", 1)) < 3:
+            return registration_input.RegistrationInput.legacy()
+        try:
+            return registration_input.RegistrationInput.from_dict(
+                p_dict.get("registration_input"))
+        except (TypeError, ValueError) as exc:
+            self.print_message(
+                "The saved registration channels could not be used ({}); choose "
+                "them again.".format(exc),
+                self.reminder_color,
+            )
+            return None
+
+    def choose_registration_channels(self):
+        """Ask which channels automatic registration uses; True if chosen."""
+        if self.image_view.current_img is None:
+            self.print_message(
+                "Load a histology section before choosing registration channels.",
+                self.error_message_color,
+            )
+            return False
+        names, _ = self._histology_channels()
+        dialog = RegistrationChannelsDialog(names, self.registration_input, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return False
+        self.registration_input = dialog.recipe()
+        self.print_message(
+            "Registration uses: {}.".format(self.registration_input.describe()),
+            self.normal_color,
+        )
+        return True
+
+    def registration_section(self):
+        """The histology input for automatic registration, or None.
+
+        Uses :attr:`registration_input`. A multichannel image without a
+        recipe asks for one; single-channel and RGB images get the default.
+        """
+        names, is_rgb = self._histology_channels()
+        if self.registration_input is None:
+            self.registration_input = registration_input.default_for(
+                len(names), is_rgb, names)
+        if self.registration_input is None and not self.choose_registration_channels():
+            return None
+        try:
+            section, _ = registration_input.prepare(
+                self.image_view.current_img, self.registration_input)
+        except ValueError as exc:
+            self.print_message(str(exc), self.error_message_color)
+            return None
+        return section
+
     def suggest_atlas_section(self):
         """Suggest and apply the atlas plane, slice and tilt for the section."""
         if (
@@ -1780,7 +1849,9 @@ class DriftlessMap(QMainWindow, FORM_Main):
             )
             return
         view = self.atlas_view
-        section = np.asarray(self.image_view.current_img)
+        section = self.registration_section()
+        if section is None:
+            return
         midline = int(view.origin_3d[0])
         # Tilts for coronal/horizontal pivot on the midline (see above); the
         # sagittal pivot is its own page, so its value here does not matter.
@@ -1882,6 +1953,9 @@ class DriftlessMap(QMainWindow, FORM_Main):
             )
             if reply != QMessageBox.StandardButton.Yes:
                 return
+        section = self.registration_section()
+        if section is None:
+            return
         stack = self.atlas_view.working_atlas
         try:
             proposal = run_in_background(
@@ -1890,7 +1964,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 propose_landmarks,
                 np.asarray(stack.img.image),
                 np.asarray(stack.label_data),
-                np.asarray(self.image_view.current_img),
+                section,
                 boundary_points=np.asarray(self.atlas_tri_onside_data, dtype=float),
             )
         except (ValueError, RuntimeError) as exc:
@@ -6551,6 +6625,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 self.tool_box.cell_count_val_list[0].setVisible(True)
 
             self.image_view.set_data(image_file)
+            self.registration_input = None
             self.reset_corners_hist()
             self.layerpanel.setEnabled(True)
         self.statusbar.showMessage("Image file loaded.")
@@ -7969,7 +8044,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
                         return False
 
             project_data = {
-                "project_schema_version": 2,
+                "project_schema_version": PROJECT_SCHEMA_VERSION,
                 "software": {"name": "DriftlessMap", "version": __version__},
                 "created_at": self.project_created_at,
                 "saved_at": saved_at,
@@ -8000,6 +8075,10 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 "num_windows": self.num_windows,
                 "probe_settings": probe_settings,
                 "probe_planning": probe_planning,
+                "registration_input": (
+                    self.registration_input.to_dict()
+                    if self.registration_input is not None else None
+                ),
                 "np_onside": self.np_onside,
                 "processing_slice": self.atlas_view.processing_slice,
                 "processing_img": self.image_view.processing_img,
@@ -8076,7 +8155,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
     def prepare_project_sources(self, project_dict, project_path):
         """Resolve and verify linked inputs before mutating the active session."""
         schema_version = int(project_dict.get("project_schema_version", 1))
-        if schema_version > 2:
+        if schema_version > PROJECT_SCHEMA_VERSION:
             self.print_message(
                 "This project uses a newer persistence schema ({}). Upgrade "
                 "DriftlessMap before opening it.".format(schema_version),
@@ -8329,6 +8408,8 @@ class DriftlessMap(QMainWindow, FORM_Main):
                     self.show_slice_and_histology()
             else:
                 self.show_only_image_window()
+
+        self.registration_input = self._saved_registration_input(p_dict)
 
         # tool
         self.tool_box.bound_pnts_num.setText(str(self.np_onside))

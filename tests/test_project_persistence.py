@@ -97,6 +97,8 @@ class ProjectPersistenceIntegrationTests(unittest.TestCase):
             window.image_view.img_stacks.image_list[1].setVisible(False)
             window.site_face = 2
             window.tool_box.merge_sites = True
+            from driftlessmap.registration_input import RegistrationInput
+            window.registration_input = RegistrationInput.from_channels((2,), ["Blue"])
 
             with patch.object(
                 QFileDialog,
@@ -107,7 +109,9 @@ class ProjectPersistenceIntegrationTests(unittest.TestCase):
 
             payload, error = load_driftlessmap_file(project, "project")
             self.assertIsNone(error)
-            self.assertEqual(payload["project_schema_version"], 2)
+            self.assertEqual(payload["project_schema_version"], 3)
+            self.assertEqual(payload["registration_input"]["mode"], "channels")
+            self.assertEqual(payload["registration_input"]["channels"], [2])
             self.assertEqual(payload["probe_planning"]["site_face"], 2)
             self.assertTrue(payload["probe_planning"]["merge_sites"])
             reference = payload["histology_provenance"]["reference"]
@@ -122,6 +126,12 @@ class ProjectPersistenceIntegrationTests(unittest.TestCase):
             restored.current_project_path = str(project)
             restored.load_project(prepared)
 
+            self.assertEqual(restored.registration_input.channels, (2,))
+            self.assertEqual(restored.registration_input.channel_names, ("Blue",))
+            # A schema-2 project was registered with Legacy input.
+            old_payload = dict(payload, project_schema_version=2)
+            old_payload.pop("registration_input")
+            self.assertEqual(restored._saved_registration_input(old_payload).mode, "legacy")
             np.testing.assert_array_equal(restored.image_view.current_img, expected)
             self.assertEqual(payload["img_ctrl_data"]["image_scale"], 1.0)
             self.assertEqual(restored.image_view.current_scale, 1.0)
