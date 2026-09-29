@@ -145,11 +145,21 @@ from .atlas_matching import suggest_sections
 from .auto_registration import propose_landmarks
 from .background import run_in_background
 from .section_suggestion_dialog import SectionSuggestionDialog
+from .registration_channels_dialog import RegistrationChannelsDialog
+from . import registration_input
+from .registration_review import (
+    REVIEWED,
+    RegistrationReview,
+    registration_fingerprint,
+)
 from .landmarks import LANDMARK_FIELDS, LandmarkModel, triangulation_payload_error
 from .project_io import (
+    CELL_COUNT_SLOTS,
+    PROJECT_SCHEMA_VERSION,
     default_working_atlas_data,
     default_working_img_data,
     object_file_names,
+    padded_cell_count,
     prefingerprint_inputs,
     with_defaults,
 )
@@ -179,6 +189,14 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.save_path = self.home_path
         self.current_project_path = None
         self.project_created_at = None
+        # Channels used by Suggest Atlas Section and Propose Landmarks; None
+        # until chosen (multichannel images) or defaulted (RGB, one channel).
+        self.registration_input = None
+        # The user's review of the current registration, and whether the last
+        # mapping to the atlas used a reviewed registration.
+        self.suggested_landmarks = None
+        self.registration_review = RegistrationReview()
+        self.mapping_review_state = None
         self.atlas_provenance = None
         self.histology_provenance = None
         self._portable_source_directories = []
@@ -530,6 +548,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.actionSwitch_Atlas.triggered.connect(self.switch_atlas)
         self.actionSuggest_Atlas_Section.triggered.connect(self.suggest_atlas_section)
         self.actionPropose_Landmarks.triggered.connect(self.propose_registration_landmarks)
+        self.actionRegistration_Channels.triggered.connect(self.choose_registration_channels)
         self.actionBregma_Picker.setCheckable(True)
         self.actionBregma_Picker.triggered.connect(self.pick_bregma)
         self.actionCreate_Slice_Layer.triggered.connect(self.process_slice)
@@ -1253,8 +1272,8 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 self.working_atlas_data[da_key] = []
             else:
                 self.working_atlas_data[da_key] = None
-        self.working_img_data["cell_count"] = [0 for _ in range(5)]
-        self.working_atlas_data["cell_count"] = [0 for _ in range(5)]
+        self.working_img_data["cell_count"] = [0] * CELL_COUNT_SLOTS
+        self.working_atlas_data["cell_count"] = [0] * CELL_COUNT_SLOTS
         self.remove_h2a_transferred_layers()
         self.remove_a2h_transferred_layers()
 
@@ -1452,15 +1471,12 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 self.working_img_data["cell_size"] = current_data["size"]
                 self.working_img_data["cell_symbol"] = current_data["symbol"]
                 self.working_img_data["cell_layer_index"] = current_data["index"]
-                self.working_img_data["cell_count"] = current_data["count"]
+                self.working_img_data["cell_count"] = padded_cell_count(current_data["count"])
                 self.image_view.img_stacks.image_dict[layer_link].setData(
                     pos=np.asarray(self.working_img_data[layer_link]),
                     symbol=self.working_img_data["cell_symbol"],
                 )
-                for i in range(5):
-                    self.tool_box.cell_count_val_list[i].setText(
-                        str(self.working_img_data["cell_count"][i])
-                    )
+                self.tool_box.update_cell_count_label(self.working_img_data["cell_count"])
             elif layer_link == "img-drawing":
                 self.working_img_data[layer_link] = current_data["data"]
                 if current_data["closed"]:
@@ -1645,7 +1661,6 @@ class DriftlessMap(QMainWindow, FORM_Main):
         else:
             file_path = self.atlas_img_path
         file_options = QFileDialog.Option(0)
-        file_options |= QFileDialog.Option.DontUseNativeDialog
         file_dialog = QFileDialog()
         file_dialog.setFileMode(QFileDialog.FileMode.ExistingFiles)
         image_file_path = file_dialog.getOpenFileName(
@@ -1761,6 +1776,116 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 "Current Slice is saved successfully.", self.normal_color
             )
 
+    def _histology_channels(self):
+        image_file = self.image_view.image_file
+        names = list(getattr(image_file, "channel_name", []) or [])
+        count = int(np.asarray(self.image_view.current_img).shape[2]) \
+            if np.asarray(self.image_view.current_img).ndim == 3 else 1
+        names += ["Channel {}".format(i + 1) for i in range(len(names), count)]
+        return names[:count], bool(getattr(image_file, "is_rgb", False))
+
+    def current_registration_fingerprint(self):
+        """Fingerprint of the registration inputs a review applies to."""
+        view = self.atlas_view
+        plane = self.atlas_display
+        pages = {"coronal": view.current_coronal_index,
+                 "sagittal": view.current_sagital_index,
+                 "horizontal": view.current_horizontal_index}
+        tilts = dict(zip(("coronal", "sagittal", "horizontal"), view.get_atlas_angles()))
+        image = self.image_view.current_img
+        return registration_fingerprint(
+            self.atlas_tri_inside_data, self.histo_tri_inside_data,
+            self.atlas_tri_onside_data, self.histo_tri_onside_data,
+            plane, pages.get(plane), tilts.get(plane, ()),
+            np.shape(image) if image is not None else (),
+        )
+
+    def registration_review_state(self):
+        """"reviewed", "not reviewed" or "not recorded" for the registration."""
+        return self.registration_review.state(self.current_registration_fingerprint())
+
+    def mark_registration_reviewed(self):
+        """Record that the user reviewed the current landmarks and warp."""
+        if len(self.atlas_tri_inside_data) < 3 or (
+            len(self.atlas_tri_inside_data) != len(self.histo_tri_inside_data)
+        ):
+            self.print_message(
+                "Place at least three landmark pairs before marking the "
+                "registration as reviewed.",
+                self.error_message_color,
+            )
+            return False
+        self.registration_review = RegistrationReview(
+            self.current_registration_fingerprint(), utc_now_iso())
+        self.print_message(
+            "Registration marked as reviewed. Editing landmarks or the atlas "
+            "plane clears the review.",
+            self.normal_color,
+        )
+        return True
+
+    def _saved_registration_review(self, p_dict):
+        if int(p_dict.get("project_schema_version", 1)) < 3:
+            return RegistrationReview(recorded=False)
+        try:
+            return RegistrationReview.from_dict(p_dict.get("registration_review"))
+        except (TypeError, ValueError):
+            return RegistrationReview(recorded=False)
+
+    def _saved_registration_input(self, p_dict):
+        """The saved recipe; projects before schema 3 used Legacy input."""
+        if int(p_dict.get("project_schema_version", 1)) < 3:
+            return registration_input.RegistrationInput.legacy()
+        try:
+            return registration_input.RegistrationInput.from_dict(
+                p_dict.get("registration_input"))
+        except (TypeError, ValueError) as exc:
+            self.print_message(
+                "The saved registration channels could not be used ({}); choose "
+                "them again.".format(exc),
+                self.reminder_color,
+            )
+            return None
+
+    def choose_registration_channels(self):
+        """Ask which channels automatic registration uses; True if chosen."""
+        if self.image_view.current_img is None:
+            self.print_message(
+                "Load a histology section before choosing registration channels.",
+                self.error_message_color,
+            )
+            return False
+        names, _ = self._histology_channels()
+        dialog = RegistrationChannelsDialog(names, self.registration_input, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return False
+        self.registration_input = dialog.recipe()
+        self.print_message(
+            "Registration uses: {}.".format(self.registration_input.describe()),
+            self.normal_color,
+        )
+        return True
+
+    def registration_section(self):
+        """The histology input for automatic registration, or None.
+
+        Uses :attr:`registration_input`. A multichannel image without a
+        recipe asks for one; single-channel and RGB images get the default.
+        """
+        names, is_rgb = self._histology_channels()
+        if self.registration_input is None:
+            self.registration_input = registration_input.default_for(
+                len(names), is_rgb, names)
+        if self.registration_input is None and not self.choose_registration_channels():
+            return None
+        try:
+            section, _ = registration_input.prepare(
+                self.image_view.current_img, self.registration_input)
+        except ValueError as exc:
+            self.print_message(str(exc), self.error_message_color)
+            return None
+        return section
+
     def suggest_atlas_section(self):
         """Suggest and apply the atlas plane, slice and tilt for the section."""
         if (
@@ -1780,7 +1905,9 @@ class DriftlessMap(QMainWindow, FORM_Main):
             )
             return
         view = self.atlas_view
-        section = np.asarray(self.image_view.current_img)
+        section = self.registration_section()
+        if section is None:
+            return
         midline = int(view.origin_3d[0])
         # Tilts for coronal/horizontal pivot on the midline (see above); the
         # sagittal pivot is its own page, so its value here does not matter.
@@ -1882,6 +2009,9 @@ class DriftlessMap(QMainWindow, FORM_Main):
             )
             if reply != QMessageBox.StandardButton.Yes:
                 return
+        section = self.registration_section()
+        if section is None:
+            return
         stack = self.atlas_view.working_atlas
         try:
             proposal = run_in_background(
@@ -1890,7 +2020,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 propose_landmarks,
                 np.asarray(stack.img.image),
                 np.asarray(stack.label_data),
-                np.asarray(self.image_view.current_img),
+                section,
                 boundary_points=np.asarray(self.atlas_tri_onside_data, dtype=float),
             )
         except (ValueError, RuntimeError) as exc:
@@ -1909,6 +2039,13 @@ class DriftlessMap(QMainWindow, FORM_Main):
 
     def apply_landmark_proposal(self, proposal):
         """Replace interior landmarks with a proposal and show them."""
+        # Remembered so the V2 landmark list can tell suggested pairs, by kind,
+        # from pairs the user placed or moved.
+        self.suggested_landmarks = (
+            np.round(np.asarray(proposal.atlas_points, dtype=float), 2).tolist(),
+            np.round(np.asarray(proposal.histology_points, dtype=float), 2).tolist(),
+            list(proposal.kinds) or ["suggested"] * len(proposal.atlas_points),
+        )
         self._invalidate_triangulation(clear_topology=True)
         self.atlas_tri_inside_data = [
             [round(float(x), 2), round(float(y), 2)] for x, y in proposal.atlas_points
@@ -3824,8 +3961,13 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 "Please transfer image to atlas first", self.error_message_color
             )
             return
+        self.mapping_review_state = self.registration_review_state()
         self.print_message(
-            "Transform accepted, start transferring...", self.normal_color
+            "Transform accepted, start transferring..."
+            if self.mapping_review_state == REVIEWED else
+            "Transferring with a registration that has not been reviewed; the "
+            "mapped results are marked not reviewed.",
+            self.normal_color,
         )
         self.sidebar_tab_state(3)
         self.atlas_tri_data = list(
@@ -3955,7 +4097,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
             self.working_img_data["cell_size"].clear()
             self.working_img_data["cell_symbol"].clear()
             self.working_img_data["cell_layer_index"].clear()
-            self.working_img_data["cell_count"] = [0 for _ in range(5)]
+            self.working_img_data["cell_count"] = [0] * CELL_COUNT_SLOTS
             self.print_message("Cells transferred.", self.normal_color)
 
         if self.working_img_data["img-virus"] is not None:
@@ -4428,7 +4570,9 @@ class DriftlessMap(QMainWindow, FORM_Main):
             else:
                 # only one layer is allowed to work on
                 da_layer = [
-                    ind for ind in range(4) if self.image_view.channel_visible[ind]
+                    ind
+                    for ind in range(self.image_view.image_file.n_channels)
+                    if self.image_view.channel_visible[ind]
                 ]
                 n_layers = len(da_layer)
                 if n_layers == 0:
@@ -5782,10 +5926,9 @@ class DriftlessMap(QMainWindow, FORM_Main):
                     "cell_layer_index",
                 ]:
                     self.working_img_data[da_key] = []
-                self.working_img_data["cell_count"] = [0 for i in range(5)]
+                self.working_img_data["cell_count"] = [0] * CELL_COUNT_SLOTS
                 if self.a2h_transferred or not self.h2a_transferred:
-                    for i in range(5):
-                        self.tool_box.cell_count_val_list[i].setText("0")
+                    self.tool_box.update_cell_count_label([])
 
             if da_link == "atlas-cells":
                 for da_key in [
@@ -5795,9 +5938,8 @@ class DriftlessMap(QMainWindow, FORM_Main):
                     "cell_layer_index",
                 ]:
                     self.working_atlas_data[da_key] = []
-                self.working_atlas_data["cell_count"] = [0 for _ in range(5)]
-                for i in range(5):
-                    self.tool_box.cell_count_val_list[i].setText("0")
+                self.working_atlas_data["cell_count"] = [0] * CELL_COUNT_SLOTS
+                self.tool_box.update_cell_count_label([])
 
             if da_link == "atlas-overlay":
                 self.remove_h2a_transferred_layers()
@@ -6046,12 +6188,13 @@ class DriftlessMap(QMainWindow, FORM_Main):
         data = self.atlas_view.get_3d_data_from_2d_view(
             processing_data, self.atlas_display
         )
-        for i in range(5):
+        cell_count = padded_cell_count(self.working_atlas_data["cell_count"])
+        for i in range(CELL_COUNT_SLOTS):
             if i == 0:
                 object_type = "cells - piece"
             else:
                 object_type = "cells {} - piece".format(i)
-            if self.working_atlas_data["cell_count"][i] != 0:
+            if cell_count[i] != 0:
                 piece_data = data[
                     np.where(
                         np.ravel(self.working_atlas_data["cell_layer_index"]) == i
@@ -6069,7 +6212,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.working_atlas_data["cell_size"].clear()
         self.working_atlas_data["cell_symbol"].clear()
         self.working_atlas_data["cell_layer_index"].clear()
-        self.working_atlas_data["cell_count"] = [0 for _ in range(5)]
+        self.working_atlas_data["cell_count"] = [0] * CELL_COUNT_SLOTS
         self.tool_box.update_cell_count_label(self.working_atlas_data["cell_count"])
 
     def make_object_pieces(self):
@@ -6199,7 +6342,12 @@ class DriftlessMap(QMainWindow, FORM_Main):
             self.error_message_color,
         )
 
-    def merge_probes(self):
+    def merge_probes(self, only=None):
+        """Build 3D probes from probe pieces, grouped by name.
+
+        ``only`` limits the build to probes with these names; other probes'
+        pieces are left untouched.
+        """
         if self.num_windows == 4:
             msg = "Can not merge probe pieces with all slice windows turned on."
             self.print_message(msg, self.error_message_color)
@@ -6219,6 +6367,20 @@ class DriftlessMap(QMainWindow, FORM_Main):
         data, obj_names, pieces_names, piece_indexes = self.object_ctrl.collect_pieces(
             "probe piece"
         )
+        if only is not None:
+            wanted = set(only)
+            keep = [i for i, name in enumerate(obj_names) if name in wanted]
+            if not keep:
+                self.print_message("There are no parts to build for {}.".format(
+                    ", ".join(sorted(wanted))), self.reminder_color)
+                return
+            data = [data[i] for i in keep]
+            pieces_names = [pieces_names[i] for i in keep]
+            obj_names = [obj_names[i] for i in keep]
+            piece_indexes = [
+                index for index in piece_indexes
+                if self.object_ctrl.obj_name[index].split("-")[0].strip() in wanted
+            ]
         probe_setting_data = self.probe_settings.get_settings()
         merge_sites = self.tool_box.merge_sites
         pre_surgery = self.image_view.image_file is None
@@ -6437,7 +6599,6 @@ class DriftlessMap(QMainWindow, FORM_Main):
         else:
             file_path = self.current_img_path
         file_options = QFileDialog.Option(0)
-        file_options |= QFileDialog.Option.DontUseNativeDialog
         file_dialog = QFileDialog()
         file_dialog.setFileMode(QFileDialog.FileMode.ExistingFiles)
         image_file_path = file_dialog.getOpenFileName(
@@ -6522,7 +6683,8 @@ class DriftlessMap(QMainWindow, FORM_Main):
                     return False
                 if image_file.error_index != 0:
                     self.print_message(
-                        "Error Index: {}".format(image_file.error_index),
+                        image_file.error_message
+                        or "Error Index: {}".format(image_file.error_index),
                         self.error_message_color,
                     )
                     return False
@@ -6551,9 +6713,17 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 self.tool_box.cell_count_val_list[0].setVisible(True)
 
             self.image_view.set_data(image_file)
+            self.registration_input = None
+            self.registration_review = RegistrationReview()
+            self.mapping_review_state = None
+            self.suggested_landmarks = None
             self.reset_corners_hist()
             self.layerpanel.setEnabled(True)
-        self.statusbar.showMessage("Image file loaded.")
+        notes = getattr(image_file, "notes", None)
+        if notes:
+            self.print_message("Image file loaded. " + " ".join(notes), self.reminder_color)
+        else:
+            self.statusbar.showMessage("Image file loaded.")
 
         # if self.image_view.image_file.n_pages > 1:
         #     da_data = self.image_view.volume_img.copy()
@@ -6864,7 +7034,6 @@ class DriftlessMap(QMainWindow, FORM_Main):
         else:
             file_path = self.current_atlas_path
         file_options = QFileDialog.Option(0)
-        file_options |= QFileDialog.Option.DontUseNativeDialog
         atlas_folder = str(
             QFileDialog.getExistingDirectory(
                 self, dialog_title, file_path, options=file_options
@@ -7090,7 +7259,6 @@ class DriftlessMap(QMainWindow, FORM_Main):
             self.print_message(msg, self.error_message_color)
             return
         file_options = QFileDialog.Option(0)
-        file_options |= QFileDialog.Option.DontUseNativeDialog
         dlg = QFileDialog()
         dlg.setFileMode(QFileDialog.FileMode.ExistingFiles)
         object_file_path = dlg.getOpenFileNames(
@@ -7472,7 +7640,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
             self.working_img_data["cell_size"] = layer_dict["cell_size"]
             self.working_img_data["cell_symbol"] = layer_dict["cell_symbol"]
             self.working_img_data["cell_layer_index"] = layer_dict["cell_layer_index"]
-            self.working_img_data["cell_count"] = layer_dict["cell_count"]
+            self.working_img_data["cell_count"] = padded_cell_count(layer_dict["cell_count"])
             self.tool_box.update_cell_count_label(self.working_img_data["cell_count"])
         elif layer_link == "img-overlay":
             if not np.all(layer_dict["data"].shape[:2] == self.image_view.img_size):
@@ -7587,15 +7755,14 @@ class DriftlessMap(QMainWindow, FORM_Main):
         elif layer_link == "atlas-cells":
             self.tool_box.cell_color_btn.setColor(layer_dict["color"])
             self.working_atlas_data[layer_link] = layer_dict["data"]
-            self.working_atlas_data["cell_count"] = layer_dict["cell_count"]
+            self.working_atlas_data["cell_count"] = padded_cell_count(layer_dict["cell_count"])
             self.working_atlas_data["cell_size"] = layer_dict["cell_size"]
             self.working_atlas_data["cell_symbol"] = layer_dict["cell_symbol"]
             self.working_atlas_data["cell_layer_index"] = layer_dict["cell_layer_index"]
             if not self.working_img_data["img-cells"]:
-                for i in range(5):
-                    self.tool_box.cell_count_val_list[i].setText(
-                        str(self.working_atlas_data["cell_count"][i])
-                    )
+                self.tool_box.update_cell_count_label(
+                    self.working_atlas_data["cell_count"]
+                )
         elif layer_link == "atlas-drawing":
             self.tool_box.pencil_color_btn.setColor(layer_dict["color"])
             self.working_atlas_data[layer_link] = layer_dict["data"]
@@ -7647,7 +7814,6 @@ class DriftlessMap(QMainWindow, FORM_Main):
     def load_layers_called(self):
         self.print_message("Loading layers ...", self.normal_color)
         file_options = QFileDialog.Option(0)
-        file_options |= QFileDialog.Option.DontUseNativeDialog
         dlg = QFileDialog()
         dlg.setFileMode(QFileDialog.FileMode.ExistingFiles)
         layer_files_path = dlg.getOpenFileNames(
@@ -7969,7 +8135,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
                         return False
 
             project_data = {
-                "project_schema_version": 2,
+                "project_schema_version": PROJECT_SCHEMA_VERSION,
                 "software": {"name": "DriftlessMap", "version": __version__},
                 "created_at": self.project_created_at,
                 "saved_at": saved_at,
@@ -8000,6 +8166,12 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 "num_windows": self.num_windows,
                 "probe_settings": probe_settings,
                 "probe_planning": probe_planning,
+                "registration_input": (
+                    self.registration_input.to_dict()
+                    if self.registration_input is not None else None
+                ),
+                "registration_review": self.registration_review.to_dict(),
+                "mapping_review_state": self.mapping_review_state,
                 "np_onside": self.np_onside,
                 "processing_slice": self.atlas_view.processing_slice,
                 "processing_img": self.image_view.processing_img,
@@ -8076,7 +8248,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
     def prepare_project_sources(self, project_dict, project_path):
         """Resolve and verify linked inputs before mutating the active session."""
         schema_version = int(project_dict.get("project_schema_version", 1))
-        if schema_version > 2:
+        if schema_version > PROJECT_SCHEMA_VERSION:
             self.print_message(
                 "This project uses a newer persistence schema ({}). Upgrade "
                 "DriftlessMap before opening it.".format(schema_version),
@@ -8330,6 +8502,10 @@ class DriftlessMap(QMainWindow, FORM_Main):
             else:
                 self.show_only_image_window()
 
+        self.registration_input = self._saved_registration_input(p_dict)
+        self.registration_review = self._saved_registration_review(p_dict)
+        self.mapping_review_state = p_dict.get("mapping_review_state")
+
         # tool
         self.tool_box.bound_pnts_num.setText(str(self.np_onside))
         tool_settings = p_dict["tool_data"]
@@ -8564,7 +8740,6 @@ class DriftlessMap(QMainWindow, FORM_Main):
 
         self.print_message("Loading project....", self.normal_color)
         file_options = QFileDialog.Option(0)
-        file_options |= QFileDialog.Option.DontUseNativeDialog
         dlg = QFileDialog()
         dlg.setFileMode(QFileDialog.FileMode.ExistingFiles)
         project_path = dlg.getOpenFileName(
@@ -8663,7 +8838,6 @@ class DriftlessMap(QMainWindow, FORM_Main):
             return
 
         file_options = QFileDialog.Option(0)
-        file_options |= QFileDialog.Option.DontUseNativeDialog
         dlg = QFileDialog()
         dlg.setFileMode(QFileDialog.FileMode.ExistingFiles)
         data_file_path = dlg.getOpenFileName(

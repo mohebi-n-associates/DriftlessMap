@@ -1,5 +1,7 @@
 import os
 import numpy as np
+
+from .image_reader import MAX_CHANNELS
 from .persistence import write_cache_pickle
 import pandas as pd
 import cv2
@@ -791,9 +793,9 @@ def rotate_base_points(data, base_loc):
 
 
 def get_cell_count(cell_layer_index):
-    cell_count = [0 for _ in range(5)]
+    cell_count = [0 for _ in range(MAX_CHANNELS + 1)]
     cell_layer_index = np.ravel(cell_layer_index)
-    for i in range(5):
+    for i in range(MAX_CHANNELS + 1):
         cell_count[i] = np.sum(cell_layer_index == i)
     return cell_count
 

@@ -5,6 +5,16 @@ import re
 
 from .provenance import describe_atlas_path, describe_path
 
+from .image_reader import MAX_CHANNELS
+
+# Cell counts: index 0 counts manual cells, index k counts cells found on
+# channel k.
+CELL_COUNT_SLOTS = MAX_CHANNELS + 1
+
+# Project payload schema. 3 adds the registration-input recipe; projects with
+# schema 1 or 2 are read with Legacy registration input.
+PROJECT_SCHEMA_VERSION = 3
+
 
 def prefingerprint_inputs(atlas_path, histology_path):
     """Warm the provenance checksum cache for the inputs a save will link."""
@@ -48,7 +58,7 @@ def default_working_img_data():
         "img-virus": None,
         "img-drawing": [],
         "img-blob": [],
-        "cell_count": [0 for i in range(5)],
+        "cell_count": [0] * CELL_COUNT_SLOTS,
         "cell_size": [],
         "cell_symbol": [],
         "cell_layer_index": [],
@@ -66,7 +76,7 @@ def default_working_atlas_data():
         "atlas-contour": [],
         "atlas-virus": [],
         "atlas-drawing": [],
-        "cell_count": [0 for i in range(5)],
+        "cell_count": [0] * CELL_COUNT_SLOTS,
         "cell_size": [],
         "cell_symbol": [],
         "cell_layer_index": [],
@@ -82,7 +92,20 @@ def with_defaults(defaults, saved):
         for key in defaults:
             if key in saved:
                 merged[key] = saved[key]
-    cell_count = merged.get("cell_count")
-    if not isinstance(cell_count, (list, tuple)) or len(cell_count) != 5:
-        merged["cell_count"] = [0 for _ in range(5)]
+    merged["cell_count"] = padded_cell_count(merged.get("cell_count"))
     return merged
+
+
+def padded_cell_count(cell_count):
+    """Cell counts with CELL_COUNT_SLOTS entries.
+
+    Projects before 2.0 stored five entries; shorter lists are padded with
+    zeros, and anything invalid is reset.
+    """
+    if not isinstance(cell_count, (list, tuple)) or len(cell_count) > CELL_COUNT_SLOTS:
+        return [0] * CELL_COUNT_SLOTS
+    try:
+        counts = [int(value) for value in cell_count]
+    except (TypeError, ValueError):
+        return [0] * CELL_COUNT_SLOTS
+    return counts + [0] * (CELL_COUNT_SLOTS - len(counts))

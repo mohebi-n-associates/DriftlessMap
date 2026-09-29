@@ -15,6 +15,7 @@ import numpy as np
 
 from driftlessmap.persistence import load_driftlessmap_file
 from driftlessmap.provenance import path_stat_signature
+from driftlessmap.project_io import CELL_COUNT_SLOTS
 
 if PROJECT_TEST_CHILD:
     from PyQt6.QtWidgets import QApplication, QFileDialog
@@ -97,6 +98,8 @@ class ProjectPersistenceIntegrationTests(unittest.TestCase):
             window.image_view.img_stacks.image_list[1].setVisible(False)
             window.site_face = 2
             window.tool_box.merge_sites = True
+            from driftlessmap.registration_input import RegistrationInput
+            window.registration_input = RegistrationInput.from_channels((2,), ["Blue"])
 
             with patch.object(
                 QFileDialog,
@@ -107,7 +110,9 @@ class ProjectPersistenceIntegrationTests(unittest.TestCase):
 
             payload, error = load_driftlessmap_file(project, "project")
             self.assertIsNone(error)
-            self.assertEqual(payload["project_schema_version"], 2)
+            self.assertEqual(payload["project_schema_version"], 3)
+            self.assertEqual(payload["registration_input"]["mode"], "channels")
+            self.assertEqual(payload["registration_input"]["channels"], [2])
             self.assertEqual(payload["probe_planning"]["site_face"], 2)
             self.assertTrue(payload["probe_planning"]["merge_sites"])
             reference = payload["histology_provenance"]["reference"]
@@ -122,6 +127,12 @@ class ProjectPersistenceIntegrationTests(unittest.TestCase):
             restored.current_project_path = str(project)
             restored.load_project(prepared)
 
+            self.assertEqual(restored.registration_input.channels, (2,))
+            self.assertEqual(restored.registration_input.channel_names, ("Blue",))
+            # A schema-2 project was registered with Legacy input.
+            old_payload = dict(payload, project_schema_version=2)
+            old_payload.pop("registration_input")
+            self.assertEqual(restored._saved_registration_input(old_payload).mode, "legacy")
             np.testing.assert_array_equal(restored.image_view.current_img, expected)
             self.assertEqual(payload["img_ctrl_data"]["image_scale"], 1.0)
             self.assertEqual(restored.image_view.current_scale, 1.0)
@@ -150,6 +161,66 @@ class ProjectPersistenceIntegrationTests(unittest.TestCase):
                 ],
                 fresh_counts,
             )
+
+    @isolated_gui_test
+    def test_six_channel_uint16_section_displays_saves_and_reopens(self):
+        import tifffile
+
+        from driftlessmap.registration_input import RegistrationInput
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            source = root / "six.tif"
+            project = root / "six.dmap"
+            rng = np.random.default_rng(5)
+            data = rng.integers(0, 60000, (6, 24, 30), dtype=np.uint16)
+            tifffile.imwrite(source, data, imagej=True, metadata={"axes": "CYX"})
+
+            window = self.create_window()
+            self.assertTrue(window.load_single_image_file(str(source), ".tif"))
+            view = window.image_view
+            self.assertEqual(view.current_img.shape, (24, 30, 6))
+            self.assertEqual(view.current_img.dtype, np.uint16)
+            self.assertEqual(sum(w.isVisibleTo(view.chn_widget_wrap)
+                                 for w in view.chn_widget_list), 6)
+            view.set_channel_visible(False, 5)
+            self.assertFalse(view.img_stacks.image_list[5].isVisible())
+            window.current_img_path = str(source)
+            window._loaded_histology_signature = path_stat_signature(source)
+            window.registration_input = RegistrationInput.from_channels((4,), ["Channel 5"])
+            window.atlas_tri_inside_data = [[1.0, 2.0], [3.0, 4.0], [5.0, 1.0]]
+            window.histo_tri_inside_data = [[2.0, 3.0], [6.0, 8.0], [10.0, 2.0]]
+            self.assertEqual(window.registration_review_state(), "not reviewed")
+            self.assertTrue(window.mark_registration_reviewed())
+            self.assertEqual(window.registration_review_state(), "reviewed")
+            with patch.object(
+                QFileDialog,
+                "getSaveFileName",
+                return_value=(str(project), "DriftlessMap Project (*.dmap)"),
+            ):
+                window.save_project_called(portable=False)
+
+            payload, error = load_driftlessmap_file(project, "project")
+            self.assertIsNone(error)
+            source.unlink()  # reopen from the embedded raster
+            restored = self.create_window()
+            with patch.object(restored, "_ask_for_verified_input", return_value=None):
+                prepared = restored.prepare_project_sources(payload, str(project))
+            restored.current_project_path = str(project)
+            restored.load_project(prepared)
+            np.testing.assert_array_equal(
+                restored.image_view.current_img, np.moveaxis(data, 0, -1))
+            self.assertEqual(restored.image_view.channel_visible[:6],
+                             [True] * 5 + [False])
+            self.assertEqual(restored.registration_input.channels, (4,))
+            self.assertEqual(restored.atlas_tri_inside_data, window.atlas_tri_inside_data)
+            self.assertEqual(restored.registration_review_state(), "reviewed")
+            restored.histo_tri_inside_data[0] = [2.5, 3.0]
+            self.assertEqual(restored.registration_review_state(), "not reviewed")
+            old_payload = dict(payload, project_schema_version=2)
+            self.assertEqual(
+                restored._saved_registration_review(old_payload).state("x" * 64),
+                "not recorded")
 
     @isolated_gui_test
     def test_portable_project_streams_and_reopens_original_histology(self):
@@ -685,7 +756,7 @@ class ProjectPersistenceIntegrationTests(unittest.TestCase):
             self.assertEqual(
                 [link for link in window.layer_ctrl.layer_link if "atlas" in link], []
             )
-            self.assertEqual(window.working_atlas_data["cell_count"], [0] * 5)
+            self.assertEqual(window.working_atlas_data["cell_count"], [0] * CELL_COUNT_SLOTS)
 
     @isolated_gui_test
     def test_vertical_probe_is_drawn_at_its_ap_position_in_sagittal_view(self):
@@ -743,8 +814,14 @@ class ProjectPersistenceIntegrationTests(unittest.TestCase):
         )
         self.assertEqual(merged["atlas-probe"], [[1, 2]])
         self.assertNotIn("retired-key", merged)
-        self.assertEqual(merged["cell_count"], [0] * 5)
+        from driftlessmap.project_io import CELL_COUNT_SLOTS
+
+        self.assertEqual(merged["cell_count"], [0] * CELL_COUNT_SLOTS)
         self.assertEqual(merged["ruler_path"], [])
+        # Five-entry counts from 1.x projects are kept and padded.
+        old_counts = DriftlessMap._with_defaults(defaults, {"cell_count": [1, 2, 3, 4, 5]})
+        self.assertEqual(old_counts["cell_count"][:5], [1, 2, 3, 4, 5])
+        self.assertEqual(len(old_counts["cell_count"]), CELL_COUNT_SLOTS)
 
     @isolated_gui_test
     def test_registration_is_built_once_per_landmark_state(self):

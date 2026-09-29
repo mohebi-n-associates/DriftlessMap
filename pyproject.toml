@@ -78,6 +78,7 @@ desktop-build = [
 
 [project.scripts]
 driftlessmap = "driftlessmap:run"
+driftlessmap-v2 = "driftlessmap.v2:main"
 
 [project.urls]
 Homepage = "https://github.com/mohebi-n-associates/DriftlessMap"
@@ -124,6 +125,8 @@ files = [
     "driftlessmap/atlas_matching.py",
     "driftlessmap/atlas_transform.py",
     "driftlessmap/auto_registration.py",
+    "driftlessmap/registration_input.py",
+    "driftlessmap/registration_review.py",
     "driftlessmap/background.py",
     "driftlessmap/cell_detection.py",
     "driftlessmap/coordinate_validation.py",

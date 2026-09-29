@@ -433,6 +433,70 @@ invalid inputs, unmatched landmarks, unavailable tools, current pixel
 coordinates, atlas voxels, region hierarchy, configured Bregma coordinates,
 estimated Allen AP/ML coordinates, and surface depth can all appear there.
 
+
+### 4.5 The 2.0 preview interface
+
+A development preview of the redesigned interface is available on the
+`v2-redesign` branch. It runs on the same engine, reads and writes the same
+project files, and keeps its preferences separate from the stable interface.
+Start it with:
+
+```bash
+driftlessmap-v2
+# or
+python -m driftlessmap.v2
+```
+
+The window has four areas:
+
+- **Steps** on the left: Project, Section, Match, Register, Annotate and
+  Results. Each step shows its current state under its name (for example
+  "registers on DAPI only" or "10 pairs · review pending"). Steps are not a
+  wizard; move between them freely. Keys 1 to 6 switch steps.
+- **The canvas** in the middle, with Compare, Atlas, Section, 3D and
+  Multi-plane views. When a tool is active, its options appear in the row
+  above the image.
+- **Objects, Layers and Regions** on the right.
+- **The status line** at the bottom: the last message, the atlas and section,
+  and whether there are unsaved changes. Changing views, zooming or selecting
+  never counts as a change.
+
+What each step does:
+
+| Step | Main actions |
+| --- | --- |
+| Project | Load atlas, load or replace the section, open, save, save a portable copy, atlas download and slice-atlas tools |
+| Section | Per-channel name, colour, visibility and display range; brightness, contrast, gamma and Auto (ImageJ-style, saturating 0.35% of samples); **Register** ticks that choose the registration channels, with a preview of the registration input; rotation, flips, crop and clean-up |
+| Match | Find atlas section with the chosen channels; the plane, depth and tilt controls of the 1.x Atlasing Controller |
+| Register | Suggest landmarks; add, move and delete pairs; a list of pairs marked Outline, Internal, Edited or Manual; mesh check; **Mark review complete**; warp preview in either direction |
+| Annotate | **Probes:** a list of named, coloured probes. For each section that shows a track: **Mark track**, click along it, **Add this section to** the probe (this maps the marks with the current registration). **Build** one probe from all its sections; **Rebuild** after adding more. Cells, colour detection, drawing, erasing, lasso and measuring; **Map to atlas**; make parts and build other 3D objects |
+| Results | Region tables, show on plane, compare, 3D options, export and import |
+
+Probes are grouped by name, so the sections of one probe combine and different
+probes stay separate without renaming parts. Probe names cannot contain "-".
+In pre-surgical planning (no section loaded), click the entry point and the tip
+on the atlas instead.
+
+Display settings (colour, visibility, brightness, contrast, gamma, curves)
+change only how the image looks; the pixel values, registration input and
+coordinates stay the same. Mapping without a review is allowed and is recorded
+as not reviewed.
+
+**Ctrl+K** (Cmd+K on macOS) opens a command search. It finds every 2.0
+command and every 1.x menu command by its old name, for example "merge" or
+"triangulation". Single-key shortcuts (P add or move landmark points,
+M measure, V no tool, Delete remove the selected landmark pair) do not fire
+while you type in a field; Escape stops the current tool.
+
+Known limits of the preview:
+
+- Mapping and building keep their 1.x behaviour: mapping moves section marks
+  to the atlas, and building replaces parts with the object (Edit parts
+  restores them). The interface says so before you act.
+- The hemisphere choice in Find atlas section still uses the 1.x wording.
+- A few adopted 1.x controls keep their dark styling in the light theme.
+- The desktop application bundles still start the stable interface.
+
 ## 5. Downloading, processing, and loading atlases
 
 ### 5.1 Atlas storage rules
@@ -619,8 +683,10 @@ Use **File > Load Image** or the histology-image toolbar button.
 | PNG `.png` | Loaded as 8-bit RGB. |
 | BMP `.bmp` | Loaded as 8-bit RGB. |
 
-DriftlessMap supports at most four non-RGB image channels. An RGB image has three
-display channels but is treated as one RGB cell-count category.
+DriftlessMap supports up to 16 non-RGB image channels, kept at their native 8-
+or 16-bit depth. Images with more channels are refused rather than truncated.
+An RGB image has three display channels but is treated as one RGB cell-count
+category.
 
 ### 7.2 CZI scenes and scale
 
@@ -639,12 +705,21 @@ work needs more detail. Higher scale increases time and memory use.
 A grayscale TIFF page stack shows page navigation under the image. RGB TIFF,
 multi-channel TIFF, and page-stack TIFF are intentionally distinct:
 
-- RGB samples display as three color channels.
-- A channel axis displays up to four independent grayscale channels.
-- A page axis displays one grayscale section at a time.
+- RGB samples display as three color channels. An alpha channel is not shown,
+  and DriftlessMap says so when it loads the file.
+- A channel axis displays up to 16 independent grayscale channels, at their
+  native bit depth.
+- A page axis displays one section at a time. In a hyperstack (for example
+  ZCYX from ImageJ or OME-TIFF), Z is browsed as pages and every channel is
+  kept. If the file has a further axis, such as time, its first plane is used
+  and DriftlessMap reports it.
+- Several series in one file become scenes, read when first shown. They must
+  share one bit depth and channel layout.
+- Channel names and colours are read from OME-TIFF or ImageJ metadata when the
+  file has them.
 
-If a TIFF is rejected, inspect its axes, series count, sample type, and channel
-count in the exporting microscopy software.
+If a TIFF is rejected, the message names the reason. Inspect the file's axes,
+series, sample type and channel count in the exporting microscopy software.
 
 ### 7.4 Display adjustments
 
@@ -719,6 +794,16 @@ probe, virus, cell, contour, and drawing transfer.
 DriftlessMap can propose a starting point for registration with a volume
 atlas. Both steps are suggestions: always review the result before
 transferring anything.
+
+**Choosing the registration channels.** Both assistants use the channels chosen
+with **Atlas > Registration Channels...**, not what is visible on screen. For a
+multichannel image, choose them before the first run (DriftlessMap asks if you
+have not): for example DAPI only, so a bright tracer channel does not change
+the tissue outline or the match. Each chosen channel is scaled between its
+0.5th and 99.5th percentile and the chosen channels are averaged. **Legacy**
+uses every channel exactly as DriftlessMap 1.6 did, and is used for RGB images
+and for projects saved before this option existed. The choice is saved with
+the project.
 
 **Atlas > Suggest Atlas Section...** compares the loaded histology with the
 atlas and ranks candidate sections:
