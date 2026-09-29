@@ -194,6 +194,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.registration_input = None
         # The user's review of the current registration, and whether the last
         # mapping to the atlas used a reviewed registration.
+        self.suggested_landmarks = None
         self.registration_review = RegistrationReview()
         self.mapping_review_state = None
         self.atlas_provenance = None
@@ -2039,6 +2040,13 @@ class DriftlessMap(QMainWindow, FORM_Main):
 
     def apply_landmark_proposal(self, proposal):
         """Replace interior landmarks with a proposal and show them."""
+        # Remembered so the V2 landmark list can tell suggested pairs, by kind,
+        # from pairs the user placed or moved.
+        self.suggested_landmarks = (
+            np.round(np.asarray(proposal.atlas_points, dtype=float), 2).tolist(),
+            np.round(np.asarray(proposal.histology_points, dtype=float), 2).tolist(),
+            list(proposal.kinds) or ["suggested"] * len(proposal.atlas_points),
+        )
         self._invalidate_triangulation(clear_topology=True)
         self.atlas_tri_inside_data = [
             [round(float(x), 2), round(float(y), 2)] for x, y in proposal.atlas_points
@@ -6691,6 +6699,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
             self.registration_input = None
             self.registration_review = RegistrationReview()
             self.mapping_review_state = None
+            self.suggested_landmarks = None
             self.reset_corners_hist()
             self.layerpanel.setEnabled(True)
         notes = getattr(image_file, "notes", None)

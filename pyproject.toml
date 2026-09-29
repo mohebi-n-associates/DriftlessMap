@@ -78,6 +78,7 @@ desktop-build = [
 
 [project.scripts]
 driftlessmap = "driftlessmap:run"
+driftlessmap-v2 = "driftlessmap.v2:main"
 
 [project.urls]
 Homepage = "https://github.com/mohebi-n-associates/DriftlessMap"
