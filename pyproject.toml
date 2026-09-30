@@ -49,8 +49,7 @@ dependencies = [
     "pyqtgraph>=0.14,<0.15",
     "PyOpenGL>=3.1.7,<4",
     "superqt>=0.8,<0.9",
-    "opencv-python>=4.10,<6",
-    "numba>=0.61,<1",
+    "opencv-python-headless>=4.10,<6",
     "numpy>=2.0,<3",
     "scipy>=1.13,<2",
     "requests>=2.32,<3",
@@ -60,6 +59,7 @@ dependencies = [
     "pandas>=2.2,<4",
     "natsort>=8.4,<9",
     "imagecodecs>=2024.6",
+    "SimpleITK>=2.3,<3",
 ]
 
 [project.optional-dependencies]
@@ -69,7 +69,11 @@ czi = [
 test = [
     "pytest>=8.3",
     "ruff>=0.9",
+    "mypy>=1.10",
     "tomli>=2; python_version < '3.11'",
+]
+desktop-build = [
+    "pyinstaller>=6.11,<7",
 ]
 
 [project.scripts]
@@ -97,12 +101,55 @@ driftlessmap = [
     "icons/*.png",
     "icons/*/*.svg",
     "icons/*/*.png",
+    "icons/*/*.ico",
+    "icons/*/*.icns",
     "qss/*.qss",
-    "herbs.png",
 ]
 
 [tool.ruff]
 target-version = "py310"
 
 [tool.ruff.lint]
-select = ["E9", "F63", "F7", "F82"]
+# Syntax errors, all pyflakes checks (unused and undefined names, star
+# imports) and flake8-bugbear. B905 (zip strict=) is not enforced because
+# several zips pair sequences of intentionally different lengths.
+select = ["E9", "F", "B"]
+ignore = ["B905"]
+
+[tool.mypy]
+# Type-check the GUI-free scientific and persistence core. Qt widget modules
+# are left out until they gain annotations.
+files = [
+    "driftlessmap/atlas_loader.py",
+    "driftlessmap/atlas_matching.py",
+    "driftlessmap/atlas_transform.py",
+    "driftlessmap/auto_registration.py",
+    "driftlessmap/background.py",
+    "driftlessmap/cell_detection.py",
+    "driftlessmap/coordinate_validation.py",
+    "driftlessmap/czi_reader.py",
+    "driftlessmap/download_utils.py",
+    "driftlessmap/image_reader.py",
+    "driftlessmap/layer_geometry.py",
+    "driftlessmap/landmarks.py",
+    "driftlessmap/layer_validation.py",
+    "driftlessmap/persistence.py",
+    "driftlessmap/probe_csv.py",
+    "driftlessmap/probe_reconstruction.py",
+    "driftlessmap/probe_utiles.py",
+    "driftlessmap/project_io.py",
+    "driftlessmap/provenance.py",
+    "driftlessmap/resources.py",
+    "driftlessmap/roi_analysis.py",
+    "driftlessmap/slice_validation.py",
+    "driftlessmap/triangulation.py",
+    "driftlessmap/user_settings.py",
+    "driftlessmap/utils.py",
+    "driftlessmap/version.py",
+]
+ignore_missing_imports = true
+follow_imports = "silent"
+warn_unused_ignores = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

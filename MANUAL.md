@@ -1,6 +1,6 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 1.2.0**.
+This manual applies to **DriftlessMap 1.6.1**.
 
 DriftlessMap - Histological E-data Registration in Brain Space - is a desktop
 application for aligning rodent histology with a reference atlas, reconstructing
@@ -107,7 +107,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-DriftlessMap 1.2.0 requires:
+DriftlessMap 1.6.1 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -119,7 +119,18 @@ the optional `aicspylibczi` dependency, whose available builds currently limit
 the CZI environment to Python 3.10-3.13. Use Python 3.13 when CZI support is
 needed.
 
-### 2.2 Recommended Conda installation
+### 2.2 Desktop installation for end users
+
+Download the Windows ZIP or the macOS DMG from the official GitHub Releases
+page. The macOS DMG (`-macOS-arm64.dmg`) is built for Apple Silicon; on an Intel
+Mac, use the developer installation below.
+The desktop builds include Python and all runtime dependencies. Windows users
+extract the entire ZIP and run `DriftlessMap.exe`; macOS users open the DMG and
+drag `DriftlessMap.app` to Applications. The 1.6.1 release is unsigned, so the
+first launch may require Windows SmartScreen confirmation or Control-clicking
+the macOS app and choosing **Open**.
+
+### 2.3 Conda and pip installation for developers
 
 Create an isolated environment so Qt, NumPy, OpenCV, and OpenGL packages do not
 conflict with unrelated software:
@@ -152,7 +163,7 @@ DriftlessMap installs no top-level `herbs` package or `herbs` command. It can
 therefore be installed alongside the original HERBS distribution without
 overwriting HERBS-owned files.
 
-### 2.3 Confirming the installation
+### 2.4 Confirming the installation
 
 Check that the selected Python and installed DriftlessMap refer to the intended
 environment:
@@ -163,9 +174,9 @@ python -m pip --version
 python -c "import driftlessmap; print(driftlessmap.__version__)"
 ```
 
-The final command should print `1.2.0`.
+The final command should print `1.6.1`.
 
-### 2.4 Launching DriftlessMap
+### 2.5 Launching DriftlessMap
 
 Any of the following launches the same GUI:
 
@@ -253,6 +264,13 @@ This metadata is used for external points, self-contained probe reconstruction,
 drawing ROI reports, and CSV exports. If it is missing, reprocess the atlas;
 do not guess a conversion.
 
+Continuous voxel coordinates use the voxel-edge convention: voxel `i` spans
+`[i, i + 1)`, and `floor(value)` is the voxel that holds a point. Exported
+source-voxel coordinates such as `allen_DV_vox` follow the same rule, so
+`floor(allen_DV_vox)` is the source voxel whose label DriftlessMap reported.
+Integer coordinates, such as a slice position or an imported integer point
+file, are treated as voxel indices and map to the matching voxel index.
+
 ### 3.4 Allen CCFv3 coordinates and estimated Bregma
 
 Allen CCFv3 source voxels use `(AP, DV, ML)` order. DriftlessMap recognizes the
@@ -290,6 +308,8 @@ Bregma coordinate means “unspecified for this axis”; DriftlessMap substitute
 midpoint of that source axis before applying flips and transposition.
 
 Brain-surface depth is calculated locally from the atlas annotation mask. It is
+measured from the top face of the dorsal-most labeled voxel directly above the
+point, so a point inside that voxel has a depth between zero and one voxel. It is
 different from the DV displacement relative to Bregma and from the total length
 of an oblique probe.
 
@@ -694,7 +714,68 @@ probe, virus, cell, contour, and drawing transfer.
 4. Show **Volume + Histology** or **Slice + Histology**.
 5. Avoid resizing or rotating the source image after placing landmarks.
 
-### 8.2 Place paired landmarks
+### 8.2 Suggest the section and landmarks automatically
+
+DriftlessMap can propose a starting point for registration with a volume
+atlas. Both steps are suggestions: always review the result before
+transferring anything.
+
+**Atlas > Suggest Atlas Section...** compares the loaded histology with the
+atlas and ranks candidate sections:
+
+1. Load the volume atlas and the histology section. A single, whole section
+   on a plain background works best; the tissue outline is found by
+   thresholding.
+2. Choose **Atlas > Suggest Atlas Section...**. The comparison runs in the
+   background and usually takes a few seconds.
+3. The dialog reports the most likely plane (coronal, sagittal or horizontal)
+   and how clearly it was preferred (**clear**, **uncertain** or
+   **ambiguous**), the orientation the section needs, and up to six candidate
+   sections. Each shows your section on the left and the atlas on the right,
+   with its depth and cutting-angle tilt.
+4. Pick the candidate that looks best. Brain outlines are left-right
+   symmetric, so the hemisphere cannot be detected: choose **Other
+   hemisphere** if the section comes from the other side.
+5. Leave **Apply the suggested cutting-angle tilt** on to use the tilt, and
+   **Rotate/flip the histology to match** on to orient the image. Rotating
+   the histology resets its landmarks.
+6. Press **Apply**. DriftlessMap switches to the plane, shows the section and
+   sets the tilt. For coronal and horizontal sections the sagittal pivot is
+   moved to the midline.
+
+The plane is found from the outline, the depth mainly from internal anatomy,
+and the tilt from a small search of about ±6°. Damaged or partial sections,
+sections with more than one piece of tissue, and strongly uneven staining make
+suggestions less reliable.
+
+**Atlas > Propose Landmarks** then fits the displayed atlas slice to the
+section and fills the Triangulation tool with paired landmarks:
+
+1. Show the matching atlas slice and orient the histology to it, for example
+   with **Suggest Atlas Section...**. Remove any transform overlay first.
+2. Choose **Atlas > Propose Landmarks**. If landmarks already exist, you are
+   asked before they are replaced.
+3. DriftlessMap fits the outlines, then refines the fit on the image
+   intensities where that improves the match. It suggests up to 10 landmarks:
+   up to 5 at the sharpest tips and notches of the outline, snapped onto the
+   section outline, and the rest on strong internal edges that both images
+   show, such as the corpus callosum. It moves the boundary anchors with the
+   same fit. The landmarks are suggestions to confirm and edit.
+4. The status bar reports how many pairs are on the outline and how many are
+   on internal edges, and the outline overlap. The
+   Triangulation tool opens so you can check the mesh. Drag any landmark that
+   is off, add more where the anatomy needs them, and check mesh quality
+   (Section 8.5) before transferring.
+
+The fit follows the outline and the overall shape well, but internal
+boundaries can still be several voxels off. Treat the proposal as a first
+draft of the manual landmarks, not as a finished registration.
+
+The tutorial [Automatic Section Matching and Landmark Proposal](Tutorial/Registration_Related/automatic_section_and_landmarks.md)
+walks through both steps on a real section, with screenshots, and explains
+how each stage works.
+
+### 8.3 Place paired landmarks
 
 1. Activate Triangulation.
 2. Choose a point color visible in both windows.
@@ -721,7 +802,7 @@ Landmarks can be dragged. With Eraser active, clicking a numbered landmark
 deletes the corresponding point in both windows and renumbers the remaining
 pairs.
 
-### 8.3 Match boundary rectangles
+### 8.4 Match boundary rectangles
 
 The automatically generated outer points define the warp domain. After
 interior points are placed, use **Match Boundaries** when the atlas and
@@ -731,7 +812,7 @@ anchors while retaining the paired interior anatomy.
 For a volume atlas, boundary matching can derive the atlas extent from the
 nonzero label area. A slice atlas requires interior landmarks in both images.
 
-### 8.4 Evaluate mesh quality
+### 8.5 Evaluate mesh quality
 
 The Triangulation controls report:
 
@@ -753,7 +834,7 @@ To repair a mesh:
 - Confirm that pair order has not been confused.
 - Recheck the atlas slice and tilt.
 
-### 8.5 Create and refine an overlay
+### 8.6 Create and refine an overlay
 
 To overlay histology onto the atlas:
 
@@ -773,7 +854,7 @@ repeatedly warping an already transformed preview, preventing accumulated blur.
 Atlas labels and masks use nearest-neighbor mapping where discrete values must
 be preserved; histology display uses smooth interpolation.
 
-### 8.6 Transfer annotations
+### 8.7 Transfer annotations
 
 Once the registration is accepted:
 
@@ -784,11 +865,15 @@ Once the registration is accepted:
 4. Read the status bar for points that fell outside the mesh.
 5. Add the atlas-layer data as an object piece in the Object View Controller.
 
+Object pieces are always made from atlas-layer data. Annotations that are
+still only in the histology window are not converted by **Make Pieces**; the
+status bar lists them so they can be transferred first.
+
 Points outside the registration mesh cannot be assigned a valid atlas
 coordinate. DriftlessMap preserves or rejects them according to the data type and
 reports the count; do not silently treat them as registered.
 
-### 8.7 Save registration landmarks
+### 8.8 Save registration landmarks
 
 Use:
 
@@ -987,7 +1072,7 @@ The Probe Information Window distinguishes:
 - Insertion and tip relative to configured Bregma.
 - Source-atlas voxels.
 - Modeled physical contacts per region.
-- Fitted centerline path length per region.
+- Path length along the shank per region.
 
 For recognized Allen CCFv3, AP and ML Bregma values are estimated. Surface
 depth, not affine transformed DV, is the targeting-relevant depth measure.
@@ -1072,7 +1157,10 @@ does not remove contacts from the self-contained reconstruction table.
 Region summaries distinguish:
 
 - **Contacts:** modeled physical sites assigned to the structure.
-- **Path:** fitted probe centerline length within the structure.
+- **Path:** length along the shank within the structure, averaged over the
+  site columns that pass through it. The shank ends at the tip base, so the
+  tip itself is not included; the labelled track in `_track.csv` covers the
+  full insertion-to-tip length, including the tip.
 
 ### 12.6 Probe CSV export
 
@@ -1302,11 +1390,12 @@ changes the active atlas type.
 
 | Extension | Payload | Portability and dependencies |
 | --- | --- | --- |
-| `.dmap` | Complete working project state. | Stores atlas and source-image paths; keep those resources at their original locations. |
+| `.dmap` | Complete working project state. | Embeds the active histology raster and verifies linked atlas/source data by checksum. A portable save can also embed the original histology source. |
 | `.dmaplayer` | One 2D layer. | Must match the target image dimensions and required layer metadata. |
 | `.dmapobj` | One object or merged object. | Load an appropriate atlas first. Current merged probes embed self-contained reconstruction metadata. |
 | `.dmapslice` | Calibrated 2D atlas slice. | Contains image, plane, physical dimensions, distance, and Bregma point. |
 | `.dmaptri` | Paired registration landmarks and topology. | Reuse only with matching atlas slice and histology geometry. |
+| `.dmapprobe` | Probe geometry and planning state. | Includes face, multi-probe offsets, merge-sites choice, and validation state. |
 
 These are versioned ZIP-based DriftlessMap archives containing a JSON manifest and
 NumPy arrays written with pickling disabled. Saves are atomic: DriftlessMap writes a
@@ -1329,20 +1418,33 @@ Only use caches created by DriftlessMap or obtained from a trusted atlas source.
 
 Use **File > Save Project** frequently. A project records:
 
-- Atlas and histology paths.
+- Relocatable atlas and histology path hints plus content checksums.
+- Atlas identity, source/version when known, voxel size, dimensions, and axis metadata.
 - Current atlas type, slice, plane, and tilt.
 - Histology scene, scale, channels, and display controls.
 - Processed images and current layers.
 - Paired landmarks and registration topology.
 - Tool settings.
-- Probe design.
+- Probe design, face, multi-probe plan, and merge-sites choice.
 - Object pieces and merged objects.
 - Current layout and related state.
 
-Projects are not fully self-contained datasets. On load, DriftlessMap reloads the
-atlas folder and source histological image from the recorded paths. Moving or
-renaming them can prevent restoration. Preserve a stable project directory or
-document any relocation.
+**Save Project** creates a linked project. The processed volume atlas is not
+embedded because it is large, but its scientifically relevant cache files are
+identified by SHA-256 checksums. DriftlessMap first tries a project-relative
+path, then the recorded absolute path. If neither contains the expected atlas,
+it asks for the atlas folder and rejects a selection whose checksum differs.
+
+The lossless active histology raster is always embedded, along with source
+scene/page, channel, curve, and scale metadata. If the original source cannot
+be found, DriftlessMap can therefore restore the exact active registration
+raster. Other scenes/pages from the original source are not available in this
+fallback mode.
+
+Use **File > Save Portable Project** when the archive must also contain the
+original histology file (including CZI), or every image used by a folder-based
+source. Portable projects can be much larger. The volume atlas remains linked
+and verified rather than duplicated.
 
 When loading another project over active work, DriftlessMap asks whether to save the
 current project first.
@@ -1359,18 +1461,21 @@ layers must match the current dimensions; process layers also require valid
 size, level, and data metadata. Invalid files are rejected instead of being
 partially displayed.
 
-### 18.4 Saving and loading objects
+### 18.4 Exporting and importing objects
 
 Use:
 
-- **File > Save Object > Current** for the selected entry.
-- A type-specific Save Object command to save every merged object of that type
+- **File > Export Object > Current** for the selected entry.
+- A type-specific Export Object command to save every merged object of that type
   into a selected folder.
-- **File > Load Objects** to select one or more `.dmapobj` files.
+- **File > Import Objects** to select one or more `.dmapobj` files.
 
-Load the intended atlas first and use a single atlas-slice layout. DriftlessMap checks
-that object coordinates fit the loaded atlas. A file from another atlas or
-resolution can be rejected as nonmatching.
+Projects already contain every object piece and merged object; object export is
+only for sharing, reuse, and downstream analysis. Exported objects record their
+coordinate frame, software version, and checksummed atlas identity. Load the
+intended atlas first and use a single atlas-slice layout. DriftlessMap rejects an
+object whose recorded atlas content does not match the loaded atlas. Legacy
+objects without provenance retain the older coordinate-bounds validation.
 
 ### 18.5 Information-window exports
 
@@ -1406,11 +1511,12 @@ still read when a DriftlessMap setting has not been created.
 | --- | --- |
 | Load Atlas | Select a processed volume-atlas folder. |
 | Load Image | Select a supported histological image. |
-| Save Project / Load Project | Write or restore `.dmap` project state. |
+| Save Project / Load Project | Write or restore linked, checksummed `.dmap` project state. |
+| Save Portable Project | Also embed the original histology source in `.dmap`. |
 | Save Layer > Current Layer / All Layers | Write `.dmaplayer` files. |
-| Save Object > Current | Write the selected `.dmapobj`. |
-| Save Object > Probes/Virus/Cells/Contours/Drawings | Save all merged objects of that type to a folder. |
-| Load Layers / Load Objects | Restore matching saved layers or objects. |
+| Export Object > Current | Write the selected `.dmapobj`. |
+| Export Object > Probes/Virus/Cells/Contours/Drawings | Export all merged objects of that type to a folder. |
+| Load Layers / Import Objects | Restore matching saved layers or objects. |
 | Load External Data > Cells | Import source-atlas `(N, 3)` point data. |
 
 ### 19.2 Edit
@@ -1443,6 +1549,8 @@ still read when a DriftlessMap setting has not been created.
 | Download Waxholm Rat Atlas | Download/process standard rat atlas. |
 | Download Allen Mice Atlas | Download/process Allen 10, 25, or 50 um atlas. |
 | Atlas Processor | Process a custom volume atlas. |
+| Suggest Atlas Section... | Rank atlas plane, section, tilt and orientation for the loaded histology. |
+| Propose Landmarks | Fit the shown atlas slice to the histology and fill in registration landmarks. |
 | Save/Load Triangulation Points | Write/read `.dmaptri`. |
 | Load Slice | Load a raw or processed 2D atlas plate. |
 | Register Slice Info | Set plane, dimensions, and Bregma distance. |
@@ -1450,15 +1558,14 @@ still read when a DriftlessMap setting has not been created.
 | Crop | Crop the slice atlas with a lasso. |
 | Bregma Picker | Select the 2D Bregma point. |
 | Save Processed Slice | Write `.dmapslice`. |
-| Merge Slices | Disabled in the current release. |
 | Switch Atlas | Switch between loaded volume and slice atlases. |
 
 ### 19.5 Objects
 
 | Command | Function |
 | --- | --- |
-| Save Probe Setting | Save the current probe geometry. |
-| Load Probe Setting | Restore a saved probe geometry. |
+| Save Probe Setting | Save complete probe-planning state as `.dmapprobe`. |
+| Load Probe Setting | Restore probe geometry, face, multi-probe plan, and related choices. |
 | Multi-Probe Planning | Configure multi-probe offsets and faces. |
 
 ### 19.6 View
@@ -1509,6 +1616,14 @@ python -m pip install "driftlessmap[czi]"
 ```
 
 Do not add PyQt5 to the environment; DriftlessMap is a PyQt6 application.
+
+### "Atlas processing in this folder did not finish"
+
+Atlas processing and downloads mark their folder while they write cache files
+and remove the mark only when they succeed. If processing was interrupted,
+the folder may mix new and old files, so DriftlessMap refuses to load it.
+Process or download the atlas into the folder again. The mark is the hidden
+file `.driftlessmap-processing`.
 
 ### The application starts but the 3D window is blank or OpenGL fails
 
@@ -1595,7 +1710,7 @@ Check:
 ### Probe CSV export says to re-merge
 
 The object predates self-contained reconstruction metadata. Load the original
-project with the same atlas, unmerge and re-merge it in DriftlessMap 1.2.0,
+project with the same atlas, unmerge and re-merge it in DriftlessMap 1.2.0 or later,
 then save a new object.
 
 ### A project cannot find its image or atlas
@@ -1665,7 +1780,11 @@ Install the test extra, then run:
 ```bash
 python -m pytest
 python -m ruff check .
+python -m mypy
 ```
+
+`mypy` checks the GUI-free scientific and persistence modules listed in
+`pyproject.toml`.
 
 The regression suite covers packaging, resource paths, image contracts, atlas
 transforms and loading, safe persistence, layers, slice validation,

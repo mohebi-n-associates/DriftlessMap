@@ -1,10 +1,7 @@
-import os
-import sys
 import numpy as np
 import pyqtgraph as pg
-from PyQt6.QtCore import *
-from PyQt6.QtGui import *
-
+from PyQt6.QtCore import QObject, Qt, pyqtSignal
+from PyQt6.QtGui import QPainter
 from .coordinate_validation import coordinates_in_bounds
 from .movable_points import TriangulationPoints
 
@@ -52,7 +49,7 @@ class ClickableSlice(pg.ImageItem):
         if event.isExit():
             return
         try:
-            pos = (event.pos())
+            event.pos()
         except (IndexError, AttributeError):
             return
         self.mouseHovered.emit(event)
@@ -174,7 +171,7 @@ class SliceStacks(pg.GraphicsLayoutWidget):
                 self.pre_trajectory_list[i].deleteLater()
                 del self.pre_trajectory_list[i]
         elif n_probe > exist_n_probes:
-            for i in range(exist_n_probes, n_probe):
+            for _ in range(exist_n_probes, n_probe):
                 self.pre_trajectory_list.append(pg.PlotDataItem(pen=pg.mkPen(color=(0, 0, 255), width=2), brush=None))
                 self.vb.addItem(self.pre_trajectory_list[-1])
 
@@ -205,7 +202,9 @@ class SliceStacks(pg.GraphicsLayoutWidget):
             self.set_boundary_data(contour)
 
     def set_boundary_data(self, contour):
-        self.boundary.setImage(contour, autoLevels=False)
+        # Contours are 0/1; without explicit levels a uint8 image is drawn
+        # on a 0-255 scale and the boundary is invisible.
+        self.boundary.setImage(contour, autoLevels=False, levels=(0, 1))
 
     def add_display_obj_to_view(self, obj_data, obj_color, obj_type):
         if obj_type == 'probe':
@@ -242,7 +241,7 @@ class SliceStacks(pg.GraphicsLayoutWidget):
         if event.isExit():
             return
         try:
-            pos = (event.pos())
+            pos = event.pos()
         except (IndexError, AttributeError):
             return
         if not image_position_in_bounds(pos, self.img.image):

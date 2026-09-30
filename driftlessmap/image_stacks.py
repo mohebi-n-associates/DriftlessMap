@@ -1,12 +1,8 @@
-import colorsys
-import os
-import sys
 import numpy as np
-from PyQt6.QtWidgets import *
-from PyQt6.QtCore import *
-from PyQt6.QtGui import *
+from PyQt6.QtCore import QObject, Qt, pyqtSignal
+from PyQt6.QtGui import QPainter
 import pyqtgraph as pg
-from pyqtgraph.Qt import QtGui, QtCore
+from pyqtgraph.Qt import QtCore
 from .movable_points import TriangulationPoints
 
 
@@ -40,8 +36,7 @@ class ClickableImage(pg.ImageItem):
         if event.isExit():
             return
         try:
-            pos = (event.pos())
-            id = 1  # self.label_data[int(event.pos().x()), int(event.pos().y())]
+            event.pos()
         except (IndexError, AttributeError):
             return
         self.mouseHovered.emit(event)
@@ -111,6 +106,8 @@ class SliceStack(pg.GraphicsLayoutWidget):
 
         cell_pnts = pg.ScatterPlotItem(pen=(0, 255, 0), brush=(0, 255, 0), size=5, hoverSize=8)
         probe_pnts = pg.ScatterPlotItem(pen=(0, 0, 255), brush=(0, 0, 255), symbol='s', size=5, hoverSize=8)
+        virus_pnts = pg.ScatterPlotItem(pen=(133, 255, 117), brush=(133, 255, 117), symbol='s', size=5,
+                                        hoverSize=8)
         bregma_pnt = pg.ScatterPlotItem(pen=(180, 112, 57), brush=(180, 112, 57), symbol='star', size=10, hoverSize=15)
 
         drawing_pnts = pg.PlotDataItem(pen=pg.mkPen(color=(255, 102, 0), width=2), brush=None)
@@ -125,6 +122,7 @@ class SliceStack(pg.GraphicsLayoutWidget):
                            'atlas-drawing': drawing_pnts,
                            'atlas-contour': contour_pnts,
                            'atlas-mask': mask_img,
+                           'atlas-virus': virus_pnts,
                            'grid_lines': grid_lines,
                            'tri_pnts': tri_pnts,
                            'circle_follow': circle_follow,
@@ -147,11 +145,9 @@ class SliceStack(pg.GraphicsLayoutWidget):
     def set_data(self, data, scale=None):
         if data.ndim != 3:
             raise ValueError('Image data must have shape (height, width, channels).')
-        if data.shape[2] > len(self.image_list):
+        if data.shape[2] not in (1, 3, 4):
             raise ValueError(
-                'DriftlessMap supports at most {} image channels.'.format(
-                    len(self.image_list)
-                )
+                'A slice atlas image must have 1, 3 or 4 channels.'
             )
         self.data = data
         if scale is not None:
@@ -171,7 +167,7 @@ class SliceStack(pg.GraphicsLayoutWidget):
                 self.pre_trajectory_list[i].deleteLater()
                 del self.pre_trajectory_list[i]
         elif n_probe > exist_n_probes:
-            for i in range(exist_n_probes, n_probe):
+            for _ in range(exist_n_probes, n_probe):
                 self.pre_trajectory_list.append(pg.PlotDataItem(pen=pg.mkPen(color=(0, 0, 255), width=2), brush=None))
                 self.vb.addItem(self.pre_trajectory_list[-1])
 
@@ -198,8 +194,7 @@ class SliceStack(pg.GraphicsLayoutWidget):
         if event.isExit():
             return
         try:
-            pos = (event.pos())
-            id = 1  # self.label_data[int(event.pos().x()), int(event.pos().y())]
+            event.pos()
         except (IndexError, AttributeError):
             return
         self.sig_mouse_hovered.emit(event)
@@ -209,7 +204,6 @@ class SliceStack(pg.GraphicsLayoutWidget):
 
     def keyPressEvent(self, event):
         if event.key() == QtCore.Qt.Key.Key_Backspace:
-            print("Killing")
             self.sig_key_pressed.emit('delete')
 
 
@@ -228,6 +222,8 @@ class ImageStacks(pg.GraphicsLayoutWidget):
         pg.GraphicsLayoutWidget.__init__(self)
 
         self.data = None
+        # Shared with ImageView: which channels the user has chosen to show.
+        self.channel_visible = None
         self.vb = self.addViewBox()
         self.setBackground('k')
         self.vb.setAspectLocked()
@@ -315,7 +311,10 @@ class ImageStacks(pg.GraphicsLayoutWidget):
         self.base_layer.setImage(base_img)
         for i in range(self.data.shape[2]):
             self.image_list[i].setImage(self.data[:, :, i], autoLevels=False)
-            self.image_list[i].setVisible(True)
+            visible = True if self.channel_visible is None else bool(
+                self.channel_visible[i]
+            )
+            self.image_list[i].setVisible(visible)
         for i in range(self.data.shape[2], len(self.image_list)):
             self.image_list[i].clear()
             self.image_list[i].setVisible(False)
@@ -338,8 +337,7 @@ class ImageStacks(pg.GraphicsLayoutWidget):
         if event.isExit():
             return
         try:
-            pos = (event.pos())
-            id = 1  # self.label_data[int(event.pos().x()), int(event.pos().y())]
+            event.pos()
         except (IndexError, AttributeError):
             return
         self.sig_mouse_hovered.emit(event)
@@ -352,7 +350,6 @@ class ImageStacks(pg.GraphicsLayoutWidget):
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_Backspace or event.key() == Qt.Key.Key_Delete:
-            print("Killing")
             self.sig_key_pressed.emit('delete')
         # elif event.key() == Qt.Key.Key_Enter or event.key() == Qt.Key.Key_Return:
         #     print('enter')

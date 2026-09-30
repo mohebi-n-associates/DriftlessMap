@@ -1,21 +1,34 @@
 import os
-
-
-import pickle
-import nrrd
-import csv
-import nibabel as nib
 import numpy as np
-import pandas as pd
-import cv2
-from PyQt6.QtGui import *
-from PyQt6.QtCore import *
-from PyQt6.QtWidgets import *
-import pyqtgraph.opengl as gl
+from .persistence import write_cache_pickle
+from PyQt6.QtGui import QIntValidator, QRegularExpressionValidator
+from PyQt6.QtCore import (
+    QObject,
+    QRegularExpression,
+    QThread,
+    Qt,
+    pyqtSignal,
+)
+from PyQt6.QtWidgets import (
+    QComboBox,
+    QDialog,
+    QFileDialog,
+    QFrame,
+    QGridLayout,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QProgressBar,
+    QPushButton,
+)
 
-from .uuuuuu import read_qss_file, make_contour_img, read_excel_file, hex2rgb
-from .obj_items import render_volume, render_small_volume
-from .atlas_loader import process_atlas_raw_data, AtlasLoader, check_data_path_and_load
+from .utils import read_qss_file, make_contour_img, read_excel_file, hex2rgb
+from .obj_items import load_mesh_file, render_volume, render_small_volume
+from .atlas_loader import (
+    check_data_path_and_load,
+    begin_atlas_processing,
+    finish_atlas_processing,
+)
 from .atlas_transform import (
     compact_boundary_volume,
     compact_label_volume,
@@ -69,12 +82,18 @@ class CustomerAtlasWorker(QObject):
         self.progress.emit(total_count)
 
     def run(self):
+        # Report unexpected failures instead of letting them escape the
+        # worker thread, which would leave the dialog stuck.
+        try:
+            self._run()
+        except Exception as exc:
+            self.error_occur.emit("Atlas processing failed: {}".format(exc))
+
+    def _run(self):
         self.progress.emit(1)
         if self.vox_size < 1e-4:
             self.error_occur.emit("Please set voxel size.")
             return
-        print(self.saving_folder)
-        print(self.label_local)
         df, msg = read_excel_file(os.path.join(self.saving_folder, self.label_local))
         if msg is not None:
             self.error_occur.emit(msg)
@@ -122,18 +141,27 @@ class CustomerAtlasWorker(QObject):
             rgb_colors = np.asarray(rgb_colors)
         except KeyError:
             rgb_colors = []
-            for i in range(len(da_short_label)):
+            for _ in range(len(da_short_label)):
                 r, g, b = np.random.randint(0, 255, 3)
                 rgb_colors.append([r, g, b])
             rgb_colors = np.asarray(rgb_colors)
         self.progress.emit(6)
 
+        # Allen ontology exports name the parent column "parent_structure_id";
+        # other tables use "parent_id".
+        parent_column = next(
+            (name for name in ("parent_id", "parent_structure_id") if name in df),
+            None,
+        )
         try:
-            parent = df["parent_id"].fillna(0).to_numpy(dtype=int, copy=True)
+            if parent_column is None:
+                raise KeyError(parent_column)
+            parent = df[parent_column].fillna(0).to_numpy(dtype=int, copy=True)
             ids = df["id"].to_numpy(dtype=int, copy=True)
         except KeyError:
             self.error_occur.emit(
-                'Label file missing columns "parent_structure_id" or "id".'
+                'Label file needs an "id" column and a "parent_id" or '
+                '"parent_structure_id" column.'
             )
             return
 
@@ -146,8 +174,10 @@ class CustomerAtlasWorker(QObject):
             "level_indicator": levels,
         }
 
-        with open(os.path.join(self.saving_folder, "atlas_labels.pkl"), "wb") as handle:
-            pickle.dump(label_info, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        # From the first cache write until success, mark the folder as
+        # incomplete so a stopped run is never loaded as a whole atlas.
+        begin_atlas_processing(self.saving_folder)
+        write_cache_pickle(os.path.join(self.saving_folder, "atlas_labels.pkl"), label_info)
         self.progress.emit(9)
 
         # laod atlas
@@ -224,9 +254,7 @@ class CustomerAtlasWorker(QObject):
 
         segment = {"data": segmentation_data, "unique_label": unique_label}
 
-        outfile = open(os.path.join(self.saving_folder, "segment_pre_made.pkl"), "wb")
-        pickle.dump(segment, outfile)
-        outfile.close()
+        write_cache_pickle(os.path.join(self.saving_folder, "segment_pre_made.pkl"), segment)
         self.progress.emit(42)
 
         atlas_info = [
@@ -250,12 +278,10 @@ class CustomerAtlasWorker(QObject):
         self.progress.emit(45)
         atlas = {"data": atlas_data, "info": atlas_info}
 
-        outfile = open(os.path.join(self.saving_folder, "atlas_pre_made.pkl"), "wb")
-        pickle.dump(atlas, outfile)
-        outfile.close()
+        write_cache_pickle(os.path.join(self.saving_folder, "atlas_pre_made.pkl"), atlas)
         self.progress.emit(50)
 
-        mesh_data = render_volume(
+        render_volume(
             atlas_data, self.saving_folder, factor=self.factor, level=0.1
         )
         self.progress.emit(55)
@@ -286,18 +312,12 @@ class CustomerAtlasWorker(QObject):
             file_name = os.path.basename(da_file)
             da_name, file_extension = os.path.splitext(file_name)
             if file_extension == ".pkl":
-                infile = open(os.path.join(mesh_path, da_file), "rb")
-                md = pickle.load(infile)
-                infile.close()
+                md = load_mesh_file(os.path.join(mesh_path, da_file))
 
                 small_mesh_list[str(da_name)] = md
 
         self.progress.emit(69)
-        outfile = open(
-            os.path.join(self.saving_folder, "atlas_small_meshdata.pkl"), "wb"
-        )
-        pickle.dump(small_mesh_list, outfile)
-        outfile.close()
+        write_cache_pickle(os.path.join(self.saving_folder, "atlas_small_meshdata.pkl"), small_mesh_list)
         self.progress.emit(70)
 
         segment_data_shape = segmentation_data.shape
@@ -314,11 +334,7 @@ class CustomerAtlasWorker(QObject):
             contour_img = make_contour_img(da_slice)
             sagital_contour_img[i, :, :] = compact_boundary_volume(contour_img)
 
-        outfile_ct = open(
-            os.path.join(self.saving_folder, "sagital_contour_pre_made.pkl"), "wb"
-        )
-        pickle.dump(sagital_contour_img, outfile_ct)
-        outfile_ct.close()
+        write_cache_pickle(os.path.join(self.saving_folder, "sagital_contour_pre_made.pkl"), sagital_contour_img)
         self.progress.emit(80)
 
         process_index = np.linspace(80, 88, segment_data_shape[1])
@@ -328,11 +344,7 @@ class CustomerAtlasWorker(QObject):
             contour_img = make_contour_img(da_slice)
             coronal_contour_img[:, i, :] = compact_boundary_volume(contour_img)
 
-        outfile_ct = open(
-            os.path.join(self.saving_folder, "coronal_contour_pre_made.pkl"), "wb"
-        )
-        pickle.dump(coronal_contour_img, outfile_ct)
-        outfile_ct.close()
+        write_cache_pickle(os.path.join(self.saving_folder, "coronal_contour_pre_made.pkl"), coronal_contour_img)
         self.progress.emit(90)
 
         process_index = np.linspace(90, 98, segment_data_shape[2])
@@ -342,21 +354,14 @@ class CustomerAtlasWorker(QObject):
             contour_img = make_contour_img(da_slice)
             horizontal_contour_img[:, :, i] = compact_boundary_volume(contour_img)
 
-        outfile_ct = open(
-            os.path.join(self.saving_folder, "horizontal_contour_pre_made.pkl"), "wb"
-        )
-        pickle.dump(horizontal_contour_img, outfile_ct)
-        outfile_ct.close()
+        write_cache_pickle(os.path.join(self.saving_folder, "horizontal_contour_pre_made.pkl"), horizontal_contour_img)
 
         # saving atlas axis changing information
         self.axis_info["size"] = tuple(atlas_size)
-        outfile_axis = open(
-            os.path.join(self.saving_folder, "atlas_axis_info.pkl"), "wb"
-        )
-        pickle.dump(self.axis_info, outfile_axis)
-        outfile_axis.close()
+        write_cache_pickle(os.path.join(self.saving_folder, "atlas_axis_info.pkl"), self.axis_info)
 
         self.progress.emit(100)
+        finish_atlas_processing(self.saving_folder)
 
         self.finished.emit()
 
@@ -402,28 +407,24 @@ class AtlasProcessor(QDialog):
         data_label = QLabel("Volume File:")
         self.data_btn = QPushButton("Select File")
         self.data_btn.setAutoDefault(False)
-        self.data_btn.setFocus(False)
         self.data_line = QLabel()
         self.data_line.setStyleSheet(box_label_style)
 
         seg_label = QLabel("Segmentation File: ")
         self.seg_btn = QPushButton("Select File")
         self.seg_btn.setAutoDefault(False)
-        self.seg_btn.setFocus(False)
         self.seg_line = QLabel()
         self.seg_line.setStyleSheet(box_label_style)
 
         mask_label = QLabel("Mask File (optional): ")
         self.mask_btn = QPushButton("Select File")
         self.mask_btn.setAutoDefault(False)
-        self.mask_btn.setFocus(False)
         self.mask_line = QLabel()
         self.mask_line.setStyleSheet(box_label_style)
 
         labinf_label = QLabel("Label Information File:")
         self.labinf_btn = QPushButton("Select File")
         self.labinf_btn.setAutoDefault(False)
-        self.labinf_btn.setFocus(False)
         self.labinf_line = QLabel()
         self.labinf_line.setStyleSheet(box_label_style)
 
@@ -483,7 +484,6 @@ class AtlasProcessor(QDialog):
 
         self.process_btn = QPushButton("Start Process")
         self.process_btn.setAutoDefault(False)
-        self.process_btn.setFocus(False)
         self.process_info = QLabel(
             "The whole process takes some time. \n"
             "This window will be closed automatically when processing finished."
@@ -590,74 +590,49 @@ class AtlasProcessor(QDialog):
                 "direction_change": tuple(direction_change),
             }
 
-            print(self.axis_info)
 
-    def get_folder_path(self, file_path):
-        self.folder_path = os.path.dirname(file_path)
+    def _pick_file(self, title):
+        """Return the chosen absolute path, or ``None`` if cancelled."""
+        file_options = QFileDialog.Option(0)
+        file_options |= QFileDialog.Option.DontUseNativeDialog
+        start = self.folder_path or ""
+        path = QFileDialog.getOpenFileName(self, title, start, options=file_options)[0]
+        if not path:
+            return None
+        path = os.path.abspath(path)
+        if self.folder_path is None:
+            self.folder_path = os.path.dirname(path)
+        return path
 
     def get_data_file(self):
-        file_options = QFileDialog.Option(0)
-        file_options |= QFileDialog.Option.DontUseNativeDialog
-        dlg = QFileDialog()
-        if self.folder_path is not None:
-            data_path = dlg.getOpenFileName(
-                self, "Select Atlas Volume File", self.folder_path, options=file_options
-            )
-        else:
-            data_path = dlg.getOpenFileName(
-                self, "Select Atlas Volume File", options=file_options
-            )
-            self.get_folder_path(data_path[0])
-        self.data_local = os.path.basename(data_path[0])
-        self.data_line.setText(self.data_local)
+        path = self._pick_file("Select Atlas Volume File")
+        if path is None:
+            return
+        # Processed files are written next to the atlas volume.
+        self.folder_path = os.path.dirname(path)
+        self.data_local = path
+        self.data_line.setText(os.path.basename(path))
 
     def get_seg_file(self):
-        file_options = QFileDialog.Option(0)
-        file_options |= QFileDialog.Option.DontUseNativeDialog
-        dlg = QFileDialog()
-        if self.folder_path is not None:
-            seg_path = dlg.getOpenFileName(
-                self, "Select Segmentation File", self.folder_path, options=file_options
-            )
-        else:
-            seg_path = dlg.getOpenFileName(
-                self, "Select Segmentation File", options=file_options
-            )
-            self.get_folder_path(seg_path[0])
-        self.segmentation_local = os.path.basename(seg_path[0])
-        self.seg_line.setText(self.segmentation_local)
+        path = self._pick_file("Select Segmentation File")
+        if path is None:
+            return
+        self.segmentation_local = path
+        self.seg_line.setText(os.path.basename(path))
 
     def get_mask_file(self):
-        file_options = QFileDialog.Option(0)
-        file_options |= QFileDialog.Option.DontUseNativeDialog
-        dlg = QFileDialog()
-        if self.folder_path is not None:
-            mask_path = dlg.getOpenFileName(
-                self, "Select Mask File", self.folder_path, options=file_options
-            )
-        else:
-            mask_path = dlg.getOpenFileName(
-                self, "Select Mask File", options=file_options
-            )
-            self.get_folder_path(mask_path[0])
-        self.mask_local = os.path.basename(mask_path[0])
-        self.mask_line.setText(self.mask_local)
+        path = self._pick_file("Select Mask File")
+        if path is None:
+            return
+        self.mask_local = path
+        self.mask_line.setText(os.path.basename(path))
 
     def get_info_file(self):
-        file_options = QFileDialog.Option(0)
-        file_options |= QFileDialog.Option.DontUseNativeDialog
-        dlg = QFileDialog()
-        if self.folder_path is not None:
-            info_path = dlg.getOpenFileName(
-                self, "Select Label File", self.folder_path, options=file_options
-            )
-        else:
-            info_path = dlg.getOpenFileName(
-                self, "Select Label File", options=file_options
-            )
-            self.get_folder_path(info_path[0])
-        self.label_local = os.path.basename(info_path[0])
-        self.labinf_line.setText(os.path.basename(self.label_local))
+        path = self._pick_file("Select Label File")
+        if path is None:
+            return
+        self.label_local = path
+        self.labinf_line.setText(os.path.basename(path))
 
     def bregma_input1_changed(self, text):
         if text == "":
@@ -700,15 +675,12 @@ class AtlasProcessor(QDialog):
         self.factor_val = int(text)
 
     def check_empty_file(self):
-        if self.data_local is None:
-            msg = "Please select atlas data."
-            return msg
-        if self.segmentation_local is None:
-            msg = "Please select segmentation file."
-            return msg
-        if self.label_local is None:
-            msg = "Please select label information file."
-            return msg
+        if not self.data_local:
+            return "Please select atlas data."
+        if not self.segmentation_local:
+            return "Please select segmentation file."
+        if not self.label_local:
+            return "Please select label information file."
         return None
 
     def process_data_called(self):
@@ -724,7 +696,7 @@ class AtlasProcessor(QDialog):
 
         msg = self.check_empty_file()
         if msg is not None:
-            self.process_info.setText("Please select file path.")
+            self.process_info.setText(msg)
             return
 
         dir_goal = ["Post. --> Ant.", "Inf. --> Sup.", "L.H. --> R.H."]
@@ -735,8 +707,6 @@ class AtlasProcessor(QDialog):
             direction_change[1] = True
         if self.z_axis_combo.currentText() not in dir_goal:
             direction_change[2] = True
-
-        transpose_order = dir_groups - 1
 
         self.process_btn.setVisible(False)
         self.process_info.setText(

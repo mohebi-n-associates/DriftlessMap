@@ -104,5 +104,74 @@ class FolderReaderTests(unittest.TestCase):
         self.assertEqual(reader.data["scene 0"].shape, (3, 4, 3))
 
 
+class EmbeddedReaderTests(unittest.TestCase):
+    def test_embedded_reader_preserves_active_raster_contract(self):
+        pixels = np.arange(24, dtype=np.uint16).reshape(3, 4, 2)
+        reader = image_reader.EmbeddedImageReader(
+            pixels,
+            {
+                "is_rgb": False,
+                "pixel_type": "gray16",
+                "level": 65535,
+                "n_channels": 2,
+                "data_type": "uint16",
+                "rgb_colors": [(255, 0, 0), (0, 255, 0)],
+                "channel_name": ["A", "B"],
+            },
+        )
+
+        self.assertEqual(reader.n_scenes, 1)
+        self.assertEqual(reader.n_pages, 1)
+        self.assertEqual(reader.level, 65535)
+        np.testing.assert_array_equal(reader.data["scene 0"], pixels)
+
+
+
+class EmbeddedReaderScaleTests(unittest.TestCase):
+    def test_embedded_raster_keeps_its_saved_scale(self):
+        pixels = np.zeros((4, 5, 3), dtype=np.uint8)
+        reader = image_reader.EmbeddedImageReader(pixels, {"image_scale": 0.1})
+        self.assertEqual(reader.scale["scene 0"], 0.1)
+
+    def test_invalid_or_missing_scale_falls_back_to_full_resolution(self):
+        pixels = np.zeros((4, 5, 3), dtype=np.uint8)
+        for metadata in (None, {}, {"image_scale": 0}, {"image_scale": "x"}):
+            reader = image_reader.EmbeddedImageReader(pixels, metadata)
+            self.assertEqual(reader.scale["scene 0"], 1.0)
+
+
+class InputRobustnessTests(unittest.TestCase):
+    def test_non_ascii_paths_decode(self):
+        with tempfile.TemporaryDirectory() as folder:
+            directory = Path(folder) / "Müller åß"
+            directory.mkdir()
+            path = directory / "slide.png"
+            ok, encoded = cv2.imencode(".png", np.full((4, 5, 3), 90, dtype=np.uint8))
+            self.assertTrue(ok)
+            path.write_bytes(encoded.tobytes())
+            reader = image_reader.ImageReader(path)
+            self.assertEqual(reader.data["scene 0"].shape, (4, 5, 3))
+
+    def test_tiff_folders_keep_their_bit_depth(self):
+        with tempfile.TemporaryDirectory() as folder:
+            for index in range(2):
+                tifffile.imwrite(
+                    Path(folder) / "section{}.tif".format(index),
+                    np.full((6, 7), 4000 + index, dtype=np.uint16),
+                )
+            reader = image_reader.ImagesReader(folder)
+            self.assertEqual(reader.n_scenes, 2)
+            self.assertEqual(reader.data_type, "uint16")
+            self.assertEqual(reader.level, 65535)
+            self.assertEqual(reader.n_channels, 1)
+            self.assertEqual(int(reader.data["scene 1"][0, 0, 0]), 4001)
+
+    def test_tiff_folders_with_mixed_layouts_are_rejected(self):
+        with tempfile.TemporaryDirectory() as folder:
+            tifffile.imwrite(Path(folder) / "a.tif", np.zeros((6, 7), dtype=np.uint16))
+            tifffile.imwrite(Path(folder) / "b.tif", np.zeros((6, 7), dtype=np.uint8))
+            with self.assertRaisesRegex(ValueError, "different bit depth"):
+                image_reader.ImagesReader(folder)
+
 if __name__ == "__main__":
     unittest.main()

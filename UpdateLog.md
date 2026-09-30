@@ -1,5 +1,35 @@
 # Update Log
 
+### 28th September 2026
+##### DriftlessMap 1.6.1
+
+Fixes **Show Boundary**, which drew atlas region boundaries almost black and therefore invisibly. **Propose Landmarks** now suggests up to 10 landmarks on features both images show (outline tips and notches, shared internal edges) instead of about 36. Adds a tutorial for the automatic section and landmark suggestions.
+
+### 27th September 2026
+##### DriftlessMap 1.6.0
+
+Adds **Atlas > Suggest Atlas Section...**, which suggests the atlas plane, section, tilt and histology orientation for a loaded section. Also adds **Atlas > Propose Landmarks**, which fits the shown atlas slice to the histology and fills in registration landmarks for review. SimpleITK is now a required dependency.
+
+### 27th September 2026
+##### DriftlessMap 1.5.0
+
+Review release: corrects probe site faces, source-voxel mirroring, brain-entry detection, region path lengths, image scale, pixel-centre warps, voxel flooring and surface depth; closes a mesh-cache code-execution hole and an allocation bomb; stops several ways of losing work; fixes many crashes; and runs long operations in the background. See the "re-export if…" list in [What’s New](WhatsNew.md) before reusing results from earlier versions.
+
+### 27th August 2026
+##### DriftlessMap 1.4.0
+
+Adds native Windows and macOS desktop release builds, a new application icon,
+visible GUI version information, and separate end-user and developer
+installation instructions.
+
+### 27th August 2026
+##### DriftlessMap 1.3.0
+
+Adds reproducible project archives with checksummed, relocatable atlas and
+histology references; lossless embedded working histology; optional portable
+histology sources; complete probe-planning persistence; and atlas-bound object
+provenance. Standalone probe-setting save/load is now implemented.
+
 ### 27th July 2026
 ##### DriftlessMap 1.2.0
 

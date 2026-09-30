@@ -1,18 +1,33 @@
-import os
-import sys
 import numpy as np
 import pyqtgraph as pg
 # from pyqtgraph.Qt import QtGui, QtCore
 import pyqtgraph.functions as fn
 import pyqtgraph.opengl as gl
-from PyQt6.QtWidgets import *
-from PyQt6.QtGui import *
-from PyQt6.QtCore import *
-
+from PyQt6.QtWidgets import (
+    QDoubleSpinBox,
+    QFrame,
+    QGridLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QRadioButton,
+    QSlider,
+    QVBoxLayout,
+    QWidget,
+)
+from PyQt6.QtGui import QIcon, QPixmap
+from PyQt6.QtCore import (
+    QObject,
+    QSize,
+    QTimer,
+    Qt,
+    pyqtSignal,
+)
 from .image_stacks import SliceStack
 from .slice_stacks import SliceStacks
 from .label_tree import LabelTree
-from .uuuuuu import read_qss_file, get_corner_line_from_rect, get_slice_atlas_coord, make_contour_img,  \
+from .utils import read_qss_file, get_corner_line_from_rect, get_slice_atlas_coord, make_contour_img,  \
     rotate_base_points, rotation_x, rotation_y, rotation_z
 from .probe_utiles import get_tilt_sign#, get_direction_rotation
 from .slice_validation import slice_info_is_ready
@@ -1141,8 +1156,9 @@ class AtlasView(QObject):
             s_start_pnt_3d = start_pnt + self.origin_3d
             s_end_pnt_3d = end_pnt + self.origin_3d
 
-            s_start_pnt = [s_start_pnt_3d[0], self.atlas_size[0] - s_start_pnt_3d[2]]
-            s_end_pnt = [s_end_pnt_3d[0], self.atlas_size[0] - s_end_pnt_3d[2]]
+            # The sagittal view's horizontal axis is AP (HERBS axis 1).
+            s_start_pnt = [s_start_pnt_3d[1], self.atlas_size[0] - s_start_pnt_3d[2]]
+            s_end_pnt = [s_end_pnt_3d[1], self.atlas_size[0] - s_end_pnt_3d[2]]
 
         c_pos = np.stack([c_start_pnt, c_end_pnt], axis=0)
         s_pos = np.stack([s_start_pnt, s_end_pnt], axis=0)
@@ -1169,8 +1185,6 @@ class AtlasView(QObject):
         self.simg.display_objects.clear()
 
         self.has_display_objects = False
-
-
 
 
     def get_atlas_angles(self):
@@ -1337,17 +1351,6 @@ class AtlasView(QObject):
     #
     #     return points3_list
 
-    def get_multi_probe_2d_vis_data(self, data, multi_settings):
-        x_vals = multi_settings['x_vals']
-        y_vals = multi_settings['y_vals']
-        n_probes = len(x_vals)
-
-        vind = np.where(y_vals == 0)[0]
-        if len(vind) == 0:
-            vis_data = [data]
-        else:
-            vis_data = []
-            base_loc = np.ravel(x_vals)[vind]
 
     def get_plane_norm_vector(self, atlas_display):
         if atlas_display == 'coronal':
@@ -1380,9 +1383,7 @@ class AtlasView(QObject):
                 self.working_atlas.image_dict['atlas-probe'].setData(pos=np.asarray(temp))
         elif len(data) == 2:
             if n_pre_trajectory == 1:
-                print('data', data)
                 start_pnt, end_pnt = rotate_base_points(np.asarray(data), np.array([0]))
-                print(start_pnt, end_pnt)
                 self.working_atlas.image_dict['atlas-probe'].setData(pos=np.asarray(data))
             else:
                 base_loc = np.array([-375, -125, 125, 375]) / self.vox_size_um
@@ -1427,9 +1428,3 @@ class AtlasView(QObject):
     def clear_atlas(self):
         self.clear_volume_atlas()
         self.clear_slice_atlas()
-
-
-
-
-
-

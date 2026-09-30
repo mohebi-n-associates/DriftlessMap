@@ -72,5 +72,24 @@ class LabelTreeTests(unittest.TestCase):
         )
 
 
+    def test_colour_change_on_sparse_id_emits_that_labels_colour(self):
+        tree = label_tree.LabelTree()
+        tree.set_labels(
+            {
+                "index": np.array([1, 997, 614454277]),
+                "parent": np.array([-1, 1, 1]),
+                "color": np.array([[10, 20, 30], [40, 50, 60], [70, 80, 90]]),
+                "label": np.array(["Root", "Brain", "Sparse"]),
+                "abbrev": np.array(["R", "B", "S"]),
+            }
+        )
+        emitted = []
+        tree.label_color_changed.connect(emitted.append)
+        for label_id in (997, 614454277):
+            tree.set_label_color(label_id, QColor(200, 100, 50), recursive=False)
+        self.assertEqual([event[0] for event in emitted], [997, 614454277])
+        for event in emitted:
+            np.testing.assert_array_equal(event[1], [200, 100, 50, 255])
+
 if __name__ == "__main__":
     unittest.main()

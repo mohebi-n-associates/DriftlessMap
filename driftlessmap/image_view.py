@@ -1,23 +1,35 @@
-import colorsys
-import os
-import sys
 
 import cv2
 import copy
-import pyqtgraph.functions as fn
 import numpy as np
 import pyqtgraph as pg
-from PyQt6.QtWidgets import *
-from PyQt6.QtGui import *
-from PyQt6.QtCore import *
-from pyqtgraph.Qt import QtGui, QtCore
-import scipy.ndimage as ndi
+from PyQt6.QtWidgets import (
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QSlider,
+    QVBoxLayout,
+    QWidget,
+)
+from PyQt6.QtGui import QIcon
+from PyQt6.QtCore import (
+    QObject,
+    QSize,
+    Qt,
+    pyqtSignal,
+)
 
 from .image_stacks import ImageStacks
 from .widgets_utils import ChannelSelector
 from .image_curves import CurveWidget
-from .uuuuuu import hsv2rgb, gamma_line, color_img, make_color_lut, get_corner_line_from_rect, \
-    rotate, rotate_bound, get_tb_size, read_qss_file
+from .utils import (
+    make_color_lut,
+    get_corner_line_from_rect,
+    rotate,
+    get_tb_size,
+    read_qss_file,
+)
 from .layer_validation import image_layer_matches
 from .resources import resource_path
 
@@ -118,6 +130,8 @@ class ImageView(QObject):
         self.processing_img = None
         self.current_img = None
         self.current_scale = None
+        self._fine_rotation_base = None
+        self._fine_rotation_angle = 0
         self.img_size = None
         self.tb_size = None
         self.color_lut_list = []
@@ -173,6 +187,7 @@ class ImageView(QObject):
 
         # image stacks
         self.img_stacks = ImageStacks()
+        self.img_stacks.channel_visible = self.channel_visible
 
         # scene control
         self.page_ctrl = ImagePageController()
@@ -237,6 +252,7 @@ class ImageView(QObject):
             self.curve_widget.line_type_combo.setCurrentIndex(0)
 
         self.image_file = image_file
+        self._fine_rotation_base = None
 
         if self.image_file.n_pages > 1:
             self.page_ctrl.set_max(self.image_file.n_pages - 1)
@@ -318,11 +334,11 @@ class ImageView(QObject):
             self.chn_widget_list[i].vis_btn.setChecked(False)
             self.chn_widget_list[i].vis = True
             self.chn_widget_list[i].set_checked(False)
+            self.channel_visible[i] = True
 
     def set_data_and_size(self, img_data):
         self.img_stacks.set_data(img_data)
         self.img_size = img_data.shape[:2]
-        print('image_view', self.img_size)
         rect = (0, 0, self.img_size[1], self.img_size[0])
         self.corner_points, self.side_lines = get_corner_line_from_rect(rect)
         self.img_stacks.image_dict['tri_pnts'].set_range(self.img_size[1], self.img_size[0])
@@ -356,10 +372,11 @@ class ImageView(QObject):
                 scale_val = scale * 0.01
                 self.image_file.read_data(scale_val, scene_index=scene_index)
             self.current_img = copy.deepcopy(self.image_file.data['scene {}'.format(scene_index)])
+            self._fine_rotation_base = None
             self.current_scale = self.image_file.scale['scene {}'.format(scene_index)]
 
             if self.current_scale != self.scale_slider.value() * 0.01:
-                self.scale_slider.setValue(self.current_scale * 100)
+                self.scale_slider.setValue(int(round(self.current_scale * 100)))
 
             self.img_size = self.current_img.shape[:2]
             for i in range(self.image_file.n_channels):
@@ -446,11 +463,37 @@ class ImageView(QObject):
         for i in range(self.current_img.shape[2]):
             lut_points_data.append(self.curve_widget.curve_plot.lut_points[i].data['pos'].copy())
 
+        source_metadata = {
+                'display_name': self.image_file.file_name_list[
+                    min(self.scene_slider.value(), len(self.image_file.file_name_list) - 1)
+                ] if self.image_file.file_name_list else 'histology',
+                'is_czi': self.image_file.is_czi,
+                'is_rgb': self.image_file.is_rgb,
+                'pixel_type': self.image_file.pixel_type,
+                'level': self.image_file.level,
+                'n_channels': self.image_file.n_channels,
+                'data_type': self.image_file.data_type,
+                'n_scenes': self.image_file.n_scenes,
+                'n_pages': self.image_file.n_pages,
+                'scaling_val': self.image_file.scaling_val,
+                'rgb_colors': self.image_file.rgb_colors,
+                'hsv_colors': self.image_file.hsv_colors,
+                'channel_name': self.image_file.channel_name,
+                'gamma_val': self.image_file.gamma_val,
+                'image_scale': self._current_scale_value(),
+        }
         data = {'current_img': self.current_img,
                 'processing_img': self.processing_img,
                 'current_scene': self.scene_slider.value(),
+                'current_page': self.display_img_index,
+                # ``current_scale`` is the scale slider percentage kept for
+                # older readers; ``image_scale`` is the fraction of full
+                # resolution the active raster was read at.
                 'current_scale': self.scale_slider.value(),
+                'image_scale': self._current_scale_value(),
+                'source_metadata': source_metadata,
                 'channel_color': self.channel_color,
+                'channel_visible': self.channel_visible,
                 'color_combo_index': self.color_combo_index,
                 'original_lut_list': self.original_lut_list,
                 'color_lut_list': self.color_lut_list,
@@ -462,12 +505,47 @@ class ImageView(QObject):
                 'lut_points_data': lut_points_data}
         return data
 
+    def _current_scale_value(self):
+        try:
+            scale = float(self.current_scale)
+        except (TypeError, ValueError):
+            return 1.0
+        return scale if np.isfinite(scale) and scale > 0 else 1.0
+
+    def _restored_scale(self, img_ctrl_data):
+        """Return the raster scale as a fraction of full resolution.
+
+        Projects before 1.4.9 stored only the slider percentage under
+        ``current_scale``; for those the reader's own scale for the scene is
+        authoritative, because it describes the pixels actually loaded.
+        """
+        saved = img_ctrl_data.get('image_scale')
+        try:
+            saved = float(saved)
+        except (TypeError, ValueError):
+            saved = None
+        if saved is not None and np.isfinite(saved) and saved > 0:
+            return saved
+        scene_key = 'scene {}'.format(self.scene_slider.value())
+        scales = getattr(self.image_file, 'scale', {}) or {}
+        return float(scales.get(scene_key, scales.get('scene 0', 1.0)))
+
     def load_img_ctrl_data(self, img_ctrl_data):
         self.current_img = img_ctrl_data['current_img']
-        self.current_scale = img_ctrl_data['current_scale']
+        self.current_scale = self._restored_scale(img_ctrl_data)
         self.channel_color = img_ctrl_data['channel_color']
         self.color_combo_index = img_ctrl_data['color_combo_index']
+        saved_channel_visible = img_ctrl_data.get(
+            'channel_visible', [True] * self.image_file.n_channels
+        )
         self.processing_img = img_ctrl_data['processing_img']
+        self.display_img_index = int(img_ctrl_data.get('current_page', 0))
+        if self.image_file.n_pages > 1:
+            page = min(self.display_img_index, self.image_file.n_pages - 1)
+            self.page_ctrl.page_slider.blockSignals(True)
+            self.page_ctrl.page_slider.setValue(page)
+            self.page_ctrl.page_label.setText(str(page))
+            self.page_ctrl.page_slider.blockSignals(False)
         # set data
         # self.scene_wrap.setVisible(False)
 
@@ -504,14 +582,17 @@ class ImageView(QObject):
         for i in range(self.image_file.n_channels):
             self.chn_widget_list[i].blockSignals(True)
             self.chn_widget_list[i].setVisible(True)
-            self.chn_widget_list[i].vis_btn.setChecked(False)
-            self.chn_widget_list[i].set_checked(False)
+            channel_visible = bool(saved_channel_visible[i])
+            self.chn_widget_list[i].vis_btn.setChecked(not channel_visible)
+            self.chn_widget_list[i].set_checked(not channel_visible)
             self.chn_widget_list[i].vis_btn.setText(self.image_file.channel_name[i])
             self.chn_widget_list[i].color_combo.blockSignals(True)
-            self.chn_widget_list[i].add_item(self.image_file.hsv_colors[i])
+            # The image's own colour swatch was added when the image loaded.
             self.chn_widget_list[i].color_combo.setCurrentIndex(self.color_combo_index[i])
             self.chn_widget_list[i].color_combo.blockSignals(False)
-            self.channel_visible[i] = True
+            self.channel_visible[i] = channel_visible
+            self.img_stacks.image_list[i].setVisible(channel_visible)
+            self.curve_widget.set_channel_enable(i, channel_visible)
             self.chn_widget_list[i].blockSignals(False)
 
         self.original_lut_list = img_ctrl_data['original_lut_list']
@@ -550,97 +631,78 @@ class ImageView(QObject):
             self.img_stacks.image_dict[da_key].clear()
 
     # image rotation
+    def _after_geometry_change(self):
+        self.clear_image_stacks()
+        self.img_stacks.set_data(self.current_img)
+        self.img_size = self.current_img.shape[:2]
+        self.img_stacks.image_dict['tri_pnts'].set_range(self.img_size[1], self.img_size[0])
+        self.tb_size = get_tb_size(self.img_size)
+        # Emits ``sig_image_changed`` so landmarks and layers follow the
+        # new geometry.
+        self.get_corner_and_lines()
+
+    def _transform_planes(self, operation):
+        """Apply a 2-D operation to every channel and every stack page."""
+        self._fine_rotation_base = None
+        self.current_img = np.dstack(
+            [operation(self.current_img[:, :, i]) for i in range(self.current_img.shape[2])]
+        )
+        if self.volume_img is not None:
+            self.volume_img = np.stack([operation(page) for page in self.volume_img], axis=0)
+        self._after_geometry_change()
+
     def image_vertical_flip(self):
         if self.image_file is None:
             return
-        # if self.image_file.is_rgb:
-        #     self.current_img = cv2.flip(self.current_img, 0)
-        # else:
-        for i in range(self.image_file.n_channels):
-            self.current_img[:, :, i] = cv2.flip(self.current_img[:, :, i], 0)
-        self.clear_image_stacks()
-        self.img_size = self.current_img.shape[:2]
-        self.img_stacks.image_dict['tri_pnts'].set_range(self.img_size[1], self.img_size[0])
-        self.img_stacks.set_data(self.current_img)
+        self._transform_planes(lambda plane: cv2.flip(plane, 0))
 
     def image_horizon_flip(self):
         if self.image_file is None:
             return
-        # if self.image_file.is_rgb:
-        #     self.current_img = cv2.flip(self.current_img, 1)
-        # else:
-        for i in range(self.image_file.n_channels):
-            self.current_img[:, :, i] = cv2.flip(self.current_img[:, :, i], 1)
-        self.clear_image_stacks()
-        self.img_stacks.set_data(self.current_img)
-        self.img_size = self.current_img.shape[:2]
-        self.img_stacks.image_dict['tri_pnts'].set_range(self.img_size[1], self.img_size[0])
+        self._transform_planes(lambda plane: cv2.flip(plane, 1))
 
     def image_90_rotate(self):
         if self.image_file is None:
             return
-        temp = []
-        for i in range(self.image_file.n_channels):
-            self.img_stacks.image_list[i].clear()
-            temp.append(cv2.rotate(self.current_img[:, :, i], cv2.ROTATE_90_CLOCKWISE))
-        self.current_img = np.dstack(temp)
-        self.clear_image_stacks()
-        self.img_stacks.set_data(self.current_img)
-        self.img_size = self.current_img.shape[:2]
-        self.img_stacks.image_dict['tri_pnts'].set_range(self.img_size[1], self.img_size[0])
-        self.get_corner_and_lines()
-        # self.image_file.data['scene %d' % scene_index] = self.current_img.copy()
-        self.tb_size = np.flip(self.tb_size, 0)
+        self._transform_planes(lambda plane: cv2.rotate(plane, cv2.ROTATE_90_CLOCKWISE))
 
     def image_180_rotate(self):
         if self.image_file is None:
             return
-        # if self.image_file.is_rgb:
-        #     self.current_img = cv2.rotate(self.current_img, cv2.ROTATE_180)
-        # else:
-        temp = []
-        for i in range(self.image_file.n_channels):
-            self.img_stacks.image_list[i].clear()
-            temp.append(cv2.rotate(self.current_img[:, :, i], cv2.ROTATE_180))
-        self.current_img = np.dstack(temp)
-        self.clear_image_stacks()
-        self.img_stacks.set_data(self.current_img)
-        self.img_size = self.current_img.shape[:2]
-        self.img_stacks.image_dict['tri_pnts'].set_range(self.img_size[1], self.img_size[0])
+        self._transform_planes(lambda plane: cv2.rotate(plane, cv2.ROTATE_180))
 
     def image_90_counter_rotate(self):
         if self.image_file is None:
             return
-        # if self.image_file.is_rgb:
-        #     self.current_img = cv2.rotate(self.current_img, cv2.ROTATE_90_COUNTERCLOCKWISE)
-        # else:
-        temp = []
-        for i in range(self.image_file.n_channels):
-            self.img_stacks.image_list[i].clear()
-            temp.append(cv2.rotate(self.current_img[:, :, i], cv2.ROTATE_90_COUNTERCLOCKWISE))
-        self.current_img = np.dstack(temp)
-        self.clear_image_stacks()
-        self.img_stacks.set_data(self.current_img)
-        self.img_size = self.current_img.shape[:2]
-        self.img_stacks.image_dict['tri_pnts'].set_range(self.img_size[1], self.img_size[0])
-        self.get_corner_and_lines()
-        self.tb_size = np.flip(self.tb_size, 0)
+        self._transform_planes(
+            lambda plane: cv2.rotate(plane, cv2.ROTATE_90_COUNTERCLOCKWISE)
+        )
 
     def image_1_rotate(self, rotate_direction):
+        """Rotate by one degree without compounding interpolation.
+
+        Each step re-rotates the unrotated image by the accumulated angle, so
+        repeated steps cost one resampling instead of one per step.
+        """
         if self.image_file is None:
             return
-        if rotate_direction == 'clockwise':
-            rotation_angle = - 1
+        step = -1 if rotate_direction == 'clockwise' else 1
+        if self._fine_rotation_base is None:
+            self._fine_rotation_base = (
+                self.current_img.copy(),
+                None if self.volume_img is None else self.volume_img.copy(),
+            )
+            self._fine_rotation_angle = 0
+        self._fine_rotation_angle += step
+        base_img, base_volume = self._fine_rotation_base
+        angle = self._fine_rotation_angle
+        if base_volume is not None:
+            self.volume_img = np.stack([rotate(page, angle) for page in base_volume], axis=0)
+            self.current_img = np.dstack([self.volume_img[self.display_img_index]])
         else:
-            rotation_angle = 1
-        temp = []
-        for i in range(self.image_file.n_channels):
-            temp.append(rotate(self.current_img[:, :, i], rotation_angle))
-        self.current_img = np.dstack(temp)
-        self.clear_image_stacks()
-        self.img_stacks.set_data(self.current_img)
-        self.img_size = self.current_img.shape[:2]
-        self.img_stacks.image_dict['tri_pnts'].set_range(self.img_size[1], self.img_size[0])
-        self.get_corner_and_lines()
+            self.current_img = np.dstack(
+                [rotate(base_img[:, :, i], angle) for i in range(base_img.shape[2])]
+            )
+        self._after_geometry_change()
 
     # def clear_curve_widget(self):

@@ -30,6 +30,22 @@ def _hsv_colors(rgb_colors):
     return result
 
 
+def read_bitmap(path, flags=cv2.IMREAD_COLOR):
+    """Decode an image file with OpenCV, including non-ASCII paths.
+
+    ``cv2.imread`` cannot open paths outside the system code page on Windows,
+    so the bytes are read with NumPy and decoded in memory. Returns ``None``
+    when the file is unreadable or not an image.
+    """
+    try:
+        buffer = np.fromfile(str(path), dtype=np.uint8)
+    except OSError:
+        return None
+    if buffer.size == 0:
+        return None
+    return cv2.imdecode(buffer, flags)
+
+
 def _set_channel_metadata(reader, rgb_colors, channel_names):
     reader.rgb_colors = list(rgb_colors)
     reader.channel_name = list(channel_names)
@@ -54,11 +70,65 @@ class ImageReader(object):
         self.data_type = "uint8"
         _set_channel_metadata(self, RGB_COLORS, ["Red", "Green", "Blue"])
 
-        image = cv2.imread(str(image_file_path), cv2.IMREAD_COLOR)
+        image = read_bitmap(image_file_path, cv2.IMREAD_COLOR)
         if image is None:
             raise ValueError("OpenCV could not decode the selected image.")
         self.data = {"scene 0": cv2.cvtColor(image, cv2.COLOR_BGR2RGB)}
         self.scale = {"scene 0": 1.0}
+
+
+class EmbeddedImageReader(object):
+    """Recreate the active histology raster when its source is unavailable.
+
+    An embedded reader intentionally exposes one scene and one page.  The
+    original scene/page indices remain in project provenance, while the saved
+    active raster remains usable without pretending that unsaved source scenes
+    are available.
+    """
+
+    def __init__(self, image, metadata=None):
+        metadata = metadata or {}
+        image = np.asarray(image)
+        if image.ndim == 2:
+            image = image[..., None]
+        if image.ndim != 3 or image.shape[2] > MAX_CHANNELS:
+            raise ValueError("Embedded histology must be an H x W x C image.")
+
+        self.error_index = 0
+        self.is_czi = False
+        self.file_name_list = [metadata.get("display_name", "embedded-histology")]
+        self.n_scenes = 1
+        self.n_pages = 1
+        self.scaling_val = metadata.get("scaling_val")
+        self.is_rgb = bool(metadata.get("is_rgb", image.shape[2] in (3, 4)))
+        self.n_channels = int(metadata.get("n_channels", image.shape[2]))
+        if self.n_channels != image.shape[2]:
+            self.n_channels = image.shape[2]
+        self.data_type = metadata.get("data_type", image.dtype.name)
+        default_level = int(np.iinfo(image.dtype).max) if image.dtype.kind == "u" else 255
+        self.level = int(metadata.get("level", default_level))
+        self.pixel_type = metadata.get(
+            "pixel_type", "rgb24" if self.is_rgb else "gray{}".format(image.dtype.itemsize * 8)
+        )
+
+        if self.is_rgb:
+            default_colors = RGB_COLORS[: self.n_channels]
+            default_names = ["Red", "Green", "Blue"][: self.n_channels]
+        else:
+            default_colors = CHANNEL_COLORS[: self.n_channels]
+            default_names = CHANNEL_NAMES[: self.n_channels]
+        self.rgb_colors = [tuple(item) for item in metadata.get("rgb_colors", default_colors)]
+        self.channel_name = list(metadata.get("channel_name", default_names))
+        self.hsv_colors = [tuple(item) for item in metadata.get("hsv_colors", _hsv_colors(self.rgb_colors))]
+        self.gamma_val = list(metadata.get("gamma_val", []))
+        self.data = {"scene 0": image.copy()}
+        try:
+            image_scale = float(metadata.get("image_scale", 1.0))
+        except (TypeError, ValueError):
+            image_scale = 1.0
+        if not np.isfinite(image_scale) or image_scale <= 0:
+            image_scale = 1.0
+        self.scale = {"scene 0": image_scale}
 
 
 class TIFFReader(object):
@@ -173,8 +243,12 @@ class ImagesReader(object):
         if not paths:
             raise ValueError("The selected folder contains no supported images.")
 
+        if all(path.suffix.lower() in (".tif", ".tiff") for path in paths):
+            self._read_tiff_scenes(paths)
+            return
+
         for scene_id, path in enumerate(paths):
-            image = cv2.imread(str(path), cv2.IMREAD_COLOR)
+            image = read_bitmap(path, cv2.IMREAD_COLOR)
             if image is None:
                 raise ValueError("Could not decode image: {}".format(path.name))
             self.file_name_list.append(path.stem)
@@ -183,4 +257,44 @@ class ImagesReader(object):
             )
             self.scale["scene {}".format(scene_id)] = 1.0
 
+        self.n_scenes = len(self.data)
+
+    def _read_tiff_scenes(self, paths):
+        """Read a TIFF folder at its native bit depth and channel layout.
+
+        Every file must share one layout, because the scenes share channel
+        controls; otherwise the folder is rejected rather than silently
+        reduced to eight-bit RGB.
+        """
+        layout = None
+        for scene_id, path in enumerate(paths):
+            tiff = TIFFReader(path)
+            if tiff.error_index != 0 or tiff.n_pages != 1:
+                raise ValueError(
+                    "{} is not a single-page grayscale, channel or RGB TIFF.".format(
+                        path.name
+                    )
+                )
+            current = (
+                tiff.data_type,
+                tiff.n_channels,
+                tiff.is_rgb,
+                tiff.data["scene 0"].shape[2:],
+            )
+            if layout is None:
+                layout = current
+                self.is_rgb = tiff.is_rgb
+                self.n_channels = tiff.n_channels
+                self.level = tiff.level
+                self.data_type = tiff.data_type
+                self.pixel_type = tiff.pixel_type
+                _set_channel_metadata(self, tiff.rgb_colors, tiff.channel_name)
+            elif current != layout:
+                raise ValueError(
+                    "{} has a different bit depth or channel layout from the "
+                    "other TIFF files in the folder.".format(path.name)
+                )
+            self.file_name_list.append(path.stem)
+            self.data["scene {}".format(scene_id)] = tiff.data["scene 0"]
+            self.scale["scene {}".format(scene_id)] = 1.0
         self.n_scenes = len(self.data)

@@ -1,20 +1,41 @@
 import gzip
 import os
 from os.path import dirname, join
-from PyQt6.QtWidgets import *
-from PyQt6.QtGui import *
-from PyQt6.QtCore import *
+from PyQt6.QtWidgets import (
+    QDialog,
+    QDialogButtonBox,
+    QFileDialog,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QProgressBar,
+    QPushButton,
+    QRadioButton,
+    QVBoxLayout,
+)
+from PyQt6.QtGui import QIntValidator
+from PyQt6.QtCore import (
+    QObject,
+    QThread,
+    Qt,
+    pyqtSignal,
+)
 import pyqtgraph.opengl as gl
 
 import nrrd
-import pickle
 import shutil
 import numpy as np
+from .persistence import write_cache_pickle
 import pandas as pd
 
-from .atlas_loader import process_atlas_raw_data
-from .uuuuuu import hex2rgb, obj_data_to_mesh3d, make_contour_img
-from .obj_items import render_volume, render_small_volume
+from .atlas_loader import (
+    begin_atlas_processing,
+    finish_atlas_processing,
+)
+from .utils import hex2rgb, obj_data_to_mesh3d, make_contour_img
+from .obj_items import load_mesh_file, render_small_volume
 from .atlas_downloader import DownloadThread
 from .atlas_transform import (
     compact_boundary_volume,
@@ -22,7 +43,7 @@ from .atlas_transform import (
     make_boundary_dict,
     normalize_atlas_volume,
 )
-from .download_utils import download_file
+from .download_utils import download_file, thread_is_running
 from .probe_reconstruction import allen_ccf_estimated_bregma_vox
 
 
@@ -114,6 +135,7 @@ class WorkerProcessAllen(QObject):
     def run(self):
         try:
             self._run()
+            finish_atlas_processing(self.saving_folder)
         except Exception as exc:
             self.failed.emit(str(exc))
             return
@@ -152,9 +174,10 @@ class WorkerProcessAllen(QObject):
         axis_info = {'to_HERBS': (2, 0, 1), 'from_HERBS': (1, 2, 0), 'direction_change': (True, True, False),
                      'size': tuple(atlas_size)}
 
-        outfile_axis = open(os.path.join(self.saving_folder, 'atlas_axis_info.pkl'), 'wb')
-        pickle.dump(axis_info, outfile_axis)
-        outfile_axis.close()
+        # From the first cache write until success, mark the folder as
+        # incomplete so a stopped run is never loaded as a whole atlas.
+        begin_atlas_processing(self.saving_folder)
+        write_cache_pickle(os.path.join(self.saving_folder, 'atlas_axis_info.pkl'), axis_info)
 
         downloaded_mesh_path = os.path.join(self.saving_folder, 'downloaded_meshes')
 
@@ -190,9 +213,7 @@ class WorkerProcessAllen(QObject):
 
                     md = gl.MeshData(vertexes=verts, faces=faces)
 
-                    outfile = open(os.path.join(mesh_path, '{}.pkl'.format(ind)), 'wb')
-                    pickle.dump(md, outfile)
-                    outfile.close()
+                    write_cache_pickle(os.path.join(mesh_path, '{}.pkl'.format(ind)), md)
                 except IndexError:
                     missing_mesh_index.append(ind)
             else:
@@ -204,9 +225,8 @@ class WorkerProcessAllen(QObject):
 
         self.progress.emit(31)
 
-        infile = open(os.path.join(self.saving_folder, 'atlas_meshdata.pkl'), 'rb')
-        self.mesh_data = pickle.load(infile)
-        infile.close()
+        self.mesh_data = load_mesh_file(
+            os.path.join(self.saving_folder, 'atlas_meshdata.pkl'))
         self.progress.emit(33)
 
         self.status.emit("Preparing the Allen label hierarchy...")
@@ -248,8 +268,7 @@ class WorkerProcessAllen(QObject):
                            'color': rgb_colors,
                            'level_indicator': levels}
 
-        with open(os.path.join(self.saving_folder, 'atlas_labels.pkl'), 'wb') as handle:
-            pickle.dump(self.label_info, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        write_cache_pickle(os.path.join(self.saving_folder, 'atlas_labels.pkl'), self.label_info)
 
         self.progress.emit(38)
 
@@ -287,25 +306,20 @@ class WorkerProcessAllen(QObject):
         atlas = {'data': self.atlas_data, 'info': self.atlas_info}
 
         self.status.emit("Saving the normalized atlas cache; this file can be large...")
-        outfile = open(os.path.join(self.saving_folder, 'atlas_pre_made.pkl'), 'wb')
-        pickle.dump(atlas, outfile)
-        outfile.close()
+        write_cache_pickle(os.path.join(self.saving_folder, 'atlas_pre_made.pkl'), atlas)
         self.progress.emit(53)
 
         self.status.emit("Transforming the annotation volume...")
         self.segmentation_data = np.transpose(label_data[::-1, ::-1, :], (2, 0, 1))
         self.segmentation_data = compact_label_volume(self.segmentation_data)
         del label_data
-        print(self.segmentation_data.shape)
 
         self.progress.emit(54)
 
         segment = {'data': self.segmentation_data, 'unique_label': self.unique_label}
 
         self.status.emit("Saving the annotation cache; this file can be large...")
-        outfile = open(os.path.join(self.saving_folder, 'segment_pre_made.pkl'), 'wb')
-        pickle.dump(segment, outfile)
-        outfile.close()
+        write_cache_pickle(os.path.join(self.saving_folder, 'segment_pre_made.pkl'), segment)
 
         self.progress.emit(58)
 
@@ -348,16 +362,12 @@ class WorkerProcessAllen(QObject):
             file_name = os.path.basename(da_file)
             da_name, file_extension = os.path.splitext(file_name)
             if file_extension == '.pkl':
-                infile = open(os.path.join(mesh_path, da_file), 'rb')
-                md = pickle.load(infile)
-                infile.close()
+                md = load_mesh_file(os.path.join(mesh_path, da_file))
 
                 self.small_mesh_list[str(da_name)] = md
 
         self.status.emit("Saving the processed structure-mesh cache...")
-        outfile = open(os.path.join(self.saving_folder, 'atlas_small_meshdata.pkl'), 'wb')
-        pickle.dump(self.small_mesh_list, outfile)
-        outfile.close()
+        write_cache_pickle(os.path.join(self.saving_folder, 'atlas_small_meshdata.pkl'), self.small_mesh_list)
         self.progress.emit(70)
 
         segment_data_shape = self.segmentation_data.shape
@@ -383,9 +393,7 @@ class WorkerProcessAllen(QObject):
             sagital_contour_img[i, :, :] = compact_boundary_volume(contour_img)
 
         self.status.emit("Saving the sagittal boundary cache...")
-        outfile_ct = open(os.path.join(self.saving_folder, 'sagital_contour_pre_made.pkl'), 'wb')
-        pickle.dump(sagital_contour_img, outfile_ct)
-        outfile_ct.close()
+        write_cache_pickle(os.path.join(self.saving_folder, 'sagital_contour_pre_made.pkl'), sagital_contour_img)
         self.progress.emit(80)
 
         process_index = np.linspace(80, 88, segment_data_shape[1])
@@ -403,9 +411,7 @@ class WorkerProcessAllen(QObject):
             coronal_contour_img[:, i, :] = compact_boundary_volume(contour_img)
 
         self.status.emit("Saving the coronal boundary cache...")
-        outfile_ct = open(os.path.join(self.saving_folder, 'coronal_contour_pre_made.pkl'), 'wb')
-        pickle.dump(coronal_contour_img, outfile_ct)
-        outfile_ct.close()
+        write_cache_pickle(os.path.join(self.saving_folder, 'coronal_contour_pre_made.pkl'), coronal_contour_img)
         self.progress.emit(90)
 
         process_index = np.linspace(90, 98, segment_data_shape[2])
@@ -423,9 +429,7 @@ class WorkerProcessAllen(QObject):
             horizontal_contour_img[:, :, i] = compact_boundary_volume(contour_img)
 
         self.status.emit("Saving the horizontal boundary cache...")
-        outfile_ct = open(os.path.join(self.saving_folder, 'horizontal_contour_pre_made.pkl'), 'wb')
-        pickle.dump(horizontal_contour_img, outfile_ct)
-        outfile_ct.close()
+        write_cache_pickle(os.path.join(self.saving_folder, 'horizontal_contour_pre_made.pkl'), horizontal_contour_img)
 
         self.status.emit("Finalizing atlas boundaries...")
         self.boundary = make_boundary_dict(
@@ -490,8 +494,8 @@ class MeshDownloader(QObject):
                     download_file(
                         url,
                         destination,
-                        progress=lambda value, base=index: self.progress.emit(
-                            base * 100 + value, progress_maximum
+                        progress=lambda value, base=index, total=progress_maximum: (
+                            self.progress.emit(base * 100 + value, total)
                         ),
                     )
                 self.progress.emit((index + 1) * 100, progress_maximum)
@@ -781,7 +785,7 @@ class AllenDownloader(QDialog):
         self.downloading_atlas = self.has_active_downloads()
 
     def has_active_downloads(self):
-        return any(thread.isRunning() for thread in self.download_threads.values())
+        return any(thread_is_running(thread) for thread in self.download_threads.values())
 
     def mesh_download_failed(self, message):
         self.downloading_meshes = False
@@ -890,8 +894,8 @@ class AllenDownloader(QDialog):
             return
         if (
             self.has_active_downloads()
-            or self.mesh_thread.isRunning()
-            or self.thread.isRunning()
+            or thread_is_running(self.mesh_thread)
+            or thread_is_running(self.thread)
         ):
             QMessageBox.information(
                 self, 'Operation in progress', 'Please wait for the active operation to finish.'

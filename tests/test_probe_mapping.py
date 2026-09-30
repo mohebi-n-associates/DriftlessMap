@@ -3,11 +3,39 @@ import unittest
 import numpy as np
 
 from driftlessmap.probe_utiles import (
+    MultiProbes,
+    Probe,
     calculate_probe_info,
+    calculate_vector_according_to_site_face,
+    PROBE_TRACK_TOO_SHORT,
+    get_angles,
+    get_label_name,
     find_probe_surface_entry,
+    get_vis_data,
     line_fit_2d,
     robust_probe_line_fit,
 )
+
+
+class ProbeSettingsPersistenceTests(unittest.TestCase):
+    def test_probe_settings_round_trip_includes_face(self):
+        probe = Probe()
+        probe.set_np2()
+        probe.probe_faces_changed("Left")
+        saved = probe.get_settings()
+
+        restored = Probe()
+        restored.set_settings(saved)
+
+        self.assertEqual(restored.get_settings(), saved)
+
+    def test_multi_probe_settings_can_be_cleared_and_restored(self):
+        probes = MultiProbes()
+        saved = {"x_vals": [1, 2], "y_vals": [3, 4], "faces": [0, 1]}
+        probes.set_multi_probes(saved)
+        self.assertEqual(probes.get_multi_settings(), saved)
+        probes.set_multi_probes(None)
+        self.assertIsNone(probes.get_multi_settings())
 
 
 class ProbeMappingTests(unittest.TestCase):
@@ -137,6 +165,163 @@ class ProbeMappingTests(unittest.TestCase):
             track["structure_acronym"], ["TR"] * track["count"]
         )
 
+
+
+class SiteFaceFrameTests(unittest.TestCase):
+    DIRECTIONS = [
+        [0.0, 0.0, -1.0],
+        [0.5, 0.5, -np.sqrt(0.5)],
+        [-0.3, 0.2, -0.93],
+        [0.1, -0.6, -0.79],
+        [0.8, 0.0, -0.6],
+    ]
+
+    def test_every_face_is_an_orthonormal_right_handed_frame(self):
+        for direction in self.DIRECTIONS:
+            for face in range(4):
+                with self.subTest(direction=direction, face=face):
+                    r_hat, u_hat, n_hat = calculate_vector_according_to_site_face(
+                        np.asarray(direction), face
+                    )
+                    for vector in (r_hat, u_hat, n_hat):
+                        self.assertAlmostEqual(np.linalg.norm(vector), 1.0)
+                    self.assertAlmostEqual(float(np.dot(r_hat, u_hat)), 0.0)
+                    self.assertAlmostEqual(float(np.dot(r_hat, n_hat)), 0.0)
+                    self.assertAlmostEqual(float(np.dot(u_hat, n_hat)), 0.0)
+                    np.testing.assert_allclose(
+                        np.cross(r_hat, u_hat), n_hat, atol=1e-12
+                    )
+
+    def test_faces_are_rotations_of_face_zero_about_the_shank(self):
+        for direction in self.DIRECTIONS:
+            _, u0, n0 = calculate_vector_according_to_site_face(
+                np.asarray(direction), 0
+            )
+            frames = [
+                calculate_vector_according_to_site_face(np.asarray(direction), face)
+                for face in range(4)
+            ]
+            np.testing.assert_allclose(frames[1][1:], [-u0, -n0], atol=1e-12)
+            np.testing.assert_allclose(frames[2][1:], [-n0, u0], atol=1e-12)
+            np.testing.assert_allclose(frames[3][1:], [n0, -u0], atol=1e-12)
+
+    def test_vertical_probe_faces_match_the_documented_axes(self):
+        direction = np.array([0.0, 0.0, -1.0])
+        expected_normals = {
+            0: [0, 1, 0],
+            1: [0, -1, 0],
+            2: [-1, 0, 0],
+            3: [1, 0, 0],
+        }
+        for face, normal in expected_normals.items():
+            _, _, n_hat = calculate_vector_according_to_site_face(direction, face)
+            np.testing.assert_allclose(n_hat, normal, atol=1e-12)
+
+
+class ProbeRobustnessTests(unittest.TestCase):
+    LABEL_INFO = {
+        "index": np.array([10]),
+        "label": np.array(["Test region"]),
+        "abbrev": np.array(["TR"]),
+        "color": np.array([[1, 2, 3]]),
+        "parent": np.array([0]),
+        "level_indicator": [1],
+    }
+
+    def settings(self, **overrides):
+        settings = {
+            "probe_type": 2,
+            "probe_type_name": "Linear-Silicon",
+            "probe_thickness": 0,
+            "probe_length": 600,
+            "tip_length": 50,
+            "site_height": 10,
+            "site_width": 10,
+            "per_max_sites": [5],
+            "sites_distance": [100],
+            "x_bias": [0],
+            "y_bias": [50],
+            "site_number_in_banks": None,
+            "multi_shanks": None,
+        }
+        settings.update(overrides)
+        return settings
+
+    def reconstruct(self, labels, settings):
+        points = [np.array([[0.0, 0.0, 25.0], [0.0, 0.0, -30.0]])]
+        return calculate_probe_info(
+            points,
+            ["probe piece"],
+            labels,
+            self.LABEL_INFO,
+            vxsize_um=10,
+            probe_settings=settings,
+            merge_sites=False,
+            bregma=np.array([50.0, 50.0, 50.0]),
+            site_face=0,
+            n_hat=None,
+            pre_plan=False,
+        )
+
+    def labels(self, region=10):
+        labels = np.zeros((101, 101, 101), dtype=np.int32)
+        labels[5:96, 5:96, 20:81] = region
+        return labels
+
+    def test_track_without_room_for_sites_reports_an_error(self):
+        _, error = self.reconstruct(self.labels(), self.settings(y_bias=[5000]))
+        self.assertEqual(error, PROBE_TRACK_TOO_SHORT)
+
+    def test_labels_missing_from_the_ontology_are_named_unknown(self):
+        names, acronyms, colors = get_label_name(self.LABEL_INFO, [10, 99, 0])
+        self.assertEqual(names[:2], ["Test region", "Unknown [99]"])
+        self.assertEqual(acronyms[1], "?99")
+        np.testing.assert_array_equal(colors[1], [128, 128, 128])
+        info, error = self.reconstruct(self.labels(region=99), self.settings())
+        self.assertEqual(error, 0)
+        self.assertIn("Unknown [99]", info["label_name"])
+
+    def test_horizontal_directions_have_finite_angles(self):
+        for direction in ([1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, -1.0]):
+            angles = get_angles(np.asarray(direction))
+            self.assertTrue(np.all(np.isfinite(angles)), direction)
+
+
+class SurfaceAndRegionLengthTests(unittest.TestCase):
+    def test_entry_ignores_tissue_above_a_gap_in_the_track(self):
+        labels = np.zeros((20, 20, 60), dtype=np.int32)
+        labels[:, :, 5:30] = 1   # tissue the probe actually traverses
+        labels[:, :, 40:50] = 2  # overhanging tissue above an empty gap
+        bregma = np.zeros(3)
+        direction = np.array([0.0, 0.0, -1.0])
+        anchor = np.array([10.0, 10.0, 25.0])
+        surface, error = find_probe_surface_entry(
+            labels, np.array([10.0, 10.0, 15.0]), direction, bregma, anchor=anchor
+        )
+        self.assertEqual(error, 0)
+        self.assertGreaterEqual(surface[2], 29)
+        self.assertLess(surface[2], 30.01)
+
+        # A traced start above the brain still finds the tissue below it.
+        surface, error = find_probe_surface_entry(
+            labels, np.array([10.0, 10.0, 15.0]), direction, bregma,
+            anchor=np.array([10.0, 10.0, 35.0]),
+        )
+        self.assertEqual(error, 0)
+        self.assertLess(surface[2], 30.01)
+
+    def test_region_length_is_averaged_over_columns_that_enter_it(self):
+        rows = 4
+        axial = np.array([0.0, 10.0, 20.0, 30.0])
+        column = np.column_stack([axial, np.zeros(rows), np.zeros(rows)])
+        column_loc = [column, column.copy()]
+        # Group 1 is entered only by column 0, over its upper two rows,
+        # which span axial bounds 15 to 30 um.
+        group_mat = np.array([[0, 0], [0, 0], [1, 0], [1, 0]], dtype=float)
+        sites = [np.array([[5.0, 0.0, 0.0]]), np.array([[5.0, 0.0, 0.0]])]
+        _vis, lengths, _sites, _text = get_vis_data(group_mat, column_loc, sites, None, 10)
+        self.assertEqual(len(lengths), 2)
+        self.assertAlmostEqual(lengths[1], 15.0)
 
 if __name__ == "__main__":
     unittest.main()

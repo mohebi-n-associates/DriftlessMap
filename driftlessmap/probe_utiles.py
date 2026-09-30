@@ -1,13 +1,6 @@
-import os
 import numpy as np
 import math
 import pandas as pd
-import cv2
-import pickle
-import colorsys
-import pyqtgraph as pg
-from scipy.interpolate import interp1d, splprep, splev
-from .uuuuuu import rotation_z, rotation_x, rotation_y
 from .coordinate_validation import (
     coordinate_groups_in_bounds,
     coordinates_in_bounds,
@@ -17,6 +10,56 @@ from .version import __version__
 
 
 PROBE_COORDINATES_OUTSIDE_ATLAS = 16
+PROBE_TRACK_TOO_SHORT = 17
+
+PROBE_ERROR_MESSAGES = {
+    PROBE_COORDINATES_OUTSIDE_ATLAS: (
+        "the fitted probe track leaves the atlas volume or never reaches "
+        "labeled brain tissue"
+    ),
+    PROBE_TRACK_TOO_SHORT: (
+        "the track inside the brain is too short to hold the tip and a "
+        "recording site in every column; check the probe length, tip length "
+        "and site offsets"
+    ),
+}
+
+
+def linear_silicon_settings_error(settings):
+    """Return why linear-silicon geometry is unusable, or ``None``."""
+    if settings["probe_length"] <= 0:
+        return "Linear Silicon Probe can not be length 0 um."
+    if not 0 <= settings["tip_length"] < settings["probe_length"]:
+        return "The tip length must be shorter than the probe length."
+    if settings["site_height"] <= 0:
+        return "Site height can not be 0 um."
+    if settings["site_width"] <= 0:
+        return "Site width can not be 0 um."
+    columns = zip(
+        settings["per_max_sites"],
+        settings["sites_distance"],
+        settings["y_bias"],
+    )
+    shank_length = settings["probe_length"] - settings["tip_length"]
+    for column, (n_sites, distance, y_bias) in enumerate(columns, start=1):
+        if n_sites <= 0 or distance <= 0:
+            return (
+                "Column {} needs at least one site and a positive site "
+                "distance.".format(column)
+            )
+        if not 0 <= y_bias < shank_length:
+            return (
+                "Column {} starts {} um above the tip, beyond the {} um shank, "
+                "so it has no sites.".format(column, y_bias, shank_length)
+            )
+    return None
+
+
+def probe_error_message(error_index):
+    """Return a readable explanation for a probe reconstruction error code."""
+    return PROBE_ERROR_MESSAGES.get(
+        error_index, "probe reconstruction failed (code {})".format(error_index)
+    )
 _LINE_SAMPLE_STEP_VOX = 0.25
 
 
@@ -234,8 +277,49 @@ def line_fit(points, return_diagnostics=False):
     return result[:4]
 
 
-def find_probe_surface_entry(label_data, center, direction, bregma):
-    """Find the first labeled atlas voxel along the fitted insertion line."""
+def _contiguous_surface_point(origin, direction, shape, is_occupied, anchor):
+    """Return the brain entry continuous with ``anchor`` along a line.
+
+    Samples run along ``direction`` (ventrally). From the sample nearest the
+    anchor, the search walks dorsally through contiguous tissue to its edge,
+    or, when the anchor lies outside the brain, ventrally to the first tissue.
+    Tissue the extended line crosses elsewhere, for example under a cortical
+    overhang, is ignored.
+    """
+    interval = _line_box_interval(origin, direction, shape)
+    if interval is None:
+        return None
+    lower, upper = interval
+    sample_count = max(
+        2, int(np.ceil((upper - lower) / _LINE_SAMPLE_STEP_VOX)) + 1
+    )
+    distances = np.linspace(lower, upper, sample_count)
+    coordinates = origin + distances[:, None] * direction
+    indexes = np.floor(coordinates).astype(int)
+    indexes = np.clip(indexes, 0, np.asarray(shape, dtype=int) - 1)
+    occupied = np.asarray(is_occupied(indexes), dtype=bool)
+    if not np.any(occupied):
+        return None
+    anchor_distance = float(np.dot(np.asarray(anchor, dtype=float) - origin, direction))
+    start = int(np.clip(np.searchsorted(distances, anchor_distance), 0, sample_count - 1))
+    if occupied[start]:
+        outside = np.flatnonzero(~occupied[:start])
+        first = int(outside[-1]) + 1 if len(outside) else 0
+    else:
+        inside = np.flatnonzero(occupied[start:])
+        if not len(inside):
+            return None
+        first = start + int(inside[0])
+    return coordinates[first]
+
+
+def find_probe_surface_entry(label_data, center, direction, bregma, anchor=None):
+    """Find where the fitted insertion line enters the brain.
+
+    With ``anchor`` (the dorsal end of the traced points), the entry is the
+    surface continuous with the traced track. Without it, the first labeled
+    voxel along the whole line is used.
+    """
     label_data = np.asarray(label_data)
     absolute_center = np.asarray(center, dtype=float) + np.asarray(
         bregma, dtype=float
@@ -243,6 +327,18 @@ def find_probe_surface_entry(label_data, center, direction, bregma):
 
     def occupied(indexes):
         return label_data[indexes[:, 0], indexes[:, 1], indexes[:, 2]] != 0
+
+    if anchor is not None:
+        surface = _contiguous_surface_point(
+            absolute_center,
+            np.asarray(direction, dtype=float),
+            label_data.shape,
+            occupied,
+            np.asarray(anchor, dtype=float) + np.asarray(bregma, dtype=float),
+        )
+        if surface is None:
+            return np.asarray(center, dtype=float), PROBE_COORDINATES_OUTSIDE_ATLAS
+        return surface - np.asarray(bregma, dtype=float), 0
 
     surface = _first_occupied_point(
         absolute_center,
@@ -259,15 +355,21 @@ def get_angles(direction):
     direction = direction / np.linalg.norm(direction)
 
     vertical_vec = np.array([0, 0, 1])
+    def plane_angle(projection):
+        # A direction with no component in this plane has no tilt in it.
+        norm = np.linalg.norm(projection)
+        if norm < 1e-12:
+            return 0.0
+        cosine = np.dot(projection / norm, vertical_vec)
+        return math.acos(float(np.clip(cosine, -1.0, 1.0)))
+
     ap_proj = direction.copy()
     ap_proj[0] = 0
-    ap_proj = ap_proj / np.linalg.norm(ap_proj)
     ml_proj = direction.copy()
     ml_proj[1] = 0
-    ml_proj = ml_proj / np.linalg.norm(ml_proj)
 
-    ap_val = math.acos(np.max([np.min([np.dot(ap_proj, vertical_vec), 1]), -1]))
-    ml_val = math.acos(np.max([np.min([np.dot(ml_proj, vertical_vec), 1]), -1]))
+    ap_val = plane_angle(ap_proj)
+    ml_val = plane_angle(ml_proj)
 
     ap_angle = np.degrees(ap_val)
     ml_angle = np.degrees(ml_val)
@@ -596,7 +698,9 @@ def get_vis_data(group_mat, column_loc, sites_loc, sites_line_count, vox_size):
                 valid_sites = np.sum(column_n_sites[i][valid_ind])
                 temp.append(valid_length)
                 temp_sites.append(valid_sites)
-        group_length.append(np.sum(temp) / n_column)
+        # Average over the columns that actually pass through the region;
+        # columns that never enter it must not dilute its length.
+        group_length.append(np.sum(temp) / len(temp) if temp else 0.0)
         group_n_sites.append(np.sum(temp_sites))
 
     text_loc = []
@@ -643,7 +747,14 @@ def get_label_name(label_info, region_label):
             label_acronym.append(" ")
             label_color.append((128, 128, 128))
         else:
-            da_ind = np.where(np.ravel(label_info["index"]) == region_label[i])[0][0]
+            matches = np.where(np.ravel(label_info["index"]) == region_label[i])[0]
+            if len(matches) == 0:
+                # The volume contains an ID the ontology does not describe.
+                label_names.append("Unknown [{}]".format(int(region_label[i])))
+                label_acronym.append("?{}".format(int(region_label[i])))
+                label_color.append((128, 128, 128))
+                continue
+            da_ind = matches[0]
             label_names.append(label_info["label"][da_ind])
             label_acronym.append(label_info["abbrev"][da_ind])
             label_color.append(label_info["color"][da_ind])
@@ -719,7 +830,7 @@ def get_pnt_from_loc(sct, loc, n_vec, u_vec, r_vec, bregma, vox_size):
         temp = temp / vox_size
         pnt.append(temp)
         vox_temp = temp + bregma
-        vox_temp = vox_temp.astype(int)
+        vox_temp = np.floor(vox_temp).astype(int)
         pnt_vox.append(vox_temp)
 
     return pnt, pnt_vox
@@ -864,7 +975,7 @@ def calculate_probe_info(
     # # print(pc_start_vox)
     # correct probe center start point
     pc_sp, error_index = find_probe_surface_entry(
-        label_data, avg, direction, bregma
+        label_data, avg, direction, bregma, anchor=pc_start_pnt
     )
     if error_index != 0:
         return data_dict, error_index
@@ -894,9 +1005,9 @@ def calculate_probe_info(
     }
 
     pv_sp = pc_sp + bregma
-    pv_sp = pv_sp.astype(int)
+    pv_sp = np.floor(pv_sp).astype(int)
     pv_ep = pc_ep + bregma
-    pv_ep = pv_ep.astype(int)
+    pv_ep = np.floor(pv_ep).astype(int)
 
     enter_coords = pc_sp * vxsize_um
     end_coords = pc_ep * vxsize_um
@@ -920,6 +1031,11 @@ def calculate_probe_info(
     sites_loc_to_base_temp = get_sites_loc_related_to_base_center(
         probe_settings, probe_length_without_tip_um
     )
+    if probe_type_name != "Tetrode" and (
+        probe_length_without_tip_um <= 0
+        or any(len(column) == 0 for column in sites_loc_to_base_temp)
+    ):
+        return data_dict, PROBE_TRACK_TOO_SHORT
     # print('sites_loc_to_base')
     # print(sites_loc_to_base)
 
@@ -935,7 +1051,8 @@ def calculate_probe_info(
     else:
         contact_pnt = [np.asarray([pc_ep], dtype=float) for _ in range(4)]
         contact_vox = [
-            np.asarray([pc_ep + bregma], dtype=float).astype(int) for _ in range(4)
+            np.floor(np.asarray([pc_ep + bregma], dtype=float)).astype(int)
+            for _ in range(4)
         ]
 
     if not coordinate_groups_in_bounds(contact_vox, label_data.shape):
@@ -997,7 +1114,7 @@ def calculate_probe_info(
     else:
         sites_pnt = [np.array([pc_ep])]
         sites_vox_temp = sites_pnt[0] + bregma
-        sites_vox = [sites_vox_temp.astype(int)]
+        sites_vox = [np.floor(sites_vox_temp).astype(int)]
 
     if not coordinate_groups_in_bounds(sites_vox, label_data.shape):
         return data_dict, PROBE_COORDINATES_OUTSIDE_ATLAS
@@ -1067,7 +1184,7 @@ def calculate_probe_info(
         np.asarray(pc_sp, dtype=float)
         + (track_depth_um / vxsize_um)[:, None] * track_direction
     )
-    track_vox = (track_pnt + np.asarray(bregma, dtype=float)).astype(int)
+    track_vox = np.floor(track_pnt + np.asarray(bregma, dtype=float)).astype(int)
     if not coordinates_in_bounds(track_vox, label_data.shape):
         return None, PROBE_COORDINATES_OUTSIDE_ATLAS
     track_labels = label_data[
@@ -1098,6 +1215,7 @@ def calculate_probe_info(
         axis_info=atlas_metadata.get("axis_info"),
         atlas_identifier=atlas_metadata.get("identifier"),
         atlas_path=atlas_metadata.get("path"),
+        atlas_reference=atlas_metadata.get("reference"),
         software_version=__version__,
         trajectory_fit=trajectory_fit,
     )
@@ -1155,49 +1273,34 @@ def get_vector_according_to_site_face(n_hat, u_hat, site_face):
 
 
 def calculate_vector_according_to_site_face(direction, site_face):
+    """Return the ``(r_hat, u_hat, n_hat)`` probe frame for a site face.
+
+    ``r_hat`` runs along the shank, ``u_hat`` across the shank face and
+    ``n_hat`` out of the face with the sites. Face 0 defines the reference
+    frame; the others rotate it about the shank: face 1 by 180 degrees and
+    faces 2 and 3 by 90 degrees to either side. Every frame is therefore
+    orthonormal and right-handed, whatever the probe tilt.
+    """
     # for after surgery
-    r_hat = direction.copy()
-    if check_parallel_to_z(direction):
-        if site_face == 0:
-            n_hat = np.array([0, 1, 0])
-            u_hat = np.cross(n_hat, r_hat)
-        elif site_face == 1:
-            n_hat = np.array([0, -1, 0])
-            u_hat = np.cross(n_hat, r_hat)
-        elif site_face == 2:
-            n_hat = np.array([-1, 0, 0])
-            u_hat = np.cross(n_hat, r_hat)
-        elif site_face == 3:
-            n_hat = np.array([1, 0, 0])
-            u_hat = np.cross(n_hat, r_hat)
-        else:
-            n_hat = None
-            u_hat = None
-            print("Site face can only be 0-Up, 1-Down, 2-Left, 3-Right.")
+    r_hat = np.asarray(direction, dtype=float).copy()
+    r_hat = r_hat / np.linalg.norm(r_hat)
+    if check_parallel_to_z(r_hat):
+        n0 = np.array([0.0, 1.0, 0.0])
+        u0 = np.cross(n0, r_hat)
     else:
-        if site_face == 0:
-            t_hat = np.array([-r_hat[1], r_hat[0], 0])
-            u_hat = t_hat / np.linalg.norm(t_hat)
-            n_hat = np.cross(r_hat, u_hat)
-        elif site_face == 1:
-            t_hat = np.array([r_hat[1], r_hat[0], 0])
-            u_hat = t_hat / np.linalg.norm(t_hat)
-            n_hat = np.cross(r_hat, u_hat)
-        elif site_face == 2:
-            t_hat = np.array([-r_hat[1], r_hat[0], 0])
-            n_hat = t_hat / np.linalg.norm(t_hat)
-            u_hat = np.cross(n_hat, r_hat)
-        elif site_face == 3:
-            t_hat = np.array([r_hat[1], r_hat[0], 0])
-            n_hat = t_hat / np.linalg.norm(t_hat)
-            u_hat = np.cross(n_hat, r_hat)
-        else:
-            n_hat = None
-            u_hat = None
-            print("Site face can only be 0-Up, 1-Down, 2-Left, 3-Right.")
-        # print('t_hat', t_hat)
-        # print(n_hat)
-        # print(u_hat)
+        t_hat = np.array([-r_hat[1], r_hat[0], 0.0])
+        u0 = t_hat / np.linalg.norm(t_hat)
+        n0 = np.cross(r_hat, u0)
+    frames = {
+        0: (u0, n0),
+        1: (-u0, -n0),
+        2: (-n0, u0),
+        3: (n0, -u0),
+    }
+    if site_face not in frames:
+        print("Site face can only be 0-Up, 1-Down, 2-Left, 3-Right.")
+        return r_hat, None, None
+    u_hat, n_hat = frames[site_face]
     return r_hat, u_hat, n_hat
 
 
@@ -1361,8 +1464,24 @@ class Probe(object):
             "y_bias": self.y_bias,
             "site_number_in_banks": self.site_number_in_banks,
             "multi_shanks": self.multi_shanks,
+            "faces": self.faces,
         }
         return data
+
+    def set_settings(self, settings):
+        """Restore a complete saved probe design, including its face."""
+        probe_type = int(settings["probe_type"])
+        if probe_type == 0:
+            self.set_np1()
+        elif probe_type == 1:
+            self.set_np2()
+        elif probe_type == 2:
+            self.set_linear_silicon(settings)
+        elif probe_type == 3:
+            self.set_tetrode()
+        else:
+            raise ValueError("Unknown probe type: {}".format(probe_type))
+        self.faces = settings.get("faces", self.faces)
 
     def probe_faces_changed(self, face_direction):
         self.faces = face_direction
@@ -1386,6 +1505,11 @@ class MultiProbes(object):
         self.faces = None
 
     def set_multi_probes(self, multi_settings):
+        if multi_settings is None:
+            self.x_vals = None
+            self.y_vals = None
+            self.faces = None
+            return
         self.x_vals = multi_settings["x_vals"]
         self.y_vals = multi_settings["y_vals"]
         self.faces = multi_settings["faces"]

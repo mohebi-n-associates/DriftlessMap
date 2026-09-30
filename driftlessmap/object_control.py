@@ -1,15 +1,45 @@
-import os
-import sys
 import numpy as np
+from natsort import natsorted
 from random import randint
 import pyqtgraph as pg
-from PyQt6.QtWidgets import *
-from PyQt6.QtGui import *
-from PyQt6.QtCore import *
+from PyQt6.QtWidgets import (
+    QAbstractItemView,
+    QBoxLayout,
+    QColorDialog,
+    QComboBox,
+    QDialog,
+    QDialogButtonBox,
+    QFileDialog,
+    QFormLayout,
+    QFrame,
+    QGridLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QHeaderView,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QScrollArea,
+    QSizePolicy,
+    QSlider,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+    QWidget,
+)
+from PyQt6.QtGui import QColor, QIcon, QPixmap
+from PyQt6.QtCore import (
+    QObject,
+    QSize,
+    Qt,
+    pyqtSignal,
+    pyqtSlot,
+)
 from .wtiles import QDoubleButton
 from .probe_csv import write_probe_csv_files
 from .roi_analysis import write_roi_csv
-from .uuuuuu import read_qss_file
+from .utils import read_qss_file
 from .resources import resource_path
 
 
@@ -887,8 +917,10 @@ class ProbeInfoWindow(QDialog):
 
         interpretation_note = QLabel(
             "Angles are measured from the dorsoventral axis. Contacts are "
-            "physical recording sites; path is the fitted centerline length "
-            "inside each region. Allen Bregma AP/ML values are estimates."
+            "physical recording sites; path is the length along the shank "
+            "inside each region, averaged over the site columns that pass "
+            "through it and excluding the tip. Allen Bregma AP/ML values "
+            "are estimates."
         )
         interpretation_note.setWordWrap(True)
 
@@ -1023,7 +1055,7 @@ class SinglePiece(QWidget):
         self.l_line_edit.setText(self.text_btn.text())
         self.l_line_edit.setVisible(True)
         self.text_btn.setVisible(False)
-        self.l_line_edit.setFocus(True)
+        self.l_line_edit.setFocus()
         self.set_checked(True)
         self.sig_clicked.emit(self.id)
 
@@ -1245,6 +1277,7 @@ class ObjectControl(QObject):
         self.obj_size = []  # size
         self.obj_opacity = []
         self.obj_comp_mode = []
+        self.obj_drawing_mode = []
         self.obj_visibility = []
         self.obj_merged = []
 
@@ -1462,7 +1495,10 @@ class ObjectControl(QObject):
                 return
             try:
                 drawing_info = self.drawing_info_provider(
-                    da_data, object_type, da_name
+                    da_data,
+                    object_type,
+                    da_name,
+                    plot_mode=self.obj_drawing_mode[self.current_obj_index],
                 )
             except (KeyError, TypeError, ValueError) as exc:
                 QMessageBox.warning(
@@ -1489,13 +1525,21 @@ class ObjectControl(QObject):
             return
 
     def obj_link_changed(self, clicked_id):
-        da_index = np.where(np.ravel(self.obj_id) == clicked_id)[0][0]
+        # Links are kept by object ID, which stays valid when other objects
+        # are deleted or merged; list positions would shift.
+        da_index = self.obj_id.index(clicked_id)
         if self.obj_list[da_index].link_button.isChecked():
-            self.linked_indexes.append(da_index)
-        else:
-            if da_index in self.linked_indexes:
-                del_ind = np.where(np.ravel(self.linked_indexes) == da_index)[0][0]
-                self.linked_indexes.pop(del_ind)
+            if clicked_id not in self.linked_indexes:
+                self.linked_indexes.append(clicked_id)
+        elif clicked_id in self.linked_indexes:
+            self.linked_indexes.remove(clicked_id)
+
+    def linked_object_indexes(self):
+        """Return current list positions of linked objects that still exist."""
+        self.linked_indexes = [
+            obj_id for obj_id in self.linked_indexes if obj_id in self.obj_id
+        ]
+        return [self.obj_id.index(obj_id) for obj_id in self.linked_indexes]
 
     def obj_color_changed(self, clicked_id):
         self.set_active_layer_to_current(clicked_id)
@@ -1529,6 +1573,7 @@ class ObjectControl(QObject):
             del self.obj_comp_mode[da_ind]
             del self.obj_opacity[da_ind]
             del self.obj_size[da_ind]
+            del self.obj_drawing_mode[da_ind]
             self.sig_delete_object.emit(da_ind)
         if self.current_obj_index in del_ind:
             if self.obj_list:
@@ -1562,11 +1607,27 @@ class ObjectControl(QObject):
         )
         return group_count
 
-    def add_object(self, object_name, object_type, object_data, object_mode):
+    @staticmethod
+    def _default_drawing_mode(object_name, object_type, object_data):
+        """Drawing mode for objects saved before it was stored explicitly."""
+        if "drawing" not in object_type:
+            return None
+        if isinstance(object_data, dict) and object_data.get("plot_mode"):
+            return str(object_data["plot_mode"])
+        return "area" if "area" in str(object_name).lower() else "line"
+
+    def add_object(
+        self, object_name, object_type, object_data, object_mode, drawing_mode=None
+    ):
         object_icon = self.get_object_icon(object_type)
         # group_count = self.get_group_count(object_type)
         if object_icon is None:
             return
+        if drawing_mode is None:
+            drawing_mode = self._default_drawing_mode(
+                object_name, object_type, object_data
+            )
+        self.obj_drawing_mode.append(drawing_mode)
         self.obj_id.append(self.obj_count)
         self.obj_data.append(object_data)
         self.obj_name.append(object_name)
@@ -1628,7 +1689,11 @@ class ObjectControl(QObject):
         self.obj_count += 1
 
     # merge object pieces
-    def merge_pieces(self, obj_type="probe piece"):
+    def collect_pieces(self, obj_type="probe piece"):
+        """Group pieces of one type by object name without removing them.
+
+        Returns ``(data, object_names, pieces_names, piece_indexes)``.
+        """
         if obj_type not in [
             "probe piece",
             "virus piece",
@@ -1651,7 +1716,9 @@ class ObjectControl(QObject):
             if m_obj_name[-1] == " ":
                 m_obj_name = m_obj_name[:-1]
             m_obj_names.append(m_obj_name)
-        merging_object_names = np.unique(m_obj_names)
+        # Natural order keeps "probe 2" before "probe 10", so shank-indexed
+        # settings such as multi-probe faces pair with the right shank.
+        merging_object_names = natsorted(set(m_obj_names))
         n_object = len(merging_object_names)
         data = [[] for _ in range(n_object)]
         pieces_names = [[] for _ in range(n_object)]
@@ -1670,6 +1737,11 @@ class ObjectControl(QObject):
             #         print(self.obj_data[da_piece_ind_in_obj_order[j]].T)
             #         temp = np.hstack([temp, self.obj_data[da_piece_ind_in_obj_order[j]].T])
             # data[i] = temp.T
+        return data, merging_object_names, pieces_names, cind
+
+    def merge_pieces(self, obj_type="probe piece"):
+        """Collect pieces of one type and remove them from the object list."""
+        data, merging_object_names, pieces_names, cind = self.collect_pieces(obj_type)
         self.delete_objects(cind)
         return data, merging_object_names, pieces_names
 
@@ -1682,11 +1754,23 @@ class ObjectControl(QObject):
         m_obj_type = current_type.split(" ")[1]
         data_list = current_data["data"]
         pieces_names = current_data["pieces_names"]
+        drawing_mode = current_data.get("plot_mode") if m_obj_type == "drawing" else None
         self.delete_objects([self.current_obj_index])
         for i in range(len(data_list)):
             self.add_object(
-                pieces_names[i], "{} piece".format(m_obj_type), data_list[i], None
+                pieces_names[i],
+                "{} piece".format(m_obj_type),
+                data_list[i],
+                None,
+                drawing_mode=drawing_mode,
             )
+
+    def drawing_mode_of_piece(self, piece_name):
+        """Return the stored mode of the first drawing piece with this name."""
+        for index, name in enumerate(self.obj_name):
+            if name == piece_name and self.obj_type[index] == "drawing piece":
+                return self.obj_drawing_mode[index]
+        return None
 
     # get obj data
     def get_obj_data(self):
@@ -1697,17 +1781,23 @@ class ObjectControl(QObject):
             "obj_size": self.obj_size,
             "obj_opacity": self.obj_opacity,
             "obj_comp_mode": self.obj_comp_mode,
+            "obj_drawing_mode": self.obj_drawing_mode,
             "current_obj_index": self.current_obj_index,
         }
         return data
 
     def set_obj_data(self, data):
+        saved_modes = data.get("obj_drawing_mode")
         for i in range(len(data["obj_type"])):
+            mode = None
+            if isinstance(saved_modes, (list, tuple)) and i < len(saved_modes):
+                mode = saved_modes[i] if saved_modes[i] in ("area", "line") else None
             self.add_object(
                 data["obj_name"][i],
                 data["obj_type"][i],
                 data["obj_data"][i],
                 data["obj_comp_mode"][i],
+                drawing_mode=mode,
             )
 
         self.obj_size = data["obj_size"]
@@ -1715,7 +1805,14 @@ class ObjectControl(QObject):
         self.obj_comp_mode = data["obj_comp_mode"]
         self.current_obj_index = data["current_obj_index"]
 
+        if not self.obj_list:
+            self.current_obj_index = None
+            return
         self.obj_list[-1].set_checked(False)
+        if self.current_obj_index is None or not (
+            0 <= self.current_obj_index < len(self.obj_list)
+        ):
+            self.current_obj_index = len(self.obj_list) - 1
         self.obj_list[self.current_obj_index].set_checked(True)
 
         # print(self.obj_type)
@@ -1752,11 +1849,14 @@ class ObjectControl(QObject):
         self.obj_size = []
         self.obj_opacity = []
         self.obj_comp_mode = []
+        self.obj_drawing_mode = []
         self.obj_count = 0
         self.current_obj_index = None
+        self.linked_indexes = []
 
     def compare_obj_called(self):
-        compare_names = [self.obj_name[ind] for ind in self.linked_indexes]
-        compare_data = [self.obj_data[ind] for ind in self.linked_indexes]
+        linked = self.linked_object_indexes()
+        compare_names = [self.obj_name[ind] for ind in linked]
+        compare_data = [self.obj_data[ind] for ind in linked]
         info_window = CompareWindow(compare_names, compare_data)
         info_window.exec()

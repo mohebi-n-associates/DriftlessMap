@@ -198,6 +198,15 @@ class AtlasViewPerformanceTests(unittest.TestCase):
             view.cimg.boundary.image.shape, view.cimg.label_data.shape
         )
 
+    def test_boundaries_are_drawn_at_full_brightness(self):
+        stack = SliceStacks()
+        contour = np.zeros((20, 20), dtype=np.uint8)
+        contour[5:15, 10] = 1
+        stack.set_boundary_data(contour)
+        stack.boundary.render()
+        self.assertEqual(stack.boundary.qimage.pixelColor(10, 10).getRgb()[:3],
+                         (255, 255, 255))
+
     def test_image_edge_hover_coordinates_are_rejected(self):
         image = np.zeros((3, 4), dtype=np.uint8)
 

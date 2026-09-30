@@ -1,13 +1,15 @@
 """Versioned, non-executable persistence for DriftlessMap user data."""
 
-import io
+import hashlib
 import importlib
 import json
 import os
 from pathlib import Path
 import pickle
+import shutil
 import tempfile
 import zipfile
+from contextlib import contextmanager
 
 import numpy as np
 
@@ -18,11 +20,13 @@ SUPPORTED_FORMAT_NAMES = LEGACY_FORMAT_NAMES | {FORMAT_NAME}
 FORMAT_VERSION = 1
 MANIFEST_NAME = "manifest.json"
 MAX_MANIFEST_BYTES = 16 * 1024 * 1024
-MAX_ARCHIVE_BYTES = 8 * 1024 * 1024 * 1024
+MAX_ARCHIVE_BYTES = 64 * 1024 * 1024 * 1024
+MAX_DEFLATE_RATIO = 1100
 
 REQUIRED_KEYS = {
     "layer": {"layer_link", "data", "color", "thumbnail"},
     "object": {"type", "data", "name"},
+    "probe_settings": {"probe_settings", "planning"},
     "project": {
         "atlas_path",
         "img_path",
@@ -54,16 +58,68 @@ REQUIRED_KEYS = {
 }
 
 
+class ArchiveAttachment:
+    """A file streamed into, or lazily read from, a DriftlessMap archive."""
+
+    def __init__(
+        self,
+        *,
+        source_path=None,
+        archive_path=None,
+        member_name=None,
+        display_name=None,
+        expected_sha256=None,
+    ):
+        self.source_path = None if source_path is None else str(source_path)
+        self.archive_path = None if archive_path is None else str(archive_path)
+        self.member_name = member_name
+        self.display_name = display_name
+        # When set, saving verifies the streamed bytes against this digest so
+        # a source that changed since it was fingerprinted is never packed.
+        self.expected_sha256 = expected_sha256
+        if self.source_path is None and (
+            self.archive_path is None or self.member_name is None
+        ):
+            raise ValueError("Attachment needs a source file or archive member.")
+
+    @contextmanager
+    def open(self):
+        if self.source_path is not None:
+            with open(self.source_path, "rb") as stream:
+                yield stream
+            return
+        with zipfile.ZipFile(self.archive_path, "r") as archive:
+            with archive.open(self.member_name, "r") as stream:
+                yield stream
+
+    def extract_to(self, destination):
+        destination = Path(destination)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        with self.open() as source, destination.open("wb") as output:
+            shutil.copyfileobj(source, output, length=8 * 1024 * 1024)
+
+
+def _numpy_multiarray():
+    """Return NumPy's multiarray module without touching deprecated aliases."""
+    for module_name in ("numpy._core.multiarray", "numpy.core.multiarray"):
+        try:
+            return importlib.import_module(module_name)
+        except ImportError:
+            continue
+    raise ImportError("NumPy multiarray module is unavailable.")
+
+
 def _numpy_pickle_globals():
     """Return inert NumPy constructors used by supported pickle versions."""
+    multiarray = _numpy_multiarray()
     safe_globals = {
         ("numpy", "dtype"): np.dtype,
         ("numpy", "ndarray"): np.ndarray,
-        ("numpy.core.multiarray", "_reconstruct"): np.core.multiarray._reconstruct,
-        ("numpy.core.multiarray", "scalar"): np.core.multiarray.scalar,
-        ("numpy._core.multiarray", "_reconstruct"): np.core.multiarray._reconstruct,
-        ("numpy._core.multiarray", "scalar"): np.core.multiarray.scalar,
     }
+    # Pickles name either module layout, whichever NumPy wrote them.
+    for module_name in ("numpy.core.multiarray", "numpy._core.multiarray"):
+        safe_globals[(module_name, "_reconstruct")] = multiarray._reconstruct
+        safe_globals[(module_name, "scalar")] = multiarray.scalar
     frombuffer = None
     for module_name in ("numpy._core.numeric", "numpy.core.numeric"):
         try:
@@ -195,6 +251,82 @@ class RestrictedUnpickler(pickle.Unpickler):
             ) from exc
 
 
+class PickledMeshState:
+    """Inert stand-in for a pickled ``pyqtgraph.opengl.MeshData``.
+
+    Only the instance state is kept, and it must be a mapping of private
+    attribute names to NumPy arrays or ``None``.
+    """
+
+    __slots__ = ("state",)
+
+    def __setstate__(self, state):
+        if isinstance(state, tuple) and len(state) == 2 and state[0] is None:
+            state = state[1]
+        if not isinstance(state, dict):
+            raise pickle.UnpicklingError("Mesh state must be a dictionary.")
+        for key, value in state.items():
+            if not isinstance(key, str) or not key.startswith("_"):
+                raise pickle.UnpicklingError("Mesh state has an invalid field.")
+            if value is not None and not isinstance(value, np.ndarray):
+                raise pickle.UnpicklingError(
+                    "Mesh field {} is not an array.".format(key)
+                )
+            if isinstance(value, np.ndarray) and value.dtype.hasobject:
+                raise pickle.UnpicklingError(
+                    "Mesh field {} contains Python objects.".format(key)
+                )
+        vertexes = state.get("_vertexes")
+        faces = state.get("_faces")
+        if vertexes is not None and (vertexes.ndim != 2 or vertexes.shape[1] != 3):
+            raise pickle.UnpicklingError("Mesh vertexes must have shape (N, 3).")
+        if faces is not None:
+            if faces.ndim != 2 or faces.shape[1] != 3:
+                raise pickle.UnpicklingError("Mesh faces must have shape (M, 3).")
+            if not np.issubdtype(faces.dtype, np.integer):
+                raise pickle.UnpicklingError("Mesh faces must be integers.")
+            if faces.size and (
+                vertexes is None
+                or faces.min() < 0
+                or faces.max() >= len(vertexes)
+            ):
+                raise pickle.UnpicklingError("Mesh faces reference missing vertexes.")
+        self.state = state
+
+
+class MeshUnpickler(RestrictedUnpickler):
+    """Restricted reader for processed-atlas mesh caches."""
+
+    SAFE_GLOBALS = {
+        **RestrictedUnpickler.SAFE_GLOBALS,
+        ("pyqtgraph.opengl.MeshData", "MeshData"): PickledMeshState,
+        ("pyqtgraph.opengl", "MeshData"): PickledMeshState,
+    }
+
+
+def load_mesh_pickle(file_path):
+    """Load a mesh cache without executing code.
+
+    Returns a :class:`PickledMeshState` or a ``{name: PickledMeshState}``
+    dictionary. Raises ``ValueError`` for unreadable or unsupported content.
+    """
+    try:
+        with open(file_path, "rb") as infile:
+            data = MeshUnpickler(infile).load()
+    except OSError as exc:
+        raise ValueError("Unable to read mesh file: {}".format(exc)) from exc
+    except Exception as exc:
+        raise ValueError("Invalid or unsupported mesh file: {}".format(exc)) from exc
+    if isinstance(data, PickledMeshState):
+        return data
+    if isinstance(data, dict) and all(
+        isinstance(key, str) and isinstance(value, PickledMeshState)
+        for key, value in data.items()
+    ):
+        return data
+    raise ValueError("Mesh file does not contain mesh data.")
+
+
 def load_legacy_pickle(file_path):
     """Load inert data from a legacy pickle with a consistent result tuple."""
     try:
@@ -216,7 +348,7 @@ def _validate_payload(data, kind):
     return data
 
 
-def _encode(value, arrays):
+def _encode(value, arrays, attachments):
     if value is None or isinstance(value, (bool, int, str)):
         return value
     if isinstance(value, float):
@@ -224,22 +356,48 @@ def _encode(value, arrays):
             return value
         return {"__type__": "float", "value": repr(value)}
     if isinstance(value, np.generic):
-        return _encode(value.item(), arrays)
+        return _encode(value.item(), arrays, attachments)
+    if isinstance(value, ArchiveAttachment):
+        name = "attachments/{:08d}.bin".format(len(attachments))
+        attachments.append((name, value))
+        return {
+            "__type__": "attachment",
+            "name": name,
+            "display_name": value.display_name,
+        }
     if isinstance(value, np.ndarray):
         if value.dtype.hasobject:
-            return {"__type__": "object_array", "value": _encode(value.tolist(), arrays)}
+            return {
+                "__type__": "object_array",
+                "value": _encode(value.tolist(), arrays, attachments),
+            }
+        for existing_name, existing_array in arrays:
+            if existing_array is value:
+                return {"__type__": "ndarray", "name": existing_name}
         name = "arrays/{:08d}.npy".format(len(arrays))
         arrays.append((name, value))
         return {"__type__": "ndarray", "name": name}
     if isinstance(value, dict):
         return {
             "__type__": "dict",
-            "items": [[_encode(key, arrays), _encode(item, arrays)] for key, item in value.items()],
+            "items": [
+                [
+                    _encode(key, arrays, attachments),
+                    _encode(item, arrays, attachments),
+                ]
+                for key, item in value.items()
+            ],
         }
     if isinstance(value, list):
-        return {"__type__": "list", "items": [_encode(item, arrays) for item in value]}
+        return {
+            "__type__": "list",
+            "items": [_encode(item, arrays, attachments) for item in value],
+        }
     if isinstance(value, tuple):
-        return {"__type__": "tuple", "items": [_encode(item, arrays) for item in value]}
+        return {
+            "__type__": "tuple",
+            "items": [_encode(item, arrays, attachments) for item in value],
+        }
     if isinstance(value, Path):
         return {"__type__": "path", "value": str(value)}
     if value.__class__.__name__ == "QColor" and hasattr(value, "getRgb"):
@@ -247,6 +405,59 @@ def _encode(value, arrays):
     raise TypeError(
         "Unsupported DriftlessMap data type: {}".format(type(value).__name__)
     )
+
+
+class _ArchiveReader:
+    """Decoding context: one archive, its member names, and decoded arrays."""
+
+    def __init__(self, archive):
+        self.archive = archive
+        self.names = frozenset(archive.namelist())
+        self.arrays = {}
+
+    def read_array(self, name):
+        if name in self.arrays:
+            return self.arrays[name]
+        array = _read_checked_array(self.archive, name)
+        self.arrays[name] = array
+        return array
+
+
+def _read_checked_array(archive, name):
+    """Read an ``.npy`` member after checking its header against its size.
+
+    ``numpy.lib.format.read_array`` allocates the shape declared in the
+    header before reading any data, so a tiny member could otherwise demand
+    an arbitrarily large allocation.
+    """
+    info = archive.getinfo(name)
+    with archive.open(name) as stream:
+        version = np.lib.format.read_magic(stream)
+        if version == (1, 0):
+            shape, _, dtype = np.lib.format.read_array_header_1_0(stream)
+        elif version == (2, 0):
+            shape, _, dtype = np.lib.format.read_array_header_2_0(stream)
+        else:
+            raise ValueError(
+                "Unsupported array format version {} in {}".format(version, name)
+            )
+        header_length = stream.tell()
+    if dtype.hasobject:
+        raise ValueError("Array {} contains Python objects.".format(name))
+    element_count = 1
+    for dimension in shape:
+        element_count *= int(dimension)
+    declared_bytes = element_count * dtype.itemsize
+    # Deflate cannot expand data by more than about 1032:1, so the compressed
+    # size bounds what the member can really hold even if its recorded
+    # uncompressed size was forged.
+    physical_limit = info.compress_size * MAX_DEFLATE_RATIO + 1024 * 1024
+    if declared_bytes > min(info.file_size - header_length, physical_limit):
+        raise ValueError(
+            "Array {} declares more data than the archive contains.".format(name)
+        )
+    with archive.open(name) as stream:
+        return np.lib.format.read_array(stream, allow_pickle=False)
 
 
 def _decode(value, archive):
@@ -257,10 +468,18 @@ def _decode(value, archive):
         return float(value["value"])
     if value_type == "ndarray":
         name = value["name"]
-        if name not in archive.namelist() or not name.startswith("arrays/"):
+        if name not in archive.names or not name.startswith("arrays/"):
             raise ValueError("Archive references a missing array: {}".format(name))
-        with archive.open(name) as stream:
-            return np.lib.format.read_array(stream, allow_pickle=False)
+        return archive.read_array(name)
+    if value_type == "attachment":
+        name = value["name"]
+        if name not in archive.names or not name.startswith("attachments/"):
+            raise ValueError("Archive references a missing attachment: {}".format(name))
+        return ArchiveAttachment(
+            archive_path=archive.archive.filename,
+            member_name=name,
+            display_name=value.get("display_name"),
+        )
     if value_type == "object_array":
         return np.asarray(_decode(value["value"], archive), dtype=object)
     if value_type == "dict":
@@ -281,13 +500,89 @@ def _decode(value, archive):
     )
 
 
+def _copy_attachment(source, output, attachment):
+    digest = hashlib.sha256()
+    while True:
+        chunk = source.read(8 * 1024 * 1024)
+        if not chunk:
+            break
+        digest.update(chunk)
+        output.write(chunk)
+    expected = attachment.expected_sha256
+    if expected is not None and digest.hexdigest() != expected:
+        raise ValueError(
+            "{} changed after it was fingerprinted; reload it before saving.".format(
+                attachment.display_name or attachment.source_path
+            )
+        )
+
+
+def _target_mode(destination):
+    try:
+        return destination.stat().st_mode & 0o7777
+    except OSError:
+        umask = os.umask(0)
+        os.umask(umask)
+        return 0o666 & ~umask
+
+
+def _fsync_file(path):
+    """Flush file contents to disk so ``os.replace`` never exposes a stub."""
+    with open(path, "rb") as stream:
+        os.fsync(stream.fileno())
+
+
+def _fsync_directory(path):
+    """Persist the rename itself (POSIX only; Windows has no directory fsync)."""
+    if os.name != "posix":
+        return
+    try:
+        descriptor = os.open(str(path), os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        os.fsync(descriptor)
+    except OSError:
+        pass
+    finally:
+        os.close(descriptor)
+
+
+def write_cache_pickle(file_path, value):
+    """Atomically write a processed-atlas cache file.
+
+    The pickle is written to a temporary file in the same folder, flushed,
+    and then renamed over the destination, so an interrupted run never
+    leaves a truncated cache behind.
+    """
+    destination = Path(file_path)
+    with tempfile.NamedTemporaryFile(
+        dir=str(destination.parent),
+        prefix=".driftlessmap-cache-",
+        suffix=".tmp",
+        delete=False,
+    ) as temporary:
+        temporary_path = Path(temporary.name)
+    try:
+        with open(temporary_path, "wb") as stream:
+            pickle.dump(value, stream, protocol=pickle.HIGHEST_PROTOCOL)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.chmod(str(temporary_path), _target_mode(destination))
+        os.replace(str(temporary_path), str(destination))
+    except BaseException:
+        temporary_path.unlink(missing_ok=True)
+        raise
+
+
 def save_driftlessmap_file(file_path, data, kind):
     """Atomically save data in the versioned DriftlessMap archive format."""
     destination = Path(file_path)
     arrays = []
+    attachments = []
     try:
         _validate_payload(data, kind)
-        encoded = _encode(data, arrays)
+        encoded = _encode(data, arrays, attachments)
         manifest = json.dumps(
             {
                 "format": FORMAT_NAME,
@@ -307,6 +602,9 @@ def save_driftlessmap_file(file_path, data, kind):
         ) as temporary:
             temporary_path = Path(temporary.name)
         try:
+            # NamedTemporaryFile is private (0600); give the saved file the
+            # permissions of the file it replaces, or the usual umask default.
+            os.chmod(str(temporary_path), _target_mode(destination))
             with zipfile.ZipFile(
                 temporary_path, "w", compression=zipfile.ZIP_DEFLATED, allowZip64=True
             ) as archive:
@@ -314,8 +612,16 @@ def save_driftlessmap_file(file_path, data, kind):
                 for name, array in arrays:
                     with archive.open(name, "w", force_zip64=True) as stream:
                         np.lib.format.write_array(stream, array, allow_pickle=False)
+                for name, attachment in attachments:
+                    with attachment.open() as source, archive.open(
+                        name, "w", force_zip64=True
+                    ) as output:
+                        _copy_attachment(source, output, attachment)
+            _fsync_file(temporary_path)
             os.replace(str(temporary_path), str(destination))
-        except Exception:
+            _fsync_directory(destination.parent)
+        except BaseException:
+            # Also clean up on KeyboardInterrupt/SystemExit mid-write.
             temporary_path.unlink(missing_ok=True)
             raise
     except Exception as exc:
@@ -363,7 +669,7 @@ def load_driftlessmap_file(file_path, expected_kind=None):
                         expected_kind, manifest.get("kind")
                     )
                 )
-            data = _decode(manifest["data"], archive)
+            data = _decode(manifest["data"], _ArchiveReader(archive))
             if expected_kind is not None:
                 data = _validate_payload(data, expected_kind)
             return data, None

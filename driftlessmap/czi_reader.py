@@ -1,14 +1,69 @@
 import cv2
 from aicspylibczi import CziFile
 from pathlib import Path
-from os.path import dirname, realpath, join
-import pickle
 import numpy as np
 import colorsys
-from .uuuuuu import hex2rgb
-from .image_reader import MAX_CHANNELS
+from .utils import hex2rgb
+from .image_reader import CHANNEL_COLORS, MAX_CHANNELS
 
 # czi_path = '~/Work/Kavli/Data/HERBS_DATA/abraham/Pecorino_mec_slide_1.czi'
+
+
+def _hsv(rgb):
+    chsv = colorsys.rgb_to_hsv(rgb[0], rgb[1], rgb[2])
+    return (chsv[0], chsv[1], chsv[2] / 255)
+
+
+def parse_czi_metadata(metadata, n_channels, is_rgb):
+    """Read scaling and channel display settings from CZI XML metadata.
+
+    Returns ``(scaling_um_per_px, rgb_colors, hsv_colors, names, gammas)``.
+    Missing entries fall back to defaults instead of failing: scaling becomes
+    ``None`` (lengths in pixels) and channels get default colours and names.
+    """
+    scaling_val = None
+    for distance in metadata.findall("./Scaling/Items/Distance"):
+        value = distance.findtext("Value")
+        try:
+            scaling_val = float(value) * 1e6
+            break
+        except (TypeError, ValueError):
+            continue
+
+    channels = metadata.findall("./DisplaySetting/Channels/Channel")
+    gamma_val = []
+    for channel in channels:
+        gamma = channel.findtext("Gamma")
+        if gamma is not None:
+            gamma_val.append(gamma)
+
+    if is_rgb:
+        rgb_colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255)]
+        return (
+            scaling_val,
+            rgb_colors,
+            [_hsv(rgb) for rgb in rgb_colors],
+            ["Red", "Green", "Blue"],
+            gamma_val,
+        )
+
+    rgb_colors, names = [], []
+    for index in range(n_channels):
+        channel = channels[index] if index < len(channels) else None
+        colour = channel.findtext("Color") if channel is not None else None
+        rgb = None
+        if colour and len(colour) >= 7:
+            # CZI stores #AARRGGBB; drop the alpha byte.
+            try:
+                rgb = tuple(int(v) for v in hex2rgb(colour[0] + colour[-6:]))
+            except (TypeError, ValueError):
+                rgb = None
+        if rgb is None:
+            rgb = CHANNEL_COLORS[index % len(CHANNEL_COLORS)]
+        name = channel.findtext("ShortName") if channel is not None else None
+        rgb_colors.append(rgb)
+        names.append(name or "Channel {}".format(index + 1))
+    return scaling_val, rgb_colors, [_hsv(rgb) for rgb in rgb_colors], names, gamma_val
 
 
 class CZIReader(object):
@@ -16,7 +71,7 @@ class CZIReader(object):
         self.error_index = 0
         self.is_czi = True
         self.status = None
-        self.file_name_list = [czi_path[:-4]]
+        self.file_name_list = [str(Path(czi_path).with_suffix(""))]
         self.czi = CziFile(czi_path)
         self.czi_info = self.czi.dims
         self.dimensions = self.czi.get_dims_shape()
@@ -74,103 +129,20 @@ class CZIReader(object):
                 bbox = self.czi.get_scene_bounding_box(index=i)
                 self.scene_bbox.append((bbox.x, bbox.y, bbox.w, bbox.h))
 
-        # get colors from metadata
-        metadata = self.czi.meta[0]
-        all_tags = [metadata[i].tag for i in range(len(metadata))]
-        ds_ind = [
-            ind for ind in range(len(all_tags)) if all_tags[ind] == "DisplaySetting"
-        ][0]
-        ds_tags = [metadata[ds_ind][i].tag for i in range(len(metadata[ds_ind]))]
-        ch_ind = [ind for ind in range(len(ds_tags)) if ds_tags[ind] == "Channels"][0]
-        ch_tags = [
-            metadata[ds_ind][ch_ind][i].tag
-            for i in range(len(metadata[ds_ind][ch_ind]))
-        ]
-
-        scale_ind = [ind for ind in range(len(all_tags)) if all_tags[ind] == "Scaling"][
-            0
-        ]
-        scale_tags = [
-            metadata[scale_ind][i].tag for i in range(len(metadata[scale_ind]))
-        ]
-        scale_item_ind = [
-            ind for ind in range(len(scale_tags)) if scale_tags[ind] == "Items"
-        ][0]
-        scale_item_tags = [
-            metadata[scale_ind][scale_item_ind][i].tag
-            for i in range(len(metadata[scale_ind][scale_item_ind]))
-        ]
-
-        scaling_vals = []
-        for i in range(len(scale_item_tags)):
-            scale_info = metadata[scale_ind][scale_item_ind]
-            single_scaling_tags = [
-                scale_info[i][ind].tag for ind in range(len(scale_info[i]))
-            ]
-            for j in range(len(single_scaling_tags)):
-                scaling_vals.append(metadata[scale_ind][scale_item_ind][i][j].text)
-
-        self.scaling_val = float(scaling_vals[0]) * 1e6
-
-        self.rgb_colors = []
-        self.hsv_colors = []
-        self.channel_name = []
-        self.gamma_val = []
-
-        if self.is_rgb:
-            self.rgb_colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255)]
-            self.channel_name = ["Red", "Green", "Blue"]
-            for i in range(3):
-                chsv = colorsys.rgb_to_hsv(
-                    self.rgb_colors[i][0], self.rgb_colors[i][1], self.rgb_colors[i][2]
-                )
-                hsv_color = (chsv[0], chsv[1], chsv[2] / 255)
-                self.hsv_colors.append(hsv_color)
-            for i in range(len(ch_tags)):
-                chn_info = metadata[ds_ind][ch_ind]
-                single_channel_tags = [
-                    chn_info[i][ind].tag for ind in range(len(chn_info[i]))
-                ]
-                channel_vals = []
-                for j in range(len(single_channel_tags)):
-                    channel_vals.append(metadata[ds_ind][ch_ind][i][j].text)
-                if len(np.where(np.ravel(single_channel_tags) == "Gamma")[0]) > 0:
-                    self.gamma_val.append(
-                        channel_vals[
-                            np.where(np.ravel(single_channel_tags) == "Gamma")[0][0]
-                        ]
-                    )
-        else:
-            for i in range(len(ch_tags)):
-                chn_info = metadata[ds_ind][ch_ind]
-                single_channel_tags = [
-                    chn_info[i][ind].tag for ind in range(len(chn_info[i]))
-                ]
-                channel_vals = []
-                for j in range(len(single_channel_tags)):
-                    channel_vals.append(metadata[ds_ind][ch_ind][i][j].text)
-                hex_color = channel_vals[
-                    np.where(np.ravel(single_channel_tags) == "Color")[0][0]
-                ]
-                self.channel_name.append(
-                    channel_vals[
-                        np.where(np.ravel(single_channel_tags) == "ShortName")[0][0]
-                    ]
-                )
-                if len(np.where(np.ravel(single_channel_tags) == "Gamma")[0]) > 0:
-                    self.gamma_val.append(
-                        channel_vals[
-                            np.where(np.ravel(single_channel_tags) == "Gamma")[0][0]
-                        ]
-                    )
-                da_color = hex_color[0] + hex_color[3:]
-                r, g, b = hex2rgb(da_color)
-                chsv = colorsys.rgb_to_hsv(r, g, b)
-                hsv_color = (chsv[0], chsv[1], chsv[2] / 255)
-                self.hsv_colors.append(hsv_color)
-                self.rgb_colors.append((r, g, b))
+        # get colors and scaling from metadata
+        (
+            self.scaling_val,
+            self.rgb_colors,
+            self.hsv_colors,
+            self.channel_name,
+            self.gamma_val,
+        ) = parse_czi_metadata(self.czi.meta[0], self.n_channels, self.is_rgb)
 
     def read_data(self, scale, scene_index=None):
+        if not self.is_mosaic:
+            # Non-mosaic images are always decoded at full resolution, so
+            # the recorded scale must describe the pixels, not the request.
+            scale = 1.0
         if scene_index is None:
             scene_index = np.arange(self.n_scenes)
         else:

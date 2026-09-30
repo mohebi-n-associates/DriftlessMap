@@ -3,6 +3,288 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.6.1
+
+Release date: 28 September 2026
+
+### Fixed
+
+- **Show Boundary** now draws atlas region boundaries in white. Since the
+  boundary images were stored as one byte per pixel, they had been drawn
+  almost black, so the button appeared to do nothing.
+
+### Changed
+
+- **Propose Landmarks** now suggests up to 10 landmarks instead of about 36,
+  each on a feature you can see and check in both images:
+  - up to 5 at the sharpest tips and notches of the brain outline, snapped
+    onto the section outline;
+  - the rest on strong internal edges that both images show, such as the
+    corpus callosum and the ventricles.
+
+  An edge seen in only one image is never chosen: an atlas region border in
+  uniform-looking tissue, or a dye track in the section. The status bar says
+  how many points are on the outline and how many are internal. Confirm or
+  drag each point, and add more by hand where the anatomy needs them.
+
+### Documentation
+
+- A new tutorial, [Automatic Section Matching and Landmark Proposal](Tutorial/Registration_Related/automatic_section_and_landmarks.md),
+  walks through **Suggest Atlas Section...** and **Propose Landmarks** on a
+  real sagittal section and explains how each stage works.
+
+## DriftlessMap 1.6.0
+
+Release date: 27 September 2026
+
+This release adds two assistants for volume-atlas registration. They suggest
+where a section sits in the atlas and propose starting landmarks. You review
+and confirm every suggestion; nothing is transferred automatically. Files
+saved by 1.5.0 open unchanged, and nothing needs to be re-exported.
+
+### Suggest Atlas Section
+
+**Atlas > Suggest Atlas Section...** compares the loaded histology with the
+volume atlas and suggests the section it came from:
+
+- the plane (coronal, sagittal or horizontal), found from the tissue outline,
+  with a note on how clearly it was preferred;
+- the orientation the histology needs (rotation and flip);
+- the depth, ranked mainly by internal anatomy;
+- a small cutting-angle tilt, searched within about ±6°.
+
+A dialog shows up to six candidates as side-by-side thumbnails. Choose one and
+press **Apply**: DriftlessMap switches the plane, shows the section and sets
+the tilt, and can also rotate or flip the histology to match. Because brain
+outlines are left-right symmetric, you choose the hemisphere yourself.
+
+### Propose Landmarks
+
+**Atlas > Propose Landmarks** fits the displayed atlas slice to the section.
+It first fits the outlines, then refines the fit on image intensities where
+that improves the match. It then fills the Triangulation tool with about 36
+paired landmarks and moves the boundary anchors with the same fit. Drag,
+add or delete landmarks as usual before transferring. Existing landmarks are
+replaced only after you confirm.
+
+The fit follows the outline and overall shape well. Internal boundaries can
+still be several voxels off, so treat the proposal as a first draft.
+
+### Other changes
+
+- DriftlessMap now requires SimpleITK, which the desktop builds and a normal
+  `pip install` include.
+- The Registering chapter of the manual gains Section 8.2, which describes
+  both assistants. Later sections in that chapter are renumbered.
+
+## DriftlessMap 1.5.0
+
+Release date: 27 September 2026
+
+This release comes from a full review of DriftlessMap 1.4.0. It corrects
+several scientific calculations and closes two security holes. It stops
+several ways of losing work, fixes many crashes, and keeps the window
+responsive during long operations. Projects, layers, objects and legacy
+HERBS files saved by earlier versions still open.
+
+### Action required: re-export if…
+
+Some corrected calculations change reported numbers. Regenerate results made
+with an earlier version if they fall into any of these cases:
+
+| If you… | Then… |
+| --- | --- |
+| Reconstructed probes **after surgery** with site face **In** or **Right** on a tilted track | Re-merge the probe and re-export its CSVs. Contact positions were wrong. |
+| Exported probe, cell or drawing CSVs using **source-atlas or Allen voxel columns** (`allen_DV_vox`, `allen_AP_vox`, `source_axis_*_vox`) or the Bregma-estimated mm derived from them | Re-export. On mirrored axes the values were about one voxel off the labelled voxel. |
+| Merged **tilted probes**, especially under overhanging tissue such as the cortex near the colliculi or cerebellum | Re-merge. The brain entry point, and with it probe length and contact depths, could come from the wrong tissue. |
+| Used **per-region path lengths** (`_regions.csv`) for multi-column probes | Re-merge. Regions crossed by only some columns were under-reported. |
+| Measured with the **histology ruler** after reopening a project, or on a **non-mosaic CZI** read below 100% | Repeat the measurement. Lengths were off by 10× to 100×. |
+| Made **virus, cell, contour, probe or drawing pieces directly from histology annotations** without Accept and Transfer | Transfer the annotations to the atlas and make the pieces again. Virus pixels were transposed and cells could be dropped. |
+| Quantified **warped overlays or virus layers** where histology and atlas resolutions differ a lot | Re-transfer. Warps were offset by up to half an atlas voxel from transferred points. |
+| Relied on exact **region counts near boundaries**, or on **drawing ROI surface depths** | Re-merge virus, cell and drawing objects and re-export ROI CSVs. Coordinates on the negative side of Bregma were rounded toward it, and depths were up to one voxel too shallow. |
+
+Results not listed here are unaffected.
+
+### Scientific corrections
+
+- **Site-face frames.** Site faces **In** and **Right** now use frames
+  perpendicular to the shank at any tilt. Lateral site offsets used to leak
+  into contact depth.
+- **Voxel mirroring.** Coordinates on mirrored source axes follow one rule
+  everywhere: `floor(exported value)` is always the voxel whose label was
+  reported. This applies to exports, hover readouts and imported points, and
+  is documented in the manual.
+- **Brain entry.** The surface entry follows the tissue continuous with the
+  traced track, not the first tissue the extended line touches.
+- **Region path length.** It is averaged only over the site columns that pass
+  through the region. The value is now correctly described as the length
+  along the shank, excluding the tip.
+- **Image scale.** Projects store the true image scale; the ruler, embedded
+  rasters and non-mosaic CZI files use it.
+- **Pixel centres.** Image warps and point transfers use the same convention.
+  Points in the last pixel row or column are no longer dropped.
+- **Flooring.** Voxel indexes are floored, not truncated, so points just
+  outside the atlas no longer take edge labels.
+- **Surface depth.** It is measured from the top face of the brain surface.
+- **Pieces from atlas data only.** **Make Pieces** uses atlas-frame
+  annotations only, and lists any histology annotations still waiting to be
+  transferred.
+- **Probe display.** Untilted probes are drawn at their AP position in the
+  sagittal view.
+- **Multi-probe faces.** Face settings pair with the right shank when there
+  are more than ten probes.
+- **Drawing mode.** Drawings remember whether they are areas or lines, so a
+  renamed area still reports an area.
+
+### Security
+
+- **Mesh caches.** Mesh cache files in atlas folders are read with a
+  restricted reader. Opening a crafted atlas folder, including one shared
+  with a project, could previously run arbitrary code.
+- **Archive sizes.** Array sizes declared in project, layer and object files
+  are checked before memory is reserved. A file of a few hundred bytes could
+  demand about 137 GB.
+- **Downloads.** Every download redirect must use HTTPS. Each downloaded file
+  is recorded with its SHA-256 in `download_manifest.json`, so a changed
+  upstream file is detected instead of being mixed into an existing atlas.
+
+### Protecting your work and provenance
+
+- **Load Project** no longer deletes the current objects before a new project
+  has been chosen and verified. Its save prompt now offers **Cancel**.
+- A failed merge no longer deletes the pieces being merged; the reason is
+  shown in plain language.
+- A failed atlas load no longer replaces the current atlas's path,
+  fingerprint or layers.
+- Loading triangulation points no longer wipes the landmarks just loaded.
+  Files for a different slice size, boundary-point setting or topology are
+  rejected with an explanation.
+- Cancel in the probe-geometry dialogs discards edits. Added linear-silicon
+  columns no longer put site count and spacing in each other's rows.
+- The correct atlas is recorded after **Switch Atlas** and after a Waxholm or
+  Allen download. A changed or unverified histology or slice file is never
+  linked on save.
+- Merged probes record the atlas's SHA-256 content identity, exported as
+  `atlas_sha256`.
+- **Save Portable Project** verifies the checksum of the bytes it packs.
+  Atlas verification also catches identity files added later and tampered
+  file lists.
+- Saves keep normal file permissions, are flushed to disk before replacing
+  the old file, and clean up after interruption.
+- Atlas cache files are written atomically. An interrupted processing run
+  marks its folder so mismatched caches are never loaded together.
+- Imported objects and atlas layers are validated against the current atlas.
+  Older projects get defaults for newer fields.
+- Undo history holds independent snapshots and survives layer deletion.
+
+### Crashes and broken features fixed
+
+- Features that did not work at all now work again:
+  - Loading a slice atlas from an image.
+  - The **Process Raw Atlas Data** dialog.
+  - Double-click renaming of objects.
+- Fixed crashes:
+  - Changing a region colour on atlases with sparse IDs, such as the Allen
+    CCF.
+  - Changing the pencil colour or size.
+  - Virus registration and **Edit > Clear** with a slice atlas.
+  - Rotating point layers.
+  - The eraser on overlay layers.
+  - Clearing a size or tolerance field while typing.
+  - Merging short tracks or atlases with unknown labels.
+  - Importing objects with only a slice atlas loaded.
+  - Loading nearly black images.
+  - Switching CZI scenes.
+  - Unexpected errors in atlas workers.
+- Other fixes:
+  - Shifting layers on non-square slices.
+  - A two-sided magic-wand band.
+  - Hidden channels staying hidden after reload.
+  - Histogram state carried over between images.
+  - Accumulating colour swatches.
+  - Stack-wide flips and rotations without cumulative blur.
+  - Settings dialogs that now prefill their values and honour Cancel.
+- Input:
+  - Non-ASCII paths on Windows.
+  - Folders of TIFF sections keep their native bit depth.
+  - CZI files with sparse metadata open.
+  - The Atlas Processor keeps full file paths.
+
+### Responsiveness
+
+Fingerprinting inputs, writing project archives, verifying atlases, warping
+overlays and detecting cells now run in the background behind a progress
+dialog, so the window no longer freezes. The registration is built once per
+landmark change, and region volumes are counted without indexing the whole
+atlas.
+
+### Other changes
+
+- **Downloads.** The macOS download is now `DriftlessMap-1.5.0-macOS-arm64.dmg`,
+  built for Apple Silicon. Intel Macs should use the Conda/pip installation.
+- **Menus.** The disabled **Atlas > Merge Slices** item and an unused export
+  action are removed.
+- **Dependencies.** `numba` is no longer required. Two unused label tables and
+  the README screenshot are no longer installed with the package.
+- **For developers:**
+  - `driftlessmap/uuuuuu.py` is renamed `driftlessmap/utils.py`.
+  - All wildcard imports are replaced.
+  - New modules: `landmarks.py`, `project_io.py`, `background.py` and
+    `layer_geometry.py`.
+  - Ruff enforces all pyflakes and bugbear checks, and mypy checks the
+    scientific core.
+  - The test suite grew from 126 to 233 tests.
+- **Release process.**
+  - One CI workflow now gates PyPI and desktop releases.
+  - Actions are pinned to commit SHAs and kept current by Dependabot.
+  - Only a separate upload job can write to the repository.
+  - Desktop bundles use exact dependency versions.
+  - Code signing runs once signing secrets are configured.
+  - `CONTRIBUTING.md` describes the development workflow.
+
+---
+
+## DriftlessMap 1.4.0
+
+Release date: 27 August 2026
+
+This release adds native desktop distribution for Windows and macOS. Official
+GitHub releases can now include a Windows ZIP containing `DriftlessMap.exe` and
+a macOS DMG containing `DriftlessMap.app`, built reproducibly on native GitHub
+Actions runners with PyInstaller. Both bundles include the application runtime,
+optional CZI support, and a new DriftlessMap application icon.
+
+The running version is now visible in both the main-window title and the
+dashboard status bar, and the application exposes its name, version,
+organization, and icon through Qt desktop metadata. The README and manual now
+separate the no-Python desktop installation intended for end users from the
+Conda/pip workflow intended for developers.
+
+---
+
+## DriftlessMap 1.3.0
+
+Release date: 27 August 2026
+
+This release makes project persistence suitable for reproducible scientific
+work. Projects now record software/schema metadata, relative and absolute path
+hints, SHA-256 identities for source histology and processed atlas resources,
+complete registration topology, complete probe-planning state, and all object
+pieces and merged objects.
+
+The exact active histology raster remains embedded in every project and can be
+restored when the original source has moved. **Save Portable Project** also
+packages the original histology source for multi-scene or future reprocessing
+work. Processed volume atlases remain external to avoid very large duplicate
+archives, but they are verified before use and can be relocated interactively.
+
+Object files now carry atlas and coordinate-frame provenance. The former Save
+Object/Load Objects wording is now Export Object/Import Objects to clarify that
+objects are already included in a project. Standalone `.dmapprobe` save/load is
+implemented for probe geometry, face, multi-probe offsets, and merge choices.
+
+---
+
 ## DriftlessMap 1.2.0
 
 Release date: 27 July 2026

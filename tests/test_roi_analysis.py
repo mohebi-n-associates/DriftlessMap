@@ -63,10 +63,12 @@ class DrawingRoiAnalysisTests(unittest.TestCase):
         self.assertEqual(info["coordinate_basis"], "Configured atlas Bregma")
         self.assertEqual(info["metric_name"], "line_length_mm")
         self.assertAlmostEqual(info["metric_value"], 0.03)
+        # The dorsal-most brain voxel (index 5) spans [5, 6); the surface is
+        # its top face at z = 6.
         np.testing.assert_allclose(
-            info["coordinates"]["surface_depth_mm"], [0.03, 0.0]
+            info["coordinates"]["surface_depth_mm"], [0.04, 0.01]
         )
-        self.assertAlmostEqual(info["surface_depth_summary"]["mean"], 0.015)
+        self.assertAlmostEqual(info["surface_depth_summary"]["mean"], 0.025)
         self.assertEqual(
             info["regions"],
             [
@@ -145,6 +147,20 @@ class DrawingRoiAnalysisTests(unittest.TestCase):
             np.isnan(info["coordinates"]["surface_depth_mm"][0])
         )
 
+
+
+class VoxelFlooringTests(unittest.TestCase):
+    def test_negative_fractions_fall_into_the_lower_voxel(self):
+        from driftlessmap.utils import get_region_label
+
+        labels = np.zeros((4, 4, 4), dtype=int)
+        labels[1, 1, 1] = 5
+        labels[0, 1, 1] = 7
+        # -0.4 relative to Bregma x=1 is voxel 0, not voxel 1.
+        self.assertEqual(get_region_label([[-0.4, 0.2, 0.2]], labels, [1, 1, 1]), [7])
+        self.assertEqual(get_region_label([[0.4, 0.2, 0.2]], labels, [1, 1, 1]), [5])
+        # Outside the volume is background rather than a wrapped index.
+        self.assertEqual(get_region_label([[-2.0, 0.0, 0.0]], labels, [1, 1, 1]), [0])
 
 if __name__ == "__main__":
     unittest.main()

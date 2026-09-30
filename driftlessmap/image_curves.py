@@ -1,21 +1,23 @@
-import os
-import sys
 import numpy as np
 import pyqtgraph as pg
-from PyQt6.QtWidgets import *
-from PyQt6.QtGui import *
-from PyQt6.QtCore import *
-from pyqtgraph.Qt import QtGui, QtCore
+from PyQt6.QtWidgets import (
+    QComboBox,
+    QFrame,
+    QGridLayout,
+    QHBoxLayout,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
+from PyQt6.QtGui import QColor
+from PyQt6.QtCore import QObject, Qt, pyqtSignal
 
 from superqt import QRangeSlider
 import scipy.interpolate
 # from scipy.interpolate import interp1d
 
-import cv2
 
-from .image_stacks import ImageStacks
-from .image_reader import ImageReader
-from .uuuuuu import hsv2rgb, gamma_line, get_qhsv_from_czi_hsv, make_hist_data, read_qss_file
+from .utils import gamma_line, get_qhsv_from_czi_hsv, make_hist_data, read_qss_file
 from .widgets_utils import BWSpin, GammaSpin
 from .movable_points import MovablePoints
 
@@ -114,6 +116,16 @@ class CurvesPlot(pg.PlotWidget):
             self.depth_level = depth_level
 
         self.hist_data = hist_data.copy()
+        # Per-channel state belongs to the image being shown; start afresh so
+        # colours and enabled channels never carry over from the last image.
+        self.active_pen = []
+        self.active_brush = []
+        self.enable_channel = [False, False, False, False]
+        self.active_index = None
+        for i in range(len(self.hist_data), len(self.hist_list)):
+            self.hist_list[i].setVisible(False)
+            self.lut_line[i].setVisible(False)
+            self.lut_points[i].setVisible(False)
 
         self.plotItem.vb.setRange(xRange=[0, depth_level], yRange=[0, depth_level])
 
@@ -186,12 +198,6 @@ class CurvesPlot(pg.PlotWidget):
 
     def set_lut_points(self, point_data, ind):
         self.lut_points[ind].setData(pos=point_data)
-
-    def set_plot(self, points, table):
-        # self.pnts = points
-        # self.table_output = table
-        self.line.setData(self.table_input, table)
-        self.points.setData(pos=points)
 
     def on_mouse_dragged(self, vec):
         if self.line_type == 'gamma' or self.active_index is None:
@@ -572,8 +578,3 @@ class CurveWidget(QWidget):
     def set_channel_enable(self, ind, is_enable):
         self.curve_plot.set_enable(ind, is_enable)
         self.set_enable_induced_slider()
-
-
-
-
-

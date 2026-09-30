@@ -1,10 +1,17 @@
-import os
-import sys
 import numpy as np
-from PyQt6.QtWidgets import *
-from PyQt6.QtGui import *
-from PyQt6.QtCore import *
-from .uuuuuu import hsv2rgb, gamma_line, get_qhsv_from_czi_hsv, make_hist_data, read_qss_file
+from PyQt6.QtWidgets import (
+    QComboBox,
+    QDoubleSpinBox,
+    QLabel,
+    QListView,
+    QPushButton,
+    QSpinBox,
+    QVBoxLayout,
+    QWidget,
+)
+from PyQt6.QtGui import QColor, QIcon, QPixmap
+from PyQt6.QtCore import QObject, Qt, pyqtSignal
+from .utils import get_qhsv_from_czi_hsv, read_qss_file
 
 
 class BWSpin(QWidget):
@@ -78,6 +85,7 @@ class ChannelSelector(QWidget):
         QWidget.__init__(self)
 
         channel_button_style = read_qss_file('qss/channel_selector.qss')
+        self.index = 0  # replaced by set_channel_index for each channel
         self.vis = True
         self.setFixedSize(60, 60)
         self.setStyleSheet(channel_button_style)
@@ -137,4 +145,3 @@ class ChannelSelector(QWidget):
     def delete_item(self):
         self.color_combo.removeItem(len(self.color_combo.hsv_color_list) - 1)
         self.color_combo.hsv_color_list.pop()
-

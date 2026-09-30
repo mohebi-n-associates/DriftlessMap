@@ -65,7 +65,7 @@ def _axis_statistics(values):
 
 def _surface_depth_mm(points, label_volume, voxel_size_um):
     points = np.asarray(points, dtype=float)
-    indexes = points.astype(int)
+    indexes = np.floor(points).astype(int)
     depths = np.full(len(points), np.nan, dtype=float)
     if label_volume is None:
         return depths
@@ -106,14 +106,17 @@ def _surface_depth_mm(points, label_volume, voxel_size_um):
     point_lower = lower[inverse]
     point_upper = upper[inverse]
     point_z = points[point_indexes, 2]
+    # ``upper`` indexes the dorsal-most brain voxel, which spans
+    # ``[upper, upper + 1)``; the brain surface is its top face.
+    surface = point_upper + 1
     inside_extent = (
         (point_lower >= 0)
         & (point_z >= point_lower)
-        & (point_z <= point_upper)
+        & (point_z < surface)
     )
     selected = point_indexes[inside_extent]
     depths[selected] = (
-        (point_upper[inside_extent] - point_z[inside_extent])
+        (surface[inside_extent] - point_z[inside_extent])
         * float(voxel_size_um)
         / 1000.0
     )
@@ -199,8 +202,12 @@ def build_drawing_roi_info(
     axis_info=None,
     label_volume=None,
     label_info=None,
+    plot_mode=None,
 ):
     """Build an ROI report for one drawing piece or a merged drawing.
+
+    ``plot_mode`` ("area" or "line") is the stored drawing mode; when it is
+    missing, as in files from before it was stored, the piece name decides.
 
     Drawing coordinates use HERBS' internal ``(ML, AP, dorsal DV)`` axes and
     are relative to the configured Bregma voxel.
@@ -239,7 +246,7 @@ def build_drawing_roi_info(
         label_array = np.asarray(label_volume)
         if label_array.shape != herbs_shape:
             raise ValueError("Atlas labels do not match the HERBS atlas shape.")
-        indexes = absolute_points.astype(int)
+        indexes = np.floor(absolute_points).astype(int)
         valid = np.all(
             (indexes >= 0) & (indexes < np.asarray(herbs_shape, dtype=int)), axis=1
         )
@@ -289,7 +296,8 @@ def build_drawing_roi_info(
             "count": int(finite_depth.size),
         }
 
-    plot_mode = "area" if names and "area" in names[0].lower() else "line"
+    if plot_mode not in ("area", "line"):
+        plot_mode = "area" if names and "area" in names[0].lower() else "line"
     metric_name, metric_value = _drawing_metric(
         pieces, plot_mode, voxel_size_um
     )

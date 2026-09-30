@@ -2,30 +2,40 @@ import os
 import sys
 from os.path import dirname, realpath, join
 import copy
+from pathlib import Path
+import tempfile
 
 import pickle
-import csv
 
 import numpy as np
-import pandas as pd
-import math
-import scipy
-import scipy.io
-import scipy.ndimage as ndi
-from scipy.ndimage import map_coordinates
-from natsort import natsorted, ns
 
 import cv2
 
 opencv_ver = (cv2.__version__).split(".")
-from numba import jit
-import colorsys
-
-
-from PyQt6.QtWidgets import *
-from PyQt6.QtCore import *
-from PyQt6.QtGui import *
-from PyQt6.QtSql import QSqlTableModel
+from PyQt6.QtWidgets import (
+    QApplication,
+    QComboBox,
+    QDialog,
+    QFileDialog,
+    QFrame,
+    QGridLayout,
+    QHBoxLayout,
+    QLabel,
+    QMainWindow,
+    QMessageBox,
+    QPushButton,
+    QVBoxLayout,
+)
+from PyQt6.QtCore import QSize, QTimer, Qt
+from PyQt6.QtGui import (
+    QIcon,
+    QKeySequence,
+    QPainter,
+    QShortcut,
+)
+from .utils import read_qss_file
+from .layers_control import LayersControl
+from .object_control import ObjectControl
 
 # from PyQt6 import uic
 from PyQt6.uic import loadUiType
@@ -34,15 +44,11 @@ import pyqtgraph as pg
 pg.setConfigOption("imageAxisOrder", "row-major")
 pg.setConfigOption("useNumba", True)
 import pyqtgraph.opengl as gl
-from pyqtgraph.Qt import QtCore, QtGui
 
-import warnings
-
-
-from .uuuuuu import (
+from .utils import (
+    tolerance_mask,
     get_cell_count,
     num_side_pnt_changed,
-    rotate,
     merge_channels_into_single_img,
     gamma_correction,
     create_vis_img,
@@ -56,7 +62,6 @@ from .uuuuuu import (
     calculate_cells_info,
     calculate_virus_info,
     calculate_drawing_info,
-    calculate_contour_line,
     check_loading_pickle_file,
     check_loaded_project,
     check_bounding_contains,
@@ -68,6 +73,8 @@ from .probe_utiles import (
     Probe,
     MultiProbes,
     calculate_probe_info,
+    linear_silicon_settings_error,
+    probe_error_message,
     get_pre_multi_shank_vis_base,
     get_center_lines,
 )
@@ -87,17 +94,16 @@ from .triangulation import (
 )
 
 from .image_reader import (
+    EmbeddedImageReader,
     HISTOLOGY_IMAGE_FILTER,
     ImageReader,
     ImagesReader,
     TIFFReader,
+    read_bitmap,
 )
-from .image_curves import *
-from .image_view import ImageView
 
-from .layers_control import *
-from .object_control import *
-from .toolbox import ToolBox
+from .image_view import ImageView
+from .toolbox import ToolBox, read_int_field
 from .wtiles import (
     LayerSettingDialog,
     SliceSettingDialog,
@@ -106,26 +112,48 @@ from .wtiles import (
 )
 from .obj_items import (
     get_object_vis_color,
-    create_plot_points_in_3d,
-    create_probe_line_in_3d,
-    create_drawing_in_3d,
-    create_contour_line_in_3d,
-    render_volume,
-    render_small_volume,
+    load_mesh_file,
     make_3d_gl_widget,
 )
 from .about import AboutDriftlessMapWindow
 from .persistence import save_driftlessmap_file
+from .provenance import (
+    ATLAS_IDENTITY_FILES,
+    describe_atlas_path,
+    describe_path,
+    pack_path,
+    path_stat_signature,
+    resolve_reference,
+    unpack_path,
+    utc_now_iso,
+    verify_reference,
+)
+from .version import APPLICATION_DISPLAY_NAME, APPLICATION_WINDOW_TITLE, __version__
 from .cell_detection import select_detection_channel
 from .coordinate_validation import coordinates_in_bounds
+from .layer_validation import image_layer_matches
 from .probe_reconstruction import (
     allen_ccf_to_estimated_bregma_mm,
     format_estimated_bregma_report,
     is_allen_ccf_2017,
     normalize_axis_info,
     volume_view_vox_to_source_vox,
+    source_vox_to_herbs_vox,
 )
 from .roi_analysis import build_drawing_roi_info
+from .atlas_matching import suggest_sections
+from .auto_registration import propose_landmarks
+from .background import run_in_background
+from .section_suggestion_dialog import SectionSuggestionDialog
+from .landmarks import LANDMARK_FIELDS, LandmarkModel, triangulation_payload_error
+from .project_io import (
+    default_working_atlas_data,
+    default_working_img_data,
+    object_file_names,
+    prefingerprint_inputs,
+    with_defaults,
+)
+from .layer_geometry import layer_center, rotate_points, rotate_raster, shift_raster
 from .resources import resource_path
 from .user_settings import load_last_atlas_path, save_last_atlas_path
 
@@ -139,14 +167,27 @@ class DriftlessMap(QMainWindow, FORM_Main):
         super(DriftlessMap, self).__init__()
         QMainWindow.__init__(self)
         self.setupUi(self)
-        self.setWindowTitle(
-            "DriftlessMap - Interactive Histology Registration and Brain-Atlas Mapping"
-        )
+        self.setWindowTitle(APPLICATION_WINDOW_TITLE)
+        self.setWindowIcon(QIcon(resource_path("icons/app/driftlessmap.png")))
+        self.version_label = QLabel(APPLICATION_DISPLAY_NAME, self)
+        self.version_label.setObjectName("versionLabel")
+        self.version_label.setToolTip("Running DriftlessMap version {}".format(__version__))
+        self.version_label.setContentsMargins(8, 0, 10, 0)
+        self.statusbar.addPermanentWidget(self.version_label)
 
         self.home_path = str(os.path.expanduser("~"))
         self.save_path = self.home_path
+        self.current_project_path = None
+        self.project_created_at = None
+        self.atlas_provenance = None
+        self.histology_provenance = None
+        self._portable_source_directories = []
+        self._temporary_histology_source = None
+        self._loaded_histology_signature = None
+        self._loaded_atlas_signatures = {}
 
         self.num_windows = 1
+        self.current_layout = "coronal"
         self.volume_atlas_path = None
         self.volume_atlas_axis_info = None
         self.slice_atlas_path = None
@@ -179,6 +220,8 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.small_atlas_rect = None
         self.small_histo_rect = None
 
+        # Landmark state lives in one model; see the properties below.
+        self.landmarks = LandmarkModel()
         self.atlas_corner_points = None
         self.atlas_side_lines = None
         self.atlas_tri_data = []
@@ -203,22 +246,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
 
         self.drawing_allowed = False
 
-        self.working_img_data = {
-            "img-overlay": None,
-            "img-mask": None,
-            "img-probe": [],
-            "img-cells": [],
-            "img-contour": [],
-            "img-virus": None,
-            "img-drawing": [],
-            "img-blob": [],
-            "cell_count": [0 for i in range(5)],
-            "cell_size": [],
-            "cell_symbol": [],
-            "cell_layer_index": [],
-            "lasso_path": [],
-            "ruler_path": [],
-        }
+        self.working_img_data = self._default_working_img_data()
         self.working_img_type = {
             "img-overlay": "pixel",
             "img-mask": "pixel",
@@ -235,21 +263,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
             "ruler_path": "vector",
         }
 
-        self.working_atlas_data = {
-            "atlas-overlay": None,
-            "atlas-mask": None,
-            "atlas-probe": [],
-            "atlas-cells": [],
-            "atlas-contour": [],
-            "atlas-virus": [],
-            "atlas-drawing": [],
-            "cell_count": [0 for i in range(5)],
-            "cell_size": [],
-            "cell_symbol": [],
-            "cell_layer_index": [],
-            "lasso_path": [],
-            "ruler_path": [],
-        }
+        self.working_atlas_data = self._default_working_atlas_data()
         self.working_atlas_type = {
             "atlas-overlay": "pixel",
             "atlas-mask": "pixel",
@@ -276,9 +290,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.register_method = 0
 
         self.action_list = []
-        self.layer_action_after_matching = []
 
-        self.probe_lines_2d_list = []
 
         self.object_3d_list = []
 
@@ -302,8 +314,6 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.layer_shift_val = 1
         self.layer_rotate_val = 1
         self.action_id = 0
-        self.undo_count = 0
-        self.redo_count = -1
 
         self.current_atlas = "volume"
 
@@ -377,7 +387,6 @@ class DriftlessMap(QMainWindow, FORM_Main):
         )
         # self.image_view.img_stacks.image_dict['img-cells'].sigClicked.connect(self.img_cell_pnts_clicked)
         # self.image_view.img_stacks.image_dict['img-probe'].sigClicked.connect(self.img_probe_pnts_clicked)
-        # self.image_view.img_stacks.image_dict['img-drawing'].sigClicked.connect(self.img_drawing_pnts_clicked)
 
         self.atlas_view = AtlasView()
         self.atlas_view.show_boundary_btn.clicked.connect(self.vis_atlas_boundary)
@@ -404,15 +413,8 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.atlas_view.simg.sig_mouse_clicked.connect(self.atlas_stacks_clicked)
         self.atlas_view.himg.sig_mouse_clicked.connect(self.atlas_stacks_clicked)
         # ruler points
-        self.atlas_view.cimg.image_dict["ruler_path"].sigPointsClicked.connect(
-            self.atlas_ruler_points_clicked
-        )
-        self.atlas_view.simg.image_dict["ruler_path"].sigPointsClicked.connect(
-            self.atlas_ruler_points_clicked
-        )
-        self.atlas_view.himg.image_dict["ruler_path"].sigPointsClicked.connect(
-            self.atlas_ruler_points_clicked
-        )
+        for item in self._atlas_view_items("ruler_path", include_slice=False):
+            item.sigPointsClicked.connect(self.atlas_ruler_points_clicked)
         # triangle points moving and clicked
         self.atlas_view.cimg.image_dict["tri_pnts"].mouseDragged.connect(
             self.atlas_window_tri_pnts_moving
@@ -433,15 +435,8 @@ class DriftlessMap(QMainWindow, FORM_Main):
             self.atlas_window_tri_pnts_clicked
         )
         # probe clicked
-        self.atlas_view.cimg.image_dict["atlas-probe"].sigClicked.connect(
-            self.atlas_probe_pnts_clicked
-        )
-        self.atlas_view.simg.image_dict["atlas-probe"].sigClicked.connect(
-            self.atlas_probe_pnts_clicked
-        )
-        self.atlas_view.himg.image_dict["atlas-probe"].sigClicked.connect(
-            self.atlas_probe_pnts_clicked
-        )
+        for item in self._atlas_view_items("atlas-probe", include_slice=False):
+            item.sigClicked.connect(self.atlas_probe_pnts_clicked)
         # contour clicked
         # self.atlas_view.cimg.image_dict['atlas-contour'].sigClicked.connect(self.atlas_contour_pnts_clicked)
         # self.atlas_view.simg.image_dict['atlas-contour'].sigClicked.connect(self.atlas_contour_pnts_clicked)
@@ -463,15 +458,8 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.image_view.img_stacks.image_dict["img-mask"].setLookupTable(
             self.magic_wand_lut
         )
-        self.atlas_view.cimg.image_dict["atlas-mask"].setLookupTable(
-            self.magic_wand_lut
-        )
-        self.atlas_view.himg.image_dict["atlas-mask"].setLookupTable(
-            self.magic_wand_lut
-        )
-        self.atlas_view.simg.image_dict["atlas-mask"].setLookupTable(
-            self.magic_wand_lut
-        )
+        for item in self._atlas_view_items("atlas-mask", include_slice=False):
+            item.setLookupTable(self.magic_wand_lut)
 
         # --------------------------------------------------------
         #                 connect all menu actions
@@ -482,6 +470,9 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.actionAtlas.triggered.connect(self.load_atlas_clicked)
         self.actionSingle_Image.triggered.connect(self.load_image)
         self.actionSave_Project.triggered.connect(self.save_project_called)
+        self.actionSave_Portable_Project.triggered.connect(
+            lambda: self.save_project_called(portable=True)
+        )
         self.actionCurrent_Layer.triggered.connect(self.save_current_layer)
         self.actionAll_Layer.triggered.connect(self.save_all_layer)
         self.actionSave_Current.triggered.connect(self.save_current_object)
@@ -537,6 +528,8 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.actionRegister_Slice_Info.triggered.connect(self.register_slice_info)
         self.actionSave_Slice.triggered.connect(self.save_processed_slice)
         self.actionSwitch_Atlas.triggered.connect(self.switch_atlas)
+        self.actionSuggest_Atlas_Section.triggered.connect(self.suggest_atlas_section)
+        self.actionPropose_Landmarks.triggered.connect(self.propose_registration_landmarks)
         self.actionBregma_Picker.setCheckable(True)
         self.actionBregma_Picker.triggered.connect(self.pick_bregma)
         self.actionCreate_Slice_Layer.triggered.connect(self.process_slice)
@@ -696,6 +689,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
     # ------------------------------------------------------------------
     def show_only_slice_window(self):
         self.num_windows = 1
+        self.current_layout = "slice"
         self.atlas_view.radio_group.setVisible(True)
         self.coronalframe.setVisible(False)
         self.sagitalframe.setVisible(False)
@@ -716,6 +710,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
             self.sagital_layout.addWidget(self.atlas_view.slut, 0, 1, 1, 1)
             self.sagital_layout.addWidget(self.atlas_view.spage_ctrl, 1, 0, 1, 2)
         self.num_windows = 1
+        self.current_layout = "coronal"
         self.atlas_view.radio_group.setVisible(True)
         self.coronalframe.setVisible(True)
         self.sagitalframe.setVisible(False)
@@ -737,6 +732,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
             self.sagital_layout.addWidget(self.atlas_view.slut, 0, 1, 1, 1)
             self.sagital_layout.addWidget(self.atlas_view.spage_ctrl, 1, 0, 1, 2)
         self.num_windows = 1
+        self.current_layout = "sagittal"
         self.atlas_view.radio_group.setVisible(True)
         self.coronalframe.setVisible(False)
         self.sagitalframe.setVisible(True)
@@ -758,6 +754,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
             self.sagital_layout.addWidget(self.atlas_view.slut, 0, 1, 1, 1)
             self.sagital_layout.addWidget(self.atlas_view.spage_ctrl, 1, 0, 1, 2)
         self.num_windows = 1
+        self.current_layout = "horizontal"
         self.atlas_view.radio_group.setVisible(True)
         self.coronalframe.setVisible(False)
         self.sagitalframe.setVisible(False)
@@ -769,6 +766,8 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.atlas_view.section_rabnt3.setChecked(True)
 
     def show_only_image_window(self):
+        self.num_windows = 1
+        self.current_layout = "image"
         self.atlas_view.radio_group.setVisible(True)
         self.coronalframe.setVisible(False)
         self.sagitalframe.setVisible(False)
@@ -789,6 +788,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
             self.sagital_layout.addWidget(self.atlas_view.slut, 0, 1, 1, 1)
             self.sagital_layout.addWidget(self.atlas_view.spage_ctrl, 1, 0, 1, 2)
         self.num_windows = 1
+        self.current_layout = "3d"
         self.atlas_view.radio_group.setVisible(True)
         self.coronalframe.setVisible(False)
         self.sagitalframe.setVisible(False)
@@ -809,6 +809,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
             self.sagital_layout.addWidget(self.atlas_view.slut, 0, 1, 1, 1)
             self.sagital_layout.addWidget(self.atlas_view.spage_ctrl, 1, 0, 1, 2)
         self.num_windows = 2
+        self.current_layout = "volume-histology"
         self.atlas_view.radio_group.setVisible(True)
         if self.atlas_display == "coronal":
             self.coronalframe.setVisible(True)
@@ -831,6 +832,8 @@ class DriftlessMap(QMainWindow, FORM_Main):
     def show_slice_and_histology(self):
         if self.atlas_view.slice_image_data is None:
             return
+        self.num_windows = 2
+        self.current_layout = "slice-histology"
         self.coronalframe.setVisible(False)
         self.sagitalframe.setVisible(False)
         self.horizontalframe.setVisible(False)
@@ -850,6 +853,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
             self.sagital_layout.addWidget(self.atlas_view.slut, 0, 1, 1, 1)
             self.sagital_layout.addWidget(self.atlas_view.spage_ctrl, 1, 0, 1, 2)
         self.num_windows = 3
+        self.current_layout = "volume-3d-histology"
         self.atlas_view.radio_group.setVisible(True)
         if self.atlas_display == "coronal":
             self.coronalframe.setVisible(True)
@@ -880,6 +884,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
             self.sagital_copy_layout.addWidget(self.atlas_view.slut, 0, 1, 1, 1)
             self.sagital_copy_layout.addWidget(self.atlas_view.spage_ctrl, 1, 0, 1, 2)
         self.num_windows = 4
+        self.current_layout = "four-atlas-windows"
         self.atlas_view.radio_group.setVisible(False)
         self.coronalframe.setVisible(True)
         self.sagitalframe.setVisible(False)
@@ -896,12 +901,8 @@ class DriftlessMap(QMainWindow, FORM_Main):
         else:
             self.is_grids_on = True
             self.actionGrids_Off.setText("Grids: On")
-        self.atlas_view.cimg.image_dict["grid_lines"].setVisible(self.is_grids_on)
-        self.atlas_view.simg.image_dict["grid_lines"].setVisible(self.is_grids_on)
-        self.atlas_view.himg.image_dict["grid_lines"].setVisible(self.is_grids_on)
-        self.atlas_view.slice_stack.image_dict["grid_lines"].setVisible(
-            self.is_grids_on
-        )
+        for item in self._atlas_view_items("grid_lines"):
+            item.setVisible(self.is_grids_on)
         self.image_view.img_stacks.image_dict["grid_lines"].setVisible(self.is_grids_on)
 
     # display mode
@@ -979,16 +980,146 @@ class DriftlessMap(QMainWindow, FORM_Main):
         if rsp == QDialog.DialogCode.Accepted:
             self.multi_settings.set_multi_probes(multi_probe_info.multi_settings)
             msg = self.multi_settings.check_multi_settings()
+            self.valid_multi_settings = msg is None
             if msg is not None:
                 self.print_message(msg, self.error_message_color)
-                return
-            self.valid_multi_settings = True
 
     def save_probe_setting_called(self):
-        self.print_message("under development", self.error_message_color)
+        path = QFileDialog.getSaveFileName(
+            self,
+            "Save Probe Setting",
+            self.save_path,
+            "DriftlessMap Probe Setting (*.dmapprobe)",
+        )[0]
+        if not path:
+            return
+        payload = {
+            "probe_settings": self.probe_settings.get_settings(),
+            "planning": self.get_probe_planning_data(),
+        }
+        success, error = save_driftlessmap_file(path, payload, "probe_settings")
+        if not success:
+            self.print_message(error, self.error_message_color)
+            return
+        self.print_message("Probe setting saved successfully.", self.normal_color)
 
     def load_probe_setting_called(self):
-        self.print_message("under development", self.error_message_color)
+        path = QFileDialog.getOpenFileName(
+            self,
+            "Load Probe Setting",
+            self.home_path,
+            "DriftlessMap Probe Setting (*.dmapprobe)",
+        )[0]
+        if not path:
+            return
+        payload, error = check_loading_pickle_file(
+            path, expected_kind="probe_settings"
+        )
+        if error is not None:
+            self.print_message(error, self.error_message_color)
+            return
+        try:
+            planning = payload.get("planning", {})
+            planning.setdefault("probe_settings", payload["probe_settings"])
+            self.set_probe_planning_data(planning)
+        except (KeyError, TypeError, ValueError) as exc:
+            self.print_message(
+                "Invalid probe setting: {}".format(exc), self.error_message_color
+            )
+            return
+        self.print_message("Probe setting loaded successfully.", self.normal_color)
+
+    def get_probe_planning_data(self):
+        return {
+            "probe_settings": self.probe_settings.get_settings(),
+            "probe_type": self.probe_type,
+            "site_face": self.site_face,
+            "multi_shanks_enabled": self.multi_shanks,
+            "multi_settings": self.multi_settings.get_multi_settings(),
+            "valid_probe_settings": self.valid_probe_settings,
+            "valid_multi_settings": self.valid_multi_settings,
+            "merge_sites": self.tool_box.merge_sites,
+            "pre_site_face_index": self.tool_box.pre_site_face_combo.currentIndex(),
+            "after_site_face_index": self.tool_box.after_site_face_combo.currentIndex(),
+        }
+
+    def _validated_probe_planning(self, planning):
+        """Check persisted probe planning before it changes the session."""
+        settings = planning.get("probe_settings", planning)
+        if not isinstance(settings, dict):
+            raise ValueError("probe settings are missing")
+        probe_type = int(planning.get("probe_type", settings["probe_type"]))
+        if not 0 <= probe_type < self.tool_box.probe_type_combo.count():
+            raise ValueError("unknown probe type {}".format(probe_type))
+        site_face = int(planning.get("site_face", 0))
+        if site_face not in (0, 1, 2, 3):
+            raise ValueError("unknown site face {}".format(site_face))
+        pre_index = int(planning.get("pre_site_face_index", site_face))
+        after_index = int(planning.get("after_site_face_index", site_face))
+        for name, index, combo in (
+            ("pre-surgery face", pre_index, self.tool_box.pre_site_face_combo),
+            ("after-surgery face", after_index, self.tool_box.after_site_face_combo),
+        ):
+            if not 0 <= index < combo.count():
+                raise ValueError("unknown {} {}".format(name, index))
+        geometry_error = None
+        if probe_type == 2:
+            try:
+                geometry_error = linear_silicon_settings_error(settings)
+            except (KeyError, TypeError, IndexError):
+                geometry_error = "the linear silicon geometry is incomplete"
+        return settings, probe_type, site_face, pre_index, after_index, geometry_error
+
+    def set_probe_planning_data(self, planning):
+        (
+            settings,
+            probe_type,
+            site_face,
+            pre_index,
+            after_index,
+            geometry_error,
+        ) = self._validated_probe_planning(planning)
+        # Changing the probe type clears unaccepted probe points; a restore
+        # must not throw that work away.
+        pending_probe = list(self.working_atlas_data["atlas-probe"])
+        self.probe_type = probe_type
+        self.tool_box.probe_type_combo.setCurrentIndex(self.probe_type)
+        # The combo signal configures type-specific UI. Restore the exact
+        # persisted geometry afterwards so custom settings are not replaced by
+        # the signal handler's temporary defaults.
+        self.probe_settings.set_settings(settings)
+        if pending_probe and not self.working_atlas_data["atlas-probe"]:
+            self.working_atlas_data["atlas-probe"] = pending_probe
+            self.atlas_view.working_atlas.image_dict["atlas-probe"].setData(
+                pos=np.asarray(pending_probe)
+            )
+
+        self.site_face = site_face
+        self.tool_box.pre_site_face_combo.blockSignals(True)
+        self.tool_box.after_site_face_combo.blockSignals(True)
+        self.tool_box.pre_site_face_combo.setCurrentIndex(pre_index)
+        self.tool_box.after_site_face_combo.setCurrentIndex(after_index)
+        self.tool_box.pre_site_face_combo.blockSignals(False)
+        self.tool_box.after_site_face_combo.blockSignals(False)
+
+        self.multi_shanks = bool(planning.get("multi_shanks_enabled", False))
+        self.multi_settings.set_multi_probes(planning.get("multi_settings"))
+        self.valid_probe_settings = geometry_error is None and bool(
+            planning.get("valid_probe_settings", True)
+        )
+        self.valid_multi_settings = bool(
+            planning.get(
+                "valid_multi_settings",
+                planning.get("multi_settings") is not None,
+            )
+        )
+        self.tool_box.multi_prb_btn.blockSignals(True)
+        self.tool_box.multi_prb_btn.setChecked(self.multi_shanks)
+        self.tool_box.multi_prb_btn.blockSignals(False)
+        self.tool_box.merge_sites = bool(planning.get("merge_sites", False))
+        self.tool_box.merge_sites_btn.blockSignals(True)
+        self.tool_box.merge_sites_btn.setChecked(self.tool_box.merge_sites)
+        self.tool_box.merge_sites_btn.blockSignals(False)
 
     # ------------------------------------------------------------------
     #
@@ -1021,16 +1152,10 @@ class DriftlessMap(QMainWindow, FORM_Main):
             self.atlas_view.slice_size
         ).astype("uint8")
         # should I delete all layers ???
-        # self.check_n_trajectory()
 
     def clear_tri_inside(self):
         self.atlas_tri_inside_data.clear()  # renew tri_inside data to empty
-        inds = np.arange(len(self.working_atlas_text))[::-1]
-        for da_ind in inds:
-            self.atlas_view.working_atlas.vb.removeItem(self.working_atlas_text[da_ind])
-            self.working_atlas_text[da_ind].deleteLater()
-            del self.working_atlas_text[da_ind]
-        self.working_atlas_text.clear()
+        self._remove_text_items(self.working_atlas_text)
 
     def reset_tri_onside_atlas(self):
         self.atlas_rect = (
@@ -1137,16 +1262,15 @@ class DriftlessMap(QMainWindow, FORM_Main):
         shift_setting = LayerSettingDialog(
             "Layer Shifting Setting", 0, 100, self.layer_shift_val
         )
-        shift_setting.exec()
-        self.layer_shift_val = shift_setting.val
+        if shift_setting.exec() == QDialog.DialogCode.Accepted:
+            self.layer_shift_val = shift_setting.val
 
     def rotate_setting_changed(self):
         rotate_setting = LayerSettingDialog(
             "Layer Rotating Setting", 0, 50, self.layer_rotate_val
         )
-        rotate_setting.exec()
-        self.layer_rotate_val = rotate_setting.val
-        # print(self.layer_rotate_val)
+        if rotate_setting.exec() == QDialog.DialogCode.Accepted:
+            self.layer_rotate_val = rotate_setting.val
 
     def get_valid_layer(self):
         if not self.layer_ctrl.current_layer_index or not self.h2a_transferred:
@@ -1170,104 +1294,62 @@ class DriftlessMap(QMainWindow, FORM_Main):
             )
             return
         if "img-" in da_link:
-            if self.working_img_type[da_link] == "vector":
-                temp = np.asarray(self.working_img_data[da_link]).copy()
-                temp = temp + moving_vec
-                self.working_img_data[da_link] = temp.tolist()
-                self.image_view.img_stacks.image_dict[da_link].setData(
-                    pos=np.asarray(self.working_img_data[da_link])
-                )
-            else:
-                shift_mat = np.float32([[1, 0, moving_vec[0]], [0, 1, moving_vec[1]]])
-                da_img = self.working_img_data[da_link].copy()
-                self.working_img_data[da_link] = cv2.warpAffine(
-                    da_img, shift_mat, da_img.shape[:2]
-                )
-                self.image_view.img_stacks.image_dict[da_link].setImage(
-                    self.working_img_data[da_link]
-                )
+            data, types, stack = (
+                self.working_img_data,
+                self.working_img_type,
+                self.image_view.img_stacks,
+            )
         else:
-            if self.working_atlas_type[da_link] == "vector":
-                temp = np.asarray(self.working_atlas_data[da_link]).copy()
-                temp = temp + moving_vec
-                self.working_atlas_data[da_link] = temp.tolist()
-                self.atlas_view.working_atlas.image_dict[da_link].setData(
-                    pos=np.asarray(self.working_atlas_data[da_link])
-                )
-            else:
-                shift_mat = np.float32([[1, 0, moving_vec[0]], [0, 1, moving_vec[1]]])
-                da_img = self.working_atlas_data[da_link].copy()
-                self.working_atlas_data[da_link] = cv2.warpAffine(
-                    da_img, shift_mat, da_img.shape[:2]
-                )
-                self.atlas_view.working_atlas.image_dict[da_link].setImage(
-                    self.working_atlas_data[da_link]
-                )
-        if da_link == "atlas-overlay":
-            print("record after transferred action for later accept.")
+            data, types, stack = (
+                self.working_atlas_data,
+                self.working_atlas_type,
+                self.atlas_view.working_atlas,
+            )
+        if types[da_link] == "vector":
+            if not data[da_link]:
+                return
+            temp = np.asarray(data[da_link], dtype=float) + moving_vec
+            data[da_link] = temp.tolist()
+            stack.image_dict[da_link].setData(pos=np.asarray(data[da_link]))
+        else:
+            if data[da_link] is None:
+                return
+            data[da_link] = shift_raster(data[da_link], moving_vec)
+            stack.image_dict[da_link].setImage(data[da_link])
 
     def rotate_layers(self, da_link, rotate_angle):
-        theta = np.radians(rotate_angle)
-        rot_mat = np.array(
-            ((np.cos(theta), -np.sin(theta)), (np.sin(theta), np.cos(theta)))
-        )
-
         if da_link in ["img-process", "atlas-slice"]:
             self.print_message(
                 "Transform only works on overlay and transferred layers.",
                 self.reminder_color,
             )
             return
+        if "img-" in da_link:
+            data, types, stack = (
+                self.working_img_data,
+                self.working_img_type,
+                self.image_view.img_stacks,
+            )
+            center = layer_center(self.histo_tri_onside_data)
         else:
-            if "img-" in da_link:
-                img_rect = cv2.boundingRect(self.histo_tri_onside_data)
-                img_center = np.array(
-                    [img_rect[0] + 0.5 * img_rect[2], img_rect[1] + 0.5 * img_rect[3]]
-                ).astype(int)
-                if self.working_img_type[da_link] == "vector":
-                    temp = (
-                        np.asarray(self.working_img_data[da_link]).copy() - img_center
-                    )
-                    temp = np.dot(rot_mat, temp) + img_center
-                    self.working_img_data[da_link] = temp.tolist()
-                    self.image_view.img_stacks.image_dict[da_link].setData(
-                        pos=np.asarray(self.working_img_data[da_link])
-                    )
-                else:
-                    temp = rotate(
-                        self.working_img_data[da_link], rotate_angle, img_center
-                    )
-                    self.working_img_data[da_link] = temp.copy()
-                    self.image_view.img_stacks.image_dict[da_link].setImage(
-                        self.working_img_data[da_link]
-                    )
-            else:
-                atlas_rect = cv2.boundingRect(self.histo_tri_onside_data)
-                atlas_center = np.array(
-                    [
-                        atlas_rect[0] + 0.5 * atlas_rect[2],
-                        atlas_rect[1] + 0.5 * atlas_rect[3],
-                    ]
-                )
-                atlas_center = atlas_center.astype(int)
-                if self.working_atlas_type[da_link] == "vector":
-                    temp = (
-                        np.asarray(self.working_atlas_data[da_link]).copy()
-                        - atlas_center
-                    )
-                    temp = np.dot(rot_mat, temp) + atlas_center
-                    self.working_atlas_data[da_link] = temp.tolist()
-                    self.atlas_view.working_atlas.image_dict[da_link].setData(
-                        pos=np.asarray(self.working_atlas_data[da_link])
-                    )
-                else:
-                    temp = rotate(
-                        self.working_atlas_data[da_link], rotate_angle, atlas_center
-                    )
-                    self.working_atlas_data[da_link] = temp.copy()
-                    self.atlas_view.working_atlas.image_dict[da_link].setImage(
-                        self.working_atlas_data[da_link]
-                    )
+            data, types, stack = (
+                self.working_atlas_data,
+                self.working_atlas_type,
+                self.atlas_view.working_atlas,
+            )
+            center = layer_center(self.atlas_tri_onside_data)
+        if types[da_link] == "vector":
+            if not data[da_link]:
+                return
+            data[da_link] = rotate_points(
+                data[da_link], center, rotate_angle
+            ).tolist()
+            stack.image_dict[da_link].setData(pos=np.asarray(data[da_link]))
+        else:
+            if data[da_link] is None:
+                return
+            data[da_link] = rotate_raster(data[da_link], center, rotate_angle)
+            stack.image_dict[da_link].setImage(data[da_link])
 
     def vertical_translation_pressed(self, moving_direction):
         valid_links = self.get_valid_layer()
@@ -1280,10 +1362,6 @@ class DriftlessMap(QMainWindow, FORM_Main):
         for da_link in valid_links:
             self.move_layers(da_link, moving_vec)
 
-        if self.a2h_transferred or self.h2a_transferred:
-            self.layer_action_after_matching.append(
-                {"action": "shift", "val": moving_vec}
-            )
 
     def horizontal_translation_pressed(self, moving_direction):
         valid_links = self.get_valid_layer()
@@ -1296,10 +1374,6 @@ class DriftlessMap(QMainWindow, FORM_Main):
         for da_link in valid_links:
             self.move_layers(da_link, moving_vec)
 
-        if self.a2h_transferred or self.h2a_transferred:
-            self.layer_action_after_matching.append(
-                {"action": "shift", "val": moving_vec}
-            )
 
     def layer_rotation_pressed(self, rotating_direction):
         valid_links = self.get_valid_layer()
@@ -1312,10 +1386,6 @@ class DriftlessMap(QMainWindow, FORM_Main):
         for da_link in valid_links:
             self.rotate_layers(da_link, rotating_val)
 
-        if self.a2h_transferred or self.h2a_transferred:
-            self.layer_action_after_matching.append(
-                {"action": "rotate", "val": rotating_val}
-            )
 
     def save_current_action(self, current_tool, layer_link, data, layer_tb):
         if self.action_id != 0:
@@ -1325,11 +1395,12 @@ class DriftlessMap(QMainWindow, FORM_Main):
             for da_ind in del_index:
                 del self.action_list[da_ind]
             self.action_id = 0
+        # Snapshots are deep copies so later edits cannot rewrite history.
         current_action = {
             "tool": current_tool,
             "link": layer_link,
-            "data": data,
-            "layer": layer_tb,
+            "data": copy.deepcopy(data),
+            "layer": None if layer_tb is None else np.array(layer_tb, copy=True),
         }
         self.action_list.append(current_action)
         if len(self.action_list) > 6:
@@ -1349,13 +1420,23 @@ class DriftlessMap(QMainWindow, FORM_Main):
             return
         self.set_undo_redo_data()
 
+    def forget_layer_actions(self, layer_link):
+        """Drop undo history for a layer that no longer exists."""
+        self.action_list = [
+            action for action in self.action_list if action["link"] != layer_link
+        ]
+        self.action_id = 0
+
     def set_undo_redo_data(self):
         current_action = self.action_list[self.action_id - 1]
-        current_data = current_action["data"]
+        # Restore a copy so the snapshot survives further edits.
+        current_data = copy.deepcopy(current_action["data"])
         layer_link = current_action["link"]
         current_tool = current_action["tool"]
         da_layer = current_action["layer"]
-        if current_tool != "delete":
+        if layer_link not in self.layer_ctrl.layer_link:
+            return
+        if current_tool in self.tool_box.checkable_btn_dict:
             self.tool_box.checkable_btn_dict[current_tool].setChecked(True)
         if "img" in layer_link:
             if layer_link == "img-process":
@@ -1399,19 +1480,20 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 self.image_view.img_stacks.image_dict[layer_link].setData(
                     pos=np.asarray(self.working_img_data[layer_link])
                 )
-        elif "atlas" in layer_link:
-            if layer_link == "atlas-slice":
-                print("process")
-            elif layer_link == "atlas-mask":
-                print("mask")
-            elif layer_link == "atlas-probe":
-                print("cells")
             else:
-                print("others")
+                return
+        elif layer_link in ["atlas-slice", "atlas-mask"]:
+            self._set_atlas_raster(layer_link, current_data["data"])
+        elif layer_link == "atlas-probe":
+            self.working_atlas_data[layer_link] = current_data["data"]
+            self.atlas_view.working_atlas.image_dict[layer_link].setData(
+                pos=np.asarray(self.working_atlas_data[layer_link])
+            )
         else:
             return
-        da_index = np.where(np.ravel(self.layer_ctrl.layer_link) == layer_link)[0][0]
-        self.layer_ctrl.layer_list[da_index].set_thumbnail_data(da_layer)
+        if da_layer is not None:
+            da_index = self.layer_ctrl.layer_link.index(layer_link)
+            self.layer_ctrl.layer_list[da_index].set_thumbnail_data(da_layer)
 
     # ------------------------------------------------------------------
     #
@@ -1511,80 +1593,39 @@ class DriftlessMap(QMainWindow, FORM_Main):
     #                  Menu Bar ---- Atlas ----- related
     #
     # ------------------------------------------------------------------
+    def _open_downloaded_atlas(self, dialog):
+        """Open a freshly processed download like any other atlas folder.
+
+        Routing downloads through :meth:`load_volume_atlas` records the atlas
+        path, content fingerprint and axis metadata used for provenance.
+        """
+        saving_folder = getattr(dialog.worker, "saving_folder", None)
+        dialog.worker.deleteLater()
+        dialog.deleteLater()
+        if not saving_folder:
+            return
+        if self.load_volume_atlas(saving_folder):
+            try:
+                save_last_atlas_path(saving_folder)
+            except OSError:
+                self.print_message(
+                    "Atlas loaded, but its location could not be remembered.",
+                    self.reminder_color,
+                )
+
     def download_waxholm_rat_atlas(self):
         wax = AtlasDownloader()
         wax.exec()
-
         if not wax.continue_process:
             return
-        self.volume_atlas_axis_info = None
-
-        atlas_data = np.transpose(wax.worker.atlas_data, [2, 0, 1])[::-1, :, :]
-        atlas_info = wax.worker.atlas_info
-
-        label_info = wax.worker.label_info
-
-        segmentation_data = np.transpose(wax.worker.segmentation_data, [2, 0, 1])[
-            ::-1, :, :
-        ]
-        unique_label = wax.worker.unique_label
-
-        s_boundary = np.transpose(wax.worker.boundary["s_contour"], [2, 0, 1])[
-            ::-1, :, :
-        ]
-        c_boundary = np.transpose(wax.worker.boundary["c_contour"], [2, 0, 1])[
-            ::-1, :, :
-        ]
-        h_boundary = np.transpose(wax.worker.boundary["h_contour"], [2, 0, 1])[
-            ::-1, :, :
-        ]
-
-        boundary = {
-            "s_contour": s_boundary,
-            "c_contour": c_boundary,
-            "h_contour": h_boundary,
-        }
-
-        self.set_volume_atlas_to_view(
-            atlas_data, segmentation_data, atlas_info, label_info, boundary
-        )
-        self.set_volume_atlas_3d(
-            unique_label, wax.worker.mesh_data, wax.worker.small_mesh_list
-        )
-
-        wax.worker.deleteLater()
-        wax.deleteLater()
+        self._open_downloaded_atlas(wax)
 
     def download_allen_mice_atlas(self):
         aln = AllenDownloader()
         aln.exec()
         if not aln.continue_process:
             return
-        self.volume_atlas_path = aln.worker.saving_folder
-        self.current_atlas_path = aln.worker.saving_folder
-        self.current_atlas = "volume"
-        self._set_volume_atlas_axis_info(aln.worker.saving_folder)
-
-        atlas_data = np.transpose(aln.worker.atlas_data, [2, 0, 1])[::-1, :, :]
-        atlas_info = aln.worker.atlas_info
-
-        label_info = aln.worker.label_info
-
-        segmentation_data = np.transpose(aln.worker.segmentation_data, [2, 0, 1])[
-            ::-1, :, :
-        ]
-        unique_label = aln.worker.unique_label
-
-        self.set_volume_atlas_to_view(
-            atlas_data, segmentation_data, atlas_info, label_info, None
-        )
-        aln.worker.boundary = None
-        self.set_volume_atlas_3d(
-            unique_label, aln.worker.mesh_data, aln.worker.small_mesh_list
-        )
-
-        aln.worker.deleteLater()
-        aln.deleteLater()
+        self._open_downloaded_atlas(aln)
 
     def process_raw_atlas_data(self):
         process_atlas_window = AtlasProcessor()
@@ -1595,7 +1636,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.print_message(msg, self.normal_color)
         file_title = "Select Atlas Slice File"
         file_filter = (
-            "JPEG (*.jpg);;PNG (*.png);;"
+            "Images (*.jpg *.jpeg *.png *.tif *.tiff *.bmp);;"
             "DriftlessMap Slice (*.dmapslice);;"
             "Legacy HERBS Slice (*.herbsslice *.pkl)"
         )
@@ -1612,7 +1653,8 @@ class DriftlessMap(QMainWindow, FORM_Main):
         )
 
         if image_file_path[0] != "":
-            self.load_slice_atlas(image_file_path[0])
+            if not self.load_slice_atlas(image_file_path[0]):
+                return
 
             if self.image_view.image_file is not None:
                 self.show_slice_and_histology()
@@ -1627,9 +1669,14 @@ class DriftlessMap(QMainWindow, FORM_Main):
             msg = "No Slice Data is loaded.  Please load Slice through <Atlas Menu>."
             self.print_message(msg, self.error_message_color)
             return
-        slice_info = SliceSettingDialog()
-        slice_info.exec()
-        self.atlas_view.set_slice_info(slice_info)
+        slice_info = SliceSettingDialog(
+            self.atlas_view.slice_cut or "Coronal",
+            self.atlas_view.slice_width,
+            self.atlas_view.slice_height,
+            self.atlas_view.slice_distance,
+        )
+        if slice_info.exec() == QDialog.DialogCode.Accepted:
+            self.atlas_view.set_slice_info(slice_info)
 
     def crop_slice(self):
         if self.atlas_view.slice_image_data is None:
@@ -1714,6 +1761,200 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 "Current Slice is saved successfully.", self.normal_color
             )
 
+    def suggest_atlas_section(self):
+        """Suggest and apply the atlas plane, slice and tilt for the section."""
+        if (
+            self.current_atlas != "volume"
+            or self.atlas_view.atlas_data is None
+            or self.atlas_view.atlas_label is None
+        ):
+            self.print_message(
+                "Load a volume atlas before suggesting an atlas section.",
+                self.error_message_color,
+            )
+            return
+        if self.image_view.current_img is None:
+            self.print_message(
+                "Load a histology section before suggesting an atlas section.",
+                self.error_message_color,
+            )
+            return
+        view = self.atlas_view
+        section = np.asarray(self.image_view.current_img)
+        midline = int(view.origin_3d[0])
+        # Tilts for coronal/horizontal pivot on the midline (see above); the
+        # sagittal pivot is its own page, so its value here does not matter.
+        pivot = (int(view.current_coronal_index), midline,
+                 int(view.current_horizontal_index))
+        try:
+            report = run_in_background(
+                self,
+                "Comparing the section with the atlas...",
+                suggest_sections,
+                section,
+                view.atlas_label,
+                view.atlas_data,
+                midline,
+                pivot,
+            )
+        except ValueError as exc:
+            self.print_message(
+                "No atlas section could be suggested: {}".format(exc),
+                self.error_message_color,
+            )
+            return
+        if not report.suggestions:
+            self.print_message(
+                "No atlas section could be suggested for this image.",
+                self.error_message_color,
+            )
+            return
+        dialog = SectionSuggestionDialog(
+            report, section, view.atlas_data, pivot, view.vox_size_um, self
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        choice = dialog.choice()
+        if choice is not None:
+            self.apply_section_suggestion(*choice)
+
+    def apply_section_suggestion(self, plane, index, orientation, tilt, rotate_histology):
+        """Show ``plane``/``index`` at ``tilt`` and orient the histology."""
+        view = self.atlas_view
+        if rotate_histology:
+            for _ in range(orientation.quarter_turns % 4):
+                self.image_view.image_90_counter_rotate()
+            if orientation.mirrored:
+                self.image_view.image_horizon_flip()
+        buttons = {"coronal": view.section_rabnt1, "sagittal": view.section_rabnt2,
+                   "horizontal": view.section_rabnt3}
+        pages = {"coronal": view.cpage_ctrl, "sagittal": view.spage_ctrl,
+                 "horizontal": view.hpage_ctrl}
+        rotations = {"coronal": view.crotation_ctrl, "sagittal": view.srotation_ctrl,
+                     "horizontal": view.hrotation_ctrl}
+        buttons[plane].setChecked(True)
+        if plane in ("coronal", "horizontal"):
+            view.spage_ctrl.set_val(int(view.origin_3d[0]))
+        pages[plane].set_val(int(index))
+        rotation = rotations[plane]
+        rotation.h_spinbox.setValue(float(tilt[0]))
+        rotation.v_spinbox.setValue(float(tilt[1]))
+        self.print_message(
+            "Showing the suggested {} slice {} at tilt ({:+.1f}°, {:+.1f}°). "
+            "Check the match before placing landmarks.".format(
+                plane, index, tilt[0], tilt[1]
+            ),
+            self.normal_color,
+        )
+
+    def propose_registration_landmarks(self):
+        """Register the section to the displayed atlas slice and propose
+        paired landmarks, which the user reviews with the triangulation tool."""
+        if (
+            self.current_atlas != "volume"
+            or self.atlas_view.atlas_data is None
+            or self.atlas_view.working_atlas.label_data is None
+        ):
+            self.print_message(
+                "Show a volume atlas slice before proposing landmarks.",
+                self.error_message_color,
+            )
+            return
+        if self.image_view.current_img is None:
+            self.print_message(
+                "Load a histology section before proposing landmarks.",
+                self.error_message_color,
+            )
+            return
+        if self.a2h_transferred or self.h2a_transferred:
+            self.print_message(
+                "Remove the current transform overlay before proposing landmarks.",
+                self.error_message_color,
+            )
+            return
+        if self.atlas_tri_inside_data or self.histo_tri_inside_data:
+            reply = QMessageBox.question(
+                self,
+                "Propose Landmarks",
+                "Replace the current registration landmarks with proposed ones?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+        stack = self.atlas_view.working_atlas
+        try:
+            proposal = run_in_background(
+                self,
+                "Registering the section to the atlas slice...",
+                propose_landmarks,
+                np.asarray(stack.img.image),
+                np.asarray(stack.label_data),
+                np.asarray(self.image_view.current_img),
+                boundary_points=np.asarray(self.atlas_tri_onside_data, dtype=float),
+            )
+        except (ValueError, RuntimeError) as exc:
+            self.print_message(
+                "Landmarks could not be proposed: {}".format(exc),
+                self.error_message_color,
+            )
+            return
+        if len(proposal.atlas_points) < 3:
+            self.print_message(
+                "Too few landmarks could be proposed; place them by hand.",
+                self.error_message_color,
+            )
+            return
+        self.apply_landmark_proposal(proposal)
+
+    def apply_landmark_proposal(self, proposal):
+        """Replace interior landmarks with a proposal and show them."""
+        self._invalidate_triangulation(clear_topology=True)
+        self.atlas_tri_inside_data = [
+            [round(float(x), 2), round(float(y), 2)] for x, y in proposal.atlas_points
+        ]
+        self.histo_tri_inside_data = [
+            [round(float(x), 2), round(float(y), 2)] for x, y in proposal.histology_points
+        ]
+        if len(proposal.boundary_points) == len(self.atlas_tri_onside_data):
+            # Carry the mesh frame through the fit too, so the fixed frame
+            # points do not contradict the interior landmarks.
+            self.histo_tri_onside_data = [
+                [round(float(x), 2), round(float(y), 2)]
+                for x, y in proposal.boundary_points
+            ]
+        self.atlas_tri_data = self.atlas_tri_onside_data + self.atlas_tri_inside_data
+        self.histo_tri_data = self.histo_tri_onside_data + self.histo_tri_inside_data
+        self.atlas_view.working_atlas.image_dict["tri_pnts"].setData(
+            pos=np.asarray(self.atlas_tri_data)
+        )
+        self.image_view.img_stacks.image_dict["tri_pnts"].setData(
+            pos=np.asarray(self.histo_tri_data)
+        )
+        self._refresh_triangulation_text("atlas")
+        self._refresh_triangulation_text("image")
+        # Show the proposal in the triangulation tool, ready for editing.
+        button = self.tool_box.checkable_btn_dict["triang_btn"]
+        if not button.isChecked():
+            button.setChecked(True)
+            self.triang_btn_clicked()
+        if self.tool_box.triang_vis_btn.isChecked():
+            self.update_atlas_tri_lines()
+            self.update_histo_tri_lines()
+        else:
+            self._build_triangulation_registration(strict=False, show_error=False)
+        stage = "outline and intensity" if proposal.deformable_used else "outline"
+        on_outline = sum(kind == "outline" for kind in proposal.kinds)
+        self.print_message(
+            "Suggested {} landmark pairs ({} on the outline, {} on internal edges) "
+            "from the {} fit (outline overlap {:.2f}). Confirm or drag each one "
+            "before transferring.".format(
+                len(proposal.atlas_points), on_outline,
+                len(proposal.atlas_points) - on_outline, stage, proposal.overlap_final
+            ),
+            self.normal_color,
+        )
+
     def switch_atlas(self):
         if (
             self.atlas_view.atlas_data is None
@@ -1725,9 +1966,8 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.delete_all_atlas_layer()
 
         if self.current_atlas == "volume":
-            self.current_atlas_path = self.volume_atlas_path
+            self._activate_atlas("slice")
             self.actionSwitch_Atlas.setText("Switch Atlas: Slice")
-            self.current_atlas = "slice"
             self.atlascontrolpanel.setEnabled(False)
             self.treeviewpanel.setEnabled(False)
             self.atlas_view.set_slice_data(self.atlas_view.slice_image_data)
@@ -1737,9 +1977,8 @@ class DriftlessMap(QMainWindow, FORM_Main):
             self.object_ctrl.add_object_btn.setEnabled(False)
             self.object_ctrl.merge_probe_btn.setEnabled(False)
         else:
-            self.current_atlas_path = self.slice_atlas_path
+            self._activate_atlas("volume")
             self.actionSwitch_Atlas.setText("Switch Atlas: Volume")
-            self.current_atlas = "volume"
             self.atlascontrolpanel.setEnabled(True)
             self.treeviewpanel.setEnabled(True)
             self.atlas_view.working_cut_changed(self.atlas_display)
@@ -1804,20 +2043,38 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 self.print_message(error, self.error_message_color)
                 return
 
-            if "atlas_corner_points" not in list(tri_data.keys()):
+            validation_error = self._triangulation_file_error(tri_data)
+            if validation_error is not None:
                 self.print_message(
-                    "Loaded data is not triangulation points data !!!",
+                    "Triangulation points were not loaded: {}".format(
+                        validation_error
+                    ),
                     self.error_message_color,
                 )
                 return
 
+            # Switch the atlas view first. Changing the view resets the atlas
+            # landmarks, so the loaded landmarks must be applied afterwards.
+            display_buttons = {
+                "coronal": self.atlas_view.section_rabnt1,
+                "sagittal": self.atlas_view.section_rabnt2,
+                "horizontal": self.atlas_view.section_rabnt3,
+            }
+            display_buttons[tri_data["atlas_display"]].setChecked(True)
+
+            self._remove_text_items(self.working_atlas_text)
             self.atlas_display = tri_data["atlas_display"]
-            self.atlas_corner_points = tri_data["atlas_corner_points"]
+            self.atlas_corner_points = [list(p) for p in tri_data["atlas_corner_points"]]
             self.atlas_side_lines = tri_data["atlas_side_lines"]
-            self.atlas_tri_data = tri_data["atlas_tri_data"]
-            self.atlas_tri_inside_data = tri_data["atlas_tri_inside_data"]
-            self.atlas_tri_onside_data = tri_data["atlas_tri_onside_data"]
+            self.atlas_tri_inside_data = [
+                list(p) for p in tri_data["atlas_tri_inside_data"]
+            ]
+            self.atlas_tri_onside_data = [
+                list(p) for p in tri_data["atlas_tri_onside_data"]
+            ]
+            self.atlas_tri_data = self.atlas_tri_onside_data + self.atlas_tri_inside_data
             loaded_simplices = tri_data.get("tri_simplices")
+            self._invalidate_triangulation(clear_topology=True)
             self.tri_simplices = (
                 None
                 if loaded_simplices is None
@@ -1828,25 +2085,38 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 if self.tri_simplices is not None
                 else None
             )
-            self.triangulation_registration = None
-            self.working_atlas_text = []
+            self.atlas_view.working_atlas.image_dict["tri_pnts"].setData(
+                pos=np.asarray(self.atlas_tri_data)
+            )
+            self._refresh_triangulation_text("atlas")
+            if self.tool_box.triang_vis_btn.isChecked():
+                self.update_atlas_tri_lines()
+            self.print_message(
+                "Loaded {} atlas landmarks.".format(len(self.atlas_tri_inside_data)),
+                self.normal_color,
+            )
 
-            if tri_data["atlas_display"] == "coronal":
-                self.atlas_view.section_rabnt1.setChecked(True)
-            elif tri_data["atlas_display"] == "sagittal":
-                self.atlas_view.section_rabnt2.setChecked(True)
-            else:
-                self.atlas_view.section_rabnt3.setChecked(True)
-            if self.atlas_tri_data:
-                self.atlas_view.working_atlas.image_dict["tri_pnts"].setData(
-                    self.atlas_tri_data
-                )
-                for i, point in enumerate(self.atlas_tri_inside_data):
-                    text_item = pg.TextItem(str(i))
-                    text_item.setColor(self.triangle_color)
-                    text_item.setPos(point[0], point[1])
-                    self.working_atlas_text.append(text_item)
-                    self.atlas_view.working_atlas.vb.addItem(text_item)
+    def _triangulation_file_error(self, tri_data):
+        """Return why a triangulation payload cannot be applied, or ``None``."""
+        return triangulation_payload_error(
+            tri_data,
+            {
+                "coronal": self.atlas_view.c_size,
+                "sagittal": self.atlas_view.s_size,
+                "horizontal": self.atlas_view.h_size,
+            },
+            self.np_onside,
+        )
+
+    @staticmethod
+    def _remove_text_items(text_items):
+        """Remove landmark labels from whichever view currently holds them."""
+        for item in text_items:
+            view_box = item.getViewBox()
+            if view_box is not None:
+                view_box.removeItem(item)
+            item.deleteLater()
+        text_items.clear()
 
     # ------------------------------------------------------------------
     #
@@ -2013,12 +2283,6 @@ class DriftlessMap(QMainWindow, FORM_Main):
         else:
             self.vis_eraser_symbol(False)
 
-    def rotation_btn_clicked(self):
-        self.inactive_lasso()
-        self.inactive_slice_window_lasso()
-        self.set_toolbox_btns_unchecked("rotation")
-        self.show_triangle_points("triang")
-        self.vis_eraser_symbol(False)
 
     def triang_btn_clicked(self):
         self.inactive_lasso()
@@ -2118,7 +2382,6 @@ class DriftlessMap(QMainWindow, FORM_Main):
         show_3d_button.setText("Show in 3D view")
         show_3d_button.clicked.connect(self.show_small_area_in_3d)
 
-        composition_label = QLabel("Composition: ")
         self.composition_combo = QComboBox()
         self.composition_combo.setFixedHeight(22)
         self.composition_combo.addItems(["opaque", "translucent", "additive"])
@@ -2143,8 +2406,6 @@ class DriftlessMap(QMainWindow, FORM_Main):
 
         image_panel_layout.addWidget(image_control_label)
 
-        space_item = QSpacerItem(300, 10, QSizePolicy.Policy.Expanding)
-
         image_container = QFrame()
         image_container_layout = QVBoxLayout(image_container)
         image_container_layout.setSpacing(5)
@@ -2164,20 +2425,8 @@ class DriftlessMap(QMainWindow, FORM_Main):
         layer_control_label = QLabel("Layer View Controller")
         layer_control_label.setStyleSheet(decor_label_style)
 
-        layer_btm_ctrl = QFrame()
-        layer_btm_ctrl.setStyleSheet("background-color:rgb(65, 65, 65);")
-        layer_btm_ctrl.setFixedHeight(24)
-        layer_btm_layout = QHBoxLayout(layer_btm_ctrl)
-        layer_btm_layout.setContentsMargins(0, 0, 0, 0)
-        layer_btm_layout.setSpacing(5)
-        layer_btm_layout.setAlignment(Qt.AlignmentFlag.AlignRight)
-        layer_btm_layout.addWidget(self.layer_ctrl.add_layer_btn)
-        layer_btm_layout.addWidget(self.layer_ctrl.delete_layer_btn)
-
         layer_panel_layout.addWidget(layer_control_label)
         layer_panel_layout.addWidget(self.layer_ctrl)
-        # layer_panel_layout.addWidget(layer_btm_ctrl)
-        # self.layerpanel.setEnabled(False)
 
         # ---------------------------- object panel
         object_panel_layout = QVBoxLayout(self.probecontrolpanel)
@@ -2224,53 +2473,29 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.image_view.img_stacks.image_dict["ruler_path"].setPen(
             pg.mkPen(color, width=width, style=Qt.PenStyle.DashLine)
         )
-        self.atlas_view.cimg.image_dict["ruler_path"].setPen(
-            pg.mkPen(color, width=width, style=Qt.PenStyle.DashLine)
-        )
-        self.atlas_view.himg.image_dict["ruler_path"].setPen(
-            pg.mkPen(color, width=width, style=Qt.PenStyle.DashLine)
-        )
-        self.atlas_view.simg.image_dict["ruler_path"].setPen(
-            pg.mkPen(color, width=width, style=Qt.PenStyle.DashLine)
-        )
-        self.atlas_view.slice_stack.image_dict["ruler_path"].setPen(
-            pg.mkPen(color, width=width, style=Qt.PenStyle.DashLine)
-        )
+        for item in self._atlas_view_items("ruler_path"):
+            item.setPen(pg.mkPen(color, width=width, style=Qt.PenStyle.DashLine))
         self.image_view.img_stacks.image_dict["ruler_path"].setSymbolPen(color=color)
-        self.atlas_view.cimg.image_dict["ruler_path"].setSymbolPen(color=color)
-        self.atlas_view.himg.image_dict["ruler_path"].setSymbolPen(color=color)
-        self.atlas_view.simg.image_dict["ruler_path"].setSymbolPen(color=color)
-        self.atlas_view.slice_stack.image_dict["ruler_path"].setSymbolPen(color=color)
+        for item in self._atlas_view_items("ruler_path"):
+            item.setSymbolPen(color=color)
         self.image_view.img_stacks.image_dict["ruler_path"].setSymbolBrush(color=color)
-        self.atlas_view.cimg.image_dict["ruler_path"].setSymbolBrush(color=color)
-        self.atlas_view.himg.image_dict["ruler_path"].setSymbolBrush(color=color)
-        self.atlas_view.simg.image_dict["ruler_path"].setSymbolBrush(color=color)
-        self.atlas_view.slice_stack.image_dict["ruler_path"].setSymbolBrush(color=color)
+        for item in self._atlas_view_items("ruler_path"):
+            item.setSymbolBrush(color=color)
 
     def change_ruler_size(self):
-        width = int(self.tool_box.ruler_size_valt.text())
+        width = read_int_field(self.tool_box.ruler_size_valt, minimum=1)
+        if width is None:
+            return
         self.tool_box.ruler_width_slider.setValue(width)
         color = np.ravel(self.tool_box.ruler_color_btn.color().getRgb())
         self.image_view.img_stacks.image_dict["ruler_path"].setPen(
             pg.mkPen(color, width=width, style=Qt.PenStyle.DashLine)
         )
-        self.atlas_view.cimg.image_dict["ruler_path"].setPen(
-            pg.mkPen(color, width=width, style=Qt.PenStyle.DashLine)
-        )
-        self.atlas_view.himg.image_dict["ruler_path"].setPen(
-            pg.mkPen(color, width=width, style=Qt.PenStyle.DashLine)
-        )
-        self.atlas_view.simg.image_dict["ruler_path"].setPen(
-            pg.mkPen(color, width=width, style=Qt.PenStyle.DashLine)
-        )
-        self.atlas_view.slice_stack.image_dict["ruler_path"].setPen(
-            pg.mkPen(color, width=width, style=Qt.PenStyle.DashLine)
-        )
+        for item in self._atlas_view_items("ruler_path"):
+            item.setPen(pg.mkPen(color, width=width, style=Qt.PenStyle.DashLine))
         self.image_view.img_stacks.image_dict["ruler_path"].setSymbolSize(width)
-        self.atlas_view.cimg.image_dict["ruler_path"].setSymbolSize(width)
-        self.atlas_view.himg.image_dict["ruler_path"].setSymbolSize(width)
-        self.atlas_view.simg.image_dict["ruler_path"].setSymbolSize(width)
-        self.atlas_view.slice_stack.image_dict["ruler_path"].setSymbolSize(width)
+        for item in self._atlas_view_items("ruler_path"):
+            item.setSymbolSize(width)
 
     def inactive_atlas_ruler(self):
         self.atlas_view.working_atlas.image_dict["ruler_path"].clear()
@@ -2465,23 +2690,6 @@ class DriftlessMap(QMainWindow, FORM_Main):
         else:
             self.multi_shanks = False
 
-    def check_n_trajectory(self):
-        if self.image_view.image_file is None:
-            if self.probe_settings.probe_type == 1:
-                if self.atlas_display in ["coronal", "horizontal"]:
-                    if self.site_face in [0, 1]:
-                        self.n_pre_trajectory = 4
-                    else:
-                        self.n_pre_trajectory = 1
-                else:
-                    if self.site_face in [2, 3]:
-                        self.n_pre_trajectory = 4
-                    else:
-                        self.n_pre_trajectory = 1
-            else:
-                self.n_pre_trajectory = 1
-        else:
-            self.n_pre_trajectory = 1
 
     def probe_type_changed(self, index):
         if index == 0:
@@ -2507,7 +2715,6 @@ class DriftlessMap(QMainWindow, FORM_Main):
 
         self.probe_type = index
         self.atlas_view.pre_trajectory_changed()
-        # self.check_n_trajectory()
         self.atlas_view.working_atlas.image_dict["atlas-probe"].clear()
         self.working_atlas_data["atlas-probe"].clear()
         self.multi_shanks_btn_clicked()
@@ -2518,43 +2725,19 @@ class DriftlessMap(QMainWindow, FORM_Main):
             temp_settings = None
         ls_probe_info = LinearSiliconInfoDialog(temp_settings)
         rsp = ls_probe_info.exec()
-        if rsp == QDialog.DialogCode.Accepted:
-            self.probe_settings.set_linear_silicon(ls_probe_info.probe_settings)
-            if self.probe_settings.probe_length == 0:
-                self.valid_probe_settings = False
-                self.print_message(
-                    "Linear Silicon Probe can not be length 0 um.",
-                    self.error_message_color,
-                )
-                return
-            if self.probe_settings.tip_length == 0:
-                self.print_message(
-                    "Linear Silicon Probe has tip length 0 um. Is that correct?",
-                    self.reminder_color,
-                )
-                return
-            if self.probe_settings.site_height == 0:
-                self.valid_probe_settings = False
-                self.print_message(
-                    "Site height can not be 0 um.", self.error_message_color
-                )
-                return
-            if self.probe_settings.site_width == 0:
-                self.valid_probe_settings = False
-                self.print_message(
-                    "Site width can not be 0 um.", self.error_message_color
-                )
-                return
-            if (
-                self.probe_settings.site_height * self.probe_settings.sites_distance[0]
-                > self.probe_settings.probe_length
-            ):
-                self.valid_probe_settings = False
-                self.print_message(
-                    "Total sites length can not be larger than probe length",
-                    self.error_message_color,
-                )
-                return
+        if rsp != QDialog.DialogCode.Accepted:
+            return
+        self.probe_settings.set_linear_silicon(ls_probe_info.probe_settings)
+        error = linear_silicon_settings_error(ls_probe_info.probe_settings)
+        self.valid_probe_settings = error is None
+        if error is not None:
+            self.print_message(error, self.error_message_color)
+            return
+        if self.probe_settings.tip_length == 0:
+            self.print_message(
+                "Linear Silicon Probe has tip length 0 um. Is that correct?",
+                self.reminder_color,
+            )
 
     def site_face_changed(self, site_index):
         self.site_face = site_index
@@ -2563,7 +2746,6 @@ class DriftlessMap(QMainWindow, FORM_Main):
         else:
             site_face_text = self.tool_box.after_site_face_combo.currentText()
         self.probe_settings.probe_faces_changed(site_face_text)
-        # self.check_n_trajectory()
         self.atlas_view.pre_trajectory_changed()
         self.atlas_view.working_atlas.image_dict["atlas-probe"].clear()
         self.multi_shanks_btn_clicked()
@@ -2578,21 +2760,13 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.image_view.img_stacks.image_dict["img-probe"].setPen(
             color=self.probe_color
         )
-        self.atlas_view.cimg.image_dict["atlas-probe"].setPen(color=self.probe_color)
-        self.atlas_view.himg.image_dict["atlas-probe"].setPen(color=self.probe_color)
-        self.atlas_view.simg.image_dict["atlas-probe"].setPen(color=self.probe_color)
-        self.atlas_view.slice_stack.image_dict["atlas-probe"].setPen(
-            color=self.probe_color
-        )
+        for item in self._atlas_view_items("atlas-probe"):
+            item.setPen(color=self.probe_color)
         self.image_view.img_stacks.image_dict["img-probe"].setBrush(
             color=self.probe_color
         )
-        self.atlas_view.cimg.image_dict["atlas-probe"].setBrush(color=self.probe_color)
-        self.atlas_view.himg.image_dict["atlas-probe"].setBrush(color=self.probe_color)
-        self.atlas_view.simg.image_dict["atlas-probe"].setBrush(color=self.probe_color)
-        self.atlas_view.slice_stack.image_dict["atlas-probe"].setBrush(
-            color=self.probe_color
-        )
+        for item in self._atlas_view_items("atlas-probe"):
+            item.setBrush(color=self.probe_color)
 
         self.atlas_view.cimg.pre_trajectory_color_changed(self.probe_color, 2)
         self.atlas_view.simg.pre_trajectory_color_changed(self.probe_color, 2)
@@ -2634,24 +2808,14 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.image_view.img_stacks.image_dict["img-drawing"].setPen(
             pg.mkPen(color=self.pencil_color, width=self.pencil_size)
         )
-        self.atlas_view.cimg.image_dict["atlas-drawing"].setPen(
-            pg.mkPen(color=self.pencil_color, width=self.pencil_size)
-        )
-        self.atlas_view.simg.image_dict["atlas-drawing"].setPen(
-            pg.mkPen(color=self.pencil_color, width=self.pencil_size)
-        )
-        self.atlas_view.himg.image_dict["atlas-drawing"].setPen(
-            pg.mkPen(color=self.pencil_color, width=self.pencil_size)
-        )
-        self.atlas_view.slice_stack.image_dict["atlas-drawing"].setPen(
-            pg.mkPen(color=self.pencil_color, width=self.pencil_size)
-        )
+        for item in self._atlas_view_items("atlas-drawing"):
+            item.setPen(pg.mkPen(color=self.pencil_color, width=self.pencil_size))
         if self.working_img_data["img-drawing"] and self.tool_box.is_closed:
             self.image_view.img_stacks.image_dict["img-drawing"].setFillBrush(
                 color=self.pencil_color
             )
         if self.working_atlas_data["atlas-drawing"] and self.tool_box.is_closed:
-            self.atlas_view.working_atlas.image_dict["img-drawing"].setFillBrush(
+            self.atlas_view.working_atlas.image_dict["atlas-drawing"].setFillBrush(
                 color=self.pencil_color
             )
 
@@ -2686,21 +2850,16 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.atlas_view.working_atlas.image_dict["atlas-drawing"].setFillBrush(None)
 
     def change_pencil_size(self):
-        val = int(self.tool_box.pencil_size_valt.text())
+        val = read_int_field(self.tool_box.pencil_size_valt, minimum=1)
+        if val is None:
+            return
         self.pencil_size = val
         self.tool_box.pencil_size_slider.setValue(val)
         self.image_view.img_stacks.image_dict["img-drawing"].setPen(
             pg.mkPen(color=self.pencil_color, width=self.pencil_size)
         )
-        self.atlas_view.cimg.image_dict["atlas-drawing"].setPen(
-            pg.mkPen(color=self.pencil_color, width=self.pencil_size)
-        )
-        self.atlas_view.simg.image_dict["atlas-drawing"].setPen(
-            pg.mkPen(color=self.pencil_color, width=self.pencil_size)
-        )
-        self.atlas_view.himg.image_dict["atlas-drawing"].setPen(
-            pg.mkPen(color=self.pencil_color, width=self.pencil_size)
-        )
+        for item in self._atlas_view_items("atlas-drawing"):
+            item.setPen(pg.mkPen(color=self.pencil_color, width=self.pencil_size))
 
     def inactive_drawing(self):
         self.working_img_data["img-drawing"] = []
@@ -2710,50 +2869,6 @@ class DriftlessMap(QMainWindow, FORM_Main):
             (self.image_view.img_size[0], self.image_view.img_size[1], 3)
         )
 
-    def img_drawing_pnts_clicked(self, points, ev):  # check mark
-        clicked_ind = ev[0].index()
-        pos = ev[0].pos()
-        if self.tool_box.checkable_btn_dict["eraser_btn"].isChecked():
-            del self.working_img_data["img-drawing"][clicked_ind]
-            if not self.working_img_data["img-drawing"]:
-                self.inactive_drawing()
-        else:
-            if clicked_ind == 0:
-                self.inactive_drawing()
-            elif clicked_ind == len(self.working_img_data["img-drawing"]) - 1:
-                self.is_pencil_allowed = False
-                self.working_img_data["img-drawing"].append([pos.x(), pos.y()])
-                if self.tool_box.is_closed:
-                    self.working_img_data["img-drawing"].append(
-                        [
-                            self.working_img_data["img-drawing"][0][0],
-                            self.working_img_data["img-drawing"][0][1],
-                        ]
-                    )
-                self.image_view.img_stacks.image_dict["img-drawing"].setData(
-                    np.asarray(self.working_img_data["img-drawing"])
-                )
-                da_img = create_vis_img(
-                    self.image_view.img_size,
-                    self.working_img_data["img-drawing"],
-                    self.pencil_color,
-                    "l",
-                    self.tool_box.is_closed,
-                )
-                res = cv2.resize(
-                    da_img, self.image_view.tb_size, interpolation=cv2.INTER_AREA
-                )
-                self.layer_ctrl.master_layers(
-                    res, layer_type="img-drawing", color=self.pencil_color
-                )
-                current_data = {
-                    "data": self.working_img_data["img-drawing"].copy(),
-                    "closed": self.tool_box.is_closed,
-                }
-                self.save_current_action("pencil_btn", "img-drawing", current_data, res)
-            else:
-                if not self.is_pencil_allowed:
-                    self.inactive_drawing()
 
     # ------------------------------------------------------------------
     #
@@ -2781,12 +2896,10 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.image_view.img_stacks.image_dict["img-cells"].setBrush(
             color=self.cell_color
         )
-        self.atlas_view.cimg.image_dict["atlas-cells"].setPen(color=self.cell_color)
-        self.atlas_view.himg.image_dict["atlas-cells"].setPen(color=self.cell_color)
-        self.atlas_view.simg.image_dict["atlas-cells"].setPen(color=self.cell_color)
-        self.atlas_view.cimg.image_dict["atlas-cells"].setBrush(color=self.cell_color)
-        self.atlas_view.himg.image_dict["atlas-cells"].setBrush(color=self.cell_color)
-        self.atlas_view.simg.image_dict["atlas-cells"].setBrush(color=self.cell_color)
+        for item in self._atlas_view_items("atlas-cells", include_slice=False):
+            item.setPen(color=self.cell_color)
+        for item in self._atlas_view_items("atlas-cells", include_slice=False):
+            item.setBrush(color=self.cell_color)
 
     def cell_select_btn_clicked(self):
         if self.tool_box.cell_aim_btn.isChecked():
@@ -2861,7 +2974,9 @@ class DriftlessMap(QMainWindow, FORM_Main):
         else:
             detector = cv2.SimpleBlobDetector_create(params)
 
-        keypoints = detector.detect(temp)
+        keypoints = run_in_background(
+            self, "Detecting cells...", detector.detect, temp
+        )
         n_keypoints = len(keypoints)
         if n_keypoints == 0:
             return
@@ -2903,23 +3018,11 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.image_view.img_stacks.image_dict["img-mask"].setLookupTable(
             self.magic_wand_lut
         )
-        self.atlas_view.cimg.image_dict["atlas-mask"].setLookupTable(
-            self.magic_wand_lut
-        )
-        self.atlas_view.himg.image_dict["atlas-mask"].setLookupTable(
-            self.magic_wand_lut
-        )
-        self.atlas_view.simg.image_dict["atlas-mask"].setLookupTable(
-            self.magic_wand_lut
-        )
-        self.atlas_view.slice_stack.image_dict["atlas-mask"].setLookupTable(
-            self.magic_wand_lut
-        )
+        for item in self._atlas_view_items("atlas-mask"):
+            item.setLookupTable(self.magic_wand_lut)
         self.image_view.img_stacks.image_dict["img-mask"].updateImage()
-        self.atlas_view.cimg.image_dict["atlas-mask"].updateImage()
-        self.atlas_view.himg.image_dict["atlas-mask"].updateImage()
-        self.atlas_view.simg.image_dict["atlas-mask"].updateImage()
-        self.atlas_view.slice_stack.image_dict["atlas-mask"].updateImage()
+        for item in self._atlas_view_items("atlas-mask"):
+            item.updateImage()
 
     def get_virus_img(self):
         if "img-mask" not in self.layer_ctrl.layer_link:
@@ -3025,7 +3128,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
                         True
                     )
                 if (
-                    self.atlas_tri_inside_data
+                    self.working_atlas_text
                     and not self.working_atlas_text[0].isVisible()
                 ):
                     for i in range(len(self.working_atlas_text)):
@@ -3034,7 +3137,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 if not self.image_view.img_stacks.image_dict["tri_pnts"].isVisible():
                     self.image_view.img_stacks.image_dict["tri_pnts"].setVisible(True)
                 if (
-                    self.histo_tri_inside_data
+                    self.working_img_text
                     and not self.working_img_text[0].isVisible()
                 ):
                     for i in range(len(self.working_img_text)):
@@ -3046,7 +3149,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
                         False
                     )
                 if (
-                    self.atlas_tri_inside_data
+                    self.working_atlas_text
                     and self.working_atlas_text[0].isVisible()
                 ):
                     for i in range(len(self.working_atlas_text)):
@@ -3054,18 +3157,18 @@ class DriftlessMap(QMainWindow, FORM_Main):
             if self.histo_tri_data:
                 if self.image_view.img_stacks.image_dict["tri_pnts"].isVisible():
                     self.image_view.img_stacks.image_dict["tri_pnts"].setVisible(False)
-                if self.histo_tri_inside_data and self.working_img_text[0].isVisible():
+                if self.working_img_text and self.working_img_text[0].isVisible():
                     for i in range(len(self.working_img_text)):
                         self.working_img_text[i].setVisible(False)
 
     def number_of_side_points_changed(self):
-        input_txt = self.tool_box.bound_pnts_num.text()
-        if input_txt == "":
+        input_txt = self.tool_box.bound_pnts_num.text().strip()
+        if read_int_field(self.tool_box.bound_pnts_num) is None:
             msg = "Number of boundary points can not be empty. Automatically set it to previous valid value. "
             self.print_message(msg, self.reminder_color)
             self.tool_box.bound_pnts_num.setText(str(self.np_onside))
             return
-        if input_txt == "0" or input_txt == "1":
+        if int(input_txt) < 2:
             msg = "Number of boundary points can not be less than 2. Automatically set it to previous valid value. "
             self.print_message(msg, self.reminder_color)
             self.tool_box.bound_pnts_num.setText(str(self.np_onside))
@@ -3157,10 +3260,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
         )
 
     def _invalidate_triangulation(self, clear_topology=False):
-        self.triangulation_registration = None
-        if clear_topology:
-            self.tri_simplices = None
-            self.triangulation_topology_point_count = None
+        self.landmarks.invalidate(clear_topology=clear_topology)
         self._set_triangulation_quality()
 
     def _build_triangulation_registration(self, strict=True, show_error=True):
@@ -3185,15 +3285,26 @@ class DriftlessMap(QMainWindow, FORM_Main):
             and self.triangulation_topology_point_count == point_count
         ):
             simplices = self.tri_simplices
+        # One landmark edit refreshes both windows; reuse the registration
+        # when nothing it depends on has changed.
+        cache_key = self.landmarks.cache_key(
+            self.atlas_view.slice_size, self.image_view.img_size, simplices
+        )
+        cached = self.triangulation_registration
+        if cached is not None and self.landmarks.registration_cache_key == cache_key:
+            registration = cached
+        else:
+            registration = None
         try:
-            registration = build_piecewise_affine_registration(
-                self.atlas_tri_data,
-                self.histo_tri_data,
-                atlas_shape=self.atlas_view.slice_size,
-                histology_shape=self.image_view.img_size,
-                simplices=simplices,
-                allow_unsafe=True,
-            )
+            if registration is None:
+                registration = build_piecewise_affine_registration(
+                    self.atlas_tri_data,
+                    self.histo_tri_data,
+                    atlas_shape=self.atlas_view.slice_size,
+                    histology_shape=self.image_view.img_size,
+                    simplices=simplices,
+                    allow_unsafe=True,
+                )
         except TriangulationError as error:
             # A malformed topology from an older or interrupted save should
             # not make otherwise valid landmarks unusable.
@@ -3220,6 +3331,9 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.tri_simplices = registration["simplices"].copy()
         self.triangulation_topology_point_count = point_count
         self.triangulation_registration = registration
+        self.landmarks.registration_cache_key = cache_key[:4] + (
+            np.asarray(self.tri_simplices).tobytes(),
+        )
         self._set_triangulation_quality(registration=registration)
         if strict and registration["errors"]:
             error = " ".join(registration["errors"])
@@ -3299,10 +3413,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
             text_items = self.working_img_text
             points = self.histo_tri_inside_data
 
-        for item in text_items:
-            view.vb.removeItem(item)
-            item.deleteLater()
-        text_items.clear()
+        self._remove_text_items(text_items)
         visible = self.tool_box.checkable_btn_dict["triang_btn"].isChecked()
         for index, point in enumerate(points, start=1):
             item = pg.TextItem(str(index))
@@ -3519,24 +3630,10 @@ class DriftlessMap(QMainWindow, FORM_Main):
         if self.working_img_text:
             for i in range(len(self.working_img_text)):
                 self.working_img_text[i].setColor(self.triangle_color)
-        self.atlas_view.cimg.image_dict["tri_pnts"].scatter.setPen(
-            color=self.triangle_color
-        )
-        self.atlas_view.simg.image_dict["tri_pnts"].scatter.setPen(
-            color=self.triangle_color
-        )
-        self.atlas_view.himg.image_dict["tri_pnts"].scatter.setPen(
-            color=self.triangle_color
-        )
-        self.atlas_view.cimg.image_dict["tri_pnts"].scatter.setBrush(
-            color=self.triangle_color
-        )
-        self.atlas_view.simg.image_dict["tri_pnts"].scatter.setBrush(
-            color=self.triangle_color
-        )
-        self.atlas_view.himg.image_dict["tri_pnts"].scatter.setBrush(
-            color=self.triangle_color
-        )
+        for item in self._atlas_view_items("tri_pnts", include_slice=False):
+            item.scatter.setPen(color=self.triangle_color)
+        for item in self._atlas_view_items("tri_pnts", include_slice=False):
+            item.scatter.setBrush(color=self.triangle_color)
         if self.working_atlas_text:
             for i in range(len(self.working_atlas_text)):
                 self.working_atlas_text[i].setColor(self.triangle_color)
@@ -3579,7 +3676,10 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 if self.current_atlas == "volume"
                 else cv2.INTER_CUBIC
             )
-            img_wrap = warp_image_piecewise(
+            img_wrap = run_in_background(
+                self,
+                "Warping the atlas onto the histology...",
+                warp_image_piecewise,
                 input_img,
                 registration,
                 "atlas_to_histology",
@@ -3653,7 +3753,10 @@ class DriftlessMap(QMainWindow, FORM_Main):
             registration = self._build_triangulation_registration()
             if registration is None:
                 return
-            img_wrap = warp_image_piecewise(
+            img_wrap = run_in_background(
+                self,
+                "Warping the histology onto the atlas...",
+                warp_image_piecewise,
                 working_img,
                 registration,
                 "histology_to_atlas",
@@ -3857,7 +3960,10 @@ class DriftlessMap(QMainWindow, FORM_Main):
 
         if self.working_img_data["img-virus"] is not None:
             input_virus_img = self.working_img_data["img-virus"].copy()
-            img_wrap = warp_image_piecewise(
+            img_wrap = run_in_background(
+                self,
+                "Transferring virus pixels...",
+                warp_image_piecewise,
                 input_virus_img,
                 registration,
                 "histology_to_atlas",
@@ -3985,416 +4091,436 @@ class DriftlessMap(QMainWindow, FORM_Main):
                     self.inactive_drawing()
                     self.clear_img_pencil_closed_style()
 
-        # ------------------------- ruler
-        if self.tool_box.checkable_btn_dict["ruler_btn"].isChecked():
-            if len(self.working_img_data["ruler_path"]) == 2:
-                self.inactive_img_ruler()
-                self.tool_box.ruler_length_label.setText("Length:")
-            else:
-                self.working_img_data["ruler_path"].append([x, y])
-                self.image_view.img_stacks.image_dict["ruler_path"].setData(
-                    np.asarray(self.working_img_data["ruler_path"])
-                )
-        # ------------------------- eraser
-        elif self.tool_box.checkable_btn_dict["eraser_btn"].isChecked():
-            if (
-                not self.layer_ctrl.layer_id
-                or len(self.layer_ctrl.current_layer_index) > 1
-            ):
-                self.print_message(
-                    "Eraser only works on one single layer.", self.error_message_color
-                )
+        tool_handlers = (
+            ("ruler_btn", self._image_click_ruler),
+            ("eraser_btn", self._image_click_eraser),
+            ("magic_wand_btn", self._image_click_magic_wand),
+            ("lasso_btn", self._image_click_lasso),
+            ("triang_btn", self._image_click_triang),
+            ("loc_btn", self._image_click_loc),
+            ("probe_btn", self._image_click_probe),
+        )
+        for tool, handler in tool_handlers:
+            if self.tool_box.checkable_btn_dict[tool].isChecked():
+                handler(pos, x, y)
                 return
-            else:
-                r = self.tool_box.eraser_size_slider.value()
-                mask_img = np.zeros(self.image_view.img_size, dtype=np.uint8)
-                cv2.circle(
-                    mask_img, center=(int(x), int(y)), radius=r, color=255, thickness=-1
-                )
-                mask_img = 255 - mask_img
 
-                da_link = self.layer_ctrl.layer_link[
-                    self.layer_ctrl.current_layer_index[0]
-                ]
-                if da_link in ["img-mask", "img-virus"]:
-                    temp = self.working_img_data[da_link].astype(np.uint8)
-                    dst = cv2.bitwise_and(temp, temp, mask=mask_img)
-                    self.image_view.img_stacks.image_dict[da_link].setImage(dst)
-                    self.working_img_data[da_link] = dst
-                    vis_img = color_vis_img(
-                        dst,
-                        self.layer_ctrl.layer_color[
-                            self.layer_ctrl.current_layer_index[0]
-                        ],
-                    )
-                    res = cv2.resize(
-                        vis_img, self.image_view.tb_size, interpolation=cv2.INTER_AREA
-                    )
-                    self.layer_ctrl.layer_list[
+    def _image_click_ruler(self, pos, x, y):
+        if len(self.working_img_data["ruler_path"]) == 2:
+            self.inactive_img_ruler()
+            self.tool_box.ruler_length_label.setText("Length:")
+        else:
+            self.working_img_data["ruler_path"].append([x, y])
+            self.image_view.img_stacks.image_dict["ruler_path"].setData(
+                np.asarray(self.working_img_data["ruler_path"])
+            )
+
+    def _image_click_eraser(self, pos, x, y):
+        if (
+            not self.layer_ctrl.layer_id
+            or len(self.layer_ctrl.current_layer_index) > 1
+        ):
+            self.print_message(
+                "Eraser only works on one single layer.", self.error_message_color
+            )
+            return
+        else:
+            r = self.tool_box.eraser_size_slider.value()
+            mask_img = np.zeros(self.image_view.img_size, dtype=np.uint8)
+            cv2.circle(
+                mask_img, center=(int(x), int(y)), radius=r, color=255, thickness=-1
+            )
+            mask_img = 255 - mask_img
+
+            da_link = self.layer_ctrl.layer_link[
+                self.layer_ctrl.current_layer_index[0]
+            ]
+            if da_link in ["img-mask", "img-virus"]:
+                if self.working_img_data[da_link] is None:
+                    return
+                temp = self.working_img_data[da_link].astype(np.uint8)
+                dst = cv2.bitwise_and(temp, temp, mask=mask_img)
+                self.image_view.img_stacks.image_dict[da_link].setImage(dst)
+                self.working_img_data[da_link] = dst
+                vis_img = color_vis_img(
+                    dst,
+                    self.layer_ctrl.layer_color[
                         self.layer_ctrl.current_layer_index[0]
-                    ].set_thumbnail_data(res)
-                    # save action
-                    current_data = {"data": self.working_img_data[da_link].copy()}
-                    self.save_current_action("eraser_btn", da_link, current_data, res)
-                elif da_link == "img-process":
-                    temp = self.image_view.processing_img.copy()
-                    dst = cv2.bitwise_and(temp, temp, mask=mask_img)
-                    if self.image_view.image_file.pixel_type != "rgb24":
-                        channel_hsv = self.image_view.image_file.hsv_colors
-                        img_temp = merge_channels_into_single_img(dst, channel_hsv)
-                        input_img = cv2.normalize(
-                            img_temp, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U
-                        )
-                    else:
-                        input_img = dst.copy()
-                    res = cv2.resize(
-                        input_img, self.image_view.tb_size, interpolation=cv2.INTER_AREA
-                    )
-                    self.layer_ctrl.layer_list[
-                        self.layer_ctrl.current_layer_index[0]
-                    ].set_thumbnail_data(res)
-                    self.image_view.img_stacks.set_data(dst)
-                    self.image_view.processing_img = dst
-                    current_data = {"data": self.image_view.processing_img.copy()}
-                    self.save_current_action("eraser_btn", da_link, current_data, res)
-                else:
-                    if not self.working_img_data[da_link]:
-                        return
-                    temp = np.asarray(self.working_img_data[da_link])
-                    remain_points, del_indexes = delete_points_inside_eraser(
-                        temp, np.array([x, y]), r
-                    )
-                    if remain_points is None:
-                        return
-                    self.working_img_data[da_link] = remain_points.tolist()
-                    if self.working_img_data[da_link]:
-                        if da_link == "img-contour":
-                            self.image_view.img_stacks.image_dict[da_link].setData(
-                                remain_points
-                            )
-                            da_color = self.layer_ctrl.layer_color[
-                                self.layer_ctrl.current_layer_index[0]
-                            ]
-                            vis_img = create_vis_img(
-                                self.image_view.img_size,
-                                self.working_img_data[da_link],
-                                da_color,
-                                "l",
-                            )
-                            res = cv2.resize(
-                                vis_img,
-                                self.image_view.tb_size,
-                                interpolation=cv2.INTER_AREA,
-                            )
-                            self.layer_ctrl.layer_list[
-                                self.layer_ctrl.current_layer_index[0]
-                            ].set_thumbnail_data(res)
-                        elif da_link == "img-drawing":
-                            self.image_view.img_stacks.image_dict[da_link].setData(
-                                remain_points
-                            )
-                            da_color = self.layer_ctrl.layer_color[
-                                self.layer_ctrl.current_layer_index[0]
-                            ]
-                            vis_img = create_vis_img(
-                                self.image_view.img_size,
-                                self.working_img_data[da_link],
-                                da_color,
-                                "l",
-                                self.tool_box.is_closed,
-                            )
-                            res = cv2.resize(
-                                vis_img,
-                                self.image_view.tb_size,
-                                interpolation=cv2.INTER_AREA,
-                            )
-                            self.layer_ctrl.layer_list[
-                                self.layer_ctrl.current_layer_index[0]
-                            ].set_thumbnail_data(res)
-                        else:
-                            if da_link == "img-cells":
-                                del_inds = np.sort(del_indexes)[::-1]
-                                for da_ind in del_inds:
-                                    del self.working_img_data["cell_size"][da_ind]
-                                    del self.working_img_data["cell_symbol"][da_ind]
-                                    del self.working_img_data["cell_layer_index"][
-                                        da_ind
-                                    ]
-                                cell_layer_index = self.working_img_data[
-                                    "cell_layer_index"
-                                ].copy()
-                                self.working_img_data["cell_count"] = get_cell_count(
-                                    cell_layer_index
-                                )
-                                self.tool_box.update_cell_count_label(
-                                    self.working_img_data["cell_count"]
-                                )
-
-                                self.image_view.img_stacks.image_dict[da_link].setData(
-                                    pos=remain_points,
-                                    symbol=self.working_img_data["cell_symbol"],
-                                )
-                            else:
-                                self.image_view.img_stacks.image_dict[da_link].setData(
-                                    pos=remain_points
-                                )
-                            da_color = self.layer_ctrl.layer_color[
-                                self.layer_ctrl.current_layer_index[0]
-                            ]
-                            vis_img = create_vis_img(
-                                self.image_view.img_size,
-                                self.working_img_data[da_link],
-                                da_color,
-                                "p",
-                            )
-                            res = cv2.resize(
-                                vis_img,
-                                self.image_view.tb_size,
-                                interpolation=cv2.INTER_AREA,
-                            )
-                            self.layer_ctrl.layer_list[
-                                self.layer_ctrl.current_layer_index[0]
-                            ].set_thumbnail_data(res)
-                    else:
-                        return
-                    # save action
-                    if da_link == "img-cells":
-                        current_data = {
-                            "data": self.working_img_data[da_link].copy(),
-                            "size": self.working_img_data["cell_size"],
-                            "symbol": self.working_img_data["cell_symbol"],
-                            "index": self.working_img_data["cell_layer_index"],
-                            "count": self.working_img_data["cell_count"],
-                        }
-                    elif da_link == "img-drawing":
-                        current_data = {
-                            "data": self.working_img_data[da_link].copy(),
-                            "closed": self.tool_box.is_closed,
-                        }
-                    else:
-                        current_data = {"data": self.working_img_data[da_link].copy()}
-                    self.save_current_action("eraser_btn", da_link, current_data, res)
-        # ------------------------- magic wand
-        elif self.tool_box.checkable_btn_dict["magic_wand_btn"].isChecked():
-            tol_val = float(self.tool_box.magic_tol_val.text())
-            if self.image_view.processing_img is None:
-                src_img = self.image_view.current_img.copy()
-            else:
-                src_img = self.image_view.processing_img.copy()
-
-            # if self.image_view.image_file.is_rgb:
-            #     da_color = src_img[int(y), int(x)]
-            #     lower_val, upper_val = get_bound_color(da_color, tol_val, self.image_view.image_file.level, 'rgb')
-            #     print(lower_val, upper_val)
-            #
-            #     mask_img = cv2.inRange(src_img[:, :, :3], tuple(lower_val), tuple(upper_val))
-            # else:
-            mask_img = self.white_img.copy()
-            for i in range(self.image_view.image_file.n_channels):
-                if not self.image_view.channel_visible[i]:
-                    continue
-                temp = src_img[:, :, i]
-                selected_color = temp[int(y), int(x)]
-                # print("selected color", selected_color)
-                lower_val, upper_val = get_bound_color(
-                    selected_color, tol_val, self.image_view.image_file.level, "gray"
-                )
-                ret, thresh = cv2.threshold(
-                    temp, lower_val, upper_val, cv2.THRESH_BINARY
-                )
-                mask_img = cv2.bitwise_and(
-                    mask_img, mask_img, mask=thresh.astype(np.uint8)
-                )
-            modifiers = QApplication.keyboardModifiers()
-            if modifiers == Qt.KeyboardModifier.ShiftModifier:
-                if self.working_img_data["img-mask"] is None:
-                    self.working_img_data["img-mask"] = cv2.bitwise_or(
-                        mask_img, mask_img, mask=self.white_img
-                    )
-                else:
-                    self.working_img_data["img-mask"] = cv2.bitwise_or(
-                        self.working_img_data["img-mask"], mask_img, mask=self.white_img
-                    )
-            else:
-                self.working_img_data["img-mask"] = mask_img.copy()
-
-            if self.kernel is not None:
-                temp = self.working_img_data["img-mask"].copy()
-                open_img = cv2.morphologyEx(temp, cv2.MORPH_OPEN, self.kernel)
-                close_img = cv2.morphologyEx(open_img, cv2.MORPH_CLOSE, self.kernel)
-                self.working_img_data["img-mask"] = close_img.copy()
-            self.image_view.img_stacks.image_dict["img-mask"].setImage(
-                self.working_img_data["img-mask"]
-            )
-            temp = color_vis_img(
-                self.working_img_data["img-mask"], self.magic_wand_lut[1]
-            )
-            res = cv2.resize(
-                temp, self.image_view.tb_size, interpolation=cv2.INTER_AREA
-            )
-            self.layer_ctrl.master_layers(
-                res, layer_type="img-mask", color=self.magic_wand_lut[1]
-            )
-            # save action
-            current_data = {"data": self.working_img_data["img-mask"].copy()}
-            self.save_current_action("magic_wand_btn", "img-mask", current_data, res)
-
-        # ------------------------- lasso
-        elif self.tool_box.checkable_btn_dict["lasso_btn"].isChecked():
-            if self.working_atlas_data["lasso_path"]:
-                self.inactive_slice_window_lasso()
-            if self.img_lasso_is_closure:
-                self.inactive_lasso()
-                return
-            new_pnt = np.array([x, y])
-            if len(self.working_img_data["lasso_path"]) > 1:
-                dists = np.sum(
-                    (np.asarray(self.working_img_data["lasso_path"][0]) - new_pnt) ** 2
-                )
-            else:
-                dists = 1e5
-            if dists < np.min(self.image_view.img_size) * 0.05:
-                self.working_img_data["lasso_path"].append(
-                    self.working_img_data["lasso_path"][0]
-                )
-                self.image_view.img_stacks.image_dict["lasso_path"].setPen(
-                    pg.mkPen(color="r", width=3, style=Qt.PenStyle.SolidLine)
-                )
-                self.img_lasso_is_closure = True
-            else:
-                self.working_img_data["lasso_path"].append([x, y])
-            drawing_pnts = np.asarray(self.working_img_data["lasso_path"])
-            self.image_view.img_stacks.image_dict["lasso_path"].setData(drawing_pnts)
-            # save action
-            current_data = {"data": self.working_img_data["lasso_path"]}
-            self.save_current_action("lasso_btn", "lasso_path", current_data, None)
-        # ------------------------- triang -- triangulation pnts
-        elif self.tool_box.checkable_btn_dict["triang_btn"].isChecked():
-            if self.a2h_transferred or self.h2a_transferred:
-                return
-            self._invalidate_triangulation(clear_topology=True)
-            self.histo_tri_inside_data.append([int(x), int(y)])
-            self.histo_tri_data = (
-                self.histo_tri_onside_data + self.histo_tri_inside_data
-            )
-            self.image_view.img_stacks.image_dict["tri_pnts"].setData(
-                pos=np.asarray(self.histo_tri_data)
-            )
-            self.working_img_text.append(
-                pg.TextItem(str(len(self.histo_tri_inside_data)))
-            )
-            self.working_img_text[-1].setColor(self.triangle_color)
-            self.image_view.img_stacks.vb.addItem(self.working_img_text[-1])
-            self.working_img_text[-1].setPos(x, y)
-            if self.tool_box.triang_vis_btn.isChecked():
-                self.update_histo_tri_lines()
-            elif len(self.atlas_tri_data) == len(self.histo_tri_data):
-                self._build_triangulation_registration(
-                    strict=False, show_error=False
-                )
-        # ------------------------- loc -- cell
-        elif self.tool_box.checkable_btn_dict["loc_btn"].isChecked():
-            if self.tool_box.cell_selector_btn.isChecked():
-                if "rgb" in self.image_view.image_file.pixel_type:
-                    layer_ind = 0
-                else:
-                    # only one layer is allowed to work on
-                    da_layer = [
-                        ind for ind in range(4) if self.image_view.channel_visible[ind]
-                    ]
-                    n_layers = len(da_layer)
-                    if n_layers == 0:
-                        self.print_message(
-                            "No image layer is visualised.", self.error_message_color
-                        )
-                        return
-                    if n_layers > 1:
-                        self.print_message(
-                            "Only one image layer is allowed to select cells.",
-                            self.error_message_color,
-                        )
-                        return
-                    layer_ind = da_layer[0] + 1
-
-                self.working_img_data["img-cells"].append([x, y])
-                self.working_img_data["cell_size"].append(1)
-                self.working_img_data["cell_symbol"].append(
-                    self.cell_base_symbol[layer_ind]
-                )
-                self.working_img_data["cell_layer_index"].append(layer_ind)
-                self.working_img_data["cell_count"][layer_ind] += 1
-                self.tool_box.update_single_cell_count_label(
-                    self.working_img_data["cell_count"], layer_ind
-                )
-
-                self.image_view.img_stacks.image_dict["img-cells"].setData(
-                    pos=np.asarray(self.working_img_data["img-cells"])
-                )
-                self.image_view.img_stacks.image_dict["img-cells"].setSymbol(
-                    symbol=self.working_img_data["cell_symbol"]
-                )
-
-                # print(self.image_view.img_stacks.image_dict['img-cells'].data)
-                # print(self.image_view.img_stacks.image_dict['img-cells'].)
-
-                cv2.circle(
-                    self.cell_img,
-                    (int(x), int(y)),
-                    radius=2,
-                    color=self.cell_color,
-                    thickness=-1,
+                    ],
                 )
                 res = cv2.resize(
-                    self.cell_img, self.image_view.tb_size, interpolation=cv2.INTER_AREA
+                    vis_img, self.image_view.tb_size, interpolation=cv2.INTER_AREA
                 )
-                self.layer_ctrl.master_layers(
-                    res, layer_type="img-cells", color=self.cell_color
+                self.layer_ctrl.layer_list[
+                    self.layer_ctrl.current_layer_index[0]
+                ].set_thumbnail_data(res)
+                # save action
+                current_data = {"data": self.working_img_data[da_link].copy()}
+                self.save_current_action("eraser_btn", da_link, current_data, res)
+            elif da_link == "img-process":
+                temp = self.image_view.processing_img.copy()
+                dst = cv2.bitwise_and(temp, temp, mask=mask_img)
+                if self.image_view.image_file.pixel_type != "rgb24":
+                    channel_hsv = self.image_view.image_file.hsv_colors
+                    img_temp = merge_channels_into_single_img(dst, channel_hsv)
+                    input_img = cv2.normalize(
+                        img_temp, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U
+                    )
+                else:
+                    input_img = dst.copy()
+                res = cv2.resize(
+                    input_img, self.image_view.tb_size, interpolation=cv2.INTER_AREA
                 )
-
-                current_data = {
-                    "data": self.working_img_data["img-cells"].copy(),
-                    "size": self.working_img_data["cell_size"].copy(),
-                    "symbol": self.working_img_data["cell_symbol"].copy(),
-                    "index": self.working_img_data["cell_layer_index"].copy(),
-                    "count": self.working_img_data["cell_count"].copy(),
-                }
-
-                self.save_current_action("loc_btn", "img-cells", current_data, res)
-            if self.tool_box.cell_aim_btn.isChecked():
-                self.working_img_data["img-blob"].append([x, y])
-                self.image_view.img_stacks.image_dict["img-blob"].setData(
-                    pos=np.asarray(self.working_img_data["img-blob"])
-                )
-        # ------------------------- probe
-        elif self.tool_box.checkable_btn_dict["probe_btn"].isChecked():
-            self.working_img_data["img-probe"].append([x, y])
-            self.image_view.img_stacks.image_dict["img-probe"].setData(
-                pos=np.asarray(self.working_img_data["img-probe"])
-            )
-            if len(self.working_img_data["img-probe"]) > 1:
-                vis_points, msg = line_fit_2d(self.working_img_data["img-probe"])
-                if msg is not None:
-                    self.print_message(msg, self.error_message_color)
+                self.layer_ctrl.layer_list[
+                    self.layer_ctrl.current_layer_index[0]
+                ].set_thumbnail_data(res)
+                self.image_view.img_stacks.set_data(dst)
+                self.image_view.processing_img = dst
+                current_data = {"data": self.image_view.processing_img.copy()}
+                self.save_current_action("eraser_btn", da_link, current_data, res)
+            else:
+                # Only point layers can be erased point by point; other
+                # raster layers and atlas layers are not editable here.
+                if self.working_img_type.get(da_link) != "vector" or not (
+                    self.working_img_data.get(da_link)
+                ):
                     return
-                self.image_view.img_stacks.image_dict["img-trajectory"].setData(
-                    vis_points
+                temp = np.asarray(self.working_img_data[da_link])
+                remain_points, del_indexes = delete_points_inside_eraser(
+                    temp, np.array([x, y]), r
                 )
-            vis_img = create_vis_img(
-                self.image_view.img_size,
-                self.working_img_data["img-probe"],
-                self.probe_color,
-                "p",
+                if remain_points is None:
+                    return
+                self.working_img_data[da_link] = remain_points.tolist()
+                if self.working_img_data[da_link]:
+                    if da_link == "img-contour":
+                        self.image_view.img_stacks.image_dict[da_link].setData(
+                            remain_points
+                        )
+                        da_color = self.layer_ctrl.layer_color[
+                            self.layer_ctrl.current_layer_index[0]
+                        ]
+                        vis_img = create_vis_img(
+                            self.image_view.img_size,
+                            self.working_img_data[da_link],
+                            da_color,
+                            "l",
+                        )
+                        res = cv2.resize(
+                            vis_img,
+                            self.image_view.tb_size,
+                            interpolation=cv2.INTER_AREA,
+                        )
+                        self.layer_ctrl.layer_list[
+                            self.layer_ctrl.current_layer_index[0]
+                        ].set_thumbnail_data(res)
+                    elif da_link == "img-drawing":
+                        self.image_view.img_stacks.image_dict[da_link].setData(
+                            remain_points
+                        )
+                        da_color = self.layer_ctrl.layer_color[
+                            self.layer_ctrl.current_layer_index[0]
+                        ]
+                        vis_img = create_vis_img(
+                            self.image_view.img_size,
+                            self.working_img_data[da_link],
+                            da_color,
+                            "l",
+                            self.tool_box.is_closed,
+                        )
+                        res = cv2.resize(
+                            vis_img,
+                            self.image_view.tb_size,
+                            interpolation=cv2.INTER_AREA,
+                        )
+                        self.layer_ctrl.layer_list[
+                            self.layer_ctrl.current_layer_index[0]
+                        ].set_thumbnail_data(res)
+                    else:
+                        if da_link == "img-cells":
+                            del_inds = np.sort(del_indexes)[::-1]
+                            for da_ind in del_inds:
+                                del self.working_img_data["cell_size"][da_ind]
+                                del self.working_img_data["cell_symbol"][da_ind]
+                                del self.working_img_data["cell_layer_index"][
+                                    da_ind
+                                ]
+                            cell_layer_index = self.working_img_data[
+                                "cell_layer_index"
+                            ].copy()
+                            self.working_img_data["cell_count"] = get_cell_count(
+                                cell_layer_index
+                            )
+                            self.tool_box.update_cell_count_label(
+                                self.working_img_data["cell_count"]
+                            )
+
+                            self.image_view.img_stacks.image_dict[da_link].setData(
+                                pos=remain_points,
+                                symbol=self.working_img_data["cell_symbol"],
+                            )
+                        else:
+                            self.image_view.img_stacks.image_dict[da_link].setData(
+                                pos=remain_points
+                            )
+                        da_color = self.layer_ctrl.layer_color[
+                            self.layer_ctrl.current_layer_index[0]
+                        ]
+                        vis_img = create_vis_img(
+                            self.image_view.img_size,
+                            self.working_img_data[da_link],
+                            da_color,
+                            "p",
+                        )
+                        res = cv2.resize(
+                            vis_img,
+                            self.image_view.tb_size,
+                            interpolation=cv2.INTER_AREA,
+                        )
+                        self.layer_ctrl.layer_list[
+                            self.layer_ctrl.current_layer_index[0]
+                        ].set_thumbnail_data(res)
+                else:
+                    return
+                # save action
+                if da_link == "img-cells":
+                    current_data = {
+                        "data": self.working_img_data[da_link].copy(),
+                        "size": self.working_img_data["cell_size"],
+                        "symbol": self.working_img_data["cell_symbol"],
+                        "index": self.working_img_data["cell_layer_index"],
+                        "count": self.working_img_data["cell_count"],
+                    }
+                elif da_link == "img-drawing":
+                    current_data = {
+                        "data": self.working_img_data[da_link].copy(),
+                        "closed": self.tool_box.is_closed,
+                    }
+                else:
+                    current_data = {"data": self.working_img_data[da_link].copy()}
+                self.save_current_action("eraser_btn", da_link, current_data, res)
+
+    def _image_click_magic_wand(self, pos, x, y):
+        tol_val = read_int_field(self.tool_box.magic_tol_val, minimum=0)
+        if tol_val is None:
+            self.print_message(
+                "Enter a magic wand tolerance of 0 or more.", self.reminder_color
+            )
+            return
+        if self.image_view.processing_img is None:
+            src_img = self.image_view.current_img.copy()
+        else:
+            src_img = self.image_view.processing_img.copy()
+
+        # if self.image_view.image_file.is_rgb:
+        #     da_color = src_img[int(y), int(x)]
+        #     lower_val, upper_val = get_bound_color(da_color, tol_val, self.image_view.image_file.level, 'rgb')
+        #     print(lower_val, upper_val)
+        #
+        #     mask_img = cv2.inRange(src_img[:, :, :3], tuple(lower_val), tuple(upper_val))
+        # else:
+        mask_img = self.white_img.copy()
+        for i in range(self.image_view.image_file.n_channels):
+            if not self.image_view.channel_visible[i]:
+                continue
+            temp = src_img[:, :, i]
+            selected_color = temp[int(y), int(x)]
+            # print("selected color", selected_color)
+            # Keep pixels within the tolerance band on both sides of the
+            # clicked intensity, at any bit depth.
+            thresh = tolerance_mask(
+                temp, selected_color, tol_val, self.image_view.image_file.level
+            )
+            mask_img = cv2.bitwise_and(
+                mask_img, mask_img, mask=thresh
+            )
+        modifiers = QApplication.keyboardModifiers()
+        if modifiers == Qt.KeyboardModifier.ShiftModifier:
+            if self.working_img_data["img-mask"] is None:
+                self.working_img_data["img-mask"] = cv2.bitwise_or(
+                    mask_img, mask_img, mask=self.white_img
+                )
+            else:
+                self.working_img_data["img-mask"] = cv2.bitwise_or(
+                    self.working_img_data["img-mask"], mask_img, mask=self.white_img
+                )
+        else:
+            self.working_img_data["img-mask"] = mask_img.copy()
+
+        if self.kernel is not None:
+            temp = self.working_img_data["img-mask"].copy()
+            open_img = cv2.morphologyEx(temp, cv2.MORPH_OPEN, self.kernel)
+            close_img = cv2.morphologyEx(open_img, cv2.MORPH_CLOSE, self.kernel)
+            self.working_img_data["img-mask"] = close_img.copy()
+        self.image_view.img_stacks.image_dict["img-mask"].setImage(
+            self.working_img_data["img-mask"]
+        )
+        temp = color_vis_img(
+            self.working_img_data["img-mask"], self.magic_wand_lut[1]
+        )
+        res = cv2.resize(
+            temp, self.image_view.tb_size, interpolation=cv2.INTER_AREA
+        )
+        self.layer_ctrl.master_layers(
+            res, layer_type="img-mask", color=self.magic_wand_lut[1]
+        )
+        # save action
+        current_data = {"data": self.working_img_data["img-mask"].copy()}
+        self.save_current_action("magic_wand_btn", "img-mask", current_data, res)
+
+    def _image_click_lasso(self, pos, x, y):
+        if self.working_atlas_data["lasso_path"]:
+            self.inactive_slice_window_lasso()
+        if self.img_lasso_is_closure:
+            self.inactive_lasso()
+            return
+        new_pnt = np.array([x, y])
+        if len(self.working_img_data["lasso_path"]) > 1:
+            dists = np.sum(
+                (np.asarray(self.working_img_data["lasso_path"][0]) - new_pnt) ** 2
+            )
+        else:
+            dists = 1e5
+        if dists < np.min(self.image_view.img_size) * 0.05:
+            self.working_img_data["lasso_path"].append(
+                self.working_img_data["lasso_path"][0]
+            )
+            self.image_view.img_stacks.image_dict["lasso_path"].setPen(
+                pg.mkPen(color="r", width=3, style=Qt.PenStyle.SolidLine)
+            )
+            self.img_lasso_is_closure = True
+        else:
+            self.working_img_data["lasso_path"].append([x, y])
+        drawing_pnts = np.asarray(self.working_img_data["lasso_path"])
+        self.image_view.img_stacks.image_dict["lasso_path"].setData(drawing_pnts)
+        # save action
+        current_data = {"data": self.working_img_data["lasso_path"]}
+        self.save_current_action("lasso_btn", "lasso_path", current_data, None)
+
+    def _image_click_triang(self, pos, x, y):
+        if self.a2h_transferred or self.h2a_transferred:
+            return
+        self._invalidate_triangulation(clear_topology=True)
+        self.histo_tri_inside_data.append([int(x), int(y)])
+        self.histo_tri_data = (
+            self.histo_tri_onside_data + self.histo_tri_inside_data
+        )
+        self.image_view.img_stacks.image_dict["tri_pnts"].setData(
+            pos=np.asarray(self.histo_tri_data)
+        )
+        self.working_img_text.append(
+            pg.TextItem(str(len(self.histo_tri_inside_data)))
+        )
+        self.working_img_text[-1].setColor(self.triangle_color)
+        self.image_view.img_stacks.vb.addItem(self.working_img_text[-1])
+        self.working_img_text[-1].setPos(x, y)
+        if self.tool_box.triang_vis_btn.isChecked():
+            self.update_histo_tri_lines()
+        elif len(self.atlas_tri_data) == len(self.histo_tri_data):
+            self._build_triangulation_registration(
+                strict=False, show_error=False
+            )
+
+    def _image_click_loc(self, pos, x, y):
+        if self.tool_box.cell_selector_btn.isChecked():
+            if "rgb" in self.image_view.image_file.pixel_type:
+                layer_ind = 0
+            else:
+                # only one layer is allowed to work on
+                da_layer = [
+                    ind for ind in range(4) if self.image_view.channel_visible[ind]
+                ]
+                n_layers = len(da_layer)
+                if n_layers == 0:
+                    self.print_message(
+                        "No image layer is visualised.", self.error_message_color
+                    )
+                    return
+                if n_layers > 1:
+                    self.print_message(
+                        "Only one image layer is allowed to select cells.",
+                        self.error_message_color,
+                    )
+                    return
+                layer_ind = da_layer[0] + 1
+
+            self.working_img_data["img-cells"].append([x, y])
+            self.working_img_data["cell_size"].append(1)
+            self.working_img_data["cell_symbol"].append(
+                self.cell_base_symbol[layer_ind]
+            )
+            self.working_img_data["cell_layer_index"].append(layer_ind)
+            self.working_img_data["cell_count"][layer_ind] += 1
+            self.tool_box.update_single_cell_count_label(
+                self.working_img_data["cell_count"], layer_ind
+            )
+
+            self.image_view.img_stacks.image_dict["img-cells"].setData(
+                pos=np.asarray(self.working_img_data["img-cells"])
+            )
+            self.image_view.img_stacks.image_dict["img-cells"].setSymbol(
+                symbol=self.working_img_data["cell_symbol"]
+            )
+
+            # print(self.image_view.img_stacks.image_dict['img-cells'].data)
+            # print(self.image_view.img_stacks.image_dict['img-cells'].)
+
+            cv2.circle(
+                self.cell_img,
+                (int(x), int(y)),
+                radius=2,
+                color=self.cell_color,
+                thickness=-1,
             )
             res = cv2.resize(
-                vis_img, self.image_view.tb_size, interpolation=cv2.INTER_AREA
+                self.cell_img, self.image_view.tb_size, interpolation=cv2.INTER_AREA
             )
             self.layer_ctrl.master_layers(
-                res, layer_type="img-probe", color=self.probe_color
+                res, layer_type="img-cells", color=self.cell_color
             )
-            current_data = {"data": self.working_img_data["img-probe"].copy()}
-            self.save_current_action("probe_btn", "img-probe", current_data, res)
-        else:
-            return
+
+            current_data = {
+                "data": self.working_img_data["img-cells"].copy(),
+                "size": self.working_img_data["cell_size"].copy(),
+                "symbol": self.working_img_data["cell_symbol"].copy(),
+                "index": self.working_img_data["cell_layer_index"].copy(),
+                "count": self.working_img_data["cell_count"].copy(),
+            }
+
+            self.save_current_action("loc_btn", "img-cells", current_data, res)
+        if self.tool_box.cell_aim_btn.isChecked():
+            self.working_img_data["img-blob"].append([x, y])
+            self.image_view.img_stacks.image_dict["img-blob"].setData(
+                pos=np.asarray(self.working_img_data["img-blob"])
+            )
+
+    def _image_click_probe(self, pos, x, y):
+        self.working_img_data["img-probe"].append([x, y])
+        self.image_view.img_stacks.image_dict["img-probe"].setData(
+            pos=np.asarray(self.working_img_data["img-probe"])
+        )
+        if len(self.working_img_data["img-probe"]) > 1:
+            vis_points, msg = line_fit_2d(self.working_img_data["img-probe"])
+            if msg is not None:
+                self.print_message(msg, self.error_message_color)
+                return
+            self.image_view.img_stacks.image_dict["img-trajectory"].setData(
+                vis_points
+            )
+        vis_img = create_vis_img(
+            self.image_view.img_size,
+            self.working_img_data["img-probe"],
+            self.probe_color,
+            "p",
+        )
+        res = cv2.resize(
+            vis_img, self.image_view.tb_size, interpolation=cv2.INTER_AREA
+        )
+        self.layer_ctrl.master_layers(
+            res, layer_type="img-probe", color=self.probe_color
+        )
+        current_data = {"data": self.working_img_data["img-probe"].copy()}
+        self.save_current_action("probe_btn", "img-probe", current_data, res)
 
     def img_stacks_hovered(self, event):
         if event.isExit():
@@ -5032,252 +5158,267 @@ class DriftlessMap(QMainWindow, FORM_Main):
                     "No slice atlas data is loaded.", self.error_message_color
                 )
                 return
-        # ------------------------- ruler
-        if self.tool_box.checkable_btn_dict["ruler_btn"].isChecked():
-            if len(self.working_atlas_data["ruler_path"]) == 2:
-                self.inactive_atlas_ruler()
-                self.tool_box.ruler_length_label.setText("Length:")
-            else:
-                self.working_atlas_data["ruler_path"].append([x, y])
-                self.atlas_view.working_atlas.image_dict["ruler_path"].setData(
-                    np.asarray(self.working_atlas_data["ruler_path"])
-                )
-
-        # ------------------------- triangle
-        elif self.tool_box.checkable_btn_dict["triang_btn"].isChecked():
-            if self.a2h_transferred or self.h2a_transferred:
+        tool_handlers = (
+            ("ruler_btn", self._atlas_click_ruler),
+            ("triang_btn", self._atlas_click_triang),
+            ("eraser_btn", self._atlas_click_eraser),
+            ("lasso_btn", self._atlas_click_lasso),
+            ("probe_btn", self._atlas_click_probe),
+            ("magic_wand_btn", self._atlas_click_magic_wand),
+        )
+        for tool, handler in tool_handlers:
+            if self.tool_box.checkable_btn_dict[tool].isChecked():
+                handler(pos, x, y)
                 return
-            if self.np_onside is None:
-                # print(self.np_onside)
-                self.print_message(
-                    "Please set valid number of boundary points!",
-                    self.error_message_color,
-                )
-                return
-            self._invalidate_triangulation(clear_topology=True)
-            self.atlas_tri_inside_data.append([int(x), int(y)])
-            self.atlas_tri_data = (
-                self.atlas_tri_onside_data + self.atlas_tri_inside_data
-            )
-            self.atlas_view.working_atlas.image_dict["tri_pnts"].setData(
-                pos=np.asarray(self.atlas_tri_data)
-            )
-            self.working_atlas_text.append(
-                pg.TextItem(str(len(self.atlas_tri_inside_data)))
-            )
-            self.working_atlas_text[-1].setColor(self.triangle_color)
-            self.working_atlas_text[-1].setPos(x, y)
-            self.atlas_view.working_atlas.vb.addItem(self.working_atlas_text[-1])
-            if self.tool_box.triang_vis_btn.isChecked():
-                self.update_atlas_tri_lines()
-            elif len(self.atlas_tri_data) == len(self.histo_tri_data):
-                self._build_triangulation_registration(
-                    strict=False, show_error=False
-                )
-        # ------------------------- eraser
-        elif self.tool_box.checkable_btn_dict["eraser_btn"].isChecked():
-            if (
-                not self.layer_ctrl.layer_id
-                or len(self.layer_ctrl.current_layer_index) > 1
-            ):
-                self.print_message(
-                    "Eraser only works on one single layer.", self.error_message_color
-                )
-                return
-            da_link = self.layer_ctrl.layer_link[self.layer_ctrl.current_layer_index[0]]
-            if da_link == "atlas-probe":
-                res = self.atlas_erasing_probe(pos)
-                if res is None:
-                    return
-            else:
-                if self.current_atlas == "volume":
-                    return
-                r = self.tool_box.eraser_size_slider.value()
-                mask_img = np.zeros(
-                    self.working_atlas_data[da_link].shape[:2], dtype=np.uint8
-                )
-                cv2.circle(
-                    mask_img, center=(int(x), int(y)), radius=r, color=255, thickness=-1
-                )
-                mask_img = 255 - mask_img
-                if da_link in ["atlas-mask", "atlas-slice"]:
-                    temp = self.working_atlas_data[da_link].astype(np.uint8)
-                    dst = cv2.bitwise_and(temp, temp, mask=mask_img)
-                    res = cv2.resize(
-                        dst, self.atlas_view.slice_tb_size, interpolation=cv2.INTER_AREA
-                    )
-                    self.atlas_view.slice_stack.image_dict[da_link].setImage(dst)
-                    self.working_atlas_data[da_link] = dst
-                else:
-                    return
-            self.layer_ctrl.layer_list[
-                self.layer_ctrl.current_layer_index[0]
-            ].set_thumbnail_data(res)
-            current_data = {"data": self.working_atlas_data[da_link].copy()}
-            self.save_current_action("eraser_btn", da_link, current_data, res)
-        # ------------------------- lasso
-        elif self.tool_box.checkable_btn_dict["lasso_btn"].isChecked():
-            if self.working_img_data["lasso_path"]:
-                self.inactive_lasso()
-            if self.atlas_lasso_is_closure:
-                self.inactive_slice_window_lasso()
-                return
-            if self.current_atlas == "volume":
-                return
-            new_pnt = np.array([x, y])
-            if len(self.working_atlas_data["lasso_path"]) > 1:
-                dists = np.sum(
-                    (np.asarray(self.working_atlas_data["lasso_path"][0]) - new_pnt)
-                    ** 2
-                )
-            else:
-                dists = 1e5
-            if dists < 5:
-                self.working_atlas_data["lasso_path"].append(
-                    self.working_atlas_data["lasso_path"][0]
-                )
-                self.atlas_view.slice_stack.image_dict["lasso_path"].setPen(
-                    pg.mkPen(color="r", width=3, style=Qt.PenStyle.SolidLine)
-                )
-                self.atlas_lasso_is_closure = True
-            else:
-                self.working_atlas_data["lasso_path"].append([x, y])
-            drawing_pnts = np.asarray(self.working_atlas_data["lasso_path"])
-            self.atlas_view.slice_stack.image_dict["lasso_path"].setData(drawing_pnts)
-            current_data = {"data": self.working_atlas_data["lasso_path"].copy()}
-            self.save_current_action("lasso_btn", "lasso_path", current_data, None)
-        # ------------------------- probe
-        elif self.tool_box.checkable_btn_dict["probe_btn"].isChecked():
-            self.working_atlas_data["atlas-probe"].append([x, y])
+        if self.actionBregma_Picker.isChecked():
+            self._atlas_click_bregma(pos, x, y)
 
-            if len(self.working_atlas_data["atlas-probe"]) > 2:
-                self.working_atlas_data["atlas-probe"].clear()
-                self.atlas_view.working_atlas.image_dict["atlas-probe"].clear()
-                self.atlas_view.working_atlas.image_dict["atlas-trajectory"].clear()
-                self.atlas_view.working_atlas.remove_pre_trajectories_vis_lines()
-            if len(self.working_atlas_data["atlas-probe"]) == 0:
-                self.atlas_view.working_atlas.image_dict["atlas-probe"].clear()
-                self.atlas_view.working_atlas.remove_pre_trajectories_vis_lines()
-                return
-            if self.image_view.image_file is None:
-                # pre-surgery
-                points2d = self.working_atlas_data["atlas-probe"].copy()
-                points2d = np.asarray(points2d)
-
-                if self.multi_shanks and self.valid_multi_settings:
-                    base_loc_1d = get_pre_multi_shank_vis_base(
-                        self.multi_settings.x_vals, self.multi_settings.y_vals
-                    )
-                else:
-                    base_loc_1d = np.array([0])
-
-                if self.current_atlas == "volume":
-                    self.atlas_view.draw_pre_2d_vis_data_for_volume_atlas(
-                        points2d, base_loc_1d
-                    )
-                else:
-                    self.atlas_view.draw_pre_2d_vis_data_for_slice_atlas(
-                        points2d, base_loc_1d
-                    )
-            else:
-                # after-surgery
-                self.atlas_view.working_atlas.image_dict["atlas-probe"].setData(
-                    pos=np.asarray(self.working_atlas_data["atlas-probe"])
-                )
-                if len(self.working_atlas_data["atlas-probe"]) > 1:
-                    if self.current_atlas == "volume":
-                        current_img = (
-                            self.atlas_view.working_atlas.label_img.image.copy()
-                        )
-                    else:
-                        current_img = None
-                    vis_points, msg = line_fit_2d(
-                        self.working_atlas_data["atlas-probe"], current_img
-                    )
-                    if msg is not None:
-                        self.print_message(msg, self.error_message_color)
-                        return
-                    self.atlas_view.working_atlas.image_dict[
-                        "atlas-trajectory"
-                    ].setData(vis_points)
-
-            vis_img = create_vis_img(
-                self.atlas_view.slice_size,
-                self.working_atlas_data["atlas-probe"],
-                self.probe_color,
-                "p",
-            )
-            res = cv2.resize(
-                vis_img, self.atlas_view.slice_tb_size, interpolation=cv2.INTER_AREA
-            )
-            self.layer_ctrl.master_layers(
-                res, layer_type="atlas-probe", color=self.probe_color
-            )
-
-            current_data = {"data": self.working_atlas_data["atlas-probe"].copy()}
-            self.save_current_action("probe_btn", "atlas-probe", current_data, None)
-        # ------------------------- magic wand -- mask
-        elif self.tool_box.checkable_btn_dict["magic_wand_btn"].isChecked():
-            if self.current_atlas == "volume":
-                if not self.h2a_transferred:
-                    return
-                src_img = self.atlas_view.working_atlas.image_dict[
-                    "atlas-overlay"
-                ].image.copy()
-            else:
-                src_img = self.atlas_view.slice_image_data.copy()
-            white_img = np.ones(self.atlas_view.slice_size).astype("uint8")
-            tol_val = int(self.tool_box.magic_tol_val.text())
-            da_color = src_img[int(y), int(x), :3]
-            lower_val, upper_val = get_bound_color(da_color, tol_val, 255, "rgb")
-            mask_img = cv2.inRange(
-                src_img[:, :, :3],
-                np.array(lower_val, dtype="float"),
-                np.array(upper_val, dtype="float"),
-            )
-
-            modifiers = QApplication.keyboardModifiers()
-            if modifiers == Qt.KeyboardModifier.ShiftModifier:
-                if self.working_atlas_data["atlas-mask"] is None:
-                    self.working_atlas_data["atlas-mask"] = cv2.bitwise_or(
-                        mask_img, mask_img, mask=white_img
-                    )
-                else:
-                    self.working_atlas_data["atlas-mask"] = cv2.bitwise_or(
-                        self.working_atlas_data["atlas-mask"], mask_img, mask=white_img
-                    )
-            else:
-                self.working_atlas_data["atlas-mask"] = mask_img.copy()
-
-            if self.kernel is not None:
-                temp = self.working_atlas_data["atlas-mask"].copy()
-                open_img = cv2.morphologyEx(temp, cv2.MORPH_OPEN, self.kernel)
-                close_img = cv2.morphologyEx(open_img, cv2.MORPH_CLOSE, self.kernel)
-                self.working_atlas_data["atlas-mask"] = close_img.copy()
-
-            self.atlas_view.working_atlas.image_dict["atlas-mask"].setImage(
-                self.working_atlas_data["atlas-mask"]
-            )
-            res = cv2.resize(
-                self.working_atlas_data["atlas-mask"],
-                self.atlas_view.slice_tb_size,
-                interpolation=cv2.INTER_AREA,
-            )
-            self.layer_ctrl.master_layers(
-                res, layer_type="atlas-mask", color=self.magic_wand_lut[1]
-            )
-            current_data = {"data": self.working_atlas_data["atlas-mask"].copy()}
-            self.save_current_action("magic_wand_btn", "atlas-mask", current_data, res)
-        # ------------------------- bregma picker
-        elif self.actionBregma_Picker.isChecked():
-            self.atlas_view.slice_bregma = [x, y]
-            self.atlas_view.slice_stack.image_dict["bregma_pnt"].setData(
-                pos=np.array([self.atlas_view.slice_bregma])
-            )
-            self.actionBregma_Picker.setChecked(False)
-            self.atlas_view.check_info_ready()
+    def _atlas_click_ruler(self, pos, x, y):
+        if len(self.working_atlas_data["ruler_path"]) == 2:
+            self.inactive_atlas_ruler()
+            self.tool_box.ruler_length_label.setText("Length:")
         else:
+            self.working_atlas_data["ruler_path"].append([x, y])
+            self.atlas_view.working_atlas.image_dict["ruler_path"].setData(
+                np.asarray(self.working_atlas_data["ruler_path"])
+            )
+
+    def _atlas_click_triang(self, pos, x, y):
+        if self.a2h_transferred or self.h2a_transferred:
             return
+        if self.np_onside is None:
+            # print(self.np_onside)
+            self.print_message(
+                "Please set valid number of boundary points!",
+                self.error_message_color,
+            )
+            return
+        self._invalidate_triangulation(clear_topology=True)
+        self.atlas_tri_inside_data.append([int(x), int(y)])
+        self.atlas_tri_data = (
+            self.atlas_tri_onside_data + self.atlas_tri_inside_data
+        )
+        self.atlas_view.working_atlas.image_dict["tri_pnts"].setData(
+            pos=np.asarray(self.atlas_tri_data)
+        )
+        self.working_atlas_text.append(
+            pg.TextItem(str(len(self.atlas_tri_inside_data)))
+        )
+        self.working_atlas_text[-1].setColor(self.triangle_color)
+        self.working_atlas_text[-1].setPos(x, y)
+        self.atlas_view.working_atlas.vb.addItem(self.working_atlas_text[-1])
+        if self.tool_box.triang_vis_btn.isChecked():
+            self.update_atlas_tri_lines()
+        elif len(self.atlas_tri_data) == len(self.histo_tri_data):
+            self._build_triangulation_registration(
+                strict=False, show_error=False
+            )
+
+    def _atlas_click_eraser(self, pos, x, y):
+        if (
+            not self.layer_ctrl.layer_id
+            or len(self.layer_ctrl.current_layer_index) > 1
+        ):
+            self.print_message(
+                "Eraser only works on one single layer.", self.error_message_color
+            )
+            return
+        da_link = self.layer_ctrl.layer_link[self.layer_ctrl.current_layer_index[0]]
+        if da_link == "atlas-probe":
+            res = self.atlas_erasing_probe(pos)
+            if res is None:
+                return
+        else:
+            if self.current_atlas == "volume":
+                return
+            if da_link not in ["atlas-mask", "atlas-slice"]:
+                return
+            r = self.tool_box.eraser_size_slider.value()
+            raster = self._atlas_raster(da_link)
+            if raster is None:
+                return
+            mask_img = np.zeros(raster.shape[:2], dtype=np.uint8)
+            cv2.circle(
+                mask_img, center=(int(x), int(y)), radius=r, color=255, thickness=-1
+            )
+            mask_img = 255 - mask_img
+            temp = raster.astype(np.uint8)
+            dst = cv2.bitwise_and(temp, temp, mask=mask_img)
+            res = cv2.resize(
+                dst, self.atlas_view.slice_tb_size, interpolation=cv2.INTER_AREA
+            )
+            self._set_atlas_raster(da_link, dst)
+        self.layer_ctrl.layer_list[
+            self.layer_ctrl.current_layer_index[0]
+        ].set_thumbnail_data(res)
+        current_data = {"data": self._atlas_raster(da_link)}
+        self.save_current_action("eraser_btn", da_link, current_data, res)
+
+    def _atlas_click_lasso(self, pos, x, y):
+        if self.working_img_data["lasso_path"]:
+            self.inactive_lasso()
+        if self.atlas_lasso_is_closure:
+            self.inactive_slice_window_lasso()
+            return
+        if self.current_atlas == "volume":
+            return
+        new_pnt = np.array([x, y])
+        if len(self.working_atlas_data["lasso_path"]) > 1:
+            dists = np.sum(
+                (np.asarray(self.working_atlas_data["lasso_path"][0]) - new_pnt)
+                ** 2
+            )
+        else:
+            dists = 1e5
+        if dists < 5:
+            self.working_atlas_data["lasso_path"].append(
+                self.working_atlas_data["lasso_path"][0]
+            )
+            self.atlas_view.slice_stack.image_dict["lasso_path"].setPen(
+                pg.mkPen(color="r", width=3, style=Qt.PenStyle.SolidLine)
+            )
+            self.atlas_lasso_is_closure = True
+        else:
+            self.working_atlas_data["lasso_path"].append([x, y])
+        drawing_pnts = np.asarray(self.working_atlas_data["lasso_path"])
+        self.atlas_view.slice_stack.image_dict["lasso_path"].setData(drawing_pnts)
+        current_data = {"data": self.working_atlas_data["lasso_path"].copy()}
+        self.save_current_action("lasso_btn", "lasso_path", current_data, None)
+
+    def _atlas_click_probe(self, pos, x, y):
+        self.working_atlas_data["atlas-probe"].append([x, y])
+
+        if len(self.working_atlas_data["atlas-probe"]) > 2:
+            self.working_atlas_data["atlas-probe"].clear()
+            self.atlas_view.working_atlas.image_dict["atlas-probe"].clear()
+            self.atlas_view.working_atlas.image_dict["atlas-trajectory"].clear()
+            self.atlas_view.working_atlas.remove_pre_trajectories_vis_lines()
+        if len(self.working_atlas_data["atlas-probe"]) == 0:
+            self.atlas_view.working_atlas.image_dict["atlas-probe"].clear()
+            self.atlas_view.working_atlas.remove_pre_trajectories_vis_lines()
+            return
+        if self.image_view.image_file is None:
+            # pre-surgery
+            points2d = self.working_atlas_data["atlas-probe"].copy()
+            points2d = np.asarray(points2d)
+
+            if self.multi_shanks and self.valid_multi_settings:
+                base_loc_1d = get_pre_multi_shank_vis_base(
+                    self.multi_settings.x_vals, self.multi_settings.y_vals
+                )
+            else:
+                base_loc_1d = np.array([0])
+
+            if self.current_atlas == "volume":
+                self.atlas_view.draw_pre_2d_vis_data_for_volume_atlas(
+                    points2d, base_loc_1d
+                )
+            else:
+                self.atlas_view.draw_pre_2d_vis_data_for_slice_atlas(
+                    points2d, base_loc_1d
+                )
+        else:
+            # after-surgery
+            self.atlas_view.working_atlas.image_dict["atlas-probe"].setData(
+                pos=np.asarray(self.working_atlas_data["atlas-probe"])
+            )
+            if len(self.working_atlas_data["atlas-probe"]) > 1:
+                if self.current_atlas == "volume":
+                    current_img = (
+                        self.atlas_view.working_atlas.label_img.image.copy()
+                    )
+                else:
+                    current_img = None
+                vis_points, msg = line_fit_2d(
+                    self.working_atlas_data["atlas-probe"], current_img
+                )
+                if msg is not None:
+                    self.print_message(msg, self.error_message_color)
+                    return
+                self.atlas_view.working_atlas.image_dict[
+                    "atlas-trajectory"
+                ].setData(vis_points)
+
+        vis_img = create_vis_img(
+            self.atlas_view.slice_size,
+            self.working_atlas_data["atlas-probe"],
+            self.probe_color,
+            "p",
+        )
+        res = cv2.resize(
+            vis_img, self.atlas_view.slice_tb_size, interpolation=cv2.INTER_AREA
+        )
+        self.layer_ctrl.master_layers(
+            res, layer_type="atlas-probe", color=self.probe_color
+        )
+
+        current_data = {"data": self.working_atlas_data["atlas-probe"].copy()}
+        self.save_current_action("probe_btn", "atlas-probe", current_data, None)
+
+    def _atlas_click_magic_wand(self, pos, x, y):
+        if self.current_atlas == "volume":
+            if not self.h2a_transferred:
+                return
+            src_img = self.atlas_view.working_atlas.image_dict[
+                "atlas-overlay"
+            ].image.copy()
+        else:
+            src_img = self.atlas_view.slice_image_data.copy()
+        white_img = np.ones(self.atlas_view.slice_size).astype("uint8")
+        tol_val = read_int_field(self.tool_box.magic_tol_val, minimum=0)
+        if tol_val is None:
+            self.print_message(
+                "Enter a magic wand tolerance of 0 or more.", self.reminder_color
+            )
+            return
+        da_color = src_img[int(y), int(x), :3]
+        lower_val, upper_val = get_bound_color(da_color, tol_val, 255, "rgb")
+        mask_img = cv2.inRange(
+            src_img[:, :, :3],
+            np.array(lower_val, dtype="float"),
+            np.array(upper_val, dtype="float"),
+        )
+
+        modifiers = QApplication.keyboardModifiers()
+        if modifiers == Qt.KeyboardModifier.ShiftModifier:
+            if self.working_atlas_data["atlas-mask"] is None:
+                self.working_atlas_data["atlas-mask"] = cv2.bitwise_or(
+                    mask_img, mask_img, mask=white_img
+                )
+            else:
+                self.working_atlas_data["atlas-mask"] = cv2.bitwise_or(
+                    self.working_atlas_data["atlas-mask"], mask_img, mask=white_img
+                )
+        else:
+            self.working_atlas_data["atlas-mask"] = mask_img.copy()
+
+        if self.kernel is not None:
+            temp = self.working_atlas_data["atlas-mask"].copy()
+            open_img = cv2.morphologyEx(temp, cv2.MORPH_OPEN, self.kernel)
+            close_img = cv2.morphologyEx(open_img, cv2.MORPH_CLOSE, self.kernel)
+            self.working_atlas_data["atlas-mask"] = close_img.copy()
+
+        self.atlas_view.working_atlas.image_dict["atlas-mask"].setImage(
+            self.working_atlas_data["atlas-mask"]
+        )
+        res = cv2.resize(
+            self.working_atlas_data["atlas-mask"],
+            self.atlas_view.slice_tb_size,
+            interpolation=cv2.INTER_AREA,
+        )
+        self.layer_ctrl.master_layers(
+            res, layer_type="atlas-mask", color=self.magic_wand_lut[1]
+        )
+        current_data = {"data": self.working_atlas_data["atlas-mask"].copy()}
+        self.save_current_action("magic_wand_btn", "atlas-mask", current_data, res)
+
+    def _atlas_click_bregma(self, pos, x, y):
+        self.atlas_view.slice_bregma = [x, y]
+        self.atlas_view.slice_stack.image_dict["bregma_pnt"].setData(
+            pos=np.array([self.atlas_view.slice_bregma])
+        )
+        self.actionBregma_Picker.setChecked(False)
+        self.atlas_view.check_info_ready()
 
     def slice_stack_key_pressed(self, action):
         if len(self.layer_ctrl.current_layer_index) != 1:
@@ -5307,13 +5448,11 @@ class DriftlessMap(QMainWindow, FORM_Main):
                         interpolation=cv2.INTER_AREA,
                     )
                 elif da_link == "atlas-slice":
-                    dst = cv2.bitwise_and(
-                        self.working_atlas_data[da_link],
-                        self.working_atlas_data[da_link],
-                        mask=mask,
-                    )
-                    self.atlas_view.slice_stack.set_data(dst)
-                    self.working_atlas_data[da_link] = dst
+                    raster = self._atlas_raster(da_link)
+                    if raster is None:
+                        return
+                    dst = cv2.bitwise_and(raster, raster, mask=mask)
+                    self._set_atlas_raster(da_link, dst)
                     res = cv2.resize(
                         dst, self.atlas_view.slice_tb_size, interpolation=cv2.INTER_AREA
                     )
@@ -5337,7 +5476,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
             self.layer_ctrl.layer_list[
                 self.layer_ctrl.current_layer_index[0]
             ].set_thumbnail_data(res)
-            current_data = {"data": self.working_atlas_data[da_link].copy()}
+            current_data = {"data": self._atlas_raster(da_link).copy()}
             self.save_current_action("delete", da_link, current_data, res)
         else:
             return
@@ -5553,10 +5692,12 @@ class DriftlessMap(QMainWindow, FORM_Main):
     def delete_all_atlas_layer(self):
         if not self.layer_ctrl.layer_link:
             return
-        for da_link in self.layer_ctrl.layer_link:
+        # Iterate over a snapshot: deleting shifts the live list, which would
+        # skip the layer after each deleted one.
+        for da_link in list(self.layer_ctrl.layer_link):
             if "atlas" not in da_link:
                 continue
-            da_index = np.where(np.ravel(self.layer_ctrl.layer_link) == da_link)[0][0]
+            da_index = self.layer_ctrl.layer_link.index(da_link)
             self.layer_ctrl.delete_layer(da_index)
             self.layers_exist_changed(da_link)
         self.remove_h2a_transferred_layers()
@@ -5605,6 +5746,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 self.atlas_view.working_atlas.image_dict[da_link].setVisible(vis)
 
     def layers_exist_changed(self, da_link):  # delete
+        self.forget_layer_actions(da_link)
         if da_link == "img-process":
             self.reset_current_image()
         elif da_link == "atlas-slice":
@@ -5653,6 +5795,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
                     "cell_layer_index",
                 ]:
                     self.working_atlas_data[da_key] = []
+                self.working_atlas_data["cell_count"] = [0 for _ in range(5)]
                 for i in range(5):
                     self.tool_box.cell_count_val_list[i].setText("0")
 
@@ -5710,7 +5853,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
         if self.atlas_view.has_display_objects:
             self.atlas_view.clear_all_display_obj()
 
-        if self.object_ctrl.linked_indexes:
+        if self.object_ctrl.linked_object_indexes():
             self.print_message(
                 "Displaying linked objects is under development.", self.reminder_color
             )
@@ -5730,14 +5873,13 @@ class DriftlessMap(QMainWindow, FORM_Main):
         # for cell/virus, show only on the current page
 
     def compare_object(self):
-        if len(self.object_ctrl.linked_indexes) < 2:
+        linked = self.object_ctrl.linked_object_indexes()
+        if len(linked) < 2:
             self.print_message(
                 "Need at least 2 objects to compare.", self.reminder_color
             )
             return
-        objects_type = np.ravel(self.object_ctrl.obj_type)[
-            np.ravel(self.object_ctrl.linked_indexes)
-        ]
+        objects_type = np.ravel(self.object_ctrl.obj_type)[np.ravel(linked)]
         if len(np.unique(objects_type)) > 1:
             self.print_message(
                 "Only the same type of objects can be compared.", self.reminder_color
@@ -5750,15 +5892,33 @@ class DriftlessMap(QMainWindow, FORM_Main):
             return
         self.object_ctrl.compare_obj_called()
 
+    def _atlas_view_items(self, key, include_slice=True):
+        """Return the ``key`` display item of every atlas view that has one."""
+        stacks = [self.atlas_view.cimg, self.atlas_view.simg, self.atlas_view.himg]
+        if include_slice:
+            stacks.append(self.atlas_view.slice_stack)
+        return [stack.image_dict[key] for stack in stacks if key in stack.image_dict]
+
+    def _atlas_raster(self, da_link):
+        """Return the editable pixels behind a raster atlas layer."""
+        if da_link == "atlas-slice":
+            return self.atlas_view.processing_slice
+        return self.working_atlas_data.get(da_link)
+
+    def _set_atlas_raster(self, da_link, pixels):
+        if da_link == "atlas-slice":
+            self.atlas_view.processing_slice = pixels
+            self.atlas_view.slice_stack.set_data(pixels)
+        else:
+            self.working_atlas_data[da_link] = pixels
+            self.atlas_view.slice_stack.image_dict[da_link].setImage(pixels)
+
     def make_probe_piece(self):
         if not self.valid_probe_settings:
             msg = "Not valid probe settings given. Please provide a valid setting."
             self.print_message(msg, self.error_message_color)
             return
-        if self.a2h_transferred:
-            data_tobe_registered = self.working_img_data["img-probe"]
-        else:
-            data_tobe_registered = self.working_atlas_data["atlas-probe"]
+        data_tobe_registered = self.working_atlas_data["atlas-probe"]
 
         if data_tobe_registered:
             center_data_2d = np.asarray(data_tobe_registered)
@@ -5812,18 +5972,11 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 )
 
             self.working_atlas_data["atlas-probe"].clear()
-            self.working_img_data["img-probe"].clear()
 
     def make_virus_piece(self):
-        if self.h2a_transferred:
-            if not self.working_atlas_data["atlas-virus"]:
-                return
-            processing_pnt = np.asarray(self.working_atlas_data["atlas-virus"])
-        else:
-            if self.working_img_data["img-virus"] is None:
-                return
-            inds = np.where(self.working_img_data["img-virus"] != 0)
-            processing_pnt = np.vstack([inds[0], inds[1]]).T
+        if not self.working_atlas_data["atlas-virus"]:
+            return
+        processing_pnt = np.asarray(self.working_atlas_data["atlas-virus"])
 
         data = self.atlas_view.get_3d_data_from_2d_view(
             processing_pnt, self.atlas_display
@@ -5838,15 +5991,9 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.working_atlas_data["atlas-virus"] = []
 
     def make_contour_piece(self):
-        if self.h2a_transferred:
-            if not self.working_atlas_data["atlas-contour"]:
-                return
-            processing_pnt = np.asarray(self.working_atlas_data["atlas-contour"])
-        else:
-            if not self.working_img_data["img-contour"]:
-                return
-            inds = np.where(self.working_img_data["img-contour"] != 0)
-            processing_pnt = np.vstack([inds[0], inds[1]]).T
+        if not self.working_atlas_data["atlas-contour"]:
+            return
+        processing_pnt = np.asarray(self.working_atlas_data["atlas-contour"])
 
         data = self.atlas_view.get_3d_data_from_2d_view(
             processing_pnt, self.atlas_display
@@ -5861,10 +6008,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.working_atlas_data["atlas-contour"] = []
 
     def make_drawing_piece(self):
-        if self.a2h_transferred:
-            data_tobe_registered = self.working_img_data["img-drawing"]
-        else:
-            data_tobe_registered = self.working_atlas_data["atlas-drawing"]
+        data_tobe_registered = self.working_atlas_data["atlas-drawing"]
         if not data_tobe_registered:
             return
         processing_data = np.asarray(data_tobe_registered)
@@ -5888,15 +6032,13 @@ class DriftlessMap(QMainWindow, FORM_Main):
             object_type="drawing piece",
             object_data=data,
             object_mode=self.obj_display_mode,
+            drawing_mode="area" if self.tool_box.is_closed else "line",
         )
 
         self.working_atlas_data["atlas-drawing"] = []
 
     def make_cell_piece(self):
-        if self.a2h_transferred:
-            data_tobe_registered = self.working_img_data["img-cells"]
-        else:
-            data_tobe_registered = self.working_atlas_data["atlas-cells"]
+        data_tobe_registered = self.working_atlas_data["atlas-cells"]
 
         if not data_tobe_registered:
             return
@@ -5935,11 +6077,40 @@ class DriftlessMap(QMainWindow, FORM_Main):
             msg = "Can not make pieces with all slice windows turned on."
             self.print_message(msg, self.error_message_color)
             return
+        # Object pieces are atlas coordinates, so they are made only from
+        # atlas-frame annotations. Histology annotations must first be
+        # transferred with Accept and Transfer, which applies the
+        # registration; their raw pixel positions are not atlas positions.
+        untransferred = self._untransferred_histology_annotations()
         self.make_probe_piece()
         self.make_virus_piece()
         self.make_cell_piece()
         self.make_drawing_piece()
         self.make_contour_piece()
+        if untransferred:
+            self.print_message(
+                "These histology annotations were not made into pieces: {}. "
+                "Use Transform to Atlas Slice Window, then Accept and "
+                "Transfer, to move them into the atlas first.".format(
+                    ", ".join(untransferred)
+                ),
+                self.reminder_color,
+            )
+
+    def _untransferred_histology_annotations(self):
+        kinds = []
+        for key, name in (
+            ("img-probe", "probe points"),
+            ("img-cells", "cells"),
+            ("img-drawing", "drawings"),
+            ("img-contour", "contours"),
+        ):
+            if len(self.working_img_data.get(key) or []) > 0:
+                kinds.append(name)
+        virus = self.working_img_data.get("img-virus")
+        if virus is not None and np.any(virus):
+            kinds.append("virus pixels")
+        return kinds
 
     def add_3d_object(self, data_dict, obj_type):
         if data_dict is None or "piece" in obj_type:
@@ -5976,58 +6147,107 @@ class DriftlessMap(QMainWindow, FORM_Main):
         if error is not None:
             return None, "Unable to load atlas axis metadata: {}".format(error)
 
+        try:
+            reference = run_in_background(
+                self, "Fingerprinting the atlas...", describe_atlas_path, atlas_path
+            )
+        except (OSError, ValueError) as exc:
+            return None, "Unable to fingerprint the atlas: {}".format(exc)
+
         return {
             "identifier": os.path.basename(os.path.normpath(atlas_path)),
             "path": os.path.abspath(atlas_path),
             "axis_info": axis_info,
+            "reference": reference,
         }, None
+
+    # Merging is validate-then-commit: every merged object is computed first,
+    # and the source pieces are removed only when all of them succeed, so a
+    # failed merge never destroys the user's annotations.
+    MERGE_ERRORS = (ValueError, IndexError, KeyError, TypeError, ZeroDivisionError,
+                    np.linalg.LinAlgError)
+
+    def _merge_label_volume(self):
+        if (
+            self.current_atlas != "volume"
+            or self.atlas_view.atlas_label is None
+            or self.atlas_view.origin_3d is None
+        ):
+            return None, (
+                "Switch to the volume atlas used for these pieces before merging. "
+                "The pieces were kept."
+            )
+        label_data = np.transpose(self.atlas_view.atlas_label, (1, 2, 0))[:, :, ::-1]
+        return label_data, None
+
+    def _count_pieces(self, piece_type):
+        return sum(1 for da_type in self.object_ctrl.obj_type if da_type == piece_type)
+
+    def _commit_merged_objects(self, piece_indexes, merged_objects):
+        self.object_ctrl.delete_objects(piece_indexes)
+        for obj_name, obj_type, info_dict in merged_objects:
+            self.object_ctrl.add_object(
+                obj_name,
+                obj_type,
+                object_data=info_dict,
+                object_mode=self.obj_display_mode,
+            )
+
+    def _merge_failed(self, obj_name, reason):
+        self.print_message(
+            "Could not merge {}: {}. No pieces were removed.".format(obj_name, reason),
+            self.error_message_color,
+        )
 
     def merge_probes(self):
         if self.num_windows == 4:
             msg = "Can not merge probe pieces with all slice windows turned on."
             self.print_message(msg, self.error_message_color)
             return
-        probe_piece_count = len(
-            [
-                da_piece
-                for da_piece in self.object_ctrl.obj_type
-                if da_piece == "probe piece"
-            ]
-        )
-        if probe_piece_count == 0:
+        if self._count_pieces("probe piece") == 0:
             return
 
-        data, obj_names, pieces_names = self.object_ctrl.merge_pieces("probe piece")
-
-        label_data = np.transpose(self.atlas_view.atlas_label, (1, 2, 0))[:, :, ::-1]
-        probe_setting_data = self.probe_settings.get_settings()
+        label_data, label_error = self._merge_label_volume()
+        if label_error is not None:
+            self.print_message(label_error, self.error_message_color)
+            return
         atlas_metadata, atlas_error = self.get_probe_atlas_metadata()
         if atlas_error is not None:
             self.print_message(atlas_error, self.error_message_color)
             return
 
+        data, obj_names, pieces_names, piece_indexes = self.object_ctrl.collect_pieces(
+            "probe piece"
+        )
+        probe_setting_data = self.probe_settings.get_settings()
         merge_sites = self.tool_box.merge_sites
-        if self.image_view.image_file is None:
-            # pre-surgery
+        pre_surgery = self.image_view.image_file is None
+        if pre_surgery:
             if self.multi_shanks and self.valid_multi_settings:
-                site_face_vec = self.multi_settings.faces.copy()
+                site_face_vec = list(self.multi_settings.faces)
             else:
                 site_face_vec = [self.site_face for _ in range(len(data))]
-            for i in range(len(data)):
-                if len(data[i]) != 1:
-                    msg = "For pre-surgery plan, the desired probe can be merged from only one piece."
-                    self.print_message(msg, self.error_message_color)
-                    return
-                else:
-                    if len(data[i][0]) == 1:
-                        self.print_message(
-                            "Can not merge probe with only one point.",
-                            self.error_message_color,
-                        )
-                        return
+            if len(site_face_vec) < len(data):
+                self.print_message(
+                    "The multi-shank settings describe fewer shanks than the "
+                    "probes being merged. No pieces were removed.",
+                    self.error_message_color,
+                )
+                return
+            n_hat = self.atlas_view.get_plane_norm_vector(self.atlas_display)
 
-                n_hat = self.atlas_view.get_plane_norm_vector(self.atlas_display)
-
+        merged_objects = []
+        for i in range(len(data)):
+            if pre_surgery and len(data[i]) != 1:
+                self._merge_failed(
+                    obj_names[i],
+                    "a pre-surgery plan can be merged from only one piece",
+                )
+                return
+            if len(data[i]) == 1 and len(data[i][0]) == 1:
+                self._merge_failed(obj_names[i], "a probe needs more than one point")
+                return
+            try:
                 info_dict, error_index = calculate_probe_info(
                     data[i],
                     pieces_names[i],
@@ -6037,125 +6257,59 @@ class DriftlessMap(QMainWindow, FORM_Main):
                     probe_setting_data,
                     merge_sites,
                     self.atlas_view.origin_3d,
-                    site_face_vec[i],
-                    n_hat,
-                    True,
+                    site_face_vec[i] if pre_surgery else self.site_face,
+                    n_hat if pre_surgery else None,
+                    pre_surgery,
                     atlas_metadata,
                 )
+            except self.MERGE_ERRORS as exc:
+                self._merge_failed(obj_names[i], exc)
+                return
+            if error_index != 0:
+                self._merge_failed(obj_names[i], probe_error_message(error_index))
+                return
+            merged_objects.append((obj_names[i], "merged probe", info_dict))
 
-                if error_index != 0:
-                    msg = "Error index: {}, please contact maintainers.".format(
-                        error_index
-                    )
-                    self.print_message(msg, self.error_message_color)
-                    return
+        self._commit_merged_objects(piece_indexes, merged_objects)
 
-                self.object_ctrl.add_object(
-                    obj_names[i],
-                    "merged probe",
-                    object_data=info_dict,
-                    object_mode=self.obj_display_mode,
-                )
-        else:
-            # after-surgery
-            for i in range(len(data)):
-                if len(data[i]) == 1:
-                    if len(data[i][0]) == 1:
-                        self.print_message(
-                            "Can not merge probe with only one point.",
-                            self.error_message_color,
-                        )
-                        return
-
-                info_dict, error_index = calculate_probe_info(
+    def _merge_point_pieces(self, piece_type, merged_type, calculate):
+        if self._count_pieces(piece_type) == 0:
+            return
+        label_data, label_error = self._merge_label_volume()
+        if label_error is not None:
+            self.print_message(label_error, self.error_message_color)
+            return
+        data, obj_names, pieces_names, piece_indexes = self.object_ctrl.collect_pieces(
+            piece_type
+        )
+        merged_objects = []
+        for i in range(len(data)):
+            try:
+                info_dict = calculate(
                     data[i],
                     pieces_names[i],
                     label_data,
                     self.atlas_view.label_info,
-                    self.atlas_view.vox_size_um,
-                    probe_setting_data,
-                    merge_sites,
                     self.atlas_view.origin_3d,
-                    self.site_face,
-                    None,
-                    False,
-                    atlas_metadata,
                 )
-
-                if error_index != 0:
-                    msg = "Error index: {}, please contact maintainers.".format(
-                        error_index
-                    )
-                    self.print_message(msg, self.error_message_color)
-                    return
-
-                self.object_ctrl.add_object(
-                    obj_names[i],
-                    "merged probe",
-                    object_data=info_dict,
-                    object_mode=self.obj_display_mode,
-                )
+            except self.MERGE_ERRORS as exc:
+                self._merge_failed(obj_names[i], exc)
+                return
+            merged_objects.append((obj_names[i], merged_type, info_dict))
+        self._commit_merged_objects(piece_indexes, merged_objects)
 
     # virus related functions
     def merge_virus(self):
-        virus_piece_count = len(
-            [
-                da_piece
-                for da_piece in self.object_ctrl.obj_type
-                if da_piece == "virus piece"
-            ]
-        )
-        if virus_piece_count == 0:
-            return
-        data, obj_names, pieces_names = self.object_ctrl.merge_pieces("virus piece")
-        label_data = np.transpose(self.atlas_view.atlas_label, (1, 2, 0))[:, :, ::-1]
-
-        for i in range(len(data)):
-            info_dict = calculate_virus_info(
-                data[i],
-                pieces_names[i],
-                label_data,
-                self.atlas_view.label_info,
-                self.atlas_view.origin_3d,
-            )
-            self.object_ctrl.add_object(
-                obj_names[i],
-                "merged virus",
-                object_data=info_dict,
-                object_mode=self.obj_display_mode,
-            )
+        self._merge_point_pieces("virus piece", "merged virus", calculate_virus_info)
 
     # cell related functions
     def merge_cells(self):
-        cells_piece_count = len(
-            [
-                da_piece
-                for da_piece in self.object_ctrl.obj_type
-                if da_piece == "cells piece"
-            ]
-        )
-        if cells_piece_count == 0:
-            return
-        data, obj_names, pieces_names = self.object_ctrl.merge_pieces("cells piece")
-        label_data = np.transpose(self.atlas_view.atlas_label, (1, 2, 0))[:, :, ::-1]
-
-        for i in range(len(data)):
-            info_dict = calculate_cells_info(
-                data[i],
-                pieces_names[i],
-                label_data,
-                self.atlas_view.label_info,
-                self.atlas_view.origin_3d,
-            )
-            self.object_ctrl.add_object(
-                obj_names[i],
-                "merged cells",
-                object_data=info_dict,
-                object_mode=self.obj_display_mode,
-            )
+        self._merge_point_pieces("cells piece", "merged cells", calculate_cells_info)
 
     # drawing related functions
-    def build_drawing_object_info(self, object_data, object_type, object_name):
+    def build_drawing_object_info(
+        self, object_data, object_type, object_name, plot_mode=None
+    ):
         """Analyze a drawing against the currently loaded volume atlas."""
         if (
             self.current_atlas != "volume"
@@ -6173,6 +6327,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 "pieces_names",
                 [object_name for _ in range(len(pieces))],
             )
+            plot_mode = object_data.get("plot_mode", plot_mode)
         else:
             pieces = [object_data]
             piece_names = [object_name]
@@ -6189,57 +6344,34 @@ class DriftlessMap(QMainWindow, FORM_Main):
             axis_info=self.volume_atlas_axis_info,
             label_volume=label_volume,
             label_info=self.atlas_view.label_info,
+            plot_mode=plot_mode,
         )
 
     def merge_drawings(self):
-        drawing_piece_count = len(
-            [
-                da_piece
-                for da_piece in self.object_ctrl.obj_type
-                if da_piece == "drawing piece"
-            ]
-        )
-        if drawing_piece_count == 0:
-            return
-        data, obj_names, pieces_names = self.object_ctrl.merge_pieces("drawing piece")
-        label_data = np.transpose(self.atlas_view.atlas_label, (1, 2, 0))[:, :, ::-1]
-
-        for i in range(len(data)):
-            info_dict = calculate_drawing_info(
-                data[i],
-                pieces_names[i],
+        def calculate(data, pieces_names, label_data, label_info, bregma):
+            return calculate_drawing_info(
+                data,
+                pieces_names,
                 label_data,
-                self.atlas_view.label_info,
-                self.atlas_view.origin_3d,
+                label_info,
+                bregma,
+                plot_mode=self.object_ctrl.drawing_mode_of_piece(pieces_names[0]),
             )
-            self.object_ctrl.add_object(
-                obj_names[i],
-                "merged drawing",
-                object_data=info_dict,
-                object_mode=self.obj_display_mode,
-            )
+
+        self._merge_point_pieces("drawing piece", "merged drawing", calculate)
 
     # contour related functions
     def merge_contour(self):
-        contour_piece_count = len(
-            [
-                da_piece
-                for da_piece in self.object_ctrl.obj_type
-                if da_piece == "contour piece"
-            ]
-        )
-        if contour_piece_count == 0:
+        if self._count_pieces("contour piece") == 0:
             return
-        data, obj_names, pieces_names = self.object_ctrl.merge_pieces("contour piece")
-
-        for i in range(len(data)):
-            info_dict = {"object_type": "contour", "data": data[i]}
-            self.object_ctrl.add_object(
-                obj_names[i],
-                "merged contour",
-                object_data=info_dict,
-                object_mode=self.obj_display_mode,
-            )
+        data, obj_names, pieces_names, piece_indexes = self.object_ctrl.collect_pieces(
+            "contour piece"
+        )
+        merged_objects = [
+            (obj_names[i], "merged contour", {"object_type": "contour", "data": data[i]})
+            for i in range(len(data))
+        ]
+        self._commit_merged_objects(piece_indexes, merged_objects)
 
     # common functions
     def obj_color_changed(self, ev):
@@ -6320,6 +6452,9 @@ class DriftlessMap(QMainWindow, FORM_Main):
             ):
                 return
             self.current_img_path = image_file_path[0]
+            self._loaded_histology_signature = path_stat_signature(
+                self.current_img_path
+            )
             self.current_img_name = os.path.basename(
                 os.path.realpath(image_file_path[0])
             )
@@ -6465,52 +6600,29 @@ class DriftlessMap(QMainWindow, FORM_Main):
         return True
 
     # load multiple images
-    def load_images(self):
-        self.statusbar.showMessage(
-            "Selecte folder to load multiple images, files can not be .czi format ..."
-        )
-        images_folder = str(
-            QFileDialog.getExistingDirectory(self, "Select Images Folder")
-        )
-        if images_folder != "":
-            # image_files_list = os.listdir(images_folder)
-            # image_files_list = natsorted(image_files_list)
-
-            with pg.BusyCursor():
-                try:
-                    image_file = ImagesReader(images_folder)
-                    self.image_view.set_data(image_file)
-                except (IOError, OSError, TypeError, ValueError) as exc:
-                    self.print_message(
-                        "Loading image folder failed: {}".format(exc),
-                        self.error_message_color,
-                    )
-                    return
-
-            self.sidebar.setCurrentIndex(3)
-            self.statusbar.showMessage("Image files loaded.")
-        else:
-            return
 
     # ------------------------------------------------------------------
     #
     #              Menu Bar ---- File ----- related
     #
     # ------------------------------------------------------------------
-    def load_slice_atlas(self, atlas_path):
-        self.slice_atlas_path = atlas_path
-        self.current_atlas_path = atlas_path
-        self.atlas_view.clear_slice_info()
+    SLICE_IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp")
 
-        if atlas_path[-4:] in [".jpg", ".png"]:
-            try:
-                img_data = cv2.imread(atlas_path)
-            except (IOError, OSError):
-                msg = "Loading slice atlas is failed. Please check your image or contact maintainers."
+    def load_slice_atlas(self, atlas_path):
+        """Load a slice atlas image or file; return ``True`` only on success."""
+        atlas_signature = path_stat_signature(atlas_path)
+        slice_data = None
+        img_data = None
+        if os.path.splitext(atlas_path)[1].lower() in self.SLICE_IMAGE_EXTENSIONS:
+            img_data = read_bitmap(atlas_path, cv2.IMREAD_COLOR)
+            if img_data is None:
+                msg = (
+                    "Loading slice atlas failed. The image could not be read: "
+                    "{}".format(atlas_path)
+                )
                 self.print_message(msg, self.error_message_color)
-                return
+                return False
             img_data = cv2.cvtColor(img_data, cv2.COLOR_BGR2RGBA)
-            self.atlas_view.set_slice_data(img_data)
         else:
             slice_data, error = check_loading_pickle_file(
                 atlas_path, expected_kind="slice"
@@ -6520,7 +6632,13 @@ class DriftlessMap(QMainWindow, FORM_Main):
                     "Loading slice atlas failed. {}".format(error),
                     self.error_message_color,
                 )
-                return
+                return False
+
+        self._commit_atlas("slice", atlas_path, atlas_signature)
+        self.atlas_view.clear_slice_info()
+        if slice_data is None:
+            self.atlas_view.set_slice_data(img_data)
+        else:
             self.atlas_view.set_slice_data_and_info(slice_data)
 
         self.reset_tri_points_atlas()
@@ -6528,7 +6646,6 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.show_only_slice_window()
 
         self.actionSwitch_Atlas.setText("Switch Atlas: Slice")
-        self.current_atlas = "slice"
         self.atlascontrolpanel.setEnabled(False)
         self.treeviewpanel.setEnabled(False)
         self.actionBregma_Picker.setEnabled(True)
@@ -6537,6 +6654,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
 
         self.object_ctrl.add_object_btn.setEnabled(False)
         self.object_ctrl.merge_probe_btn.setEnabled(False)
+        return True
 
     def set_volume_atlas_to_view(
         self, atlas_data, segmentation_data, atlas_info, label_info, boundary
@@ -6612,6 +6730,33 @@ class DriftlessMap(QMainWindow, FORM_Main):
             self.normal_color,
         )
 
+    def _commit_atlas(self, kind, path, signature):
+        """Record a loaded atlas as the active one.
+
+        This is the single place that pairs an atlas with its kind, path and
+        load-time fingerprint, so saves always describe the atlas on screen.
+        ``signature`` is ``None`` when the pixels did not come from ``path``
+        (for example a slice restored from a project), which leaves the file
+        unverified.
+        """
+        if kind == "volume":
+            self.volume_atlas_path = path
+        else:
+            self.slice_atlas_path = path
+        key = os.path.abspath(path)
+        if signature is None:
+            self._loaded_atlas_signatures.pop(key, None)
+        else:
+            self._loaded_atlas_signatures[key] = signature
+        self._activate_atlas(kind)
+
+    def _activate_atlas(self, kind):
+        """Show the already-loaded ``kind`` atlas and make it current."""
+        self.current_atlas = kind
+        self.current_atlas_path = (
+            self.volume_atlas_path if kind == "volume" else self.slice_atlas_path
+        )
+
     def _set_volume_atlas_axis_info(self, atlas_folder):
         self.volume_atlas_axis_info = None
         if not atlas_folder:
@@ -6625,78 +6770,67 @@ class DriftlessMap(QMainWindow, FORM_Main):
 
     # load volume atlas
     def load_volume_atlas(self, atlas_folder):
-        self.volume_atlas_path = atlas_folder
-        self.current_atlas_path = atlas_folder
-        self._set_volume_atlas_axis_info(atlas_folder)
-        self.atlascontrolpanel.setEnabled(True)
-        self.treeviewpanel.setEnabled(True)
-        self.actionSwitch_Atlas.setText("Switch Atlas: Volume")
-        self.current_atlas = "volume"
-        self.actionBregma_Picker.setEnabled(False)
-        self.actionCreate_Slice_Layer.setEnabled(False)
+        """Load a processed volume atlas; return ``True`` only on success.
 
-        if self.atlas_view.atlas_data is not None:
-            self.delete_all_atlas_layer()
-            # self.atlas_view.clear_atlas()
-            # self.view3d.clear()
-            # self.view3d.addItem(self.atlas_view.mesh)
-            # self.view3d.addItem(self.atlas_view.ap_plate_mesh)
-            # self.view3d.addItem(self.atlas_view.dv_plate_mesh)
-            # self.view3d.addItem(self.atlas_view.ml_plate_mesh)
-
+        Everything is read and validated before any session state changes, so
+        a failed load leaves the current atlas, its layers and its provenance
+        untouched.
+        """
+        atlas_signature = path_stat_signature(
+            atlas_folder, included_names=ATLAS_IDENTITY_FILES
+        )
         with pg.BusyCursor():
-            # from Archived.HERBS.herbs.atlas_loader import AtlasLoader
             da_atlas = AtlasLoader(atlas_folder, load_boundaries=False)
 
         if not da_atlas.success:
-            self.statusbar.showMessage(da_atlas.msg)
-            return
-        else:
-            self.print_message("Atlas loaded successfully.", self.normal_color)
+            self.print_message(
+                "Loading the atlas failed. {}".format(da_atlas.msg),
+                self.error_message_color,
+            )
+            return False
 
-        # load mesh data
         pre_made_meshdata_path = os.path.join(atlas_folder, "atlas_meshdata.pkl")
         pre_made_small_meshdata_path = os.path.join(
             atlas_folder, "atlas_small_meshdata.pkl"
         )
-
         if not os.path.exists(pre_made_meshdata_path) or not os.path.exists(
             pre_made_small_meshdata_path
         ):
             msg = "Brain mesh is not found! Please pre-process the atlas."
             self.print_message(msg, self.error_message_color)
+            return False
 
         try:
-            infile = open(pre_made_meshdata_path, "rb")
-            meshdata = pickle.load(infile)
-            infile.close()
-        except (
-            IOError,
-            OSError,
-            ValueError,
-            pickle.PickleError,
-            pickle.UnpicklingError,
-        ):
+            meshdata = load_mesh_file(pre_made_meshdata_path)
+            if isinstance(meshdata, dict):
+                raise ValueError("Whole-brain mesh file contains a mesh list.")
+        except ValueError:
             msg = "Please pre-process mesh for the whole brain."
             self.print_message(msg, self.error_message_color)
-            return
+            return False
 
         try:
-            infile = open(pre_made_small_meshdata_path, "rb")
-            small_meshdata_list = pickle.load(infile)
-            infile.close()
-        except (
-            IOError,
-            OSError,
-            ValueError,
-            pickle.PickleError,
-            pickle.UnpicklingError,
-        ):
+            small_meshdata_list = load_mesh_file(pre_made_small_meshdata_path)
+            if not isinstance(small_meshdata_list, dict):
+                raise ValueError("Region mesh file does not contain a mesh list.")
+        except ValueError:
             self.print_message(
                 "Please re-process meshes for each brain region.",
                 self.error_message_color,
             )
-            return
+            return False
+
+        # The atlas is complete; commit it to the session.
+        self._commit_atlas("volume", atlas_folder, atlas_signature)
+        self._set_volume_atlas_axis_info(atlas_folder)
+        self.atlascontrolpanel.setEnabled(True)
+        self.treeviewpanel.setEnabled(True)
+        self.actionSwitch_Atlas.setText("Switch Atlas: Volume")
+        self.actionBregma_Picker.setEnabled(False)
+        self.actionCreate_Slice_Layer.setEnabled(False)
+
+        if self.atlas_view.atlas_data is not None:
+            self.delete_all_atlas_layer()
 
         atlas_data = np.transpose(da_atlas.atlas_data, [2, 0, 1])[::-1, :, :]
         atlas_info = da_atlas.atlas_info
@@ -6713,6 +6847,8 @@ class DriftlessMap(QMainWindow, FORM_Main):
         )
 
         self.set_volume_atlas_3d(unique_label, meshdata, small_meshdata_list)
+        self.print_message("Atlas loaded successfully.", self.normal_color)
+        return True
 
     # ------------------------------------------------------------------
     #
@@ -6735,14 +6871,14 @@ class DriftlessMap(QMainWindow, FORM_Main):
             )
         )
         if atlas_folder != "":
-            try:
-                save_last_atlas_path(atlas_folder)
-            except OSError:
-                self.print_message(
-                    "Atlas loaded, but its location could not be remembered.",
-                    self.reminder_color,
-                )
-            self.load_volume_atlas(atlas_folder)
+            if self.load_volume_atlas(atlas_folder):
+                try:
+                    save_last_atlas_path(atlas_folder)
+                except OSError:
+                    self.print_message(
+                        "Atlas loaded, but its location could not be remembered.",
+                        self.reminder_color,
+                    )
         else:
             self.print_message("", self.normal_color)
 
@@ -6768,20 +6904,30 @@ class DriftlessMap(QMainWindow, FORM_Main):
             )
 
         if atlas_folder != "":
-            try:
-                save_last_atlas_path(atlas_folder)
-            except OSError:
-                self.print_message(
-                    "Atlas loaded, but its location could not be remembered.",
-                    self.reminder_color,
-                )
-            self.load_volume_atlas(atlas_folder)
+            if self.load_volume_atlas(atlas_folder):
+                try:
+                    save_last_atlas_path(atlas_folder)
+                except OSError:
+                    self.print_message(
+                        "Atlas loaded, but its location could not be remembered.",
+                        self.reminder_color,
+                    )
         else:
             self.print_message("", self.normal_color)
 
     # --------------------------------------------------------------------
     #                            save merged object
     # --------------------------------------------------------------------
+    def get_object_export_provenance(self):
+        atlas = self._atlas_provenance_for_save(None)
+        return {
+            "schema_version": 1,
+            "software": {"name": "DriftlessMap", "version": __version__},
+            "exported_at": utc_now_iso(),
+            "coordinate_frame": "driftlessmap-atlas-view-vox",
+            "atlas": atlas,
+        }
+
     def save_merged_object(self, object_type):
         if not self.object_ctrl.obj_list:
             self.print_message("No object is created ...", self.error_message_color)
@@ -6820,23 +6966,40 @@ class DriftlessMap(QMainWindow, FORM_Main):
         )
         save_path = str(
             QFileDialog.getExistingDirectory(
-                self, "Select Folder to Save Objects", self.current_img_path
+                self, "Select Folder to Export Objects", self.current_img_path
             )
         )
         if save_path != "":
-            for da_ind in valid_index:
+            try:
+                with pg.BusyCursor():
+                    provenance = self.get_object_export_provenance()
+            except (OSError, ValueError) as exc:
+                self.print_message(
+                    "Unable to fingerprint the object atlas: {}".format(exc),
+                    self.error_message_color,
+                )
+                return
+            file_stems = self._object_file_names(
+                [self.object_ctrl.obj_name[da_ind] for da_ind in valid_index]
+            )
+            for da_ind, file_stem in zip(valid_index, file_stems):
                 data = {
                     "type": self.object_ctrl.obj_type[da_ind],
                     "data": self.object_ctrl.obj_data[da_ind],
                     "name": self.object_ctrl.obj_name[da_ind],
+                    "provenance": provenance,
                 }
-                s_path = os.path.join(save_path, self.object_ctrl.obj_name[da_ind])
+                s_path = os.path.join(save_path, file_stem)
                 success, error = save_driftlessmap_file(
                     "{}.dmapobj".format(s_path), data, "object"
                 )
                 if not success:
                     self.print_message(error, self.error_message_color)
                     return
+            self.print_message(
+                "Exported {} objects to {}.".format(len(valid_index), save_path),
+                self.normal_color,
+            )
         else:
             return
 
@@ -6862,10 +7025,20 @@ class DriftlessMap(QMainWindow, FORM_Main):
             "DriftlessMap Object (*.dmapobj)",
         )
         if file_name[0] != "":
+            try:
+                with pg.BusyCursor():
+                    provenance = self.get_object_export_provenance()
+            except (OSError, ValueError) as exc:
+                self.print_message(
+                    "Unable to fingerprint the object atlas: {}".format(exc),
+                    self.error_message_color,
+                )
+                return
             da_data = {
                 "type": self.object_ctrl.obj_type[self.object_ctrl.current_obj_index],
                 "data": self.object_ctrl.obj_data[self.object_ctrl.current_obj_index],
                 "name": self.object_ctrl.obj_name[self.object_ctrl.current_obj_index],
+                "provenance": provenance,
             }
             success, error = save_driftlessmap_file(file_name[0], da_data, "object")
             if not success:
@@ -6877,16 +7050,39 @@ class DriftlessMap(QMainWindow, FORM_Main):
         else:
             self.print_message("", self.normal_color)
 
+    def _object_points_in_atlas(self, object_dict):
+        """Check that an object's Bregma-relative points lie in the atlas."""
+        try:
+            if "merged" in object_dict["type"]:
+                pieces = object_dict["data"]["data"]
+            else:
+                pieces = [object_dict["data"]]
+            points = np.vstack(
+                [np.asarray(piece, dtype=float).reshape(-1, 3) for piece in pieces]
+            )
+        except (KeyError, TypeError, ValueError):
+            return False
+        if not len(points) or not np.all(np.isfinite(points)):
+            return False
+        view_shape = np.asarray(self.atlas_view.atlas_size)
+        herbs_shape = view_shape[[1, 2, 0]]
+        absolute = np.floor(points + np.asarray(self.atlas_view.origin_3d))
+        return coordinates_in_bounds(absolute, herbs_shape)
+
+
     # --------------------------------------------------------------------
     #                         Load object
     # --------------------------------------------------------------------
     def load_objects(self):
         if (
-            self.atlas_view.atlas_data is None
-            and self.atlas_view.slice_image_data is None
+            self.current_atlas != "volume"
+            or self.atlas_view.atlas_data is None
+            or self.atlas_view.origin_3d is None
         ):
             self.print_message(
-                "Atlas need to be loaded first.", self.error_message_color
+                "Load and show the volume atlas the objects belong to before "
+                "importing them.",
+                self.error_message_color,
             )
             return
         if self.num_windows == 4:
@@ -6909,6 +7105,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
         if object_file_path[0]:
             n_files = len(object_file_path[0])
             problem_obj_name = []
+            verified_atlas_references = {}
             for i in range(n_files):
                 file_name = os.path.basename(object_file_path[0][i])
                 object_dict, msg = check_loading_pickle_file(
@@ -6921,16 +7118,31 @@ class DriftlessMap(QMainWindow, FORM_Main):
                     )
                     return
 
-                if "merged" in object_dict["type"]:
-                    data_list = object_dict["data"]["data"]
-                    data = data_list[0]
-                    for j in range(1, len(data_list)):
-                        data = np.vstack([data, data_list[j]])
-                    max_val = np.max(data, 0)
-                else:
-                    max_val = np.max(object_dict["data"], 0)
+                object_provenance = object_dict.get("provenance") or {}
+                object_atlas = object_provenance.get("atlas") or {}
+                object_reference = object_atlas.get("reference")
+                if object_reference is not None:
+                    identity = (
+                        object_reference.get("kind"),
+                        object_reference.get("size_bytes"),
+                        object_reference.get("sha256"),
+                    )
+                    if identity not in verified_atlas_references:
+                        verified_atlas_references[identity] = run_in_background(
+                            self,
+                            "Verifying the objects' atlas...",
+                            verify_reference,
+                            self.current_atlas_path,
+                            object_reference,
+                        )
+                    matches, reason = verified_atlas_references[identity]
+                    if not matches:
+                        problem_obj_name.append(
+                            "{} ({})".format(file_name, reason)
+                        )
+                        continue
 
-                if np.any(max_val > self.atlas_view.atlas_size):
+                if not self._object_points_in_atlas(object_dict):
                     problem_obj_name.append(file_name)
                 else:
                     self.object_ctrl.add_object(
@@ -7060,7 +7272,6 @@ class DriftlessMap(QMainWindow, FORM_Main):
         if layer_link in ["img-process", "img-mask", "img-overlay"]:
             if layer_link == "img-process":
                 if "rgb" in self.image_view.image_file.pixel_type:
-                    print("rgb")
                     image_to_be_saved = self.image_view.processing_img.copy()
                     if self.image_view.image_file.pixel_type != "rgb24":
                         image_to_be_saved = cv2.normalize(
@@ -7291,7 +7502,76 @@ class DriftlessMap(QMainWindow, FORM_Main):
         else:
             return
 
+    ATLAS_LAYER_KEYS = {
+        "atlas-slice": set(),
+        "atlas-overlay": set(),
+        "atlas-mask": {"color"},
+        "atlas-cells": {
+            "color",
+            "symbol",
+            "cell_count",
+            "cell_size",
+            "cell_symbol",
+            "cell_layer_index",
+        },
+        "atlas-drawing": {"color"},
+        "atlas-contour": {"color"},
+        "atlas-virus": {"color"},
+        "atlas-probe": {"color"},
+    }
+
+    def _atlas_layer_error(self, layer_dict):
+        """Return why an atlas layer cannot be applied, or ``None``."""
+        if not isinstance(layer_dict, dict) or not {"layer_link", "data"}.issubset(
+            layer_dict
+        ):
+            return "the file is not a layer"
+        layer_link = layer_dict["layer_link"]
+        required = self.ATLAS_LAYER_KEYS.get(layer_link)
+        if required is None:
+            return "unknown atlas layer {!r}".format(layer_link)
+        if not required.issubset(layer_dict):
+            return "the layer is missing {}".format(
+                ", ".join(sorted(required - set(layer_dict)))
+            )
+        slice_size = self.atlas_view.slice_size
+        if slice_size is None:
+            return "no atlas slice is shown"
+        height, width = int(slice_size[0]), int(slice_size[1])
+        if layer_link in ("atlas-slice", "atlas-overlay", "atlas-mask"):
+            if not image_layer_matches(layer_dict, (height, width)):
+                return "its image size does not match the current atlas slice"
+            return None
+        try:
+            points = np.asarray(layer_dict["data"], dtype=float)
+        except (TypeError, ValueError):
+            return "its points are not numeric"
+        if points.size == 0:
+            return None
+        points = points.reshape(-1, 2) if points.ndim != 2 else points
+        if points.shape[1] != 2 or not np.all(np.isfinite(points)):
+            return "its points are not two-dimensional"
+        if np.any(points < 0) or np.any(points[:, 0] > width) or np.any(
+            points[:, 1] > height
+        ):
+            return "its points lie outside the current atlas slice"
+        if layer_link == "atlas-cells":
+            count = len(points)
+            per_cell = ("cell_size", "cell_symbol", "cell_layer_index")
+            if any(len(layer_dict[key]) != count for key in per_cell):
+                return "its cell metadata does not match its cells"
+            if len(layer_dict["cell_count"]) != 5:
+                return "its cell counts are incomplete"
+        return None
+
     def set_atlas_layer_data(self, layer_dict):
+        error = self._atlas_layer_error(layer_dict)
+        if error is not None:
+            self.print_message(
+                "The atlas layer was not loaded: {}.".format(error),
+                self.error_message_color,
+            )
+            return False
         layer_link = layer_dict["layer_link"]
         if layer_link == "atlas-slice":
             self.atlas_view.processing_slice = layer_dict["data"]
@@ -7342,8 +7622,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
             self.probe_color = layer_dict["color"]
             self.tool_box.pencil_color_btn.setColor(self.probe_color)
             self.working_atlas_data[layer_link] = layer_dict["data"]
-        else:
-            return
+        return True
 
     def set_atlas_layer_to_atlas_view(self, layer_link, vis_data_2d, symbol):
         if layer_link == "atlas-slice":
@@ -7423,7 +7702,8 @@ class DriftlessMap(QMainWindow, FORM_Main):
                             "Please load atlas first.", self.error_message_color
                         )
                         return
-                    self.set_atlas_layer_data(layer_dict)
+                    if not self.set_atlas_layer_data(layer_dict):
+                        return
                     if "cells" in layer_dict["layer_link"]:
                         symbol = layer_dict["symbol"]
                     else:
@@ -7440,10 +7720,121 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 # self.layer_ctrl.add_layer(layer_dict['layer_link'], layer_dict['color'])
                 # self.layer_ctrl.layer_list[-1].set_thumbnail_data(layer_dict['thumbnail'])
 
+    def _atlas_provenance_for_save(self, project_path):
+        if self.current_atlas_path is None:
+            return None
+        provenance = {
+            "schema_version": 1,
+            "atlas_kind": self.current_atlas,
+            "identifier": Path(self.current_atlas_path).name,
+        }
+        loaded_atlas_signature = self._loaded_atlas_signatures.get(
+            os.path.abspath(self.current_atlas_path)
+        )
+        if loaded_atlas_signature is not None:
+            current_signature = path_stat_signature(
+                self.current_atlas_path,
+                included_names=(
+                    ATLAS_IDENTITY_FILES if self.current_atlas == "volume" else None
+                ),
+            )
+            if current_signature != loaded_atlas_signature:
+                raise ValueError(
+                    "Atlas files changed after they were loaded. Reload the atlas "
+                    "before saving so the pixels and checksum describe the same data."
+                )
+        atlas_shape = getattr(self.atlas_view, "atlas_size", None)
+        if atlas_shape is not None:
+            provenance["driftlessmap_shape_vox"] = tuple(
+                int(value) for value in np.ravel(atlas_shape)
+            )
+        voxel_size = getattr(self.atlas_view, "vox_size_um", None)
+        if voxel_size is not None:
+            provenance["voxel_size_um"] = float(voxel_size)
+        if self.current_atlas == "volume" and os.path.isdir(self.current_atlas_path):
+            provenance["reference"] = describe_atlas_path(
+                self.current_atlas_path, project_path=project_path
+            )
+            provenance["axis_info"] = self.volume_atlas_axis_info
+            try:
+                recognized_allen = (
+                    self.volume_atlas_axis_info is not None
+                    and voxel_size is not None
+                    and is_allen_ccf_2017(self.volume_atlas_axis_info, voxel_size)
+                )
+            except (KeyError, TypeError, ValueError):
+                recognized_allen = False
+            if recognized_allen:
+                provenance["source"] = {
+                    "provider": "Allen Institute for Brain Science",
+                    "name": "Allen Mouse Common Coordinate Framework",
+                    "version": "CCFv3 2017",
+                }
+            else:
+                provenance["source"] = {
+                    "provider": None,
+                    "name": provenance["identifier"],
+                    "version": None,
+                }
+        elif loaded_atlas_signature is None:
+            # Slice pixels restored from a project are embedded; keep the
+            # reference that described them rather than re-describing a file
+            # that was never verified against them.
+            previous = self.atlas_provenance or {}
+            if previous.get("reference") is not None:
+                provenance["reference"] = previous["reference"]
+        elif os.path.exists(self.current_atlas_path):
+            provenance["reference"] = describe_path(
+                self.current_atlas_path, project_path=project_path
+            )
+        return provenance
+
+    def _histology_provenance_for_save(self, project_path, portable=False):
+        if self.image_view.current_img is None:
+            return None
+        reference = None
+        source_changed = False
+        # A file is linked only when its fingerprint was taken as it was
+        # loaded; otherwise its current bytes might not be the ones shown.
+        if (
+            self.current_img_path
+            and os.path.exists(self.current_img_path)
+            and self.current_img_path != self._temporary_histology_source
+            and self._loaded_histology_signature is not None
+        ):
+            if (
+                path_stat_signature(self.current_img_path)
+                != self._loaded_histology_signature
+            ):
+                source_changed = True
+                if portable:
+                    raise ValueError(
+                        "Histology source changed after it was loaded. Reload it "
+                        "before creating a portable project."
+                    )
+            else:
+                reference = describe_path(
+                    self.current_img_path, project_path=project_path
+                )
+        elif self.histology_provenance is not None:
+            reference = self.histology_provenance.get("reference")
+        return {
+            "schema_version": 1,
+            "reference": reference,
+            "selected_scene": int(self.image_view.scene_slider.value()),
+            "selected_page": int(self.image_view.display_img_index),
+            "working_raster_embedded": True,
+            "working_raster_shape": tuple(
+                int(value) for value in self.image_view.current_img.shape
+            ),
+            "working_raster_dtype": self.image_view.current_img.dtype.name,
+            "source_changed_since_load": source_changed,
+        }
+
     # -------------------------------------------------------------
     #                    save project
     # -------------------------------------------------------------
-    def save_project_called(self):
+    def save_project_called(self, portable=False):
         self.print_message("Saving Project ...", self.normal_color)
         if (
             self.atlas_view.atlas_data is None
@@ -7451,7 +7842,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
             and self.image_view.current_img is None
         ):
             self.print_message("No project can be saved.", self.reminder_color)
-            return
+            return False
         file_name = QFileDialog.getSaveFileName(
             self,
             "Save Project",
@@ -7459,6 +7850,39 @@ class DriftlessMap(QMainWindow, FORM_Main):
             "DriftlessMap Project (*.dmap)",
         )
         if file_name[0] != "":
+            project_path = file_name[0]
+            # Hash large inputs off the GUI thread; the provenance helpers
+            # below then reuse the cached fingerprints.
+            run_in_background(
+                self,
+                "Fingerprinting project inputs...",
+                prefingerprint_inputs,
+                self.current_atlas_path if self.current_atlas == "volume" else None,
+                self.current_img_path
+                if self._loaded_histology_signature is not None
+                else None,
+            )
+            try:
+                with pg.BusyCursor():
+                    atlas_provenance = self._atlas_provenance_for_save(project_path)
+                    histology_provenance = self._histology_provenance_for_save(
+                        project_path, portable=portable
+                    )
+            except (OSError, ValueError) as exc:
+                self.print_message(
+                    "Unable to fingerprint project inputs: {}".format(exc),
+                    self.error_message_color,
+                )
+                return False
+            if histology_provenance and histology_provenance.get(
+                "source_changed_since_load"
+            ):
+                self.print_message(
+                    "The histology source changed after loading. The project will "
+                    "preserve the embedded active raster but will not link the "
+                    "changed file.",
+                    self.reminder_color,
+                )
             if self.current_atlas == "slice":
                 atlas_ctrl_data = self.atlas_view.save_slice_data_and_info()
             else:
@@ -7511,15 +7935,71 @@ class DriftlessMap(QMainWindow, FORM_Main):
             else:
                 object_data = None
 
-            # collect_probe_data
-            probe_settings = self.probe_settings.get_settings()
+            probe_planning = self.get_probe_planning_data()
+            probe_settings = probe_planning["probe_settings"]
+
+            saved_at = utc_now_iso()
+            if self.project_created_at is None:
+                self.project_created_at = saved_at
+
+            portable_sources = None
+            if portable and histology_provenance is not None:
+                reference = histology_provenance.get("reference")
+                if reference is None or not self.current_img_path or not os.path.exists(
+                    self.current_img_path
+                ):
+                    self.print_message(
+                        "The original histology source is unavailable; the portable "
+                        "project will still contain the active lossless raster.",
+                        self.reminder_color,
+                    )
+                else:
+                    try:
+                        with pg.BusyCursor():
+                            portable_sources = {
+                                "histology": pack_path(
+                                    self.current_img_path, reference=reference
+                                )
+                            }
+                    except (OSError, ValueError) as exc:
+                        self.print_message(
+                            "Unable to package the histology source: {}".format(exc),
+                            self.error_message_color,
+                        )
+                        return False
 
             project_data = {
+                "project_schema_version": 2,
+                "software": {"name": "DriftlessMap", "version": __version__},
+                "created_at": self.project_created_at,
+                "saved_at": saved_at,
+                "portable": bool(portable_sources),
+                "portable_sources": portable_sources,
+                "atlas_provenance": atlas_provenance,
+                "histology_provenance": histology_provenance,
+                "session_state": {
+                    "current_layout": self.current_layout,
+                    "layer_shift_val": self.layer_shift_val,
+                    "layer_rotate_val": self.layer_rotate_val,
+                    "display_mode_3d": self.display_mode_3d,
+                    "display_mode_2d": self.display_mode_2d,
+                    "planes_visible": self.is_planes_on,
+                    "axes_visible": self.is_axis_on,
+                    "grids_visible": self.is_grids_on,
+                    "object_display_mode": self.obj_display_mode,
+                },
                 "atlas_path": self.current_atlas_path,
-                "img_path": self.current_img_path,
+                "img_path": (
+                    histology_provenance.get("reference", {}).get("absolute_path")
+                    if self.current_img_path == self._temporary_histology_source
+                    and histology_provenance is not None
+                    and histology_provenance.get("reference") is not None
+                    else self.current_img_path
+                ),
                 "current_atlas": self.current_atlas,
                 "num_windows": self.num_windows,
                 "probe_settings": probe_settings,
+                "probe_planning": probe_planning,
                 "np_onside": self.np_onside,
                 "processing_slice": self.atlas_view.processing_slice,
                 "processing_img": self.image_view.processing_img,
@@ -7534,37 +8014,242 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 "object_data": object_data,
             }
 
-            success, error = save_driftlessmap_file(file_name[0], project_data, "project")
+            success, error = run_in_background(
+                self,
+                "Saving project...",
+                save_driftlessmap_file,
+                file_name[0],
+                project_data,
+                "project",
+            )
             if not success:
                 self.print_message(error, self.error_message_color)
-                return
+                return False
+            self.current_project_path = project_path
+            self.atlas_provenance = atlas_provenance
+            self.histology_provenance = histology_provenance
             self.print_message("Project saved successfully.", self.normal_color)
+            return True
+        self.print_message("", self.normal_color)
+        return False
+
+    def _ask_for_verified_input(self, reference, title):
+        QMessageBox.warning(
+            self,
+            "Project input unavailable",
+            "{} was moved, deleted, or no longer matches its saved checksum. "
+            "Select the original input to continue.".format(title),
+        )
+        if reference.get("kind") == "directory":
+            candidate = QFileDialog.getExistingDirectory(self, title, self.home_path)
         else:
-            self.print_message("", self.normal_color)
+            candidate = QFileDialog.getOpenFileName(self, title, self.home_path)[0]
+        if not candidate:
+            return None
+        matches, reason = verify_reference(candidate, reference)
+        if not matches:
+            QMessageBox.critical(
+                self,
+                "Input does not match",
+                "The selected input is not the one recorded by this project: {}.".format(
+                    reason
+                ),
+            )
+            return None
+        return candidate
+
+    def _extract_portable_histology(self, project_dict):
+        sources = project_dict.get("portable_sources") or {}
+        payload = sources.get("histology")
+        if payload is None:
+            return None
+        temporary = tempfile.TemporaryDirectory(prefix="driftlessmap-project-")
+        try:
+            extracted = unpack_path(payload, temporary.name)
+        except Exception:
+            temporary.cleanup()
+            raise
+        self._portable_source_directories.append(temporary)
+        self._temporary_histology_source = extracted
+        return extracted
+
+    def prepare_project_sources(self, project_dict, project_path):
+        """Resolve and verify linked inputs before mutating the active session."""
+        schema_version = int(project_dict.get("project_schema_version", 1))
+        if schema_version > 2:
+            self.print_message(
+                "This project uses a newer persistence schema ({}). Upgrade "
+                "DriftlessMap before opening it.".format(schema_version),
+                self.error_message_color,
+            )
+            return None
+        prepared = dict(project_dict)
+        prepared["_histology_load_mode"] = "source"
+
+        atlas_provenance = prepared.get("atlas_provenance") or {}
+        atlas_reference = atlas_provenance.get("reference")
+        if prepared.get("current_atlas") == "volume" and (
+            atlas_reference is not None or prepared.get("atlas_path") is not None
+        ):
+            resolved_atlas = None
+            if atlas_reference is not None:
+                resolved_atlas, _ = run_in_background(
+                    self,
+                    "Verifying the project's atlas...",
+                    resolve_reference,
+                    atlas_reference,
+                    project_path=project_path,
+                )
+                if resolved_atlas is None:
+                    resolved_atlas = self._ask_for_verified_input(
+                        atlas_reference, "Locate Volume Atlas Folder"
+                    )
+            else:
+                legacy_path = prepared.get("atlas_path")
+                if legacy_path and os.path.isdir(legacy_path):
+                    resolved_atlas = legacy_path
+                else:
+                    resolved_atlas = QFileDialog.getExistingDirectory(
+                        self, "Locate Volume Atlas Folder", self.home_path
+                    )
+            if not resolved_atlas:
+                self.print_message(
+                    "The project requires its volume atlas.",
+                    self.error_message_color,
+                )
+                return None
+            prepared["atlas_path"] = resolved_atlas
+
+        histology_provenance = prepared.get("histology_provenance") or {}
+        histology_reference = histology_provenance.get("reference")
+        if prepared.get("img_ctrl_data") is not None:
+            resolved_histology = None
+            if histology_reference is not None:
+                resolved_histology, _ = run_in_background(
+                    self,
+                    "Verifying the project's histology...",
+                    resolve_reference,
+                    histology_reference,
+                    project_path=project_path,
+                )
+                if resolved_histology is None and prepared.get("portable_sources"):
+                    try:
+                        resolved_histology = self._extract_portable_histology(prepared)
+                        matches, _ = verify_reference(
+                            resolved_histology, histology_reference
+                        )
+                        if not matches:
+                            resolved_histology = None
+                    except (OSError, ValueError):
+                        resolved_histology = None
+                if resolved_histology is None:
+                    resolved_histology = self._ask_for_verified_input(
+                        histology_reference, "Locate Histology Source"
+                    )
+            else:
+                legacy_path = prepared.get("img_path")
+                if legacy_path and os.path.exists(legacy_path):
+                    resolved_histology = legacy_path
+
+            if resolved_histology:
+                prepared["img_path"] = resolved_histology
+                if resolved_histology != self._temporary_histology_source:
+                    self._temporary_histology_source = None
+            elif prepared["img_ctrl_data"].get("current_img") is not None:
+                prepared["_histology_load_mode"] = "embedded"
+                self.print_message(
+                    "Original histology is unavailable; restored the lossless "
+                    "active raster embedded in the project.",
+                    self.reminder_color,
+                )
+            else:
+                self.print_message(
+                    "The project has neither a matching histology source nor an "
+                    "embedded working raster.",
+                    self.error_message_color,
+                )
+                return None
+        return prepared
+
+    def _load_embedded_histology(self, img_ctrl_data):
+        reader = EmbeddedImageReader(
+            img_ctrl_data["current_img"], img_ctrl_data.get("source_metadata")
+        )
+        self.image_view.set_data(reader)
+        embedded_ctrl = dict(img_ctrl_data)
+        embedded_ctrl["current_scene"] = 0
+        embedded_ctrl["current_page"] = 0
+        self.image_view.load_img_ctrl_data(embedded_ctrl)
+        self.reset_corners_hist()
+        self.layerpanel.setEnabled(True)
 
     # -------------------------------------------------------------
     #                    load project
     # -------------------------------------------------------------
+
+
+    # Project-assembly helpers live in ``project_io``; kept here as aliases.
+    _default_working_img_data = staticmethod(default_working_img_data)
+    _default_working_atlas_data = staticmethod(default_working_atlas_data)
+    _with_defaults = staticmethod(with_defaults)
+    _object_file_names = staticmethod(object_file_names)
+
     def load_project(self, p_dict):
         self.current_atlas_path = p_dict["atlas_path"]
         self.current_img_path = p_dict["img_path"]
         self.current_atlas = p_dict["current_atlas"]
         self.num_windows = p_dict["num_windows"]
+        self.project_created_at = p_dict.get("created_at")
+        self.atlas_provenance = p_dict.get("atlas_provenance")
+        self.histology_provenance = p_dict.get("histology_provenance")
+        session_state = p_dict.get("session_state", {})
+        self.layer_shift_val = session_state.get(
+            "layer_shift_val", self.layer_shift_val
+        )
+        self.layer_rotate_val = session_state.get(
+            "layer_rotate_val", self.layer_rotate_val
+        )
+        desired_display_mode_3d = session_state.get(
+            "display_mode_3d", self.display_mode_3d
+        )
+        desired_display_mode_2d = session_state.get(
+            "display_mode_2d", self.display_mode_2d
+        )
+        desired_planes = session_state.get("planes_visible", self.is_planes_on)
+        desired_axes = session_state.get("axes_visible", self.is_axis_on)
+        desired_grids = session_state.get("grids_visible", self.is_grids_on)
+        desired_object_mode = session_state.get(
+            "object_display_mode", self.obj_display_mode
+        )
+        saved_layout = session_state.get("current_layout")
 
         self.np_onside = p_dict["np_onside"]
 
         self.atlas_view.processing_slice = p_dict["processing_slice"]
         self.image_view.processing_img = p_dict["processing_img"]
         self.overlay_img = p_dict["overlay_img"]
-        self.working_atlas_data = p_dict["working_atlas_data"]
-        self.working_img_data = p_dict["working_img_data"]
+        # Start from the current defaults so keys added in later versions
+        # exist for projects saved before them.
+        self.working_atlas_data = self._with_defaults(
+            self._default_working_atlas_data(), p_dict["working_atlas_data"]
+        )
+        self.working_img_data = self._with_defaults(
+            self._default_working_img_data(), p_dict["working_img_data"]
+        )
 
         # load atlas data
         if self.current_atlas_path is not None:
             atlas_ctrl_data = p_dict["atlas_control"]
             if self.current_atlas == "volume":
-                if self.current_atlas_path is not None:
-                    self.load_volume_atlas(self.current_atlas_path)
+                if not self.load_volume_atlas(self.current_atlas_path):
+                    self.print_message(
+                        "The project's volume atlas could not be loaded, so "
+                        "the project was not opened. {}".format(
+                            self.statusbar.currentMessage().strip()
+                        ),
+                        self.error_message_color,
+                    )
+                    return
 
                 self.atlas_display = atlas_ctrl_data["atlas_display"]
 
@@ -7578,6 +8263,9 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 self.atlas_view.set_volume_atlas_ctrl_data(atlas_ctrl_data)
             else:
                 self.atlas_view.set_slice_data_and_info(atlas_ctrl_data)
+                # Slice pixels come from the project, not from the file at
+                # ``atlas_path``, so that file is not treated as verified.
+                self._commit_atlas("slice", self.current_atlas_path, None)
                 if self.atlas_view.processing_slice is not None:
                     self.atlas_view.slice_stack.set_data(
                         self.atlas_view.processing_slice
@@ -7590,12 +8278,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 self.show_only_slice_window()
 
         # load image data
-        if self.current_img_path is not None:
-            if not os.path.exists(self.current_img_path):
-                msg = "Can not find the image. Image file may be deleted or moved to another location"
-                self.print_message(msg, self.error_message_color)
-                return
-
+        if p_dict.get("img_ctrl_data") is not None:
             img_ctrl_data = p_dict["img_ctrl_data"]
 
             self.image_view.scale_slider.blockSignals(True)
@@ -7605,15 +8288,32 @@ class DriftlessMap(QMainWindow, FORM_Main):
             )
             self.image_view.scale_slider.blockSignals(False)
 
-            filename, file_extension = os.path.splitext(self.current_img_path)
-
-            scene_index = img_ctrl_data["current_scene"]
-            self.load_single_image_file(
-                self.current_img_path, file_extension, scene_index
-            )
-            self.save_path = self.current_img_path
-
-            self.image_view.load_img_ctrl_data(img_ctrl_data)
+            if p_dict.get("_histology_load_mode") == "embedded":
+                self._load_embedded_histology(img_ctrl_data)
+                # The raster did not come from any file on disk. Unlink the
+                # path so later saves keep the project's original reference
+                # instead of fingerprinting whatever file is there now.
+                self.current_img_path = None
+                self._loaded_histology_signature = None
+            elif os.path.isdir(self.current_img_path):
+                image_file = ImagesReader(self.current_img_path)
+                self.image_view.set_data(image_file)
+                self.image_view.load_img_ctrl_data(img_ctrl_data)
+                self._loaded_histology_signature = path_stat_signature(
+                    self.current_img_path
+                )
+            else:
+                _, file_extension = os.path.splitext(self.current_img_path)
+                scene_index = img_ctrl_data["current_scene"]
+                if not self.load_single_image_file(
+                    self.current_img_path, file_extension.lower(), scene_index
+                ):
+                    return
+                self.image_view.load_img_ctrl_data(img_ctrl_data)
+                self._loaded_histology_signature = path_stat_signature(
+                    self.current_img_path
+                )
+            self.save_path = self.current_img_path or self.current_project_path
 
             if self.image_view.processing_img is not None:
                 self.image_view.set_data_and_size(self.image_view.processing_img)
@@ -7635,14 +8335,21 @@ class DriftlessMap(QMainWindow, FORM_Main):
         tool_settings = p_dict["tool_data"]
         self.tool_box.set_tool_data(tool_settings)
 
+        probe_planning = p_dict.get("probe_planning")
+        if probe_planning is None:
+            probe_planning = {
+                "probe_settings": p_dict["probe_settings"],
+                "probe_type": p_dict["probe_settings"].get(
+                    "probe_type", p_dict.get("probe_type", 0)
+                ),
+            }
         try:
-            self.probe_type = p_dict["probe_settings"]["probe_type"]
-        except KeyError:
-            self.probe_type = p_dict["probe_type"]
-
-        self.tool_box.probe_type_combo.setCurrentIndex(self.probe_type)
-        if self.probe_type == 2:
-            self.probe_settings.set_linear_silicon(p_dict["probe_settings"])
+            self.set_probe_planning_data(probe_planning)
+        except (KeyError, TypeError, ValueError) as exc:
+            self.print_message(
+                "The project's probe settings were not restored: {}".format(exc),
+                self.error_message_color,
+            )
 
         # settings
         setting_data = p_dict["setting_data"]
@@ -7715,6 +8422,32 @@ class DriftlessMap(QMainWindow, FORM_Main):
             # self.object_3d_list = object_data["object_3d_list"]
             self.object_ctrl.set_obj_data(object_data)
 
+        layout_methods = {
+            "slice": self.show_only_slice_window,
+            "coronal": self.show_only_coronal_window,
+            "sagittal": self.show_only_sagital_window,
+            "horizontal": self.show_only_horizontal_window,
+            "image": self.show_only_image_window,
+            "3d": self.show_only_3d_window,
+            "volume-histology": self.show_2_windows,
+            "slice-histology": self.show_slice_and_histology,
+            "volume-3d-histology": self.show_3_windows,
+            "four-atlas-windows": self.show_4_windows,
+        }
+        if saved_layout in layout_methods:
+            layout_methods[saved_layout]()
+        if self.display_mode_3d != desired_display_mode_3d:
+            self.switch_3d_display_mode()
+        if self.display_mode_2d != desired_display_mode_2d:
+            self.switch_2d_display_mode()
+        if self.is_planes_on != desired_planes:
+            self.show_3d_planes()
+        if self.is_axis_on != desired_axes:
+            self.show_3d_axes()
+        if self.is_grids_on != desired_grids:
+            self.show_grids()
+        self.obj_display_mode = desired_object_mode
+
         self.print_message("Project loaded successfully.", self.normal_color)
 
     def get_setting_data(self):
@@ -7786,27 +8519,13 @@ class DriftlessMap(QMainWindow, FORM_Main):
             self.atlas_view.working_atlas.image_dict["tri_pnts"].setData(
                 pos=np.asarray(self.atlas_tri_data)
             )
-            for i in range(len(self.atlas_tri_inside_data)):
-                self.working_atlas_text.append(pg.TextItem(str(i)))
-                self.working_atlas_text[-1].setColor(self.triangle_color)
-                self.working_atlas_text[-1].setPos(
-                    self.atlas_tri_inside_data[i][0], self.atlas_tri_inside_data[i][1]
-                )
-                self.atlas_view.working_atlas.vb.addItem(self.working_atlas_text[-1])
-                self.working_atlas_text[-1].setVisible(False)
+            self._refresh_triangulation_text("atlas")
 
         if self.image_view.current_img is not None and self.histo_tri_inside_data:
             self.image_view.img_stacks.image_dict["tri_pnts"].setData(
                 pos=np.asarray(self.histo_tri_data)
             )
-            for i in range(len(self.histo_tri_inside_data)):
-                self.working_img_text.append(pg.TextItem(str(i)))
-                self.working_img_text[-1].setColor(self.triangle_color)
-                self.working_img_text[-1].setPos(
-                    self.histo_tri_inside_data[i][0], self.histo_tri_inside_data[i][1]
-                )
-                self.image_view.img_stacks.vb.addItem(self.working_img_text[-1])
-                self.working_img_text[-1].setVisible(False)
+            self._refresh_triangulation_text("image")
 
         if (
             self.current_atlas_path is not None
@@ -7825,15 +8544,23 @@ class DriftlessMap(QMainWindow, FORM_Main):
             reply = QMessageBox.question(
                 self,
                 "Message",
-                "Saving current project?",
+                "Save the current project before loading another one?",
+                QMessageBox.StandardButton.Yes
+                | QMessageBox.StandardButton.No
+                | QMessageBox.StandardButton.Cancel,
                 QMessageBox.StandardButton.Yes,
-                QMessageBox.StandardButton.No,
             )
 
+            if reply == QMessageBox.StandardButton.Cancel:
+                return
             if reply == QMessageBox.StandardButton.Yes:
-                self.save_project_called()
-
-            self.object_ctrl.clear_all()
+                if not self.save_project_called():
+                    self.print_message(
+                        "The current project was not saved, so no other "
+                        "project was loaded.",
+                        self.reminder_color,
+                    )
+                    return
 
         self.print_message("Loading project....", self.normal_color)
         file_options = QFileDialog.Option(0)
@@ -7867,6 +8594,15 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 )
                 return
 
+            prepared = self.prepare_project_sources(p_dict, project_path[0])
+            if prepared is None:
+                return
+            p_dict = prepared
+            self.current_project_path = project_path[0]
+
+            # Only now that a complete project is ready to replace the
+            # session are the current objects removed.
+            self.object_ctrl.clear_all()
             if self.object_3d_list:
                 for _ in range(len(self.object_3d_list)):
                     if not isinstance(self.object_3d_list[-1], list):
@@ -7881,7 +8617,15 @@ class DriftlessMap(QMainWindow, FORM_Main):
             #     self.delete_all
             self.layer_ctrl.clear_all()
 
-            self.load_project(p_dict)
+            try:
+                self.load_project(p_dict)
+            except (KeyError, TypeError, ValueError, IndexError) as exc:
+                self.print_message(
+                    "The project could not be opened completely ({}). The "
+                    "session may be partly restored; do not save over the "
+                    "original project.".format(exc),
+                    self.error_message_color,
+                )
 
         else:
             self.print_message("", self.normal_color)
@@ -7900,14 +8644,15 @@ class DriftlessMap(QMainWindow, FORM_Main):
             axis_info, error = check_loading_pickle_file(file_path)
             if error is not None:
                 raise ValueError(error)
-            transpose_order = axis_info["to_HERBS"]
-            atlas_size = axis_info["size"]
-            direction_change = axis_info["direction_change"]
-            print(axis_info)
+            axis_info = normalize_axis_info(
+                axis_info, np.asarray(self.atlas_view.atlas_label.shape)[[1, 2, 0]]
+            )
         except (
             IOError,
             OSError,
             ValueError,
+            TypeError,
+            AttributeError,
             KeyError,
             IndexError,
             pickle.PickleError,
@@ -7934,24 +8679,26 @@ class DriftlessMap(QMainWindow, FORM_Main):
             if msg is not None:
                 self.print_message(msg, self.error_message_color)
                 return
-            if isinstance(data[0, 1], float):
-                extra_vox = 0
-            elif isinstance(data[0, 1], int):
-                extra_vox = 1
-            else:
+            if not (
+                np.issubdtype(data.dtype, np.integer)
+                or np.issubdtype(data.dtype, np.floating)
+            ):
                 msg = "Data is in wrong type, please check the Tutorial on GitHub."
                 self.print_message(msg, self.error_message_color)
                 return
+            source_points = np.asarray(data, dtype=float)
+            source_shape = np.asarray(axis_info["size"], dtype=float)
+            if not np.all(np.isfinite(source_points)) or np.any(
+                (source_points < 0) | (source_points >= source_shape)
+            ):
+                self.print_message(
+                    "Point coordinates must lie inside the source atlas volume "
+                    "{} in its native voxel order.".format(tuple(axis_info["size"])),
+                    self.error_message_color,
+                )
+                return
 
-            data_temp = data.copy()
-            for i in range(data.shape[1]):
-                if direction_change[i]:
-                    data_temp[:, i] = atlas_size[i] - extra_vox - data_temp[:, i]
-            if transpose_order != (0, 1, 2):
-                pnt_vox = data_temp[:, transpose_order]
-            else:
-                pnt_vox = data_temp.copy()
-
+            pnt_vox = source_vox_to_herbs_vox(source_points, axis_info)
             pnt_vis = pnt_vox - self.atlas_view.origin_3d
 
             self.object_ctrl.add_object(
@@ -7964,95 +8711,6 @@ class DriftlessMap(QMainWindow, FORM_Main):
     # -------------------------------------------------------------
     #                    Export
     # -------------------------------------------------------------
-    def export_atlas_overlay_layers(self):
-        if not "atlas-overlay" in self.layer_ctrl.layer_link:
-            self.print_message(
-                "No atlas-overlay layer is created.", self.error_message_color
-            )
-            return
-        self.print_message("Export atlas overaly layers...", self.normal_color)
-        path = QFileDialog.getSaveFileName(
-            self, "Export image", self.current_img_path, "JPEG (*.jpg)"
-        )
-        if path[0] != "":
-            overlay_img = self.atlas_view.working_atlas.image_dict[
-                "atlas-overlay"
-            ].image
-
-            atlas_data = self.atlas_view.working_atlas.img.image.copy()
-
-            slice_shape = self.atlas_view.slice_size
-
-            atlas_data_temp = np.zeros((slice_shape[0], slice_shape[1], 3))
-            atlas_data_temp[:, :, 0] = atlas_data
-            atlas_data_temp[:, :, 1] = atlas_data
-            atlas_data_temp[:, :, 2] = atlas_data
-
-            max_val = int(np.max(atlas_data) * 255)
-            slice_img = cv2.normalize(
-                atlas_data_temp, None, 0, max_val, cv2.NORM_MINMAX, dtype=cv2.CV_8U
-            )
-
-            label_data = self.atlas_view.working_atlas.label_img.image.copy()
-            unique_labels = np.unique(label_data)
-
-            label_colors = self.atlas_view.label_tree.lookup_table()
-
-            valid_label = np.where(label_colors[:, 3] != 0)[0].astype(int)
-
-            label_img = np.zeros((slice_shape[0], slice_shape[1], 3))
-            for labl in valid_label:
-                if labl in unique_labels:
-                    loc_filter = np.where(label_data == labl)
-                    label_img[loc_filter[0], loc_filter[1], 0] = label_colors[labl, 0]
-                    label_img[loc_filter[0], loc_filter[1], 1] = label_colors[labl, 1]
-                    label_img[loc_filter[0], loc_filter[1], 2] = label_colors[labl, 2]
-
-            label_img = cv2.normalize(
-                label_img, None, 0, np.max(label_img), cv2.NORM_MINMAX, dtype=cv2.CV_8U
-            )
-
-            label_img = cv2.cvtColor(label_img, cv2.COLOR_RGB2BGR)
-
-            blend_img = cv2.addWeighted(slice_img, 0.8, label_img, 0.2, 0)
-            if overlay_img is not None:
-                overlay_img = cv2.cvtColor(overlay_img, cv2.COLOR_RGB2BGR)
-                blend_img = cv2.addWeighted(blend_img, 0.6, overlay_img, 0.4, 0)
-
-            point_data = self.atlas_view.working_atlas.image_dict["tri_pnts"].data
-
-            # font = cv2.FONT_HERSHEY_SIMPLEX
-            # font_scale = 0.3
-            # color = (128, 128, 128)
-            # thickness = 1
-
-            if len(point_data["pos"]) > 4:
-                for i in range(len(point_data["pos"][4:])):
-                    point = point_data["pos"][4 + i]
-                    blend_img = cv2.circle(
-                        blend_img,
-                        tuple(point),
-                        radius=3,
-                        color=(128, 128, 128),
-                        thickness=-1,
-                    )
-                    # point_image = cv2.putText(
-                    #     point_image,
-                    #     f"{i+1}",
-                    #     tuple(point),
-                    #     font,
-                    #     font_scale,
-                    #     color,
-                    #     thickness,
-                    #     cv2.LINE_AA,
-                    # )
-            cv2.imwrite(path[0], blend_img)
-
-            self.print_message(
-                "Merged image is exported successfully.", self.normal_color
-            )
-        else:
-            self.print_message("", self.normal_color)
 
     # -------------------------------------------------------------
     #                    Status
@@ -8073,6 +8731,11 @@ class DriftlessMap(QMainWindow, FORM_Main):
 # -------------------------------------------------------------
 def main():
     app = QApplication(sys.argv)
+    app.setApplicationName("DriftlessMap")
+    app.setApplicationDisplayName("DriftlessMap")
+    app.setApplicationVersion(__version__)
+    app.setOrganizationName("Mohebi & Associates")
+    app.setWindowIcon(QIcon(resource_path("icons/app/driftlessmap.png")))
     qss_file_name = "qss/main_window.qss"
     herbs_style = read_qss_file(qss_file_name)
     app.setStyleSheet(herbs_style)
@@ -8083,3 +8746,20 @@ def main():
     window = DriftlessMap()
     window.show()
     return app.exec()
+
+
+def _landmark_property(name):
+    def getter(self):
+        return getattr(self.landmarks, name)
+
+    def setter(self, value):
+        setattr(self.landmarks, name, value)
+
+    return property(getter, setter, doc="Delegates to ``LandmarkModel.{}``.".format(name))
+
+
+# Existing call sites keep reading ``self.atlas_tri_data`` and friends; the
+# values are stored on ``self.landmarks``.
+for _name in LANDMARK_FIELDS:
+    setattr(DriftlessMap, _name, _landmark_property(_name))
+del _name

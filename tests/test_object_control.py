@@ -54,8 +54,8 @@ class DrawingInfoWindowTests(unittest.TestCase):
         control = ObjectControl()
         calls = []
 
-        def provider(data, object_type, object_name):
-            calls.append((data, object_type, object_name))
+        def provider(data, object_type, object_name, plot_mode=None):
+            calls.append((data, object_type, object_name, plot_mode))
             return drawing_info()
 
         control.drawing_info_provider = provider
@@ -172,6 +172,68 @@ class ProbeInfoWindowTests(unittest.TestCase):
         )
         message.assert_called_once()
 
+
+
+class ObjectLinkTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
+    def test_links_follow_objects_when_others_are_deleted(self):
+        control = ObjectControl()
+        piece = np.array([[0.0, 0.0, 1.0], [0.0, 0.0, 2.0]])
+        for name in ("a", "b", "c"):
+            control.add_object(
+                name, "merged contour", {"object_type": "contour", "data": [piece]},
+                "opaque",
+            )
+        for index in (1, 2):
+            control.obj_list[index].link_button.setChecked(True)
+            control.obj_link_changed(control.obj_id[index])
+
+        control.delete_objects([0])
+
+        linked = control.linked_object_indexes()
+        self.assertEqual([control.obj_name[i] for i in linked], ["b", "c"])
+        control.delete_objects([linked[0]])
+        self.assertEqual(
+            [control.obj_name[i] for i in control.linked_object_indexes()],
+            ["c"],
+        )
+
+
+class DrawingModeAndOrderTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
+    def test_drawing_mode_survives_renaming_and_project_round_trip(self):
+        control = ObjectControl()
+        piece = np.array([[0.0, 0.0, 1.0], [0.0, 0.0, 2.0]])
+        control.add_object("area drawing - piece", "drawing piece", piece, "opaque",
+                           drawing_mode="area")
+        control.obj_name[0] = "my region - piece"
+        self.assertEqual(control.drawing_mode_of_piece("my region - piece"), "area")
+
+        saved = control.get_obj_data()
+        restored = ObjectControl()
+        restored.set_obj_data(saved)
+        self.assertEqual(restored.obj_drawing_mode, ["area"])
+
+        legacy = dict(saved)
+        legacy.pop("obj_drawing_mode")
+        legacy["obj_name"] = ["line drawing - piece"]
+        older = ObjectControl()
+        older.set_obj_data(legacy)
+        self.assertEqual(older.obj_drawing_mode, ["line"])
+
+    def test_pieces_are_grouped_in_natural_order(self):
+        control = ObjectControl()
+        piece = np.array([[0.0, 0.0, 1.0], [0.0, 0.0, 2.0]])
+        for name in ("probe 10 - piece", "probe 2 - piece", "probe 1 - piece"):
+            control.add_object(name, "probe piece", piece, "opaque")
+        _data, names, _pieces, _indexes = control.collect_pieces("probe piece")
+        self.assertEqual(list(names), ["probe 1", "probe 2", "probe 10"])
 
 if __name__ == "__main__":
     unittest.main()

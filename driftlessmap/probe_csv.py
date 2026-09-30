@@ -111,7 +111,6 @@ def iter_probe_contact_rows(probe_name, probe_data):
     reconstruction = _reconstruction(probe_data)
     contacts = reconstruction["coordinates"]["contacts"]
     source_axes = reconstruction["atlas"]["source_axes"]
-    count = int(contacts["count"])
     site_indexes = np.asarray(contacts["site_index"], dtype=int)
     column_indexes = np.asarray(contacts["column_index"], dtype=int)
     indexes_in_column = np.asarray(contacts["index_in_column"], dtype=int)
@@ -249,6 +248,9 @@ def probe_trajectory_row(probe_name, probe_data):
         row["atlas_version"] = atlas["source_version"]
     if atlas.get("identifier"):
         row["atlas_identifier"] = atlas["identifier"]
+    reference = atlas.get("content_reference") or {}
+    if reference.get("sha256"):
+        row["atlas_sha256"] = reference["sha256"]
     if probe.get("site_face") is not None:
         row["site_face"] = probe["site_face"]
 

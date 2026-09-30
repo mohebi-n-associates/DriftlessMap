@@ -1,21 +1,10 @@
 import os
-from os.path import dirname, realpath, join
-import sys
-from sys import argv, exit
-from pathlib import Path
 import nrrd
-import pickle
-import csv
 import nibabel as nib
 import numpy as np
-import pandas as pd
-import cv2
-from PyQt6.QtGui import *
-from PyQt6.QtCore import *
-from PyQt6.QtWidgets import *
+from .persistence import write_cache_pickle
 
-from .uuuuuu import make_contour_img, make_atlas_label_contour
-from .obj_items import render_volume, render_small_volume
+from .utils import make_contour_img, make_atlas_label_contour
 from .atlas_transform import (
     compact_atlas_volume,
     compact_boundary_volume,
@@ -24,105 +13,6 @@ from .atlas_transform import (
     prepare_atlas_mask,
 )
 from .persistence import load_legacy_pickle
-
-
-def _make_label_info_data_waxholm_rat(label_file_path, excel_file_path):
-    # label_file_path = '..../WHS_SD_rat_atlas_v4.label'
-    # excel_file_path = '..../WHS SD rat brain atlas v4 labels for MBAT.xlsx'
-
-    xl_file = pd.ExcelFile(excel_file_path)
-    dfs = {sheet_name: xl_file.parse(sheet_name) for sheet_name in xl_file.sheet_names}
-    dfs_keys = list(dfs.keys())
-    if len(dfs_keys) != 1:
-        raise Exception('need to be only 1 sheet')
-
-    df = dfs[dfs_keys[0]]
-
-    index = []
-    level = []
-    name = []
-
-    for i in range(df.shape[0]):
-        da_line = df.iloc[i].values
-        for j in range(df.shape[1]):
-            if ~np.isnan(da_line[j]):
-                print(da_line[j])
-                index.append(da_line[j])
-                level.append(j)
-                name.append(da_line[j+1])
-                break
-
-    index = np.ravel(index).astype(int)
-    abv = df['Abbreviation'].values[:len(index)]
-    parent = df['Parent'].values[:len(index)].astype(int)
-
-    file = open(label_file_path, 'rb')
-    lines = file.readlines()
-    file.close()
-
-    for i in range(len(lines)):
-        da_line = lines[i].decode()
-        if da_line[0] == '#':
-            continue
-        start_line = i
-        break
-
-    lindex = []
-    red = []
-    green = []
-    blue = []
-    lname = []
-    for i in range(start_line, len(lines)):
-        da_line = lines[i].decode()
-        print(da_line)
-        da_elements = da_line.split('"')
-        da_numbers = da_elements[0].split()
-        lindex.append(int(da_numbers[0]))
-        red.append(int(da_numbers[1]))
-        green.append(int(da_numbers[2]))
-        blue.append(int(da_numbers[3]))
-        lname.append(da_elements[1])
-
-    lindex = np.ravel(lindex)
-    red = np.ravel(red)
-    green = np.ravel(green)
-    blue = np.ravel(blue)
-
-    colors = np.zeros((len(index), 3))
-    colors[:] = np.nan
-
-    for i in range(1, len(lname)):
-        print(i)
-        if lindex[i] not in index:
-            raise Exception('not matching')
-
-    for i in range(len(index)):
-        if index[i] > 600:
-            if index[i] == 1000:
-                colors[i] = np.array([50, 168, 82])
-            elif index[i] in [1001, 1050, 1002, 1003, 1004, 1005, 1006, 1051, 1007, 1008, 1009, 1010, 1011, 1012]:
-                colors[i] = np.array([255, 255, 255])
-            elif index[i] == 1048:
-                colors[i] = np.array([114, 126, 186])
-            elif index[i] == 1049:
-                colors[i] = np.array([16, 79, 24])
-            else:
-                colors[i] = np.array([128, 128, 128])
-        else:
-            da_ind = np.where(lindex == index[i])[0][0]
-            colors[i] = np.array([red[da_ind], green[da_ind], blue[da_ind]])
-
-    label = {}
-    label['index'] = index
-    label['color'] = colors.astype(int)
-    label['label'] = name
-    label['abbrev'] = abv
-    label['parent'] = parent
-    label['level_indicator'] = np.ravel(level)
-
-    outfile = open('atlas_labels.pkl', 'wb')
-    pickle.dump(label, outfile)
-    outfile.close()
 
 
 def check_data_path_and_load(file_path):
@@ -146,7 +36,6 @@ def check_data_path_and_load(file_path):
         except Exception:
             success = False
     return data, success
-
 
 
 def check_atlas_file_path(atlas_folder, data_file=None, segmentation_file=None):
@@ -214,9 +103,7 @@ def process_segmentation_data(atlas_folder, segmentation_path, mask_data):
 
         segment = {'data': segmentation_data, 'unique_label': unique_label}
 
-        outfile = open(os.path.join(atlas_folder, 'segment_pre_made.pkl'), 'wb')
-        pickle.dump(segment, outfile)
-        outfile.close()
+        write_cache_pickle(os.path.join(atlas_folder, 'segment_pre_made.pkl'), segment)
 
         msg = 'Segmentation data processed successfully.'
         msg_flag = 1
@@ -257,9 +144,7 @@ def process_atlas_data(atlas_folder, atlas_path, mask_data,
         atlas_data = atlas['data']
         atlas_info = atlas['info']
 
-        outfile = open(os.path.join(atlas_folder, 'atlas_pre_made.pkl'), 'wb')
-        pickle.dump(atlas, outfile)
-        outfile.close()
+        write_cache_pickle(os.path.join(atlas_folder, 'atlas_pre_made.pkl'), atlas)
 
         msg = 'Volume Atlas data processed successfully.'
         msg_flag = 1
@@ -287,7 +172,6 @@ def process_contour_data(segmentation_data, dim_index=0):
             da_contour = make_contour_img(da_slice)
             contour_img[:, :, i] = da_contour
     return contour_img
-
 
 
 # boundary = {'s_contour': sagital_contour_img,
@@ -389,10 +273,8 @@ def process_atlas_raw_data(atlas_folder, data_file=None, segmentation_file=None,
     atlas_data = atlas['data']
     atlas_info = atlas['info']
 
-    with open(os.path.join(atlas_folder, 'segment_pre_made.pkl'), 'wb') as outfile:
-        pickle.dump(segment, outfile)
-    with open(os.path.join(atlas_folder, 'atlas_pre_made.pkl'), 'wb') as outfile:
-        pickle.dump(atlas, outfile)
+    write_cache_pickle(os.path.join(atlas_folder, 'segment_pre_made.pkl'), segment)
+    write_cache_pickle(os.path.join(atlas_folder, 'atlas_pre_made.pkl'), atlas)
 
     boundary = make_atlas_label_contour(atlas_folder, segmentation_data)
 
@@ -401,16 +283,24 @@ def process_atlas_raw_data(atlas_folder, data_file=None, segmentation_file=None,
     return atlas_data, atlas_info, segmentation_data, unique_label, boundary, msg
 
 
+PROCESSING_MARKER = ".driftlessmap-processing"
 
 
+def begin_atlas_processing(atlas_folder):
+    """Mark a folder as being (re)processed until processing succeeds."""
+    marker = os.path.join(atlas_folder, PROCESSING_MARKER)
+    with open(marker, "w", encoding="utf-8") as stream:
+        stream.write("Atlas processing started; remove only if it completed.\n")
 
 
-class AtlasMeshProcessor(object):
-    def __init__(self, atlas_folder, atlas_data, segmentation_data, factor, level):
-        meshdata = render_volume(atlas_data, atlas_folder, factor=factor, level=level)
+def finish_atlas_processing(atlas_folder):
+    marker = os.path.join(atlas_folder, PROCESSING_MARKER)
+    if os.path.exists(marker):
+        os.remove(marker)
 
-        small_meshdata_list = render_small_volume(atlas_data, segmentation_data, atlas_folder,
-                                                  factor=factor, level=level)
+
+def atlas_processing_incomplete(atlas_folder):
+    return os.path.exists(os.path.join(atlas_folder, PROCESSING_MARKER))
 
 
 class AtlasLoader(object):
@@ -433,6 +323,15 @@ class AtlasLoader(object):
         pre_h_boundary_path = os.path.join(atlas_folder, 'horizontal_contour_pre_made.pkl')
 
         pre_made_label_info_path = os.path.join(atlas_folder, 'atlas_labels.pkl')
+
+        if atlas_processing_incomplete(atlas_folder):
+            # A run that stopped part-way can leave new and old cache files
+            # side by side; refuse them rather than pair mismatched data.
+            self.msg = (
+                'Atlas processing in this folder did not finish. Process or '
+                'download the atlas again.'
+            )
+            return
 
         required_paths = (
             pre_made_label_info_path,
@@ -510,17 +409,3 @@ class AtlasLoader(object):
         if error is not None:
             raise ValueError(error)
         return data
-
-
-
-
-
-
-
-
-
-
-
-class AtlasMeshLoader(object):
-    def __init__(self, atlas_folder):
-        pre_made_meshdata_path = os.path.join(atlas_folder, 'atlas_meshdata.pkl')

@@ -1,9 +1,11 @@
 import os
-import pickle
 import pyqtgraph as pg
 import pyqtgraph.opengl as gl
 import numpy as np
+from .persistence import write_cache_pickle
 import scipy.ndimage as ndi
+
+from .persistence import PickledMeshState, load_mesh_pickle
 
 
 def get_object_vis_color(color):
@@ -69,6 +71,23 @@ def make_3d_gl_widget(data_dict, obj_type):
     return obj_3d
 
 
+def mesh_from_state(mesh_state):
+    """Build a ``gl.MeshData`` from a validated :class:`PickledMeshState`."""
+    md = gl.MeshData()
+    for key, value in mesh_state.state.items():
+        if key in md.__dict__:
+            setattr(md, key, value)
+    return md
+
+
+def load_mesh_file(file_path):
+    """Load a whole-brain mesh or a ``{label: mesh}`` cache safely."""
+    data = load_mesh_pickle(file_path)
+    if isinstance(data, PickledMeshState):
+        return mesh_from_state(data)
+    return {key: mesh_from_state(value) for key, value in data.items()}
+
+
 def render_volume(atlas_data, atlas_folder, factor=2, level=0.1):
     da_data = atlas_data.copy()
     img = np.ascontiguousarray(da_data[::factor, ::factor, ::factor])
@@ -76,9 +95,7 @@ def render_volume(atlas_data, atlas_folder, factor=2, level=0.1):
 
     md = gl.MeshData(vertexes=verts * factor, faces=faces)
 
-    outfile = open(os.path.join(atlas_folder, 'atlas_meshdata.pkl'), 'wb')
-    pickle.dump(md, outfile)
-    outfile.close()
+    write_cache_pickle(os.path.join(atlas_folder, 'atlas_meshdata.pkl'), md)
 
     return md
 
@@ -114,9 +131,7 @@ def render_small_volume(
 
     if progress is not None:
         progress(0.9, "saving the generated mesh")
-    outfile = open(os.path.join(save_path, '{}.pkl'.format(label_id)), 'wb')
-    pickle.dump(md, outfile)
-    outfile.close()
+    write_cache_pickle(os.path.join(save_path, '{}.pkl'.format(label_id)), md)
     if progress is not None:
         progress(1.0, "mesh complete")
 

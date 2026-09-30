@@ -1,4 +1,6 @@
 import base64
+import io
+import json
 import importlib.util
 import os
 from pathlib import Path
@@ -156,6 +158,116 @@ class SafeArchiveTests(unittest.TestCase):
             self.assertIsNone(loaded)
             self.assertIn("Expected a project file", error)
 
+    def test_repeated_array_references_are_stored_once(self):
+        shared = np.arange(10, dtype=np.uint16)
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "deduplicated.dmap"
+            success, error = persistence.save_driftlessmap_file(
+                path, {"first": shared, "second": shared}, "test"
+            )
+            self.assertTrue(success, error)
+            with persistence.zipfile.ZipFile(path) as archive:
+                arrays = [name for name in archive.namelist() if name.startswith("arrays/")]
+            self.assertEqual(arrays, ["arrays/00000000.npy"])
+
+            loaded, error = persistence.load_driftlessmap_file(path, "test")
+            self.assertIsNone(error)
+            np.testing.assert_array_equal(loaded["first"], shared)
+            np.testing.assert_array_equal(loaded["second"], shared)
+
+    def test_repeated_array_references_decode_to_one_shared_array(self):
+        shared = np.arange(10, dtype=np.uint16)
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "shared.dmap"
+            success, error = persistence.save_driftlessmap_file(
+                path, {"first": shared, "second": shared}, "test"
+            )
+            self.assertTrue(success, error)
+            loaded, error = persistence.load_driftlessmap_file(path, "test")
+            self.assertIsNone(error)
+            self.assertIs(loaded["first"], loaded["second"])
+
+    def _archive_with_array_member(self, folder, member_bytes):
+        path = Path(folder) / "forged.dmaplayer"
+        manifest = {
+            "format": persistence.FORMAT_NAME,
+            "version": persistence.FORMAT_VERSION,
+            "kind": "test",
+            "data": {"__type__": "ndarray", "name": "arrays/00000000.npy"},
+        }
+        with persistence.zipfile.ZipFile(
+            path, "w", compression=persistence.zipfile.ZIP_DEFLATED
+        ) as archive:
+            archive.writestr(persistence.MANIFEST_NAME, json.dumps(manifest))
+            archive.writestr("arrays/00000000.npy", member_bytes)
+        return path
+
+    def test_array_header_declaring_more_data_than_stored_is_rejected(self):
+        header = io.BytesIO()
+        np.lib.format.write_array_header_1_0(
+            header,
+            {"descr": "<f8", "fortran_order": False, "shape": (2**34,)},
+        )
+        with tempfile.TemporaryDirectory() as folder:
+            path = self._archive_with_array_member(folder, header.getvalue())
+            loaded, error = persistence.load_driftlessmap_file(path, "test")
+        self.assertIsNone(loaded)
+        self.assertIn("declares more data", error)
+
+    def test_highly_compressible_real_arrays_still_load(self):
+        zeros = np.zeros((512, 512, 16), dtype=np.uint8)
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "mask.dmap"
+            success, error = persistence.save_driftlessmap_file(
+                path, {"mask": zeros}, "test"
+            )
+            self.assertTrue(success, error)
+            loaded, error = persistence.load_driftlessmap_file(path, "test")
+        self.assertIsNone(error)
+        np.testing.assert_array_equal(loaded["mask"], zeros)
+
+    def test_probe_setting_payload_has_its_own_validated_kind(self):
+        payload = {
+            "probe_settings": {"probe_type": 0},
+            "planning": {"site_face": 2},
+        }
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "probe.dmapprobe"
+            success, error = persistence.save_driftlessmap_file(
+                path, payload, "probe_settings"
+            )
+            self.assertTrue(success, error)
+            loaded, error = persistence.load_driftlessmap_file(
+                path, "probe_settings"
+            )
+        self.assertIsNone(error)
+        self.assertEqual(loaded, payload)
+
+    def test_attachment_streams_through_archive_and_extracts_lazily(self):
+        with tempfile.TemporaryDirectory() as folder:
+            source = Path(folder) / "source.czi"
+            source.write_bytes(bytes(range(255)) * 100)
+            archive_path = Path(folder) / "portable.dmap"
+            success, error = persistence.save_driftlessmap_file(
+                archive_path,
+                {
+                    "source": persistence.ArchiveAttachment(
+                        source_path=source, display_name="source.czi"
+                    )
+                },
+                "test",
+            )
+            self.assertTrue(success, error)
+
+            loaded, error = persistence.load_driftlessmap_file(
+                archive_path, "test"
+            )
+            self.assertIsNone(error)
+            self.assertIsInstance(loaded["source"], persistence.ArchiveAttachment)
+            extracted = Path(folder) / "restored.czi"
+            loaded["source"].extract_to(extracted)
+            self.assertEqual(extracted.read_bytes(), source.read_bytes())
+
     def test_legacy_herbs_manifest_remains_readable(self):
         data = {"answer": 42}
         with tempfile.TemporaryDirectory() as folder:
@@ -186,6 +298,54 @@ class SafeArchiveTests(unittest.TestCase):
         self.assertIsNone(error)
         self.assertEqual(loaded, data)
 
+
+
+class AtomicSaveTests(unittest.TestCase):
+    @unittest.skipUnless(os.name == "posix", "POSIX permissions")
+    def test_saved_files_use_umask_or_keep_existing_permissions(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "shared.dmap"
+            umask = os.umask(0)
+            os.umask(umask)
+            success, error = persistence.save_driftlessmap_file(path, {"a": 1}, "test")
+            self.assertTrue(success, error)
+            self.assertEqual(path.stat().st_mode & 0o777, 0o666 & ~umask)
+
+            os.chmod(path, 0o640)
+            success, error = persistence.save_driftlessmap_file(path, {"a": 2}, "test")
+            self.assertTrue(success, error)
+            self.assertEqual(path.stat().st_mode & 0o777, 0o640)
+
+    def test_failed_save_keeps_the_old_file_and_leaves_no_temporary(self):
+        class Exploding:
+            def open(self):
+                raise OSError("disk vanished")
+
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "project.dmap"
+            success, error = persistence.save_driftlessmap_file(path, {"a": 1}, "test")
+            self.assertTrue(success, error)
+            source = Path(folder) / "source.bin"
+            source.write_bytes(b"data")
+            attachment = persistence.ArchiveAttachment(source_path=source)
+            attachment.open = Exploding().open
+            success, error = persistence.save_driftlessmap_file(
+                path, {"a": 2, "file": attachment}, "test"
+            )
+            self.assertFalse(success)
+            loaded, error = persistence.load_driftlessmap_file(path, "test")
+            self.assertEqual(loaded, {"a": 1})
+            leftovers = [p.name for p in Path(folder).iterdir() if p.name.endswith(".tmp")]
+            self.assertEqual(leftovers, [])
+
+    def test_numpy_constructors_resolve_without_deprecation_warnings(self):
+        import warnings
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", DeprecationWarning)
+            safe = persistence._numpy_pickle_globals()
+        self.assertIn(("numpy.core.multiarray", "_reconstruct"), safe)
+        self.assertIn(("numpy._core.multiarray", "scalar"), safe)
 
 if __name__ == "__main__":
     unittest.main()

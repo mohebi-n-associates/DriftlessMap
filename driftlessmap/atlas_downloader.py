@@ -1,15 +1,27 @@
 import numpy as np
+from .persistence import write_cache_pickle
 import os
 from os.path import dirname, join
-from PyQt6.QtWidgets import *
-from PyQt6.QtGui import *
-from PyQt6.QtCore import *
-
-import pickle
+from PyQt6.QtWidgets import (
+    QDialog,
+    QDialogButtonBox,
+    QFileDialog,
+    QLabel,
+    QMessageBox,
+    QProgressBar,
+    QPushButton,
+    QVBoxLayout,
+)
+from PyQt6.QtCore import QObject, QThread, pyqtSignal
 import shutil
-from .atlas_loader import process_atlas_raw_data
-from .obj_items import render_volume, render_small_volume
-from .download_utils import DownloadCancelled, download_file
+from .atlas_loader import (
+    begin_atlas_processing,
+    finish_atlas_processing,
+    process_atlas_raw_data,
+)
+from .obj_items import load_mesh_file, render_volume, render_small_volume
+from .persistence import load_legacy_pickle
+from .download_utils import DownloadCancelled, download_file, thread_is_running
 
 
 class DownloadThread(QThread):
@@ -75,15 +87,30 @@ class WorkerProcessData(QObject):
         self.vox_size = vox_size
 
     def run(self):
+        # Always report back: an exception escaping a worker thread would
+        # leave the dialog waiting forever and can abort the application.
+        try:
+            begin_atlas_processing(self.saving_folder)
+            self._run()
+            if self.success:
+                finish_atlas_processing(self.saving_folder)
+        except Exception as exc:
+            self.success = False
+            self.message = 'Atlas processing failed: {}'.format(exc)
+        finally:
+            self.finished.emit()
+
+    def _run(self):
         target = os.path.join(self.saving_folder, 'atlas_labels.pkl')
         if not os.path.exists(target):
             shutil.copyfile(join(dirname(__file__), "data/atlas_labels.pkl"), target)
 
         self.progress.emit(1)
 
-        infile = open(os.path.join(self.saving_folder, 'atlas_labels.pkl'), 'rb')
-        self.label_info = pickle.load(infile)
-        infile.close()
+        self.label_info, label_error = load_legacy_pickle(
+            os.path.join(self.saving_folder, 'atlas_labels.pkl'))
+        if label_error is not None:
+            raise ValueError(label_error)
 
         self.progress.emit(5)
 
@@ -119,21 +146,15 @@ class WorkerProcessData(QObject):
                 file_name = os.path.basename(da_file)
                 da_name, file_extension = os.path.splitext(file_name)
                 if file_extension == '.pkl':
-                    infile = open(os.path.join(save_path, da_file), 'rb')
-                    md = pickle.load(infile)
-                    infile.close()
+                    md = load_mesh_file(os.path.join(save_path, da_file))
 
                     self.small_mesh_list[str(da_name)] = md
 
             self.progress.emit(97)
-            outfile = open(os.path.join(self.saving_folder, 'atlas_small_meshdata.pkl'), 'wb')
-            pickle.dump(self.small_mesh_list, outfile)
-            outfile.close()
+            write_cache_pickle(os.path.join(self.saving_folder, 'atlas_small_meshdata.pkl'), self.small_mesh_list)
 
             self.progress.emit(100)
             self.success = True
-
-        self.finished.emit()
 
 
 class AtlasDownloader(QDialog):
@@ -262,7 +283,7 @@ class AtlasDownloader(QDialog):
             thread.deleteLater()
 
     def has_active_downloads(self):
-        return any(thread.isRunning() for thread in self.download_threads.values())
+        return any(thread_is_running(thread) for thread in self.download_threads.values())
 
     # Setting progress bar
     def set_label_bar_value(self, value):
@@ -348,7 +369,7 @@ class AtlasDownloader(QDialog):
         if self.process_finished:
             event.accept()
             return
-        if self.has_active_downloads() or self.thread.isRunning():
+        if self.has_active_downloads() or thread_is_running(self.thread):
             QMessageBox.information(
                 self, 'Operation in progress', 'Please wait for the active operation to finish.'
             )

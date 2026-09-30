@@ -1,10 +1,38 @@
-from PyQt6.QtGui import *
-from PyQt6.QtCore import *
-from PyQt6.QtWidgets import *
+from PyQt6.QtGui import (
+    QAction,
+    QColor,
+    QIcon,
+    QIntValidator,
+    QPixmap,
+)
+from PyQt6.QtCore import QObject, QSize, Qt
+from PyQt6.QtWidgets import (
+    QComboBox,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QSizePolicy,
+    QSlider,
+    QSpinBox,
+)
 import pyqtgraph as pg
 import numpy as np
-from pyqtgraph.Qt import QtGui, QtCore
 from .resources import resource_path
+
+
+def read_int_field(line_edit, minimum=None, maximum=None):
+    """Return a line edit's integer value, or ``None`` while it is incomplete."""
+    try:
+        value = int(line_edit.text())
+    except ValueError:
+        return None
+    if minimum is not None and value < minimum:
+        return None
+    if maximum is not None and value > maximum:
+        return None
+    return value
 
 
 class ToolBox(QObject):
@@ -122,7 +150,7 @@ class ToolBox(QObject):
         self.magic_tol_val = QLineEdit()
         self.magic_tol_val.setFixedWidth(40)
         # self.magic_tol_val.setAlignment(Qt.AlignmentFlag.AlignLeft)
-        self.magic_tol_val.setValidator(QIntValidator())
+        self.magic_tol_val.setValidator(QIntValidator(0, 65535))
         self.magic_tol_val.setText('0')
 
         self.magic_wand_kernel = QComboBox()
@@ -365,7 +393,7 @@ class ToolBox(QObject):
         self.bound_pnts_num.setFixedSize(50, 24)
         self.bound_pnts_num.setAlignment(Qt.AlignmentFlag.AlignLeft)
         self.bound_pnts_num.setMaxLength(2)
-        self.bound_pnts_num.setValidator(QIntValidator())
+        self.bound_pnts_num.setValidator(QIntValidator(2, 99))
         self.bound_pnts_num.setText('2')
         self.triang_vis_btn = QPushButton()
         self.triang_vis_btn.setCheckable(True)
@@ -521,7 +549,9 @@ class ToolBox(QObject):
         self.circle = self.original_circle * val
 
     def change_eraser_val(self):
-        val = int(self.eraser_size_valt.text())
+        val = read_int_field(self.eraser_size_valt, minimum=1)
+        if val is None:
+            return
         self.eraser_size_slider.setValue(val)
 
     def change_ruler_slider(self):
@@ -531,12 +561,21 @@ class ToolBox(QObject):
     def get_tool_data(self):
         data = {'pencil_color': self.pencil_color_btn.color().getRgb(),
                 'pencil_size': self.pencil_size_valt.text(),
+                'ruler_color': self.ruler_color_btn.color().getRgb(),
+                'ruler_width': self.ruler_width_slider.value(),
+                'eraser_color': self.eraser_color_btn.color().getRgb(),
+                'eraser_size': self.eraser_size_slider.value(),
+                'lasso_color': self.lasso_color_btn.color().getRgb(),
+                'remove_inside': self.remove_inside,
+                'kernel_size': self.kernel_size_slider.value(),
                 'magic_wand_color': self.magic_color_btn.color().getRgb(),
                 'magic_wand_tol': self.magic_tol_val.text(),
                 'magic_wand_kernel': self.magic_wand_kernel.currentText(),
                 'magic_wand_ksize': self.magic_wand_ksize.value(),
                 'probe_color': self.probe_color_btn.color().getRgb(),
                 'cell_color': self.cell_color_btn.color().getRgb(),
+                'triangulation_color': self.triang_color_btn.color().getRgb(),
+                'triangulation_visible': self.triang_vis_btn.isChecked(),
                 'is_closed': self.is_closed}
         return data
 
@@ -544,12 +583,25 @@ class ToolBox(QObject):
         self.pencil_color_btn.setColor(data['pencil_color'])
         self.pencil_size_valt.setText(str(data['pencil_size']))
         self.pencil_path_btn.setChecked(data['is_closed'])
+        self.is_closed = bool(data['is_closed'])
+        if 'ruler_color' in data:
+            self.ruler_color_btn.setColor(data['ruler_color'])
+            self.ruler_width_slider.setValue(int(data['ruler_width']))
+            self.eraser_color_btn.setColor(data['eraser_color'])
+            self.eraser_size_slider.setValue(int(data['eraser_size']))
+            self.lasso_color_btn.setColor(data['lasso_color'])
+            self.remove_inside = bool(data['remove_inside'])
+            self.lasso_type_btn.setChecked(not self.remove_inside)
+            self.kernel_size_slider.setValue(int(data['kernel_size']))
         self.magic_color_btn.setColor(data['magic_wand_color'])
         self.magic_tol_val.setText(str(data['magic_wand_tol']))
         self.magic_wand_ksize.setValue(data['magic_wand_ksize'])
         self.magic_wand_kernel.setCurrentText(data['magic_wand_kernel'])
         self.probe_color_btn.setColor(data['probe_color'])
         self.cell_color_btn.setColor(data['cell_color'])
+        if 'triangulation_color' in data:
+            self.triang_color_btn.setColor(data['triangulation_color'])
+            self.triang_vis_btn.setChecked(bool(data['triangulation_visible']))
 
 
     def multi_prb_status_changed(self):
@@ -557,7 +609,6 @@ class ToolBox(QObject):
             self.multi_shanks = True
         else:
             self.multi_shanks = False
-
 
 
 
