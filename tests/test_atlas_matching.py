@@ -20,7 +20,9 @@ from driftlessmap.atlas_matching import (
     mirrored_tilt,
     same_up_to_hemisphere,
     sagittal_side,
+    search_factor,
     search_planes,
+    suggest_sections,
     tissue_mask,
 )
 
@@ -176,6 +178,44 @@ class TiltTests(unittest.TestCase):
         by_key = {(m.index, m.tilt_degrees): m.score for m in matches}
         self.assertGreater(by_key[(34, (6.0, 0.0))], by_key[(34, (0.0, 0.0))])
         self.assertEqual(matches[0].tilt_degrees[0], 6.0)
+
+
+class SampledSearchTests(unittest.TestCase):
+    def test_search_factor(self):
+        self.assertEqual(search_factor((528, 320, 456)), 1)        # Allen 25 um
+        self.assertEqual(search_factor((1320, 800, 1140)), 3)      # Allen 10 um
+        self.assertEqual(search_factor((40, 50, 80), max_side=30), 3)
+
+    def test_stepped_tilted_slice_samples_the_same_slice(self):
+        _, intensity = brain_with_depth_cues()
+        full = tilted_slice(intensity, "sagittal", 30, (5.0, -4.0), (40, 25, 20))
+        coarse = tilted_slice(intensity, "sagittal", 30, (5.0, -4.0), (40, 25, 20), step=3)
+        np.testing.assert_allclose(coarse, full[::3, ::3])
+
+    def test_sampled_search_suggests_full_resolution_pages(self):
+        from scipy.ndimage import zoom
+
+        small_labels, small_intensity = brain_with_depth_cues()
+        # Three times finer, so the search samples every third page and
+        # sees the volume the other tests use.
+        labels = zoom(small_labels, 3, order=0)
+        intensity = zoom(small_intensity, 3, order=1)
+        midline = labels.shape[1] // 2
+        pivot = (120, midline, 60)
+        for page in (midline + 22, midline + 41):
+            with self.subTest(page=page):
+                slice_ = atlas_slice(intensity, "sagittal", page).astype(np.uint8)
+                section = np.dstack([cv2.resize(slice_, None, fx=1.5, fy=1.5)] * 3)
+                sampled = suggest_sections(section, labels, intensity, midline, pivot,
+                                           angles=(0,), max_side=90)
+                exact = suggest_sections(section, labels, intensity, midline, pivot,
+                                         angles=(0,), max_side=1000)
+                best = sampled.suggestions[0]
+                self.assertEqual(best.plane, "sagittal")
+                self.assertLessEqual(abs(best.index - page), 2, sampled.suggestions[:3])
+                self.assertLessEqual(abs(best.index - exact.suggestions[0].index), 2)
+                self.assertEqual(sampled.midline, midline)
+                self.assertEqual(sampled.plane_candidates[0].index % 3, 0)
 
 
 class HemisphereTests(unittest.TestCase):
