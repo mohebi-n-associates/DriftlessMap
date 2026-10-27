@@ -28,6 +28,14 @@ MAX_SLICES_PER_PLANE = 240
 # 10 um Allen atlas is searched at 30 um) and only the final depth is refined
 # page by page at full resolution.
 SEARCH_MAX_SIDE = 560
+# Orientations whose outline match is within this of the best one are told
+# apart by internal anatomy: many section outlines look nearly the same
+# upside down.
+ORIENTATION_MARGIN = 0.03
+# Between orientations whose anatomy matches within this, the upright one
+# (dorsal side still on top) is preferred: sections are rarely mounted upside
+# down.
+UPRIGHT_PREFERENCE = 0.05
 
 
 @dataclass(frozen=True)
@@ -42,6 +50,12 @@ class Orientation:
     def apply(self, array):
         result = np.rot90(array, self.quarter_turns)
         return result[:, ::-1] if self.mirrored else result
+
+    @property
+    def upright(self):
+        """Whether the section's top edge stays on top (only mirrored, if anything)."""
+        corners = self.apply(np.array([[1, 2], [3, 4]]))
+        return set(corners[0].tolist()) == {1, 2}
 
     def describe(self):
         turns = {0: "no rotation", 1: "rotate 90° counter-clockwise",
@@ -622,6 +636,42 @@ class SuggestionReport:
         return self.plane_candidates[0].silhouette - self.plane_candidates[1].silhouette
 
 
+def orientation_contenders(candidates, best, margin=ORIENTATION_MARGIN, limit=4):
+    """Best candidate of each distinct orientation of ``best``'s plane whose
+    outline match is within ``margin`` of the best (mirror images, which the
+    outline cannot tell apart, count as one)."""
+    chosen = []
+    for candidate in candidates:
+        if candidate.plane != best.plane or candidate.silhouette < best.silhouette - margin:
+            continue
+        if any(same_up_to_hemisphere(best.plane, candidate.orientation, other.orientation)
+               for other in chosen):
+            continue
+        chosen.append(candidate)
+        if len(chosen) == limit:
+            break
+    return chosen or [best]
+
+
+def _anatomy(match):
+    """Raw agreement of a depth match, comparable across orientations."""
+    return match.silhouette + match.template_edges + match.label_edges
+
+
+def choose_orientation(ranked, preference=UPRIGHT_PREFERENCE):
+    """The ``(candidate, depths)`` pair whose best depth matches best.
+
+    Upright orientations are preferred unless another matches clearly
+    better (by more than ``preference``).
+    """
+    def merit(item):
+        candidate, depths = item
+        bonus = preference if candidate.orientation.upright else 0.0
+        return _anatomy(depths[0]) + bonus
+
+    return max(ranked, key=merit)
+
+
 def _distinct(indexes, count, spacing):
     chosen = []
     for index in indexes:
@@ -694,14 +744,24 @@ def suggest_sections(histology, label_volume, intensity_volume, midline, pivot,
     coarse_midline = None if midline is None else midline / factor
     coarse_pivot = tuple(value / factor for value in pivot)
 
-    planes = best_by_plane(search_planes(histology, labels, progress=stage(0.0, 0.25)))
+    candidates = search_planes(histology, labels, progress=stage(0.0, 0.25))
+    planes = best_by_plane(candidates)
     best = planes[0]
     length = plane_length(labels.shape, best.plane)
-    depths = rank_depths(
-        histology, labels, intensity, best.plane, best.orientation,
-        indexes=hemisphere_indexes(best.plane, length, coarse_midline),
-        progress=stage(0.25, 0.5),
-    )
+    contenders = orientation_contenders(candidates, best)
+    ranked = []
+    for number, contender in enumerate(contenders):
+        share = 0.25 / len(contenders)
+        depths = rank_depths(
+            histology, labels, intensity, best.plane, contender.orientation,
+            indexes=hemisphere_indexes(best.plane, length, coarse_midline),
+            progress=stage(0.25 + number * share, 0.25 + (number + 1) * share),
+        )
+        if depths:
+            ranked.append((contender, depths))
+    if not ranked:
+        raise ValueError("No atlas slice could be compared with the section.")
+    best, depths = choose_orientation(ranked)
     spacing = max(2, length // 100)
     chosen = _distinct([match.index for match in depths], depth_candidates, spacing)
     tilts = refine_tilt(

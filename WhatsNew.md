@@ -3,6 +3,21 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.0.0a18
+
+Development preview, 27 October 2026 (`v2-implants` branch; not a release)
+
+- **Upside-down suggestions.** Find atlas section chose the section's
+  orientation from its outline alone, and many outlines (frontal sections in
+  particular) look nearly the same upside down. Orientations whose outlines
+  match within 0.03 are now compared by internal anatomy, and the upright one
+  (dorsal side on top, possibly mirrored) is preferred unless another matches
+  clearly better.
+- **Smooth atlas slider at 10 µm.** Reading one coronal page of a 10 µm atlas
+  takes 70–130 ms, because coronal pages are scattered through the volume.
+  While the slider is dragged, a page sampled to at most 400 pixels is shown
+  (about 2 ms); the full page is drawn when the slider is released.
+
 ## DriftlessMap 2.0.0a17
 
 Development preview, 27 October 2026 (`v2-implants` branch; not a release)

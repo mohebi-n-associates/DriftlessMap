@@ -39,10 +39,14 @@ class PageController(QWidget):
 
     class SignalProxy(QObject):
         sigPageChanged = pyqtSignal(object)
+        sigPageSettled = pyqtSignal(object)
 
     def __init__(self):
         self._sigprox = PageController.SignalProxy()
         self.sig_page_changed = self._sigprox.sigPageChanged
+        # Emitted when the slider is released: pages drawn as a quick
+        # preview while dragging are then drawn in full.
+        self.sig_page_settled = self._sigprox.sigPageSettled
 
         QWidget.__init__(self)
         page_control_style = read_qss_file('qss/page_control.qss')
@@ -59,7 +63,7 @@ class PageController(QWidget):
         self.page_slider = QSlider(Qt.Orientation.Horizontal)
         self.page_slider.setMinimum(0)
         self.page_slider.valueChanged.connect(self.slider_value_changed)
-        self.page_slider.sliderReleased.connect(self._flush_pending_page)
+        self.page_slider.sliderReleased.connect(self._slider_released)
 
         self.page_label = QLabel()
         self.page_label.setFixedSize(50, 20)
@@ -123,6 +127,10 @@ class PageController(QWidget):
             return
         self._last_emitted_page = val
         self.sig_page_changed.emit(val)
+
+    def _slider_released(self):
+        self._flush_pending_page()
+        self.sig_page_settled.emit(self.page_slider.value())
 
     def _flush_pending_page(self):
         self._drag_update_timer.stop()
@@ -261,6 +269,9 @@ class AtlasView(QObject):
 
 
     """
+    # Longest side of a coronal page drawn while its slider is dragged.
+    PREVIEW_MAX_SIDE = 400
+
     def __init__(self):
         super(AtlasView, self).__init__()
         QObject.__init__(self)
@@ -373,6 +384,8 @@ class AtlasView(QObject):
         self.cimg = SliceStacks()
         self.cpage_ctrl = PageController()
         self.cpage_ctrl.sig_page_changed.connect(self.coronal_slice_page_changed)
+        self.cpage_ctrl.sig_page_settled.connect(self._coronal_page_settled)
+        self._coronal_preview = False
         self.cimg.sig_page_step_requested.connect(self.cpage_ctrl.step_by)
         self.clut = pg.HistogramLUTWidget()
         self.clut.setImageItem(self.cimg.img)
@@ -799,23 +812,40 @@ class AtlasView(QObject):
         self.himg.label_img.setOpts(opacity=val)
 
     # coronal page number changed and slice rotated
+    def _coronal_preview_step(self):
+        """Sampling step for a coronal page drawn while the slider is dragged.
+
+        Coronal pages are scattered through the volume (every AP-th value),
+        so reading one full page of a 10 um atlas takes over 100 ms. While
+        dragging, a page sampled to at most PREVIEW_MAX_SIDE pixels is shown;
+        the full page follows when the slider is released.
+        """
+        if not self.cpage_ctrl.page_slider.isSliderDown():
+            return 1
+        return max(1, int(np.ceil(max(self.atlas_data.shape[:2]) / self.PREVIEW_MAX_SIDE)))
+
+    def _coronal_page_settled(self, _page):
+        if self._coronal_preview:
+            self.coronal_slice_page_changed(self.current_coronal_index)
+
     def set_perfect_coronal_slice(self):
-        da_atlas_slice = self.atlas_data[:, :, self.current_coronal_index]
-        da_atlas_label = self.atlas_label[:, :, self.current_coronal_index]
+        step = self._coronal_preview_step()
+        self._coronal_preview = step > 1
+        page = self.current_coronal_index
+        da_atlas_slice = self.atlas_data[::step, ::step, page]
+        da_atlas_label = self.atlas_label[::step, ::step, page]
         da_atlas_contour = None
         if self.cimg.boundary.isVisible():
             if self.atlas_boundary is None:
                 da_atlas_contour = make_contour_img(da_atlas_label)
             else:
-                da_atlas_contour = self.atlas_boundary['c_contour'][
-                    :, :, self.current_coronal_index
-                ]
+                da_atlas_contour = self.atlas_boundary['c_contour'][::step, ::step, page]
         display_label = self.label_tree.map_labels(da_atlas_label)
         self.cimg.set_data(
             da_atlas_slice,
             da_atlas_label,
             da_atlas_contour,
-            scale=None,
+            scale=(step, step),
             display_label=display_label,
         )
 

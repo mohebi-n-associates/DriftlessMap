@@ -1,7 +1,7 @@
 import numpy as np
 import pyqtgraph as pg
 from PyQt6.QtCore import QObject, Qt, pyqtSignal
-from PyQt6.QtGui import QPainter
+from PyQt6.QtGui import QPainter, QTransform
 from .coordinate_validation import coordinates_in_bounds
 from .movable_points import TriangulationPoints
 
@@ -193,6 +193,7 @@ class SliceStacks(pg.GraphicsLayoutWidget):
 
 
     def set_data(self, atlas, label, contour, scale=None, display_label=None):
+        """Show a slice; ``scale`` (sx, sy) draws a sampled slice at full size."""
         self.img.set_data(atlas)
         self.label_data = label
         if display_label is None:
@@ -200,6 +201,9 @@ class SliceStacks(pg.GraphicsLayoutWidget):
         self.label_img.setImage(display_label, autoLevels=False)
         if contour is not None:
             self.set_boundary_data(contour)
+        scale = (1, 1) if scale is None else tuple(scale)
+        for item in (self.img, self.label_img, self.boundary):
+            item.setTransform(QTransform.fromScale(*scale))
 
     def set_boundary_data(self, contour):
         # Contours are 0/1; without explicit levels a uint8 image is drawn

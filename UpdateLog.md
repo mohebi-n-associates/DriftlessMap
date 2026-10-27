@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th October 2026
+##### DriftlessMap 2.0.0a18
+
+Find atlas section prefers upright orientations and compares close ones by anatomy; the coronal atlas slider previews pages while dragging.
+
+### 27th October 2026
 ##### DriftlessMap 2.0.0a17
 
 Find atlas section and Suggest landmarks handle brightfield sections (inverted, illumination flattened, black background); hole filling fixed for tissue touching two edges.
