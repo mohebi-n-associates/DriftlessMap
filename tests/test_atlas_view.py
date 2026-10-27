@@ -69,6 +69,38 @@ class PageControllerTests(unittest.TestCase):
 
         self.assertEqual(pages, [11])
 
+    def test_releasing_the_slider_reports_the_settled_page(self):
+        controller = PageController()
+        settled = []
+        controller.sig_page_settled.connect(settled.append)
+        controller.set_max(20)
+        controller.page_slider.setSliderDown(True)
+        controller.page_slider.setValue(9)
+        controller.page_slider.setSliderDown(False)     # emits sliderReleased
+        self.assertEqual(settled, [9])
+
+    def test_dragged_coronal_pages_are_previewed_then_drawn_in_full(self):
+        view = AtlasView()
+        view.PREVIEW_MAX_SIDE = 10
+        shape = (40, 30, 12)
+        atlas = np.linspace(0, 1, np.prod(shape), dtype=np.float32).reshape(shape)
+        labels = np.ones(shape, dtype=np.int32)
+        atlas_info = [{"name": "anterior"}, {"name": "dorsal"}, {"name": "right"},
+                      {"vxsize": 10, "Bregma": [20, 15, 6]}]
+        label_info = {"index": np.array([1]), "parent": np.array([0]),
+                      "color": np.array([[10, 20, 30]]), "label": np.array(["Root"]),
+                      "abbrev": np.array(["R"])}
+        view.set_data(atlas, labels, atlas_info, label_info, None)
+        slider = view.cpage_ctrl.page_slider
+        slider.setSliderDown(True)
+        view.coronal_slice_page_changed(5)
+        self.assertEqual(view.cimg.label_data.shape, (10, 8))
+        self.assertEqual(view.cimg.img.transform().m11(), 4.0)
+        slider.setSliderDown(False)     # released: the full page is drawn
+        self.assertEqual(view.cimg.label_data.shape, (40, 30))
+        self.assertEqual(view.cimg.img.transform().m11(), 1.0)
+        np.testing.assert_array_equal(view.cimg.img.image, atlas[:, :, 5])
+
     def test_arrow_keys_advance_a_focused_atlas_plane(self):
         image = SliceStacks()
         controller = PageController()

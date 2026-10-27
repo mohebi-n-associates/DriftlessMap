@@ -10,7 +10,11 @@ from driftlessmap.atlas_matching import (
     Orientation,
     animal_right_edge,
     atlas_slice,
+    Candidate,
+    DepthMatch,
     best_by_plane,
+    choose_orientation,
+    orientation_contenders,
     bright_background,
     histology_gray,
     hemisphere_indexes,
@@ -220,6 +224,36 @@ class TiltTests(unittest.TestCase):
         by_key = {(m.index, m.tilt_degrees): m.score for m in matches}
         self.assertGreater(by_key[(34, (6.0, 0.0))], by_key[(34, (0.0, 0.0))])
         self.assertEqual(matches[0].tilt_degrees[0], 6.0)
+
+
+class OrientationChoiceTests(unittest.TestCase):
+    def test_upright_orientations(self):
+        upright = {(o.quarter_turns, o.mirrored) for o in ORIENTATIONS if o.upright}
+        self.assertEqual(upright, {(0, False), (0, True)})
+        # Rotate 180 degrees then mirror is an upside-down flip.
+        self.assertFalse(Orientation(2, True).upright)
+
+    def test_close_outlines_are_decided_by_anatomy_with_an_upright_preference(self):
+        flipped, upright, turned = Orientation(2, True), Orientation(0, False), Orientation(1, False)
+        candidates = [Candidate("coronal", 30, flipped, 0.88),
+                      Candidate("coronal", 30, Orientation(2, False), 0.88),  # its mirror
+                      Candidate("coronal", 31, upright, 0.87),
+                      Candidate("sagittal", 9, upright, 0.86),
+                      Candidate("coronal", 12, turned, 0.70)]
+        contenders = orientation_contenders(candidates, candidates[0])
+        self.assertEqual([c.orientation for c in contenders], [flipped, upright])
+
+        def depth(anatomy):
+            return [DepthMatch(30, anatomy, 0.0, 0.0, 1.0)]
+
+        # Nearly equal anatomy: the upright section wins.
+        chosen, _ = choose_orientation([(contenders[0], depth(1.02)),
+                                        (contenders[1], depth(1.00))])
+        self.assertEqual(chosen.orientation, upright)
+        # Clearly better anatomy upside down: that wins.
+        chosen, _ = choose_orientation([(contenders[0], depth(1.20)),
+                                        (contenders[1], depth(1.00))])
+        self.assertEqual(chosen.orientation, flipped)
 
 
 class SampledSearchTests(unittest.TestCase):
