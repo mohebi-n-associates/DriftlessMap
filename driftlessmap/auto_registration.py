@@ -281,7 +281,7 @@ def propose_landmarks(atlas_intensity, atlas_labels, section, count=10,
     if atlas_mask.sum() < 100:
         raise ValueError("The atlas slice contains too little brain.")
     section_mask = tissue_mask(section)
-    section_gray = histology_gray(section).astype(np.float32)
+    section_gray = histology_gray(section, section_mask).astype(np.float32)
     atlas_image = cv2.normalize(np.asarray(atlas_intensity, dtype=np.float32),
                                 None, 0, 1, cv2.NORM_MINMAX)
 

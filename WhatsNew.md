@@ -3,6 +3,21 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.0.0a17
+
+Development preview, 27 October 2026 (`v2-implants` branch; not a release)
+
+- **Brightfield sections in Find atlas section and Suggest landmarks.** The
+  tissue outline was found by assuming tissue is brighter than the
+  background, as in fluorescence. On brightfield sections (dark tissue on a
+  white slide) the whole image was taken as tissue, so every outline
+  comparison, and the suggestions, were meaningless. Brightfield sections are
+  now recognised from their bright border, uneven illumination is flattened
+  (a smooth background surface is fitted and subtracted), and the section is
+  compared as bright tissue on a black background, like the atlas template.
+- **Fixed:** sections whose tissue touches two opposite image edges had the
+  background on one side counted as tissue when holes were filled.
+
 ## DriftlessMap 2.0.0a16
 
 Development preview, 27 October 2026 (`v2-implants` branch; not a release)
