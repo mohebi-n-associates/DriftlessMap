@@ -8,8 +8,8 @@ or important workflows change.
 
 ## Project identity
 
-- Current stable release: DriftlessMap 1.6.1. The `v2-redesign` branch is the
-  2.0 development preview, versioned 2.0.0aN (currently 2.0.0a12); each
+- Current stable release: DriftlessMap 1.6.1. `main` now carries the 2.0
+  development preview (merged from `v2-redesign`), versioned 2.0.0aN (currently 2.0.0a15); each
   feature there increments N. Plain 2.0.0 is reserved for the release that
   passes the gates in `version2_redesign.md`. Never give V2 work 1.x numbers.
 - Desktop application for histology registration, atlas mapping, probe
@@ -88,6 +88,22 @@ or important workflows change.
   `DriftlessMap.undoable(label)`, which records only the outermost action
   (wrap new mapping, part or build entry points in it), and
   `undo_mapping_step` / `redo_mapping_step`.
+- `driftlessmap/implants.py` (GUI-free) and `implant_engine.py`: optical
+  fibers and microprisms (`implants_design.md`). `ImplantBook` holds the
+  implants (id, name, kind, validated specs, colour); `fit_fiber` /
+  `fit_prism` fit a cylinder / block to mapped outlines (Bregma-relative
+  voxels: ML right, AP anterior, DV dorsal) and return a report (fiber tip;
+  prism bottom DV and medial, lateral, centre and face ML; regions;
+  stereotaxic estimate; warnings). `ImplantEngineMixin` (mixed into
+  `DriftlessMap`) keeps `implant_outlines` for the loaded section;
+  `map_implant` resamples the polygon, maps it, records it as kind
+  `fiber`/`prism` (the record's `probe` field holds the implant id) and makes
+  the section's part at once (`"<name> - piece"`, data carries
+  `implant_id`); `build_implant` fits all parts into `merged fiber` /
+  `merged prism`. Implants and live outlines are saved in the project and in
+  undo transactions. V2: `v2/implant_card.py` and `v2/outline_editor.py`
+  (draw, Propose by flood fill inside the brain envelope, tip/bottom point).
+  Neuropixels stay on the named-probe path.
 - `driftlessmap/landmarks.py`: `LandmarkModel` owns paired landmark lists,
   topology, the cached registration and label items (the `DriftlessMap`
   attributes of the same names delegate to it), plus `.dmaptri` validation.

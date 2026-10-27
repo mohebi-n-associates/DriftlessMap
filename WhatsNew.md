@@ -3,6 +3,26 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.0.0a15
+
+Development preview, 27 October 2026 (`v2-implants` branch; not a release)
+
+- **Implants card (2.0 preview, Annotate step).** Add optical fibers and
+  microprisms with their specifications (Neuropixels probes are listed too and
+  keep their Probes card). For each section: **Draw outline** (click around
+  the track, click the first point to close, drag corners to correct) or
+  **Propose** (click inside a bright track; the outline stays inside the
+  brain and is declined where the track is as bright as the tissue), then
+  optionally **Mark tip** / **Mark bottom edge**, and **Map this section**.
+  **Build** shows the report in the card; **Report…**, **Show in 3D** and
+  **Export table…** follow.
+- Mapped implant outlines stay on the section as dashed lines and appear in
+  the mapped-marks list with their status; the step rail counts implants and
+  unmapped outlines. Results > Export saves all fibers or prisms and the
+  implant table. Commands: Add implant, Draw implant outline, Map implant
+  outline, Build implant, Export implant table.
+- See Manual Section 12.7 and `implants_design.md`.
+
 ## DriftlessMap 2.0.0a14
 
 Development preview, 27 October 2026 (`v2-implants` branch; not a release)

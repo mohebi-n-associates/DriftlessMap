@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th October 2026
+##### DriftlessMap 2.0.0a15
+
+Implants card in the 2.0 preview: outline (draw or propose), mark the tip or bottom, map, build and report fibers and microprisms.
+
+### 27th October 2026
 ##### DriftlessMap 2.0.0a14
 
 Implants in the engine: map outlines, build, undo, save in projects, 3D display, object import/export and the implant CSV.

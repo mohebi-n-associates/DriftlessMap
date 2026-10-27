@@ -334,6 +334,79 @@ class V2ShellTests(unittest.TestCase):
             self.assertIn("Edit mapped marks", [c.name for c in window.registry.all()])
 
     @isolated_gui_test
+    def test_implants_card_outlines_maps_and_builds_a_fiber(self):
+        import cv2
+
+        from tests.atlas_fixture import make_processed_atlas
+
+        with tempfile.TemporaryDirectory() as folder:
+            window = self.make_window(folder)
+            engine = window.engine
+            self.assertTrue(engine.load_volume_atlas(str(make_processed_atlas(
+                Path(folder) / "atlas"))))
+            image = np.full((32, 24, 3), 120, dtype=np.uint8)
+            image[4:20, 10:14] = 240           # a bright track
+            cv2.imwrite(str(Path(folder) / "s.png"), image)
+            self.assertTrue(engine.load_single_image_file(str(Path(folder) / "s.png"), ".png"))
+            window.go_to("annotate")
+            panel = window.panels["annotate"]
+            card = panel.implants
+            self.assertIn("No fiber or prism yet", card.active.text())
+            self.assertIn("Add implant (fiber, microprism, probe)…",
+                          [c.name for c in window.registry.search("optical fiber")])
+
+            fiber = engine.add_implant("fiber", specs={"diameter_um": 100})
+            engine.add_implant("prism")
+            card.probe_card.new_probe()
+            card.refresh(select=fiber.implant_id)
+            self.assertEqual(card.list.count(), 3)
+            self.assertIn("Neuropixels", card.list.item(2).text())
+            self.assertEqual(card.implant(), fiber)
+            self.assertFalse(card.map_button.isEnabled())
+
+            # Draw by clicking; clicking the first vertex again closes it.
+            card.draw.setChecked(True)
+            card._mode("draw")
+            editor = card.editor
+            for x, y in ([10.0, 4.0], [14.0, 4.0], [14.0, 20.0], [10.0, 20.0], [10.0, 4.0]):
+                editor._clicked((x, y))
+            self.assertIsNone(editor.mode)
+            np.testing.assert_allclose(engine.implant_outline(fiber.implant_id)["points"],
+                                       [[10, 4], [14, 4], [14, 20], [10, 20]])
+            self.assertIsNotNone(editor._roi)
+            card.point.setChecked(True)
+            card._mode("point")
+            editor._clicked((12.0, 19.5))
+            self.assertEqual(engine.implant_outline(fiber.implant_id)["point"], [12.0, 19.5])
+            card.refresh()
+            self.assertTrue(card.map_button.isEnabled())
+            self.assertIn("tip marked", card.outline_state.text())
+
+            # Propose outlines the bright track from one click.
+            card.propose.setChecked(True)
+            card._mode("propose")
+            editor._clicked((12.0, 10.0))
+            proposed = np.asarray(engine.implant_outline(fiber.implant_id)["points"])
+            self.assertTrue(np.all((proposed[:, 0] >= 9) & (proposed[:, 0] <= 15)))
+            self.assertTrue(np.all((proposed[:, 1] >= 3) & (proposed[:, 1] <= 21)))
+
+            card.map_section()
+            self.assertEqual(engine.object_ctrl.obj_type, ["fiber piece"])
+            self.assertIsNone(editor._roi)
+            panel.refresh()
+            self.assertEqual(panel.mapped_list.item(0).text(), "Fiber 1 · outline · current")
+            card.build()
+            self.assertEqual(engine.object_ctrl.obj_type, ["merged fiber"])
+            card.refresh()
+            self.assertTrue(card.report.text().startswith("Tip (marked tip)"))
+            self.assertIn("built", card.list.item(0).text())
+
+            # Selecting the probe row hands over to the Probes card.
+            card.list.setCurrentRow(2)
+            self.assertTrue(card.map_button.isHidden())
+            self.assertEqual(card.probe_card.current(), "Probe 1")
+
+    @isolated_gui_test
     def test_allen_download_dialog_reuses_verified_files(self):
         import json
         from unittest.mock import patch
