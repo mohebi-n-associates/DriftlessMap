@@ -9,7 +9,7 @@ or important workflows change.
 ## Project identity
 
 - Current stable release: DriftlessMap 1.6.1. `main` now carries the 2.0
-  development preview (merged from `v2-redesign`), versioned 2.0.0aN (currently 2.0.0a19); each
+  development preview (merged from `v2-redesign`), versioned 2.0.0aN (currently 2.0.0a20); each
   feature there increments N. Plain 2.0.0 is reserved for the release that
   passes the gates in `version2_redesign.md`. Never give V2 work 1.x numbers.
 - Desktop application for histology registration, atlas mapping, probe
@@ -54,7 +54,11 @@ or important workflows change.
   `histology_gray` detect brightfield sections (`bright_background`),
   flatten their illumination (`_absorbance`) and present tissue bright on
   black, as the atlas template is; auto-registration shares them.
-  Orientations within `ORIENTATION_MARGIN` of the best outline are compared
+  Coronal/sagittal sections stay upright unless another orientation's outline
+  is better by `UPRIGHT_OUTLINE_MARGIN`; mirror pairs resolve to the
+  unflipped form (`preferred_form`); `plane_candidates[0]` carries the chosen
+  orientation, which the dialog shows and applies. Otherwise orientations
+  within `ORIENTATION_MARGIN` of the best outline are compared
   by internal anatomy (`orientation_contenders`, `choose_orientation`) on
   every few pages, with a preference for upright ones; depth is ranked in two
   passes (`DEPTH_PAGES` pages, then page by page around the best

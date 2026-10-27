@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th October 2026
+##### DriftlessMap 2.0.0a20
+
+Suggest Atlas Section keeps sections upright and unflipped unless clearly better otherwise, and shows the orientation it applies.
+
+### 27th October 2026
 ##### DriftlessMap 2.0.0a19
 
 Find atlas section ranks depth in two passes and compares close orientations on sampled pages; checked on the Allen 25 µm atlas.

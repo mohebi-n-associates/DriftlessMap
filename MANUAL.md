@@ -1,6 +1,6 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 2.0.0a19**, a development preview of
+This manual applies to **DriftlessMap 2.0.0a20**, a development preview of
 DriftlessMap 2.0 (the `main` branch, not a release). The current stable release is
 1.6.1; its desktop downloads are described in Section 2.2.
 
@@ -109,7 +109,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-DriftlessMap 2.0.0a19 requires:
+DriftlessMap 2.0.0a20 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -177,7 +177,7 @@ python -c "import driftlessmap; print(driftlessmap.__version__)"
 ```
 
 The final command prints the installed version: `1.6.1` for the stable
-release, or `2.0.0a19` for this development preview installed from the
+release, or `2.0.0a20` for this development preview installed from the
 `v2-redesign` branch.
 
 ### 2.5 Launching DriftlessMap
@@ -847,9 +847,11 @@ atlas and ranks candidate sections:
    recognised from their bright border: uneven illumination is flattened,
    and the section is compared as bright tissue on a black background, like
    the atlas template. Suggest Landmarks prepares the section the same way.
-   Orientations whose outlines match almost equally (many sections look
-   nearly the same upside down) are told apart by internal anatomy, and the
-   upright one is preferred unless another matches clearly better.
+   Coronal and sagittal sections are kept upright (dorsal side on top)
+   unless a rotated or flipped orientation matches the outline clearly
+   better (by more than 0.05); otherwise close orientations are told apart by
+   internal anatomy. Of two mirror images the unflipped one is shown: the
+   side is your choice below.
 2. Choose **Atlas > Suggest Atlas Section...**. The comparison runs in the
    background and usually takes a few seconds. Fine atlases (for example
    Allen 10 µm) are searched on a copy sampled to at most 560 voxels per side
@@ -1460,7 +1462,7 @@ region, stereotaxic estimate, depth, prism edges and face, tilt and
 warnings). Results > Export also saves fibers and prisms as `.dmapobj`
 files; importing one into another project adds it to that project's
 implants. Projects save the implants, their unmapped outlines, mapping
-records and built objects; projects from 2.0.0a19 and earlier open with no
+records and built objects; projects from 2.0.0a20 and earlier open with no
 implants.
 
 ## 13. Virus, tracer, lesion, and expression registration

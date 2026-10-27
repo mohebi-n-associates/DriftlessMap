@@ -15,6 +15,7 @@ from driftlessmap.atlas_matching import (
     best_by_plane,
     choose_orientation,
     orientation_contenders,
+    preferred_form,
     bright_background,
     histology_gray,
     hemisphere_indexes,
@@ -254,6 +255,28 @@ class OrientationChoiceTests(unittest.TestCase):
         chosen, _ = choose_orientation([(contenders[0], depth(1.20)),
                                         (contenders[1], depth(1.00))])
         self.assertEqual(chosen.orientation, flipped)
+
+
+class UprightPreferenceTests(unittest.TestCase):
+    def test_mirror_images_resolve_to_the_unflipped_upright_form(self):
+        self.assertEqual(preferred_form("coronal", Orientation(0, True)), Orientation(0, False))
+        # Neither a 180-degree turn nor its mirror is upright: keep it unflipped.
+        self.assertEqual(preferred_form("coronal", Orientation(2, True)), Orientation(2, False))
+        self.assertEqual(preferred_form("sagittal", Orientation(0, True)), Orientation(0, True))
+
+    def test_report_orientation_is_the_one_the_suggestions_use(self):
+        labels = synthetic_brain()
+        intensity = np.where(labels > 0, 120.0, 0.0)
+        for orientation_index in (0, 1, 4):
+            with self.subTest(orientation=orientation_index):
+                section, expected = fake_section(labels, "coronal", 42, orientation_index)
+                report = suggest_sections(section, labels, intensity, 25, (42, 25, 20),
+                                          angles=(0,))
+                chosen = report.plane_candidates[0].orientation
+                self.assertTrue(all(s.orientation == chosen for s in report.suggestions))
+                self.assertTrue(same_up_to_hemisphere("coronal", chosen, expected),
+                                (chosen, expected))
+                self.assertFalse(chosen.mirrored)
 
 
 class SampledSearchTests(unittest.TestCase):
