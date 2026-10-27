@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th October 2026
+##### DriftlessMap 1.13.0
+
+Pyramidal TIFFs can be read at a stored lower resolution with the Scale slider; the level is saved and restored with the project.
+
+### 27th October 2026
 ##### DriftlessMap 1.12.0
 
 The desktop application can open the 2.0 preview (Help > Open the 2.0 Preview, or `--v2`), and the preview can open the classic interface.

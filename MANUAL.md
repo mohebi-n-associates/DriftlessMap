@@ -1,6 +1,6 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 1.12.0**.
+This manual applies to **DriftlessMap 1.13.0**.
 
 DriftlessMap - Histological E-data Registration in Brain Space - is a desktop
 application for aligning rodent histology with a reference atlas, reconstructing
@@ -107,7 +107,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-DriftlessMap 1.12.0 requires:
+DriftlessMap 1.13.0 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -126,7 +126,7 @@ page. The macOS DMG (`-macOS-arm64.dmg`) is built for Apple Silicon; on an Intel
 Mac, use the developer installation below.
 The desktop builds include Python and all runtime dependencies. Windows users
 extract the entire ZIP and run `DriftlessMap.exe`; macOS users open the DMG and
-drag `DriftlessMap.app` to Applications. The 1.12.0 release is unsigned, so the
+drag `DriftlessMap.app` to Applications. The 1.13.0 release is unsigned, so the
 first launch may require Windows SmartScreen confirmation or Control-clicking
 the macOS app and choosing **Open**.
 
@@ -174,7 +174,7 @@ python -m pip --version
 python -c "import driftlessmap; print(driftlessmap.__version__)"
 ```
 
-The final command should print `1.12.0`.
+The final command should print `1.13.0`.
 
 ### 2.5 Launching DriftlessMap
 
@@ -733,6 +733,12 @@ multi-channel TIFF, and page-stack TIFF are intentionally distinct:
   again when the project reopens from the original file.
 - Several series in one file become scenes, read when first shown. They must
   share one bit depth and channel layout.
+- Pyramidal TIFFs (for example OME-TIFF whole-slide images with stored
+  sub-resolutions) open at full resolution. The **Scale** slider, shown for
+  such files as for CZI, reads a lower level instead: it snaps to the coarsest
+  stored level that keeps at least the chosen resolution. The level read is
+  saved in the project and read again when the project reopens from the
+  original file. Pyramids of page stacks are read at full resolution only.
 - Channel names and colours are read from OME-TIFF or ImageJ metadata when the
   file has them. A named channel without a stored colour gets its conventional
   colour (DAPI and Hoechst blue; GFP, YFP, FITC and 488 green; tdTomato,

@@ -270,6 +270,55 @@ class ProjectPersistenceIntegrationTests(unittest.TestCase):
             self.assertTrue(np.all(restored.image_view.current_img == 300))
 
     @isolated_gui_test
+    def test_pyramid_level_is_read_saved_and_reread(self):
+        import tifffile
+
+        from driftlessmap.app import _valid_read_scale
+
+        self.assertIsNone(_valid_read_scale("x"))
+        self.assertIsNone(_valid_read_scale(1.0))
+        self.assertIsNone(_valid_read_scale(float("nan")))
+        self.assertEqual(_valid_read_scale(0.25), 0.25)
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            source = root / "pyramid.ome.tif"
+            project = root / "pyramid.dmap"
+            data = np.random.default_rng(6).integers(0, 60000, (2, 64, 80), dtype=np.uint16)
+            with tifffile.TiffWriter(source) as tiff:
+                tiff.write(data, subifds=2, metadata={"axes": "CYX"}, tile=(16, 16))
+                tiff.write(data[:, ::2, ::2], subfiletype=1, tile=(16, 16))
+                tiff.write(data[:, ::4, ::4], subfiletype=1, tile=(16, 16))
+
+            window = self.create_window()
+            self.assertTrue(window.load_single_image_file(str(source), ".tif"))
+            window.current_img_path = str(source)
+            window._loaded_histology_signature = path_stat_signature(source)
+            view = window.image_view
+            self.assertFalse(view.scale_wrap.isHidden())
+            view.scale_slider.setValue(30)
+            view.scale_slider_released()
+            self.assertEqual(view.current_scale, 0.5)
+            self.assertEqual(view.scale_slider.value(), 50)
+            self.assertEqual(view.current_img.shape, (32, 40, 2))
+            with patch.object(
+                QFileDialog,
+                "getSaveFileName",
+                return_value=(str(project), "DriftlessMap Project (*.dmap)"),
+            ):
+                window.save_project_called(portable=False)
+
+            payload, error = load_driftlessmap_file(project, "project")
+            self.assertIsNone(error)
+            restored = self.create_window()
+            prepared = restored.prepare_project_sources(payload, str(project))
+            restored.current_project_path = str(project)
+            restored.load_project(prepared)
+            self.assertEqual(restored.image_view.image_file.scale["scene 0"], 0.5)
+            self.assertEqual(restored.image_view.current_scale, 0.5)
+            np.testing.assert_array_equal(restored.image_view.current_img,
+                                          np.moveaxis(data[:, ::2, ::2], 0, -1))
+
+    @isolated_gui_test
     def test_portable_project_streams_and_reopens_original_histology(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

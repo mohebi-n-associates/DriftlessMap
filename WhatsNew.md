@@ -3,6 +3,19 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.13.0
+
+Release date: 27 October 2026
+
+- **Read large pyramidal TIFFs at a lower resolution.** For TIFFs that store
+  sub-resolution levels (such as whole-slide OME-TIFFs), the **Scale** slider
+  now appears as it does for CZI files and reads the coarsest stored level that
+  keeps at least the chosen resolution. Files open at full resolution, as
+  before. The level read is saved in the project (through the existing image
+  scale) and read again on reopening from the original file; measurements use
+  the level's scale, as for CZI.
+- Pyramids of page stacks are still read at full resolution only.
+
 ## DriftlessMap 1.12.0
 
 Release date: 27 October 2026

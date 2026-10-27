@@ -238,6 +238,37 @@ class TiffLayoutTests(unittest.TestCase):
         for bad in (None, [], {"T": -1}, {"T": 1.5}, {"C": 0}, {"TT": 0}, {"T": True}):
             self.assertEqual(image_reader.plane_selection(bad), {}, bad)
 
+    def test_pyramid_levels_are_read_on_request(self):
+        data = np.random.default_rng(4).integers(0, 60000, (2, 64, 80), dtype=np.uint16)
+        with tempfile.TemporaryDirectory() as folder:
+            path = str(Path(folder) / "pyramid.ome.tif")
+            with tifffile.TiffWriter(path) as tiff:
+                tiff.write(data, subifds=2, metadata={"axes": "CYX"}, tile=(16, 16))
+                tiff.write(data[:, ::2, ::2], subfiletype=1, tile=(16, 16))
+                tiff.write(data[:, ::4, ::4], subfiletype=1, tile=(16, 16))
+            reader = image_reader.TIFFReader(path)
+            self.assertEqual(reader.error_index, 0)
+            self.assertTrue(reader.has_levels)
+            self.assertEqual(reader.level_scales, [1.0, 0.5, 0.25])
+            self.assertEqual(reader.data["scene 0"].shape, (64, 80, 2))
+            reader.read_data(0.3, scene_index=0)
+            self.assertEqual(reader.scale["scene 0"], 0.5)
+            np.testing.assert_array_equal(reader.data["scene 0"],
+                                          np.moveaxis(data[:, ::2, ::2], 0, -1))
+            reader.read_data(0.25, scene_index=0)
+            self.assertEqual(reader.data["scene 0"].shape, (16, 20, 2))
+            reader.read_data(None, scene_index=0)
+            self.assertEqual((reader.scale["scene 0"], reader.data["scene 0"].shape),
+                             (1.0, (64, 80, 2)))
+
+    def test_level_choice_keeps_at_least_the_requested_resolution(self):
+        scales = [1.0, 0.5, 0.25]
+        self.assertEqual(image_reader.choose_level(scales, None), 0)
+        self.assertEqual(image_reader.choose_level(scales, 1.0), 0)
+        self.assertEqual(image_reader.choose_level(scales, 0.6), 0)
+        self.assertEqual(image_reader.choose_level(scales, 0.5), 1)
+        self.assertEqual(image_reader.choose_level(scales, 0.01), 2)
+
     def test_ome_channel_names_and_colours(self):
         data = np.zeros((3, 6, 7), dtype=np.uint16)
         metadata = {"axes": "CYX", "Channel": {"Name": ["DAPI", "GFP", "Tracer"],

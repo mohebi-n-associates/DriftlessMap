@@ -6660,7 +6660,8 @@ class DriftlessMap(QMainWindow, FORM_Main):
         recipe = self.registration_input
         page = self.image_view.display_img_index
         if not self.load_single_image_file(path, os.path.splitext(path)[1].lower(),
-                                           planes=plane_selection(planes)):
+                                           planes=plane_selection(planes),
+                                           scale=self.image_view.current_scale):
             return False
         self._loaded_histology_signature = path_stat_signature(path)
         self.registration_input = recipe
@@ -6680,7 +6681,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
                                self.error_message_color)
 
     def load_single_image_file(
-        self, image_file_path, image_file_type, scene_index=None, planes=None
+        self, image_file_path, image_file_type, scene_index=None, planes=None, scale=None
     ):
         with pg.BusyCursor():
             if image_file_type == ".czi":
@@ -6725,6 +6726,9 @@ class DriftlessMap(QMainWindow, FORM_Main):
             elif image_file_type in (".tif", ".tiff"):
                 try:
                     image_file = TIFFReader(image_file_path, planes=planes)
+                    scale = _valid_read_scale(scale)
+                    if image_file.error_index == 0 and image_file.has_levels and scale:
+                        image_file.read_data(scale, scene_index=0)
                 except (IOError, OSError, IndexError, AttributeError, TypeError, ValueError):
                     self.print_message(
                         "Load TIF file failed.", self.error_message_color
@@ -8529,6 +8533,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 if not self.load_single_image_file(
                     self.current_img_path, file_extension.lower(), scene_index,
                     planes=plane_selection(img_ctrl_data.get("plane_selection")),
+                    scale=img_ctrl_data.get("image_scale"),
                 ):
                     return
                 self.image_view.load_img_ctrl_data(img_ctrl_data)
@@ -8953,6 +8958,15 @@ class DriftlessMap(QMainWindow, FORM_Main):
 # -------------------------------------------------------------
 #                    Main run
 # -------------------------------------------------------------
+def _valid_read_scale(value):
+    """A saved read scale in (0, 1], or None to read full resolution."""
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return None
+    return value if np.isfinite(value) and 0 < value < 1 else None
+
+
 def main():
     app = QApplication(sys.argv)
     app.setApplicationName("DriftlessMap")

@@ -284,10 +284,9 @@ class ImageView(QObject):
         else:
             self.scene_wrap.setVisible(False)
 
-        if not self.image_file.is_czi:
-            self.scale_wrap.setVisible(False)
-        else:
-            self.scale_wrap.setVisible(True)
+        # CZI files read at any scale; pyramidal TIFFs at their stored levels.
+        self.scale_wrap.setVisible(
+            bool(self.image_file.is_czi or getattr(self.image_file, 'has_levels', False)))
 
         # set data to curves
         self.set_curve_widgets()  # get reasonable table
@@ -407,7 +406,7 @@ class ImageView(QObject):
     def scale_slider_released(self):
         if self.image_file is None:
             return
-        if self.image_file.is_czi:
+        if self.image_file.is_czi or getattr(self.image_file, 'has_levels', False):
             self.clear_image_stacks()
             scale = self.scale_slider.value()
             scale_val = scale * 0.01
@@ -416,6 +415,12 @@ class ImageView(QObject):
                 self.image_file.read_data(scale_val, scene_index)
                 self.current_img = copy.deepcopy(self.image_file.data['scene %d' % scene_index])
                 self.current_scale = self.image_file.scale['scene {}'.format(scene_index)]
+                if not self.image_file.is_czi:
+                    # Snap to the pyramid level that was read.
+                    self.scale_slider.blockSignals(True)
+                    self.scale_slider.setValue(max(1, int(round(self.current_scale * 100))))
+                    self.scale_slider.blockSignals(False)
+                    self.scale_label.setText('{}%'.format(self.scale_slider.value()))
 
                 self.img_size = self.current_img.shape[:2]
                 for i in range(self.image_file.n_channels):

@@ -209,6 +209,24 @@ TIFF_ERRORS = {
 PAGE_AXES = ("Z", "T", "I", "Q", "R", "H", "E", "A", "V", "L", "P", "M")
 
 
+def level_scales(series):
+    """Scale of each pyramid level of a tifffile series relative to level 0."""
+    levels = getattr(series, "levels", None) or [series]
+    axes = series.axes
+    if "X" not in axes:
+        return [1.0]
+    width = series.shape[axes.index("X")]
+    return [level.shape[level.axes.index("X")] / float(width) for level in levels]
+
+
+def choose_level(scales, scale):
+    """The coarsest level that still has at least ``scale`` resolution."""
+    if scale is None:
+        return 0
+    candidates = [index for index, value in enumerate(scales) if value >= scale - 1e-6]
+    return candidates[-1] if candidates else 0
+
+
 def plane_selection(value):
     """Validate a chosen plane per fixed TIFF axis, e.g. ``{"T": 3}``.
 
@@ -280,7 +298,9 @@ class TIFFReader(object):
     dimension; one further axis (Z preferred, then T and others) is browsed as
     pages; any remaining extra axes are fixed at the plane chosen in
     ``planes`` (default 0), recorded in :attr:`fixed_axes` with their sizes
-    in :attr:`fixed_axis_sizes`, and reported in :attr:`notes`. Several series become scenes, read when first shown, and
+    in :attr:`fixed_axis_sizes`, and reported in :attr:`notes`. Pyramidal
+    single-plane files can be read at a lower level (:attr:`has_levels`,
+    :meth:`read_data` with ``scale``); :attr:`scale` records the level read. Several series become scenes, read when first shown, and
     must share one bit depth and channel layout. Channel names and colours
     come from OME or ImageJ metadata when present.
     """
@@ -309,6 +329,8 @@ class TIFFReader(object):
         self.page_axis = None
         self.fixed_axes = {}
         self.fixed_axis_sizes = {}
+        self.level_scales = [1.0]
+        self.has_levels = False
         _set_channel_metadata(self, [], [])
 
         with tifffile.TiffFile(image_file_path) as tiff_file:
@@ -325,6 +347,10 @@ class TIFFReader(object):
             layout = self._interpret(image, axes)
             if layout is None:
                 return
+            self.level_scales = level_scales(series)
+            # Lower levels of paged stacks are not offered: pages and levels
+            # would have to be browsed together.
+            self.has_levels = len(self.level_scales) > 1 and self.n_pages == 1
             for other in tiff_file.series[1:]:
                 other_layout = self._layout_of(other.dtype, other.axes, other.shape)
                 if other_layout != self._layout_key:
@@ -432,16 +458,23 @@ class TIFFReader(object):
         return np.ascontiguousarray(image)
 
     def read_data(self, scale=None, scene_index=0):
-        """Read the series of ``scene_index`` (TIFF scenes are full size)."""
+        """Read the series of ``scene_index``.
+
+        Without pyramid levels, scenes are full size. With them, ``scale``
+        picks the coarsest level that still has at least that resolution.
+        """
         indices = range(self.n_scenes) if scene_index is None else [scene_index]
         for index in indices:
             key = "scene {}".format(index)
-            if key in self.data:
-                continue
             with tifffile.TiffFile(self.path) as tiff_file:
                 series = tiff_file.series[index]
-                image = np.asarray(series.asarray())
-                axes = series.axes
+                scales = level_scales(series) if self.has_levels else [1.0]
+                level = choose_level(scales, scale)
+                if key in self.data and abs(self.scale.get(key, 1.0) - scales[level]) < 1e-9:
+                    continue
+                source = (getattr(series, "levels", None) or [series])[level]
+                image = np.asarray(source.asarray())
+                axes = source.axes
             notes, fixed = list(self.notes), dict(self.fixed_axes)
             sizes = dict(self.fixed_axis_sizes)
             layout = self._interpret(image, axes)
@@ -449,7 +482,7 @@ class TIFFReader(object):
             if layout is None:
                 raise ValueError(self.error_message or "The TIFF series could not be read.")
             self.data[key] = layout
-            self.scale[key] = 1.0
+            self.scale[key] = scales[level]
 
 
 class ImagesReader(object):

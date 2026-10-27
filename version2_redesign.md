@@ -58,8 +58,12 @@ Done, with tests:
   `--v2`, `DRIFTLESSMAP_INTERFACE=v2` or Help > Open the 2.0 Preview starts
   the preview, and the preview's Help menu opens the classic interface.
 
-Not yet done (see Sections 3, 6 and 15): source retention and staleness,
-undo for mapping and building, and pyramid levels.
+- Pyramidal single-plane TIFFs can be read at a stored lower level with the
+  Scale slider; the level is saved through the existing image scale.
+
+Not yet done (see Sections 3, 6 and 15): source retention and staleness, and
+undo for mapping and building. These need the Section 16 decisions on
+annotation identity and the undo memory budget first.
 
 ## Contents
 
