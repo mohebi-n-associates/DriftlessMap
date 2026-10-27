@@ -46,11 +46,16 @@ Done, with tests:
 - End-to-end check on a 16-bit DAPI/GFP/tracer OME-TIFF: DAPI-only match and
   landmarks, review, warp, probe mapping, build, save and reopen.
 
+- Find atlas section names the anatomical side: where the animal's right is
+  in the section (coronal, horizontal), or the Right or Left hemisphere
+  (sagittal).
+- Actions that cannot run are disabled with the reason; empty canvas and
+  inspector states explain what to load.
+
 Not yet done (see Sections 3, 6 and 15): source retention and staleness,
-undo for mapping and building, named anatomical sides for the hemisphere
-choice, series/Z/T selectors beyond the page slider, pyramid levels, a fully
-themed restyle of adopted 1.x controls, and a desktop bundle that starts the
-preview.
+undo for mapping and building, series/Z/T selectors beyond the page slider,
+pyramid levels, a fully themed restyle of adopted 1.x controls, and a desktop
+bundle that starts the preview.
 
 ## Contents
 

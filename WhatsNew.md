@@ -3,6 +3,18 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.8.0
+
+Release date: 27 October 2026
+
+- **Find atlas section names the side.** Instead of "As suggested" and
+  "Other hemisphere", the choice now says where the animal's right side is in
+  your section (for example "toward the left of your section") for coronal
+  and horizontal sections, and names the Right or Left hemisphere for
+  sagittal sections. The result of each choice is unchanged. This applies to
+  Atlas > Suggest Atlas Section... in the stable interface and to Find atlas
+  section in the 2.0 preview.
+
 ## DriftlessMap 1.7.0 (2.0 preview update)
 
 Release date: 27 October 2026

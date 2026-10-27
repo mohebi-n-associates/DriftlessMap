@@ -470,6 +470,44 @@ def mirrored_tilt(plane, tilt_degrees):
     raise ValueError("Unknown atlas plane {!r}.".format(plane))
 
 
+# Screen edge of the displayed atlas slice on the animal's right. The view's
+# ML axis increases toward the right (positive ML is right, as in the probe
+# exports); coronal slices show it along columns, horizontal slices along rows,
+# which grow downward. Sagittal slices contain no ML axis.
+RIGHT_EDGE = {"coronal": "right", "horizontal": "bottom"}
+_EDGES = {"right": (slice(None), -1), "left": (slice(None), 0),
+          "bottom": (-1, slice(None)), "top": (0, slice(None))}
+_OPPOSITE_EDGE = {"right": "left", "left": "right", "bottom": "top", "top": "bottom"}
+
+
+def animal_right_edge(plane, orientation):
+    """The edge of the section, as shown before ``orientation`` is applied, that
+    lies toward the animal's right once the section is oriented like the atlas.
+
+    Returns "left", "right", "top" or "bottom", or None for sagittal views.
+    """
+    edge = RIGHT_EDGE.get(plane)
+    if edge is None:
+        return None
+    rows, cols = np.mgrid[0:3, 0:5].astype(float)
+    oriented_rows, oriented_cols = orientation.apply(rows), orientation.apply(cols)
+    far, near = _EDGES[edge], _EDGES[_OPPOSITE_EDGE[edge]]
+    d_row = oriented_rows[far].mean() - oriented_rows[near].mean()
+    d_col = oriented_cols[far].mean() - oriented_cols[near].mean()
+    if abs(d_col) > abs(d_row):
+        return "right" if d_col > 0 else "left"
+    return "bottom" if d_row > 0 else "top"
+
+
+def sagittal_side(index, midline):
+    """The hemisphere of a sagittal slice: "right", "left" or "midline"."""
+    if midline is None:
+        return None
+    if abs(index - midline) < 0.5:
+        return "midline"
+    return "right" if index > midline else "left"
+
+
 def mirror_hemisphere(plane, orientation):
     """The orientation showing the other hemisphere (coronal/horizontal).
 

@@ -1,6 +1,6 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 1.7.0**.
+This manual applies to **DriftlessMap 1.8.0**.
 
 DriftlessMap - Histological E-data Registration in Brain Space - is a desktop
 application for aligning rodent histology with a reference atlas, reconstructing
@@ -107,7 +107,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-DriftlessMap 1.7.0 requires:
+DriftlessMap 1.8.0 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -126,7 +126,7 @@ page. The macOS DMG (`-macOS-arm64.dmg`) is built for Apple Silicon; on an Intel
 Mac, use the developer installation below.
 The desktop builds include Python and all runtime dependencies. Windows users
 extract the entire ZIP and run `DriftlessMap.exe`; macOS users open the DMG and
-drag `DriftlessMap.app` to Applications. The 1.7.0 release is unsigned, so the
+drag `DriftlessMap.app` to Applications. The 1.8.0 release is unsigned, so the
 first launch may require Windows SmartScreen confirmation or Control-clicking
 the macOS app and choosing **Open**.
 
@@ -174,7 +174,7 @@ python -m pip --version
 python -c "import driftlessmap; print(driftlessmap.__version__)"
 ```
 
-The final command should print `1.7.0`.
+The final command should print `1.8.0`.
 
 ### 2.5 Launching DriftlessMap
 
@@ -499,7 +499,6 @@ Known limits of the preview:
 - Mapping and building keep their 1.x behaviour: mapping moves section marks
   to the atlas, and building replaces parts with the object (Edit parts
   restores them). The interface says so before you act.
-- The hemisphere choice in Find atlas section still uses the 1.x wording.
 - A few adopted 1.x controls keep their dark styling in the light theme.
 - The desktop application bundles still start the stable interface.
 
@@ -825,8 +824,13 @@ atlas and ranks candidate sections:
    sections. Each shows your section on the left and the atlas on the right,
    with its depth and cutting-angle tilt.
 4. Pick the candidate that looks best. Brain outlines are left-right
-   symmetric, so the hemisphere cannot be detected: choose **Other
-   hemisphere** if the section comes from the other side.
+   symmetric, so the side cannot be detected; choose it from what you know
+   about the tissue, such as the injected or implanted side. For coronal and
+   horizontal sections the choice says where the **animal's right side** is
+   in your section as currently shown (for example "toward the left of your
+   section"). For sagittal sections it names the **Right** or **Left
+   hemisphere**. The atlas convention is that positive medio-lateral
+   coordinates are on the animal's right, as in the probe exports.
 5. Leave **Apply the suggested cutting-angle tilt** on to use the tilt, and
    **Rotate/flip the histology to match** on to orient the image. Rotating
    the histology resets its landmarks.

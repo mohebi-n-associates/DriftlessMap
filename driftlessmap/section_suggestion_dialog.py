@@ -18,11 +18,13 @@ from PyQt6.QtWidgets import (
 )
 
 from .atlas_matching import (
+    animal_right_edge,
     atlas_slice,
     histology_gray,
     mirror_hemisphere,
     mirrored_index,
     mirrored_tilt,
+    sagittal_side,
     tilted_slice,
 )
 
@@ -92,16 +94,19 @@ class SectionSuggestionDialog(QDialog):
 
         self.hemisphere_group = QButtonGroup(self)
         hemisphere_row = QHBoxLayout()
-        hemisphere_row.addWidget(QLabel("Hemisphere:"))
-        for number, text in enumerate(("As suggested", "Other hemisphere")):
-            button = QRadioButton(text)
+        self.hemisphere_label = QLabel(
+            "Hemisphere:" if self.plane == "sagittal" else "Animal's right side:")
+        hemisphere_row.addWidget(self.hemisphere_label)
+        for number in range(2):
+            button = QRadioButton()
             button.setChecked(number == 0)
             self.hemisphere_group.addButton(button, number)
             hemisphere_row.addWidget(button)
         hemisphere_row.addStretch(1)
         hemisphere_note = QLabel(
-            "Brain outlines are left-right symmetric, so the hemisphere cannot "
-            "be detected automatically."
+            "Brain outlines are left-right symmetric, so the side cannot be detected "
+            "automatically. Choose it from what you know about the tissue, for "
+            "example the injected or implanted side."
         )
         hemisphere_note.setWordWrap(True)
 
@@ -123,8 +128,10 @@ class SectionSuggestionDialog(QDialog):
             item = QListWidgetItem(QIcon(_pixmap(_pair(section, atlas))), self._label(suggestion))
             item.setData(Qt.ItemDataRole.UserRole, suggestion)
             self.list.addItem(item)
+        self.list.currentItemChanged.connect(lambda *_args: self._name_sides())
         if self.list.count():
             self.list.setCurrentRow(0)
+        self._name_sides()
         self.list.itemDoubleClicked.connect(lambda _item: self.accept())
 
         buttons = QDialogButtonBox(
@@ -148,6 +155,28 @@ class SectionSuggestionDialog(QDialog):
         if tuple(tilt) == (0.0, 0.0):
             return atlas_slice(self.intensity_volume, self.plane, index)
         return tilted_slice(self.intensity_volume, self.plane, index, tilt, self.pivot)
+
+    def _side_texts(self, suggestion):
+        """Names of the two hemisphere choices for ``suggestion``."""
+        if self.plane == "sagittal":
+            midline = self.report.midline
+            if midline is None:
+                return "As suggested", "Mirror-image slice"
+            sides = (sagittal_side(suggestion.index, midline),
+                     sagittal_side(mirrored_index(suggestion.index, midline), midline))
+            return tuple("Midline" if side == "midline" else "{} hemisphere".format(
+                side.capitalize()) for side in sides)
+        orientations = (suggestion.orientation,
+                        mirror_hemisphere(self.plane, suggestion.orientation))
+        return tuple("toward the {} of your section".format(
+            animal_right_edge(self.plane, orientation)) for orientation in orientations)
+
+    def _name_sides(self):
+        item = self.list.currentItem()
+        if item is None:
+            return
+        for number, text in enumerate(self._side_texts(item.data(Qt.ItemDataRole.UserRole))):
+            self.hemisphere_group.button(number).setText(text)
 
     def _label(self, suggestion):
         if self.plane == "sagittal" and self.report.midline is not None:

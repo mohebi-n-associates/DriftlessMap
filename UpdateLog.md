@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th October 2026
+##### DriftlessMap 1.8.0
+
+**Suggest Atlas Section** names the anatomical side: where the animal's right is in the section, or the Right or Left hemisphere for sagittal sections.
+
+### 27th October 2026
 ##### DriftlessMap 1.7.0
 
 In the 2.0 preview, actions that cannot run yet are greyed out with the reason in their tooltip, Match and Register show what to load first, and empty views and side panels are replaced by short guidance.

@@ -8,7 +8,7 @@ or important workflows change.
 
 ## Project identity
 
-- Current release: DriftlessMap 1.7.0.
+- Current release: DriftlessMap 1.8.0.
 - Desktop application for histology registration, atlas mapping, probe
   reconstruction, anatomical annotation, and data export.
 - Python package: `driftlessmap`; GUI: PyQt6 + pyqtgraph/OpenGL.
@@ -38,7 +38,9 @@ or important workflows change.
 - `driftlessmap/atlas_matching.py`: GUI-free suggestion of the atlas plane,
   orientation and slice that match a histology section (silhouette search on
   slices exactly as `AtlasView` displays them). Coronal/horizontal matches are
-  ambiguous up to a left-right mirror; the user chooses the hemisphere.
+  ambiguous up to a left-right mirror; the user chooses the side, which the
+  dialog names anatomically (`animal_right_edge`, `sagittal_side`; positive
+  ML is the animal's right).
   `section_suggestion_dialog.py` shows ranked candidates for confirmation and
   `DriftlessMap.apply_section_suggestion` sets the view, page, tilt and
   histology orientation. Tilted matches use `tilted_slice`, which must stay
