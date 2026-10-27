@@ -9,7 +9,7 @@ or important workflows change.
 ## Project identity
 
 - Current stable release: DriftlessMap 1.6.1. `main` now carries the 2.0
-  development preview (merged from `v2-redesign`), versioned 2.0.0aN (currently 2.0.0a15); each
+  development preview (merged from `v2-redesign`), versioned 2.0.0aN (currently 2.0.0a16); each
   feature there increments N. Plain 2.0.0 is reserved for the release that
   passes the gates in `version2_redesign.md`. Never give V2 work 1.x numbers.
 - Desktop application for histology registration, atlas mapping, probe
@@ -47,7 +47,10 @@ or important workflows change.
   slices exactly as `AtlasView` displays them). Coronal/horizontal matches are
   ambiguous up to a left-right mirror; the user chooses the side, which the
   dialog names anatomically (`animal_right_edge`, `sagittal_side`; positive
-  ML is the animal's right).
+  ML is the animal's right). `suggest_sections` searches a copy sampled by
+  `search_factor` (at most `SEARCH_MAX_SIDE` voxels per side) and refines
+  each suggested page at full resolution (`_refine_page`); suggested and
+  candidate indexes are always full-resolution pages.
   `section_suggestion_dialog.py` shows ranked candidates for confirmation and
   `DriftlessMap.apply_section_suggestion` sets the view, page, tilt and
   histology orientation. Tilted matches use `tilted_slice`, which must stay

@@ -3,6 +3,19 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.0.0a16
+
+Development preview, 27 October 2026 (`v2-implants` branch; not a release)
+
+- **Faster Find atlas section on fine atlases.** The search now runs on a
+  copy of the atlas sampled to at most 560 voxels per side (a 10 µm Allen
+  atlas is searched at 30 µm), because every comparison is made on a small
+  normalised image anyway. Each suggested depth is then refined page by page
+  at full resolution, so suggestions are still full-resolution pages. On a
+  synthetic atlas the size of Allen 10 µm the search went from 49 s to 6 s
+  with the same suggested page. Atlases of 25 µm and coarser are searched
+  exactly as before.
+
 ## DriftlessMap 2.0.0a15
 
 Development preview, 27 October 2026 (`v2-implants` branch; not a release)

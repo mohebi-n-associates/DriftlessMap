@@ -13,7 +13,7 @@ reliable for choosing the plane and orientation. Silhouettes alone barely
 change with depth, so depth is refined from internal anatomy separately.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import cv2
 import numpy as np
@@ -23,6 +23,11 @@ PLANES = ("coronal", "sagittal", "horizontal")
 CANVAS = 192
 FIT = 160
 MAX_SLICES_PER_PLANE = 240
+# Every comparison shrinks both images to a CANVAS-pixel square, so the
+# search runs on an atlas sampled to at most this many voxels per side (a
+# 10 um Allen atlas is searched at 30 um) and only the final depth is refined
+# page by page at full resolution.
+SEARCH_MAX_SIDE = 560
 
 
 @dataclass(frozen=True)
@@ -367,7 +372,7 @@ def _rotation_z(theta):
     return np.array([[c, -s, 0], [s, c, 0], [0, 0, 1]])
 
 
-def tilted_slice(volume, plane, index, tilt_degrees, pivot, order=1):
+def tilted_slice(volume, plane, index, tilt_degrees, pivot, order=1, step=1):
     """Sample the tilted slice ``AtlasView`` shows for these rotation controls.
 
     ``tilt_degrees`` is the (horizontal, vertical) pair of the view's rotation
@@ -405,7 +410,9 @@ def tilted_slice(volume, plane, index, tilt_degrees, pivot, order=1):
     first = rotation @ np.array(axes[0], dtype=float)
     second = rotation @ np.array(axes[1], dtype=float)
     origin = o_rot + rotation @ (o_val - o_rot)
-    rows, columns = np.meshgrid(np.arange(shape[0]), np.arange(shape[1]), indexing="ij")
+    # ``step`` samples every step-th row and column (the same slice, coarser).
+    rows, columns = np.meshgrid(np.arange(0, shape[0], step), np.arange(0, shape[1], step),
+                                indexing="ij")
     coordinates = (origin[:, None, None] + first[:, None, None] * rows
                    + second[:, None, None] * columns)
     return map_coordinates(volume, coordinates, order=order, mode="constant", cval=0)
@@ -556,41 +563,98 @@ def _distinct(indexes, count, spacing):
     return chosen
 
 
+def search_factor(shape, max_side=SEARCH_MAX_SIDE):
+    """The sampling step that keeps every side of ``shape`` within ``max_side``."""
+    return max(1, int(np.ceil(max(shape) / float(max_side))))
+
+
+def _refine_page(histology, label_volume, intensity_volume, plane, orientation,
+                 index, tilt, pivot, factor):
+    """The full-resolution page near coarse page ``index * factor`` that matches best.
+
+    The pages between coarse samples are read from the full-resolution
+    volume, at the tilt chosen for the coarse page.
+    """
+    if factor == 1:
+        return index * factor
+    h_mask, h_gray = _prepared_section(histology, orientation)
+    length = plane_length(label_volume.shape, plane)
+    centre = index * factor
+    best = None
+    for page in range(max(0, centre - factor + 1), min(length, centre + factor)):
+        if tuple(tilt) == (0, 0):
+            labels = atlas_slice(label_volume, plane, page)
+            intensity = atlas_slice(intensity_volume, plane, page)
+        else:
+            labels = tilted_slice(label_volume, plane, page, tilt, pivot, order=0,
+                                  step=factor)
+            intensity = tilted_slice(intensity_volume, plane, page, tilt, pivot, order=1,
+                                     step=factor)
+        if tuple(tilt) == (0, 0):
+            labels, intensity = labels[::factor, ::factor], intensity[::factor, ::factor]
+        measures = _measure(h_mask, h_gray, labels, intensity)
+        if measures is None:
+            continue
+        # Neighbouring pages differ little: a plain sum ranks them.
+        total = float(sum(measures))
+        if best is None or total > best[0]:
+            best = (total, page)
+    return best[1] if best is not None else centre
+
+
 def suggest_sections(histology, label_volume, intensity_volume, midline, pivot,
                      max_suggestions=6, depth_candidates=4,
-                     angles=(-6, -3, 0, 3, 6), progress=None):
+                     angles=(-6, -3, 0, 3, 6), progress=None,
+                     max_side=SEARCH_MAX_SIDE):
     """Plane, orientation, depth and tilt suggestions for one section.
 
     ``midline`` is the sagittal page index of the midline (for searching one
     hemisphere); ``pivot`` is the current (coronal, sagittal, horizontal) page
-    indices of the atlas view.
+    indices of the atlas view. Large atlases are searched on a sampled copy
+    (see :data:`SEARCH_MAX_SIDE`); the suggested pages are full-resolution
+    pages.
     """
     def stage(start, end):
         if progress is None:
             return None
         return lambda fraction: progress(start + (end - start) * fraction)
 
-    planes = best_by_plane(search_planes(histology, label_volume, progress=stage(0.0, 0.3)))
+    factor = search_factor(label_volume.shape, max_side)
+    labels = np.ascontiguousarray(label_volume[::factor, ::factor, ::factor])
+    intensity = np.ascontiguousarray(intensity_volume[::factor, ::factor, ::factor])
+    coarse_midline = None if midline is None else midline / factor
+    coarse_pivot = tuple(value / factor for value in pivot)
+
+    planes = best_by_plane(search_planes(histology, labels, progress=stage(0.0, 0.25)))
     best = planes[0]
-    length = plane_length(label_volume.shape, best.plane)
+    length = plane_length(labels.shape, best.plane)
     depths = rank_depths(
-        histology, label_volume, intensity_volume, best.plane, best.orientation,
-        indexes=hemisphere_indexes(best.plane, length, midline), progress=stage(0.3, 0.6),
+        histology, labels, intensity, best.plane, best.orientation,
+        indexes=hemisphere_indexes(best.plane, length, coarse_midline),
+        progress=stage(0.25, 0.5),
     )
     spacing = max(2, length // 100)
     chosen = _distinct([match.index for match in depths], depth_candidates, spacing)
     tilts = refine_tilt(
-        histology, label_volume, intensity_volume, best.plane, best.orientation,
-        indexes=chosen, pivot=pivot, angles=angles, progress=stage(0.6, 1.0),
+        histology, labels, intensity, best.plane, best.orientation,
+        indexes=chosen, pivot=coarse_pivot, angles=angles, progress=stage(0.5, 0.8),
     )
-    suggestions, seen = [], set()
+    picked, seen = [], set()
     for match in tilts:
         if match.index in seen:
             continue  # the best tilt of each depth
         seen.add(match.index)
-        suggestions.append(Suggestion(best.plane, best.orientation, match.index,
-                                      match.tilt_degrees, match.score, match.silhouette))
-        if len(suggestions) == max_suggestions:
+        picked.append(match)
+        if len(picked) == max_suggestions:
             break
-    return SuggestionReport(tuple(planes), tuple(suggestions),
+    suggestions = []
+    for count, match in enumerate(picked, start=1):
+        page = _refine_page(histology, label_volume, intensity_volume, best.plane,
+                            best.orientation, match.index, match.tilt_degrees, pivot, factor)
+        suggestions.append(Suggestion(best.plane, best.orientation, page,
+                                      match.tilt_degrees, match.score, match.silhouette))
+        if progress is not None:
+            progress(0.8 + 0.2 * count / len(picked))
+    planes = tuple(replace(candidate, index=candidate.index * factor) for candidate in planes)
+    return SuggestionReport(planes, tuple(suggestions),
                             midline if best.plane == "sagittal" else None)

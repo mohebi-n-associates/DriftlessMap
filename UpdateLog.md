@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th October 2026
+##### DriftlessMap 2.0.0a16
+
+Find atlas section searches fine atlases on a sampled copy and refines the pages at full resolution (about 8x faster at 10 µm).
+
+### 27th October 2026
 ##### DriftlessMap 2.0.0a15
 
 Implants card in the 2.0 preview: outline (draw or propose), mark the tip or bottom, map, build and report fibers and microprisms.
