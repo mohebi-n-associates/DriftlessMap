@@ -3,6 +3,21 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.0.0a20
+
+Development preview, 27 October 2026 (`v2-implants` branch; not a release)
+
+- **Fixed: the suggestion dialog showed and offered the wrong orientation.**
+  Its header, section thumbnails and "Rotate/flip the histology" checkbox used
+  the orientation with the best outline alone (for example "rotate 180°"),
+  while the suggestions used the orientation chosen afterwards. The report
+  now carries the chosen orientation, so the dialog shows and applies the
+  same one.
+- **Upright by default.** Coronal and sagittal sections are kept upright
+  unless a rotated or flipped orientation matches the outline better by more
+  than 0.05; smaller differences are noise. Of two mirror images the
+  unflipped one is used, since the hemisphere is chosen in the dialog.
+
 ## DriftlessMap 2.0.0a19
 
 Development preview, 27 October 2026 (`v2-implants` branch; not a release)

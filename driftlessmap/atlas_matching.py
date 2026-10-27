@@ -36,6 +36,11 @@ ORIENTATION_MARGIN = 0.03
 # (dorsal side still on top) is preferred: sections are rarely mounted upside
 # down.
 UPRIGHT_PREFERENCE = 0.05
+# Coronal and sagittal sections are kept upright (dorsal on top) unless a
+# rotated or flipped orientation matches the outline better by more than
+# this; smaller outline differences are noise.
+UPRIGHT_OUTLINE_MARGIN = 0.05
+UPRIGHT_PLANES = ("coronal", "sagittal")
 # Pages per orientation used to tell close orientations apart.
 CONTENDER_PAGES = 150
 # Depth ranking: pages compared in the first pass, and how many of the best
@@ -642,6 +647,17 @@ class SuggestionReport:
         return self.plane_candidates[0].silhouette - self.plane_candidates[1].silhouette
 
 
+def preferred_form(plane, orientation):
+    """Of an orientation and its hemisphere mirror, the upright, unflipped one.
+
+    Mirror images match equally well (the brain is nearly symmetric), and the
+    user chooses the hemisphere in the suggestion dialog anyway.
+    """
+    options = {orientation, mirror_hemisphere(plane, orientation)}
+    return min(options, key=lambda o: (plane in UPRIGHT_PLANES and not o.upright,
+                                       o.mirrored, o.quarter_turns))
+
+
 def orientation_contenders(candidates, best, margin=ORIENTATION_MARGIN, limit=4):
     """Best candidate of each distinct orientation of ``best``'s plane whose
     outline match is within ``margin`` of the best (mirror images, which the
@@ -755,7 +771,13 @@ def suggest_sections(histology, label_volume, intensity_volume, midline, pivot,
     best = planes[0]
     length = plane_length(labels.shape, best.plane)
     indexes = list(hemisphere_indexes(best.plane, length, coarse_midline))
-    contenders = orientation_contenders(candidates, best)
+    upright = [c for c in candidates if c.plane == best.plane and c.orientation.upright]
+    if (best.plane in UPRIGHT_PLANES and upright
+            and upright[0].silhouette >= best.silhouette - UPRIGHT_OUTLINE_MARGIN):
+        contenders = [upright[0]]
+        best = upright[0]
+    else:
+        contenders = orientation_contenders(candidates, best)
     if len(contenders) > 1:
         # Tell the orientations apart on every few pages; rank the winner's
         # pages one by one below.
@@ -772,6 +794,8 @@ def suggest_sections(histology, label_volume, intensity_volume, midline, pivot,
                 ranked.append((contender, depths))
         if ranked:
             best = choose_orientation(ranked)[0]
+    # Of two mirror images (the hemisphere choice), show the unflipped one.
+    best = replace(best, orientation=preferred_form(best.plane, best.orientation))
     # Depth in two passes: every few pages, then each page around the best
     # few (scores are compared within one pass only).
     stride = max(1, len(indexes) // DEPTH_PAGES)
@@ -811,6 +835,9 @@ def suggest_sections(histology, label_volume, intensity_volume, midline, pivot,
                                       match.tilt_degrees, match.score, match.silhouette))
         if progress is not None:
             progress(0.8 + 0.2 * count / len(picked))
+    # The report's plane candidate carries the orientation actually chosen,
+    # which the dialog shows and applies.
+    planes = [best] + [candidate for candidate in planes if candidate.plane != best.plane]
     planes = tuple(replace(candidate, index=candidate.index * factor) for candidate in planes)
     return SuggestionReport(planes, tuple(suggestions),
                             midline if best.plane == "sagittal" else None)
