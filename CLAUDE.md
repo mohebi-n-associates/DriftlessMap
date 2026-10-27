@@ -71,6 +71,12 @@ or important workflows change.
   processed atlas loading, display, coordinate transforms.
 - `driftlessmap/triangulation.py`: deterministic piecewise-affine registration,
   topology, validation, transforms, and warping.
+- `driftlessmap/mapping_records.py` and `transactions.py`: Phase 3
+  groundwork (see `phase3_mapping_design.md`), not yet used by mapping.
+  `MappingLedger` keeps one record per mapped unit (section, kind, probe)
+  with the kept section marks and the registration fingerprint, for
+  out-of-date detection; `TransactionHistory` is the bounded (10 steps,
+  500 MB, compressed masks) undo history for Map, Update, Make parts, Build.
 - `driftlessmap/landmarks.py`: `LandmarkModel` owns paired landmark lists,
   topology, the cached registration and label items (the `DriftlessMap`
   attributes of the same names delegate to it), plus `.dmaptri` validation.
