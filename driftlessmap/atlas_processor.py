@@ -594,7 +594,6 @@ class AtlasProcessor(QDialog):
     def _pick_file(self, title):
         """Return the chosen absolute path, or ``None`` if cancelled."""
         file_options = QFileDialog.Option(0)
-        file_options |= QFileDialog.Option.DontUseNativeDialog
         start = self.folder_path or ""
         path = QFileDialog.getOpenFileName(self, title, start, options=file_options)[0]
         if not path:

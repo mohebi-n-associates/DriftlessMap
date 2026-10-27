@@ -15,6 +15,7 @@ import numpy as np
 
 from driftlessmap.persistence import load_driftlessmap_file
 from driftlessmap.provenance import path_stat_signature
+from driftlessmap.project_io import CELL_COUNT_SLOTS
 
 if PROJECT_TEST_CHILD:
     from PyQt6.QtWidgets import QApplication, QFileDialog
@@ -97,6 +98,8 @@ class ProjectPersistenceIntegrationTests(unittest.TestCase):
             window.image_view.img_stacks.image_list[1].setVisible(False)
             window.site_face = 2
             window.tool_box.merge_sites = True
+            from driftlessmap.registration_input import RegistrationInput
+            window.registration_input = RegistrationInput.from_channels((2,), ["Blue"])
 
             with patch.object(
                 QFileDialog,
@@ -107,7 +110,9 @@ class ProjectPersistenceIntegrationTests(unittest.TestCase):
 
             payload, error = load_driftlessmap_file(project, "project")
             self.assertIsNone(error)
-            self.assertEqual(payload["project_schema_version"], 2)
+            self.assertEqual(payload["project_schema_version"], 3)
+            self.assertEqual(payload["registration_input"]["mode"], "channels")
+            self.assertEqual(payload["registration_input"]["channels"], [2])
             self.assertEqual(payload["probe_planning"]["site_face"], 2)
             self.assertTrue(payload["probe_planning"]["merge_sites"])
             reference = payload["histology_provenance"]["reference"]
@@ -122,6 +127,12 @@ class ProjectPersistenceIntegrationTests(unittest.TestCase):
             restored.current_project_path = str(project)
             restored.load_project(prepared)
 
+            self.assertEqual(restored.registration_input.channels, (2,))
+            self.assertEqual(restored.registration_input.channel_names, ("Blue",))
+            # A schema-2 project was registered with Legacy input.
+            old_payload = dict(payload, project_schema_version=2)
+            old_payload.pop("registration_input")
+            self.assertEqual(restored._saved_registration_input(old_payload).mode, "legacy")
             np.testing.assert_array_equal(restored.image_view.current_img, expected)
             self.assertEqual(payload["img_ctrl_data"]["image_scale"], 1.0)
             self.assertEqual(restored.image_view.current_scale, 1.0)
@@ -150,6 +161,524 @@ class ProjectPersistenceIntegrationTests(unittest.TestCase):
                 ],
                 fresh_counts,
             )
+
+    @isolated_gui_test
+    def test_six_channel_uint16_section_displays_saves_and_reopens(self):
+        import tifffile
+
+        from driftlessmap.registration_input import RegistrationInput
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            source = root / "six.tif"
+            project = root / "six.dmap"
+            rng = np.random.default_rng(5)
+            data = rng.integers(0, 60000, (6, 24, 30), dtype=np.uint16)
+            tifffile.imwrite(source, data, imagej=True, metadata={"axes": "CYX"})
+
+            window = self.create_window()
+            self.assertTrue(window.load_single_image_file(str(source), ".tif"))
+            view = window.image_view
+            self.assertEqual(view.current_img.shape, (24, 30, 6))
+            self.assertEqual(view.current_img.dtype, np.uint16)
+            self.assertEqual(sum(w.isVisibleTo(view.chn_widget_wrap)
+                                 for w in view.chn_widget_list), 6)
+            view.set_channel_visible(False, 5)
+            self.assertFalse(view.img_stacks.image_list[5].isVisible())
+            window.current_img_path = str(source)
+            window._loaded_histology_signature = path_stat_signature(source)
+            window.registration_input = RegistrationInput.from_channels((4,), ["Channel 5"])
+            window.atlas_tri_inside_data = [[1.0, 2.0], [3.0, 4.0], [5.0, 1.0]]
+            window.histo_tri_inside_data = [[2.0, 3.0], [6.0, 8.0], [10.0, 2.0]]
+            self.assertEqual(window.registration_review_state(), "not reviewed")
+            self.assertTrue(window.mark_registration_reviewed())
+            self.assertEqual(window.registration_review_state(), "reviewed")
+            with patch.object(
+                QFileDialog,
+                "getSaveFileName",
+                return_value=(str(project), "DriftlessMap Project (*.dmap)"),
+            ):
+                window.save_project_called(portable=False)
+
+            payload, error = load_driftlessmap_file(project, "project")
+            self.assertIsNone(error)
+            source.unlink()  # reopen from the embedded raster
+            restored = self.create_window()
+            with patch.object(restored, "_ask_for_verified_input", return_value=None):
+                prepared = restored.prepare_project_sources(payload, str(project))
+            restored.current_project_path = str(project)
+            restored.load_project(prepared)
+            np.testing.assert_array_equal(
+                restored.image_view.current_img, np.moveaxis(data, 0, -1))
+            self.assertEqual(restored.image_view.channel_visible[:6],
+                             [True] * 5 + [False])
+            self.assertEqual(restored.registration_input.channels, (4,))
+            self.assertEqual(restored.atlas_tri_inside_data, window.atlas_tri_inside_data)
+            self.assertEqual(restored.registration_review_state(), "reviewed")
+            restored.histo_tri_inside_data[0] = [2.5, 3.0]
+            self.assertEqual(restored.registration_review_state(), "not reviewed")
+            old_payload = dict(payload, project_schema_version=2)
+            self.assertEqual(
+                restored._saved_registration_review(old_payload).state("x" * 64),
+                "not recorded")
+
+    @isolated_gui_test
+    def test_chosen_time_plane_is_saved_and_reread_from_the_source(self):
+        import tifffile
+
+        from driftlessmap.registration_input import RegistrationInput
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            source = root / "tzcyx.tif"
+            project = root / "planes.dmap"
+            data = np.zeros((3, 4, 2, 12, 14), dtype=np.uint16)
+            for t in range(3):
+                data[t] = 100 * (t + 1)
+            data[2, 1] += 7  # Z plane 2 of time point 3
+            tifffile.imwrite(source, data, imagej=True, metadata={"axes": "TZCYX"})
+
+            window = self.create_window()
+            self.assertTrue(window.load_single_image_file(str(source), ".tif"))
+            window.current_img_path = str(source)
+            window._loaded_histology_signature = path_stat_signature(source)
+            window.registration_input = RegistrationInput.from_channels((1,), ["Channel 2"])
+            self.assertTrue(window.select_image_planes({"T": 2}))
+            self.assertEqual(window.image_view.image_file.fixed_axes, {"T": 2})
+            self.assertEqual(window.registration_input.channels, (1,))
+            window.image_view.page_ctrl.page_slider.setValue(1)
+            self.assertTrue(np.all(window.image_view.current_img == 307))
+            self.assertFalse(window.select_image_planes({"T": 3}))
+            self.assertEqual(window.image_view.image_file.fixed_axes, {"T": 2})
+            with patch.object(
+                QFileDialog,
+                "getSaveFileName",
+                return_value=(str(project), "DriftlessMap Project (*.dmap)"),
+            ):
+                window.save_project_called(portable=False)
+
+            payload, error = load_driftlessmap_file(project, "project")
+            self.assertIsNone(error)
+            self.assertEqual(payload["img_ctrl_data"]["plane_selection"], {"T": 2})
+            restored = self.create_window()
+            prepared = restored.prepare_project_sources(payload, str(project))
+            restored.current_project_path = str(project)
+            restored.load_project(prepared)
+            self.assertEqual(restored.image_view.image_file.fixed_axes, {"T": 2})
+            self.assertTrue(np.all(restored.image_view.current_img == 307))
+            restored.image_view.page_ctrl.page_slider.setValue(0)
+            self.assertTrue(np.all(restored.image_view.current_img == 300))
+
+    @isolated_gui_test
+    def test_pyramid_level_is_read_saved_and_reread(self):
+        import tifffile
+
+        from driftlessmap.app import _valid_read_scale
+
+        self.assertIsNone(_valid_read_scale("x"))
+        self.assertIsNone(_valid_read_scale(1.0))
+        self.assertIsNone(_valid_read_scale(float("nan")))
+        self.assertEqual(_valid_read_scale(0.25), 0.25)
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            source = root / "pyramid.ome.tif"
+            project = root / "pyramid.dmap"
+            data = np.random.default_rng(6).integers(0, 60000, (2, 64, 80), dtype=np.uint16)
+            with tifffile.TiffWriter(source) as tiff:
+                tiff.write(data, subifds=2, metadata={"axes": "CYX"}, tile=(16, 16))
+                tiff.write(data[:, ::2, ::2], subfiletype=1, tile=(16, 16))
+                tiff.write(data[:, ::4, ::4], subfiletype=1, tile=(16, 16))
+
+            window = self.create_window()
+            self.assertTrue(window.load_single_image_file(str(source), ".tif"))
+            window.current_img_path = str(source)
+            window._loaded_histology_signature = path_stat_signature(source)
+            view = window.image_view
+            self.assertFalse(view.scale_wrap.isHidden())
+            view.scale_slider.setValue(30)
+            view.scale_slider_released()
+            self.assertEqual(view.current_scale, 0.5)
+            self.assertEqual(view.scale_slider.value(), 50)
+            self.assertEqual(view.current_img.shape, (32, 40, 2))
+            with patch.object(
+                QFileDialog,
+                "getSaveFileName",
+                return_value=(str(project), "DriftlessMap Project (*.dmap)"),
+            ):
+                window.save_project_called(portable=False)
+
+            payload, error = load_driftlessmap_file(project, "project")
+            self.assertIsNone(error)
+            restored = self.create_window()
+            prepared = restored.prepare_project_sources(payload, str(project))
+            restored.current_project_path = str(project)
+            restored.load_project(prepared)
+            self.assertEqual(restored.image_view.image_file.scale["scene 0"], 0.5)
+            self.assertEqual(restored.image_view.current_scale, 0.5)
+            np.testing.assert_array_equal(restored.image_view.current_img,
+                                          np.moveaxis(data[:, ::2, ::2], 0, -1))
+
+    @isolated_gui_test
+    def test_mapping_records_and_object_origin_are_saved(self):
+        from driftlessmap.mapping_records import MappingLedger, derivation, is_identifier
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            source = root / "section.png"
+            project = root / "records.dmap"
+            cv2.imwrite(str(source), np.full((20, 24, 3), 80, dtype=np.uint8))
+            window = self.create_window()
+            first_section = window.section_id
+            self.assertTrue(window.load_single_image_file(str(source), ".png"))
+            self.assertNotEqual(window.section_id, first_section)
+            self.assertTrue(is_identifier(window.section_id))
+            window.current_img_path = str(source)
+            window._loaded_histology_signature = path_stat_signature(source)
+            fingerprint = window.current_registration_fingerprint()
+            record = window.mapping_ledger.record(
+                window.section_id, "probe", {"points": [[1.0, 2.0], [5.0, 9.0]]},
+                fingerprint, "not reviewed", "2026-10-27T00:00:00Z", probe="A")
+            o = window.object_ctrl
+            # A built drawing with two parts of known origin: Edit parts
+            # restores each part's own origin.
+            other = window.mapping_ledger.record(
+                window.section_id, "drawing", {"points": [[0, 0], [3, 3]]},
+                fingerprint, "not reviewed", "t")
+            o.add_object("A", "merged drawing",
+                         {"object_type": "drawing", "data": [np.zeros((2, 3)), np.ones((2, 3))],
+                          "pieces_names": ["A - piece", "A - piece"]},
+                         window.obj_display_mode,
+                         derivation=derivation([record]) + derivation([other]),
+                         piece_derivation=[derivation([record]), derivation([other])])
+            with patch.object(
+                QFileDialog,
+                "getSaveFileName",
+                return_value=(str(project), "DriftlessMap Project (*.dmap)"),
+            ):
+                window.save_project_called(portable=False)
+
+            payload, error = load_driftlessmap_file(project, "project")
+            self.assertIsNone(error)
+            restored = self.create_window()
+            prepared = restored.prepare_project_sources(payload, str(project))
+            restored.current_project_path = str(project)
+            restored.load_project(prepared)
+            self.assertEqual(restored.section_id, window.section_id)
+            self.assertEqual({r.unit_id for r in restored.mapping_ledger.records()},
+                             {record.unit_id, other.unit_id})
+            ro = restored.object_ctrl
+            self.assertEqual(ro.obj_derivation, [derivation([record]) + derivation([other])])
+            ro.current_obj_index = 0
+            ro.unmerge_objects()
+            self.assertEqual(ro.obj_type, ["drawing piece", "drawing piece"])
+            self.assertEqual(ro.obj_derivation, [derivation([record]), derivation([other])])
+
+            # Projects from before mapping records: a new section, no records,
+            # objects without origin.
+            older, _ = load_driftlessmap_file(project, "project")
+            for key in ("section_id", "mapping_records"):
+                older.pop(key)
+            older["object_data"].pop("obj_derivation")
+            older["object_data"].pop("obj_piece_derivation")
+            old_window = self.create_window()
+            prepared = old_window.prepare_project_sources(older, str(project))
+            old_window.load_project(prepared)
+            self.assertTrue(is_identifier(old_window.section_id))
+            self.assertEqual(len(old_window.mapping_ledger), 0)
+            self.assertEqual(old_window.object_ctrl.obj_derivation, [[]])
+            self.assertIsInstance(old_window.mapping_ledger, MappingLedger)
+
+    @isolated_gui_test
+    def test_mapping_keeps_marks_and_parts_record_their_origin(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window = self._window_with_volume_atlas(root)
+            source = root / "section.png"
+            project = root / "kept.dmap"
+            image = np.zeros((32, 24, 3), dtype=np.uint8)
+            image[4:28, 4:20] = 200
+            cv2.imwrite(str(source), image)
+            self.assertTrue(window.load_single_image_file(str(source), ".png"))
+            window.current_img_path = str(source)
+            window._loaded_histology_signature = path_stat_signature(source)
+
+            def click_cells(points):
+                window.working_img_data["img-cells"] = [list(p) for p in points]
+                window.working_img_data["cell_size"] = [5] * len(points)
+                window.working_img_data["cell_symbol"] = ["o"] * len(points)
+                window.working_img_data["cell_layer_index"] = [0] * len(points)
+                window.working_img_data["cell_count"][0] = len(points)
+
+            click_cells([[8.0, 8.0], [12.0, 20.0]])
+            window.transfer_to_atlas_clicked()
+            self.assertTrue(window.h2a_transferred)
+            window.transform_accept()
+            mapped = [list(p) for p in window.working_atlas_data["atlas-cells"]]
+            self.assertEqual(len(mapped), 2)
+            # The live list is emptied as before; the marks are kept.
+            self.assertEqual(window.working_img_data["img-cells"], [])
+            record = window.mapping_ledger.get(window.section_id, "cells")
+            self.assertEqual(record.revision, 1)
+            np.testing.assert_array_equal(record.source["points"], [[8, 8], [12, 20]])
+            xs, ys = window._kept_marks_item.getData()
+            self.assertEqual(sorted(zip(xs.tolist(), ys.tolist())), [(8.0, 8.0), (12.0, 20.0)])
+            self.assertIs(window.atlas_marks_origin("cells"), record)
+
+            # Saved before making parts, the atlas marks keep their origin.
+            with patch.object(
+                QFileDialog,
+                "getSaveFileName",
+                return_value=(str(project), "DriftlessMap Project (*.dmap)"),
+            ):
+                window.save_project_called(portable=False)
+            payload, error = load_driftlessmap_file(project, "project")
+            self.assertIsNone(error)
+            restored = self.create_window()
+            self.assertTrue(restored.load_volume_atlas(window.volume_atlas_path))
+            prepared = restored.prepare_project_sources(payload, str(project))
+            restored.load_project(prepared)
+            self.assertEqual(restored.atlas_marks_origin("cells").unit_id, record.unit_id)
+            self.assertEqual(len(restored._kept_marks_item.getData()[0]), 2)
+
+            parts = window.make_pieces_of("cells")
+            self.assertEqual(len(parts), 1)
+            o = window.object_ctrl
+            self.assertEqual(o.obj_derivation[parts[0]], [[record.unit_id, 1]])
+
+            # Mapping more cells replaces the unit; making parts again
+            # replaces the earlier part instead of adding a second.
+            click_cells([[8.0, 8.0], [12.0, 20.0], [16.0, 10.0]])
+            window.transform_accept()
+            again = window.mapping_ledger.get(window.section_id, "cells")
+            self.assertEqual((again.unit_id, again.revision), (record.unit_id, 2))
+            self.assertEqual(len(window.mapping_ledger), 1)
+            parts = window.make_pieces_of("cells")
+            self.assertEqual(o.obj_type, ["cells piece"])
+            self.assertEqual(o.obj_derivation[parts[0]], [[record.unit_id, 2]])
+            self.assertEqual(len(o.obj_data[0]), 3)
+
+            # Atlas marks edited after mapping lose their origin.
+            window.working_img_data["img-probe"] = [[6.0, 6.0], [10.0, 26.0]]
+            window.transform_accept(probe="A")
+            window.working_atlas_data["atlas-probe"].append([1.0, 1.0])
+            self.assertIsNone(window.atlas_marks_origin("probe"))
+            window.working_img_data["img-probe"] = [[7.0, 6.0], [11.0, 26.0]]
+            window.transform_accept(probe="B")
+            self.assertIsNotNone(window.mapping_ledger.get(window.section_id, "probe", "A"))
+            self.assertIsNotNone(window.mapping_ledger.get(window.section_id, "probe", "B"))
+            self.assertEqual(len(window.mapping_ledger), 3)
+
+    @isolated_gui_test
+    def test_mappings_and_parts_go_out_of_date_with_the_registration(self):
+        from driftlessmap.mapping_records import CURRENT, REGISTRATION_CHANGED
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window = self._window_with_volume_atlas(root)
+            source = root / "section.png"
+            image = np.zeros((32, 24, 3), dtype=np.uint8)
+            image[4:28, 4:20] = 200
+            cv2.imwrite(str(source), image)
+            self.assertTrue(window.load_single_image_file(str(source), ".png"))
+            window.current_img_path = str(source)
+            window.working_img_data["img-contour"] = [[6.0, 6.0], [18.0, 6.0], [18.0, 26.0]]
+            window.transfer_to_atlas_clicked()
+            window.transform_accept()
+            part = window.make_pieces_of("contour")[0]
+            record = window.mapping_ledger.get(window.section_id, "contour")
+            self.assertEqual(window.mapping_status(record), CURRENT)
+            self.assertEqual(window.object_mapping_status(part), CURRENT)
+
+            # Changing the atlas page changes the registration.
+            view = window.atlas_view
+            page = view.current_coronal_index
+            view.current_coronal_index = page + 1
+            self.assertEqual(window.mapping_status(record), REGISTRATION_CHANGED)
+            self.assertEqual(window.out_of_date_objects(), [part])
+            # Display changes do not count.
+            window.image_view.set_channel_visible(False, 1)
+            view.current_coronal_index = page
+            self.assertEqual(window.out_of_date_objects(), [])
+
+            view.current_coronal_index = page + 1
+            exported = root / "contour.dmapobj"
+            window.object_ctrl.current_obj_index = part
+            with patch.object(QFileDialog, "getSaveFileName",
+                              return_value=(str(exported), "")), \
+                    patch.object(window, "get_object_export_provenance", return_value={}):
+                window.save_current_object()
+            data, error = load_driftlessmap_file(exported, "object")
+            self.assertIsNone(error)
+            self.assertEqual(data["mapping_status"], REGISTRATION_CHANGED)
+
+            # Loading another section leaves parts of the earlier one current.
+            other = root / "other.png"
+            cv2.imwrite(str(other), image)
+            self.assertTrue(window.load_single_image_file(str(other), ".png"))
+            self.assertEqual(window.object_mapping_status(part), CURRENT)
+            self.assertEqual(window.kept_marks(), [])
+
+    @isolated_gui_test
+    def test_update_mapping_and_edit_marks(self):
+        from driftlessmap.mapping_records import CURRENT, REMAPPED
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window = self._window_with_volume_atlas(root)
+            source = root / "section.png"
+            image = np.zeros((32, 24, 3), dtype=np.uint8)
+            image[4:28, 4:20] = 200
+            cv2.imwrite(str(source), image)
+            self.assertTrue(window.load_single_image_file(str(source), ".png"))
+            window.current_img_path = str(source)
+            drawing = [[6.0, 6.0], [18.0, 20.0], [10.0, 26.0]]
+            window.working_img_data["img-drawing"] = [list(p) for p in drawing]
+            window.transfer_to_atlas_clicked()
+            window.transform_accept()
+            first_atlas = [list(p) for p in window.working_atlas_data["atlas-drawing"]]
+            part = window.make_pieces_of("drawing")[0]
+            record = window.mapping_ledger.get(window.section_id, "drawing")
+            view = window.atlas_view
+            view.current_coronal_index += 1
+            self.assertEqual(window.out_of_date_objects(), [part])
+
+            # Unmapped cells on the section are not touched by the update.
+            window.working_img_data["img-cells"] = [[9.0, 9.0]]
+            window.working_img_data["cell_size"] = [5]
+            window.working_img_data["cell_symbol"] = ["o"]
+            window.working_img_data["cell_layer_index"] = [0]
+            updated = window.update_mapping(record.unit_id)
+            self.assertEqual((updated.unit_id, updated.revision), (record.unit_id, 2))
+            self.assertEqual(window.mapping_status(updated), CURRENT)
+            self.assertEqual(window.working_img_data["img-cells"], [[9.0, 9.0]])
+            self.assertEqual(window.working_img_data["img-drawing"], [])
+            self.assertEqual(window.working_atlas_data["atlas-cells"], [])
+            np.testing.assert_allclose(window.working_atlas_data["atlas-drawing"], first_atlas)
+            self.assertEqual(window.object_mapping_status(part), REMAPPED)
+            parts = window.make_pieces_of("drawing")
+            self.assertEqual(window.object_ctrl.obj_type.count("drawing piece"), 1)
+            self.assertEqual(window.object_mapping_status(parts[0]), CURRENT)
+
+            # Edit parts on a build made before the update restores the old
+            # part; building again leaves it out instead of using both.
+            window.working_img_data["img-contour"] = [[6.0, 6.0], [18.0, 6.0], [18.0, 26.0]]
+            for key in ("img-cells", "cell_size", "cell_symbol", "cell_layer_index"):
+                window.working_img_data[key] = []
+            window.transform_accept()
+            window.make_pieces_of("contour")
+            window.merge_contour()
+            contour = window.mapping_ledger.get(window.section_id, "contour")
+            window.update_mapping(contour.unit_id)
+            window.make_pieces_of("contour")
+            o = window.object_ctrl
+            o.current_obj_index = o.obj_type.index("merged contour")
+            o.unmerge_objects()
+            self.assertEqual(o.obj_type.count("contour piece"), 2)
+            window.merge_contour()
+            self.assertEqual(o.obj_type.count("contour piece"), 0)
+            built = o.obj_type.index("merged contour")
+            self.assertEqual(o.obj_derivation[built], [[contour.unit_id, 2]])
+            self.assertEqual(window.object_mapping_status(built), CURRENT)
+            # Contours built by earlier versions kept no part names.
+            o.add_object("old", "merged contour",
+                         {"object_type": "contour", "data": [np.zeros((3, 3))]},
+                         window.obj_display_mode)
+            o.current_obj_index = len(o.obj_name) - 1
+            o.unmerge_objects()
+            self.assertEqual(o.obj_name[-1], "old - piece")
+            o.delete_objects([len(o.obj_name) - 1])
+
+            # Edit marks: refused while unmapped marks of that kind exist.
+            window.working_img_data["img-drawing"] = [[1.0, 1.0]]
+            self.assertFalse(window.edit_mapped_marks(record.unit_id))
+            window.working_img_data["img-drawing"] = []
+            self.assertTrue(window.edit_mapped_marks(record.unit_id))
+            self.assertEqual(window.working_img_data["img-drawing"], drawing)
+
+            def overlay_count():
+                return len(window._kept_marks_item.getData()[0])
+
+            def kept(kinds):
+                return sum(len(r.source["points"]) for r in window.kept_marks()
+                           if r.kind in kinds)
+
+            # The drawing being edited is no longer shown as kept.
+            self.assertEqual(overlay_count(), kept({"contour"}))
+            window.working_img_data["img-drawing"][0] = [7.0, 7.0]
+            window.transform_accept()
+            again = window.mapping_ledger.get(window.section_id, "drawing")
+            self.assertEqual((again.unit_id, again.revision), (record.unit_id, 3))
+            self.assertEqual(again.source["points"][0].tolist(), [7.0, 7.0])
+            self.assertEqual(overlay_count(), kept({"contour", "drawing"}))
+
+            # Records of a section that is no longer loaded cannot be changed.
+            other = root / "other.png"
+            cv2.imwrite(str(other), image)
+            self.assertTrue(window.load_single_image_file(str(other), ".png"))
+            self.assertIsNone(window.update_mapping(record.unit_id))
+            self.assertFalse(window.edit_mapped_marks(record.unit_id))
+
+    @isolated_gui_test
+    def test_map_parts_and_build_undo_and_redo_together(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window = self._window_with_volume_atlas(root)
+            source = root / "section.png"
+            image = np.zeros((32, 24, 3), dtype=np.uint8)
+            image[4:28, 4:20] = 200
+            cv2.imwrite(str(source), image)
+            self.assertTrue(window.load_single_image_file(str(source), ".png"))
+            history = window.undo_history
+            self.assertIsNone(history.undo_label())
+            contour = [[6.0, 6.0], [18.0, 6.0], [18.0, 26.0]]
+            window.working_img_data["img-contour"] = [list(p) for p in contour]
+            window.transfer_to_atlas_clicked()
+            window.transform_accept()
+            self.assertEqual(history.undo_label(), "Map contour")
+            window.sync_mapping_undo_actions()
+            self.assertEqual(window.actionUndo_Mapping.text(), "Undo Map contour")
+            mapped = [list(p) for p in window.working_atlas_data["atlas-contour"]]
+            window.make_object_pieces()
+            self.assertEqual(history.undo_label(), "Make parts")
+            window.merge_contour()
+            self.assertEqual(history.undo_label(), "Build contours")
+            o = window.object_ctrl
+            self.assertEqual(o.obj_type, ["merged contour"])
+
+            # Undo Build restores the part and its origin.
+            self.assertTrue(window.undo_mapping_step())
+            self.assertEqual(o.obj_type, ["contour piece"])
+            record = window.mapping_ledger.get(window.section_id, "contour")
+            self.assertEqual(o.obj_derivation, [[[record.unit_id, 1]]])
+            # Undo Make parts restores the atlas marks.
+            self.assertTrue(window.undo_mapping_step())
+            self.assertEqual(o.obj_type, [])
+            np.testing.assert_allclose(window.working_atlas_data["atlas-contour"], mapped)
+            self.assertIsNotNone(window.atlas_marks_origin("contour"))
+            # Undo Map restores the section's marks and removes the record.
+            self.assertTrue(window.undo_mapping_step())
+            self.assertEqual(window.working_img_data["img-contour"], contour)
+            self.assertEqual(window.working_atlas_data["atlas-contour"], [])
+            self.assertEqual(len(window.mapping_ledger), 0)
+            self.assertEqual(len(window._kept_marks_item.getData()[0]), 0)
+            self.assertFalse(window.undo_mapping_step())
+
+            # Redo replays all three, in order.
+            for label in ("Map contour", "Make parts", "Build contours"):
+                self.assertEqual(history.redo_label(), label)
+                self.assertTrue(window.redo_mapping_step())
+            self.assertEqual(o.obj_type, ["merged contour"])
+            self.assertEqual(len(window.mapping_ledger), 1)
+
+            # A new action clears redo; an action that changes nothing is not
+            # recorded; loading a section starts a fresh history.
+            window.undo_mapping_step()
+            window.merge_contour()
+            self.assertIsNone(history.redo_label())
+            window.make_object_pieces()
+            self.assertEqual(history.undo_label(), "Build contours")
+            self.assertTrue(window.load_single_image_file(str(source), ".png"))
+            self.assertIsNone(history.undo_label())
 
     @isolated_gui_test
     def test_portable_project_streams_and_reopens_original_histology(self):
@@ -685,7 +1214,7 @@ class ProjectPersistenceIntegrationTests(unittest.TestCase):
             self.assertEqual(
                 [link for link in window.layer_ctrl.layer_link if "atlas" in link], []
             )
-            self.assertEqual(window.working_atlas_data["cell_count"], [0] * 5)
+            self.assertEqual(window.working_atlas_data["cell_count"], [0] * CELL_COUNT_SLOTS)
 
     @isolated_gui_test
     def test_vertical_probe_is_drawn_at_its_ap_position_in_sagittal_view(self):
@@ -743,8 +1272,14 @@ class ProjectPersistenceIntegrationTests(unittest.TestCase):
         )
         self.assertEqual(merged["atlas-probe"], [[1, 2]])
         self.assertNotIn("retired-key", merged)
-        self.assertEqual(merged["cell_count"], [0] * 5)
+        from driftlessmap.project_io import CELL_COUNT_SLOTS
+
+        self.assertEqual(merged["cell_count"], [0] * CELL_COUNT_SLOTS)
         self.assertEqual(merged["ruler_path"], [])
+        # Five-entry counts from 1.x projects are kept and padded.
+        old_counts = DriftlessMap._with_defaults(defaults, {"cell_count": [1, 2, 3, 4, 5]})
+        self.assertEqual(old_counts["cell_count"][:5], [1, 2, 3, 4, 5])
+        self.assertEqual(len(old_counts["cell_count"]), CELL_COUNT_SLOTS)
 
     @isolated_gui_test
     def test_registration_is_built_once_per_landmark_state(self):

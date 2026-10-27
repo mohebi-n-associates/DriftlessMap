@@ -2,6 +2,8 @@ import os
 import sys
 from os.path import dirname, realpath, join
 import copy
+import hashlib
+from contextlib import contextmanager
 from pathlib import Path
 import tempfile
 
@@ -28,6 +30,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import QSize, QTimer, Qt
 from PyQt6.QtGui import (
+    QAction,
     QIcon,
     QKeySequence,
     QPainter,
@@ -93,12 +96,23 @@ from .triangulation import (
     warp_image_piecewise,
 )
 
+from .interfaces import start_interface
+from .transactions import TransactionHistory
+from .mapping_records import (
+    MappingLedger,
+    derivation,
+    derivation_status,
+    is_identifier,
+    is_out_of_date,
+    new_identifier,
+)
 from .image_reader import (
     EmbeddedImageReader,
     HISTOLOGY_IMAGE_FILTER,
     ImageReader,
     ImagesReader,
     TIFFReader,
+    plane_selection,
     read_bitmap,
 )
 
@@ -145,11 +159,21 @@ from .atlas_matching import suggest_sections
 from .auto_registration import propose_landmarks
 from .background import run_in_background
 from .section_suggestion_dialog import SectionSuggestionDialog
+from .registration_channels_dialog import RegistrationChannelsDialog
+from . import registration_input
+from .registration_review import (
+    REVIEWED,
+    RegistrationReview,
+    registration_fingerprint,
+)
 from .landmarks import LANDMARK_FIELDS, LandmarkModel, triangulation_payload_error
 from .project_io import (
+    CELL_COUNT_SLOTS,
+    PROJECT_SCHEMA_VERSION,
     default_working_atlas_data,
     default_working_img_data,
     object_file_names,
+    padded_cell_count,
     prefingerprint_inputs,
     with_defaults,
 )
@@ -179,6 +203,25 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.save_path = self.home_path
         self.current_project_path = None
         self.project_created_at = None
+        # Channels used by Suggest Atlas Section and Propose Landmarks; None
+        # until chosen (multichannel images) or defaulted (RGB, one channel).
+        self.registration_input = None
+        # The user's review of the current registration, and whether the last
+        # mapping to the atlas used a reviewed registration.
+        self.suggested_landmarks = None
+        self.registration_review = RegistrationReview()
+        self.mapping_review_state = None
+        # Phase 3 mapping records: the loaded section's identity (new for
+        # every load) and one record per mapped unit of marks.
+        self.section_id = new_identifier()
+        self.mapping_ledger = MappingLedger()
+        # kind -> [unit_id, revision, digest of the atlas marks it produced]
+        self.atlas_mark_origin = {}
+        # Units whose kept marks are back on the section for editing.
+        self.editing_units = set()
+        # Undo for Map, Update mapping, Make parts and Build (not saved).
+        self.undo_history = TransactionHistory()
+        self._transaction_depth = 0
         self.atlas_provenance = None
         self.histology_provenance = None
         self._portable_source_directories = []
@@ -515,6 +558,21 @@ class DriftlessMap(QMainWindow, FORM_Main):
         )
         self.actionUndo.triggered.connect(self.undo_called)
         self.actionRedo.triggered.connect(self.redo_called)
+        # Undo for Map, Update mapping, Make parts and Build; their text names
+        # the step. The 2.0 preview has its own commands for these.
+        self.actionUndo_Mapping = QAction("Undo Mapping Step", self)
+        self.actionUndo_Mapping.setObjectName("actionUndo_Mapping")
+        self.actionUndo_Mapping.setShortcut(QKeySequence("Ctrl+Alt+Z"))
+        self.actionRedo_Mapping = QAction("Redo Mapping Step", self)
+        self.actionRedo_Mapping.setObjectName("actionRedo_Mapping")
+        self.actionRedo_Mapping.setShortcut(QKeySequence("Ctrl+Alt+Shift+Z"))
+        for action, handler in ((self.actionUndo_Mapping, self.undo_mapping_step),
+                                (self.actionRedo_Mapping, self.redo_mapping_step)):
+            action.setProperty("classic_only", True)
+            action.triggered.connect(lambda _checked=False, h=handler: h())
+            self.menuEdit.insertAction(None, action)
+        self.menuEdit.aboutToShow.connect(self.sync_mapping_undo_actions)
+        self.sync_mapping_undo_actions()
         self.actionClear.triggered.connect(self.clear_all_layers)
 
         # atlas menu related
@@ -530,6 +588,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.actionSwitch_Atlas.triggered.connect(self.switch_atlas)
         self.actionSuggest_Atlas_Section.triggered.connect(self.suggest_atlas_section)
         self.actionPropose_Landmarks.triggered.connect(self.propose_registration_landmarks)
+        self.actionRegistration_Channels.triggered.connect(self.choose_registration_channels)
         self.actionBregma_Picker.setCheckable(True)
         self.actionBregma_Picker.triggered.connect(self.pick_bregma)
         self.actionCreate_Slice_Layer.triggered.connect(self.process_slice)
@@ -585,6 +644,12 @@ class DriftlessMap(QMainWindow, FORM_Main):
 
         # about menu related
         self.actionAbout_HERBS.triggered.connect(self.about_driftlessmap_info)
+        self.actionOpen_Preview = QAction("Open the 2.0 Preview", self)
+        self.actionOpen_Preview.setObjectName("actionOpen_Preview")
+        # The 2.0 preview offers its own way back; it does not list this.
+        self.actionOpen_Preview.setProperty("classic_only", True)
+        self.actionOpen_Preview.triggered.connect(self.open_preview_interface)
+        self.menuHelp.insertAction(self.actionAbout_HERBS, self.actionOpen_Preview)
 
         self.init_tool_bar()
         self.init_side_bar()
@@ -1253,8 +1318,8 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 self.working_atlas_data[da_key] = []
             else:
                 self.working_atlas_data[da_key] = None
-        self.working_img_data["cell_count"] = [0 for _ in range(5)]
-        self.working_atlas_data["cell_count"] = [0 for _ in range(5)]
+        self.working_img_data["cell_count"] = [0] * CELL_COUNT_SLOTS
+        self.working_atlas_data["cell_count"] = [0] * CELL_COUNT_SLOTS
         self.remove_h2a_transferred_layers()
         self.remove_a2h_transferred_layers()
 
@@ -1452,15 +1517,12 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 self.working_img_data["cell_size"] = current_data["size"]
                 self.working_img_data["cell_symbol"] = current_data["symbol"]
                 self.working_img_data["cell_layer_index"] = current_data["index"]
-                self.working_img_data["cell_count"] = current_data["count"]
+                self.working_img_data["cell_count"] = padded_cell_count(current_data["count"])
                 self.image_view.img_stacks.image_dict[layer_link].setData(
                     pos=np.asarray(self.working_img_data[layer_link]),
                     symbol=self.working_img_data["cell_symbol"],
                 )
-                for i in range(5):
-                    self.tool_box.cell_count_val_list[i].setText(
-                        str(self.working_img_data["cell_count"][i])
-                    )
+                self.tool_box.update_cell_count_label(self.working_img_data["cell_count"])
             elif layer_link == "img-drawing":
                 self.working_img_data[layer_link] = current_data["data"]
                 if current_data["closed"]:
@@ -1645,7 +1707,6 @@ class DriftlessMap(QMainWindow, FORM_Main):
         else:
             file_path = self.atlas_img_path
         file_options = QFileDialog.Option(0)
-        file_options |= QFileDialog.Option.DontUseNativeDialog
         file_dialog = QFileDialog()
         file_dialog.setFileMode(QFileDialog.FileMode.ExistingFiles)
         image_file_path = file_dialog.getOpenFileName(
@@ -1761,6 +1822,116 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 "Current Slice is saved successfully.", self.normal_color
             )
 
+    def _histology_channels(self):
+        image_file = self.image_view.image_file
+        names = list(getattr(image_file, "channel_name", []) or [])
+        count = int(np.asarray(self.image_view.current_img).shape[2]) \
+            if np.asarray(self.image_view.current_img).ndim == 3 else 1
+        names += ["Channel {}".format(i + 1) for i in range(len(names), count)]
+        return names[:count], bool(getattr(image_file, "is_rgb", False))
+
+    def current_registration_fingerprint(self):
+        """Fingerprint of the registration inputs a review applies to."""
+        view = self.atlas_view
+        plane = self.atlas_display
+        pages = {"coronal": view.current_coronal_index,
+                 "sagittal": view.current_sagital_index,
+                 "horizontal": view.current_horizontal_index}
+        tilts = dict(zip(("coronal", "sagittal", "horizontal"), view.get_atlas_angles()))
+        image = self.image_view.current_img
+        return registration_fingerprint(
+            self.atlas_tri_inside_data, self.histo_tri_inside_data,
+            self.atlas_tri_onside_data, self.histo_tri_onside_data,
+            plane, pages.get(plane), tilts.get(plane, ()),
+            np.shape(image) if image is not None else (),
+        )
+
+    def registration_review_state(self):
+        """"reviewed", "not reviewed" or "not recorded" for the registration."""
+        return self.registration_review.state(self.current_registration_fingerprint())
+
+    def mark_registration_reviewed(self):
+        """Record that the user reviewed the current landmarks and warp."""
+        if len(self.atlas_tri_inside_data) < 3 or (
+            len(self.atlas_tri_inside_data) != len(self.histo_tri_inside_data)
+        ):
+            self.print_message(
+                "Place at least three landmark pairs before marking the "
+                "registration as reviewed.",
+                self.error_message_color,
+            )
+            return False
+        self.registration_review = RegistrationReview(
+            self.current_registration_fingerprint(), utc_now_iso())
+        self.print_message(
+            "Registration marked as reviewed. Editing landmarks or the atlas "
+            "plane clears the review.",
+            self.normal_color,
+        )
+        return True
+
+    def _saved_registration_review(self, p_dict):
+        if int(p_dict.get("project_schema_version", 1)) < 3:
+            return RegistrationReview(recorded=False)
+        try:
+            return RegistrationReview.from_dict(p_dict.get("registration_review"))
+        except (TypeError, ValueError):
+            return RegistrationReview(recorded=False)
+
+    def _saved_registration_input(self, p_dict):
+        """The saved recipe; projects before schema 3 used Legacy input."""
+        if int(p_dict.get("project_schema_version", 1)) < 3:
+            return registration_input.RegistrationInput.legacy()
+        try:
+            return registration_input.RegistrationInput.from_dict(
+                p_dict.get("registration_input"))
+        except (TypeError, ValueError) as exc:
+            self.print_message(
+                "The saved registration channels could not be used ({}); choose "
+                "them again.".format(exc),
+                self.reminder_color,
+            )
+            return None
+
+    def choose_registration_channels(self):
+        """Ask which channels automatic registration uses; True if chosen."""
+        if self.image_view.current_img is None:
+            self.print_message(
+                "Load a histology section before choosing registration channels.",
+                self.error_message_color,
+            )
+            return False
+        names, _ = self._histology_channels()
+        dialog = RegistrationChannelsDialog(names, self.registration_input, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return False
+        self.registration_input = dialog.recipe()
+        self.print_message(
+            "Registration uses: {}.".format(self.registration_input.describe()),
+            self.normal_color,
+        )
+        return True
+
+    def registration_section(self):
+        """The histology input for automatic registration, or None.
+
+        Uses :attr:`registration_input`. A multichannel image without a
+        recipe asks for one; single-channel and RGB images get the default.
+        """
+        names, is_rgb = self._histology_channels()
+        if self.registration_input is None:
+            self.registration_input = registration_input.default_for(
+                len(names), is_rgb, names)
+        if self.registration_input is None and not self.choose_registration_channels():
+            return None
+        try:
+            section, _ = registration_input.prepare(
+                self.image_view.current_img, self.registration_input)
+        except ValueError as exc:
+            self.print_message(str(exc), self.error_message_color)
+            return None
+        return section
+
     def suggest_atlas_section(self):
         """Suggest and apply the atlas plane, slice and tilt for the section."""
         if (
@@ -1780,7 +1951,9 @@ class DriftlessMap(QMainWindow, FORM_Main):
             )
             return
         view = self.atlas_view
-        section = np.asarray(self.image_view.current_img)
+        section = self.registration_section()
+        if section is None:
+            return
         midline = int(view.origin_3d[0])
         # Tilts for coronal/horizontal pivot on the midline (see above); the
         # sagittal pivot is its own page, so its value here does not matter.
@@ -1882,6 +2055,9 @@ class DriftlessMap(QMainWindow, FORM_Main):
             )
             if reply != QMessageBox.StandardButton.Yes:
                 return
+        section = self.registration_section()
+        if section is None:
+            return
         stack = self.atlas_view.working_atlas
         try:
             proposal = run_in_background(
@@ -1890,7 +2066,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 propose_landmarks,
                 np.asarray(stack.img.image),
                 np.asarray(stack.label_data),
-                np.asarray(self.image_view.current_img),
+                section,
                 boundary_points=np.asarray(self.atlas_tri_onside_data, dtype=float),
             )
         except (ValueError, RuntimeError) as exc:
@@ -1909,6 +2085,13 @@ class DriftlessMap(QMainWindow, FORM_Main):
 
     def apply_landmark_proposal(self, proposal):
         """Replace interior landmarks with a proposal and show them."""
+        # Remembered so the V2 landmark list can tell suggested pairs, by kind,
+        # from pairs the user placed or moved.
+        self.suggested_landmarks = (
+            np.round(np.asarray(proposal.atlas_points, dtype=float), 2).tolist(),
+            np.round(np.asarray(proposal.histology_points, dtype=float), 2).tolist(),
+            list(proposal.kinds) or ["suggested"] * len(proposal.atlas_points),
+        )
         self._invalidate_triangulation(clear_topology=True)
         self.atlas_tri_inside_data = [
             [round(float(x), 2), round(float(y), 2)] for x, y in proposal.atlas_points
@@ -3818,14 +4001,34 @@ class DriftlessMap(QMainWindow, FORM_Main):
         res_pnts = self.transfer_pnt(data, registration)
         return res_pnts
 
-    def transform_accept(self):
+    def transform_accept(self, probe=None):
+        """Map the section's marks onto the atlas with the current registration.
+
+        The marks are kept in a mapping record per kind (and per ``probe`` for
+        probe marks named in the 2.0 preview), so they can be edited or mapped
+        again; the section's live mark lists are emptied as before. Undoable.
+        """
+        # Qt passes the action's checked state when this is a slot.
+        probe = probe if isinstance(probe, str) else None
+        kinds = [kind for kind in MAPPED_KINDS if self._section_marks(kind) is not None]
+        with self.undoable("Map {}".format(", ".join(kinds) or "marks")):
+            return self._transform_accept(probe)
+
+    def _transform_accept(self, probe):
         if not self.h2a_transferred:
             self.print_message(
                 "Please transfer image to atlas first", self.error_message_color
             )
             return
+        sources = {kind: self._section_marks(kind) for kind in MAPPED_KINDS}
+        fingerprint = self.current_registration_fingerprint()
+        self.mapping_review_state = self.registration_review_state()
         self.print_message(
-            "Transform accepted, start transferring...", self.normal_color
+            "Transform accepted, start transferring..."
+            if self.mapping_review_state == REVIEWED else
+            "Transferring with a registration that has not been reviewed; the "
+            "mapped results are marked not reviewed.",
+            self.normal_color,
         )
         self.sidebar_tab_state(3)
         self.atlas_tri_data = list(
@@ -3955,7 +4158,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
             self.working_img_data["cell_size"].clear()
             self.working_img_data["cell_symbol"].clear()
             self.working_img_data["cell_layer_index"].clear()
-            self.working_img_data["cell_count"] = [0 for _ in range(5)]
+            self.working_img_data["cell_count"] = [0] * CELL_COUNT_SLOTS
             self.print_message("Cells transferred.", self.normal_color)
 
         if self.working_img_data["img-virus"] is not None:
@@ -3990,7 +4193,425 @@ class DriftlessMap(QMainWindow, FORM_Main):
             self.working_img_data["img-virus"] = None
             self.print_message("Virus transferred.", self.normal_color)
 
+        self._record_mappings(sources, fingerprint, probe)
         self.print_message("All objects transferred.", self.normal_color)
+
+    # ------------------------------------------------------------------
+    #
+    #      Mapping records: kept section marks and the origin of parts
+    #
+    # ------------------------------------------------------------------
+    def _section_marks(self, kind):
+        """The section's live marks of ``kind`` as a record source, or None."""
+        data = self.working_img_data
+        if kind == "expression":
+            mask = data.get("img-virus")
+            return None if mask is None else {"mask": np.array(mask, copy=True)}
+        points = data.get(MAPPED_KINDS[kind][0]) or []
+        if len(points) == 0:
+            return None
+        source = {"points": np.asarray(points, dtype=float).reshape(-1, 2)}
+        if kind == "cells":
+            source.update(size=list(data["cell_size"]), symbol=list(data["cell_symbol"]),
+                          layer_index=list(data["cell_layer_index"]))
+        if kind == "drawing":
+            source["closed"] = bool(self.tool_box.is_closed)
+        return source
+
+    def _atlas_marks_digest(self, kind):
+        values = self.working_atlas_data.get(MAPPED_KINDS[kind][1])
+        array = np.ascontiguousarray(
+            np.asarray(values if values is not None else [], dtype=float))
+        return hashlib.sha256(str(array.shape).encode("utf-8") + array.tobytes()).hexdigest()
+
+    def _record_mappings(self, sources, fingerprint, probe):
+        mapped_at = utc_now_iso()
+        for kind, source in sources.items():
+            if source is None:
+                continue
+            record = self.mapping_ledger.record(
+                self.section_id, kind, source, fingerprint, self.mapping_review_state,
+                mapped_at, probe=probe if kind == "probe" else None)
+            # The atlas marks now come from this record, until they are edited.
+            self.atlas_mark_origin[kind] = [record.unit_id, record.revision,
+                                            self._atlas_marks_digest(kind)]
+            self.editing_units.discard(record.unit_id)
+        self.refresh_kept_marks()
+
+    # Section mark keys a mapping can change.
+    LIVE_MARK_KEYS = ("img-probe", "img-cells", "cell_size", "cell_symbol",
+                      "cell_layer_index", "cell_count", "img-drawing", "img-contour",
+                      "img-virus")
+
+    def _live_marks(self):
+        return {key: copy.deepcopy(self.working_img_data[key]) for key in self.LIVE_MARK_KEYS}
+
+    def _set_live_marks(self, marks):
+        for key, value in marks.items():
+            self.working_img_data[key] = value
+        self.working_img_data["cell_count"] = padded_cell_count(
+            self.working_img_data["cell_count"])
+        for kind in MAPPED_KINDS:
+            self._show_section_marks(kind)
+
+    def _empty_live_marks(self):
+        return {"img-probe": [], "img-cells": [], "cell_size": [], "cell_symbol": [],
+                "cell_layer_index": [], "cell_count": [0] * CELL_COUNT_SLOTS,
+                "img-drawing": [], "img-contour": [], "img-virus": None}
+
+    def _marks_from_source(self, kind, source):
+        marks = {}
+        if kind == "expression":
+            marks["img-virus"] = np.array(source["mask"], copy=True)
+        else:
+            marks[MAPPED_KINDS[kind][0]] = np.asarray(source["points"], dtype=float).tolist()
+        if kind == "cells":
+            marks.update(cell_size=list(source["size"]), cell_symbol=list(source["symbol"]),
+                         cell_layer_index=list(source["layer_index"]),
+                         cell_count=[int(v) for v in get_cell_count(source["layer_index"])])
+        return marks
+
+    def _show_section_marks(self, kind):
+        """Redraw the section's live marks of ``kind`` and their layer thumbnail."""
+        data = self.working_img_data
+        items = self.image_view.img_stacks.image_dict
+        size, thumb = self.image_view.img_size, self.image_view.tb_size
+        if kind == "expression":
+            mask = data["img-virus"]
+            if mask is None:
+                return
+            items["img-virus"].setImage(mask)
+            res = cv2.resize(color_vis_img(mask, self.virus_lut[1]), thumb,
+                             interpolation=cv2.INTER_AREA)
+            self.layer_ctrl.master_layers(res, layer_type="img-virus", color=self.virus_lut[1])
+            return
+        key = MAPPED_KINDS[kind][0]
+        points = np.asarray(data[key], dtype=float).reshape(-1, 2)
+        if kind == "cells":
+            symbols = list(data["cell_symbol"])
+            items[key].setData(pos=points,
+                               symbol=symbols if len(symbols) == len(points) else None)
+            self.tool_box.update_cell_count_label(data["cell_count"])
+        elif kind == "probe":
+            items[key].setData(pos=points)
+            if len(points) > 1:
+                vis_points, msg = line_fit_2d(points.tolist())
+                if msg is None:
+                    items["img-trajectory"].setData(vis_points)
+        else:
+            items[key].setData(points)
+        if not len(points):
+            return
+        colour, style = {"cells": (self.cell_color, "p"), "probe": (self.probe_color, "p"),
+                         "drawing": (self.pencil_color, "l"),
+                         "contour": (self.contour_color, "l")}[kind]
+        res = cv2.resize(create_vis_img(size, points, colour, style), thumb,
+                         interpolation=cv2.INTER_AREA)
+        self.layer_ctrl.master_layers(res, layer_type=key, color=colour)
+
+    def _loaded_record(self, unit_id, action):
+        record = self.mapping_ledger.by_unit(unit_id)
+        if record is None:
+            self.print_message("That mapping no longer exists.", self.error_message_color)
+            return None
+        if record.section_id != self.section_id:
+            self.print_message("{} needs the section these marks were mapped from; it is "
+                               "no longer loaded.".format(action), self.error_message_color)
+            return None
+        return record
+
+    # ------------------------------------------------------------------
+    #
+    #           Undo for Map, Update mapping, Make parts and Build
+    #
+    # ------------------------------------------------------------------
+    ATLAS_MARK_KEYS = ("atlas-probe", "atlas-cells", "cell_size", "cell_symbol",
+                       "cell_layer_index", "cell_count", "atlas-drawing", "atlas-contour",
+                       "atlas-virus")
+
+    def _transaction_state(self):
+        """Everything Map, Update, Make parts and Build can change."""
+        objects = self.object_ctrl.get_obj_data()
+        return {
+            "live": self._live_marks(),
+            "atlas": {key: copy.deepcopy(self.working_atlas_data[key])
+                      for key in self.ATLAS_MARK_KEYS},
+            "records": self.mapping_ledger.to_list(),
+            "atlas_mark_origin": copy.deepcopy(self.atlas_mark_origin),
+            "editing_units": sorted(self.editing_units),
+            "objects": {key: copy.deepcopy(value) for key, value in objects.items()},
+            "registration_review": self.registration_review.to_dict(),
+            "mapping_review_state": self.mapping_review_state,
+        }
+
+    def _transaction_signature(self):
+        """A cheap summary that changes whenever an undoable action changed something."""
+        o = self.object_ctrl
+        return repr((
+            [(r.unit_id, r.revision) for r in self.mapping_ledger.records()],
+            list(o.obj_name), list(o.obj_type), copy.deepcopy(o.obj_derivation),
+            [self._atlas_marks_digest(kind) for kind in MAPPED_KINDS],
+            [len(self.working_img_data[key] or []) if key != "img-virus"
+             else self.working_img_data[key] is None
+             for key in ("img-probe", "img-cells", "img-drawing", "img-contour", "img-virus")],
+            self.mapping_review_state,
+        ))
+
+    @contextmanager
+    def undoable(self, label):
+        """Record the enclosed action for undo; nested actions join the outer one."""
+        if self._transaction_depth:
+            self._transaction_depth += 1
+            try:
+                yield
+            finally:
+                self._transaction_depth -= 1
+            return
+        before = self._transaction_signature()
+        transaction = self.undo_history.prepare(label, self._transaction_state())
+        if transaction is None:
+            self.print_message("{} is too large to undo (over the undo memory budget); it "
+                               "will not be undoable.".format(label), self.reminder_color)
+        self._transaction_depth = 1
+        try:
+            yield
+        finally:
+            self._transaction_depth = 0
+        if transaction is not None and self._transaction_signature() != before:
+            self.undo_history.commit(transaction)
+            # The per-tool edit history refers to state this action replaced.
+            self.action_list = []
+            self.action_id = 0
+            self.sync_mapping_undo_actions()
+
+    def sync_mapping_undo_actions(self):
+        """Name the next undo and redo step in the Edit menu."""
+        for action, label, verb in (
+                (self.actionUndo_Mapping, self.undo_history.undo_label(), "Undo"),
+                (self.actionRedo_Mapping, self.undo_history.redo_label(), "Redo")):
+            action.setText("{} {}".format(verb, label) if label else
+                           "{} Mapping Step".format(verb))
+            action.setEnabled(label is not None)
+
+    def undo_mapping_step(self):
+        return self._step_history(self.undo_history.undo, self.undo_history.undo_label(), "Undid")
+
+    def redo_mapping_step(self):
+        return self._step_history(self.undo_history.redo, self.undo_history.redo_label(), "Redid")
+
+    def _step_history(self, step, label, verb):
+        if label is None:
+            self.print_message("Nothing to {}.".format(verb.lower()[:-1] if verb == "Undid"
+                                                         else "redo"), self.reminder_color)
+            return False
+        state = step(self._transaction_state())
+        self._restore_transaction_state(state)
+        self.action_list = []
+        self.action_id = 0
+        self.sync_mapping_undo_actions()
+        self.print_message("{} {}.".format(verb, label), self.normal_color)
+        return True
+
+    def _restore_transaction_state(self, state):
+        o = self.object_ctrl
+        if o.obj_name:
+            o.delete_objects(list(range(len(o.obj_name))))
+        o.current_obj_index = None
+        if state["objects"]["obj_name"]:
+            o.set_obj_data(state["objects"])
+        self.mapping_ledger, _problems = MappingLedger.from_list(state["records"])
+        self.atlas_mark_origin = state["atlas_mark_origin"]
+        self.editing_units = set(state["editing_units"])
+        self.registration_review = RegistrationReview.from_dict(state["registration_review"])
+        self.mapping_review_state = state["mapping_review_state"]
+        for key, value in state["atlas"].items():
+            self.working_atlas_data[key] = value
+        for kind in MAPPED_KINDS:
+            self._show_atlas_marks(kind)
+        self._set_live_marks(state["live"])
+        self.refresh_kept_marks()
+
+    def _show_atlas_marks(self, kind):
+        """Redraw the atlas marks of ``kind`` and their layer."""
+        key = MAPPED_KINDS[kind][1]
+        items = self.atlas_view.working_atlas.image_dict
+        points = np.asarray(self.working_atlas_data[key] or [], dtype=float).reshape(-1, 2)
+        if not len(points):
+            if key in self.layer_ctrl.layer_link:
+                self.remove_single_link_related(key)
+            else:
+                items[key].clear()
+            if kind == "probe":
+                items["atlas-trajectory"].clear()
+            return
+        if kind == "cells":
+            symbols = list(self.working_atlas_data["cell_symbol"])
+            items[key].setData(pos=points,
+                               symbol=symbols if len(symbols) == len(points) else None)
+        elif kind in ("probe", "expression"):
+            items[key].setData(pos=points)
+            if kind == "probe" and len(points) > 1:
+                vis_points, msg = line_fit_2d(points.tolist(),
+                                              self.atlas_view.working_atlas.label_img.image)
+                if msg is None:
+                    items["atlas-trajectory"].setData(vis_points)
+        else:
+            items[key].setData(points)
+        colour, style = {"cells": (self.cell_color, "p"), "probe": (self.probe_color, "p"),
+                         "drawing": (self.pencil_color, "l"),
+                         "contour": (self.contour_color, "l"),
+                         "expression": (self.virus_lut[1], "p")}[kind]
+        res = cv2.resize(create_vis_img(self.atlas_view.slice_size, points, colour, style),
+                         self.atlas_view.slice_tb_size, interpolation=cv2.INTER_AREA)
+        self.layer_ctrl.master_layers(res, layer_type=key, color=colour)
+
+    def update_mapping(self, unit_id):
+        """Map a record's kept marks again with the current registration.
+
+        Only that unit is mapped: other unmapped section marks are left as
+        they are. Returns the updated record, or None. Undoable.
+        """
+        record = self.mapping_ledger.by_unit(unit_id)
+        name = record.probe or record.kind if record is not None else "marks"
+        with self.undoable("Update mapping of {}".format(name)):
+            return self._update_mapping(unit_id)
+
+    def _update_mapping(self, unit_id):
+        record = self._loaded_record(unit_id, "Update mapping")
+        if record is None:
+            return None
+        if not self.h2a_transferred:
+            self.transfer_to_atlas_clicked()
+            if not self.h2a_transferred:
+                return None
+        live = self._live_marks()
+        marks = self._empty_live_marks()
+        marks.update(self._marks_from_source(record.kind, record.source))
+        for key, value in marks.items():
+            self.working_img_data[key] = value
+        try:
+            self.transform_accept(probe=record.probe)
+        finally:
+            self._set_live_marks(live)
+            self.refresh_kept_marks()
+        updated = self.mapping_ledger.by_unit(unit_id)
+        if updated is None or updated.revision == record.revision:
+            return None
+        self.print_message("Mapping updated with the current registration. Make parts again "
+                           "to replace the parts made from the earlier mapping.",
+                           self.normal_color)
+        return updated
+
+    def edit_mapped_marks(self, unit_id):
+        """Return a record's kept marks to the section as editable marks.
+
+        The record stays, so mapping the marks again replaces it. Refused
+        while the section has unmapped marks of the same kind.
+        """
+        record = self._loaded_record(unit_id, "Edit marks")
+        if record is None:
+            return False
+        current = self._section_marks(record.kind)
+        if current is not None and (record.kind != "expression"
+                                    or np.any(current["mask"])):
+            self.print_message("Map or clear the section's current {} marks before editing "
+                               "mapped ones.".format(record.kind), self.error_message_color)
+            return False
+        for key, value in self._marks_from_source(record.kind, record.source).items():
+            self.working_img_data[key] = value
+        self._show_section_marks(record.kind)
+        self.editing_units.add(record.unit_id)
+        self.refresh_kept_marks()
+        self.print_message("The mapped {} marks are editable on the section again. Map them "
+                           "to replace the earlier mapping.".format(record.kind),
+                           self.normal_color)
+        return True
+
+    def atlas_marks_origin(self, kind):
+        """The record the current atlas marks of ``kind`` were mapped from, or None."""
+        origin = self.atlas_mark_origin.get(kind)
+        if not origin or origin[2] != self._atlas_marks_digest(kind):
+            return None
+        record = self.mapping_ledger.by_unit(origin[0])
+        return record if record is not None and record.revision == origin[1] else None
+
+    def make_pieces_of(self, kind):
+        """Make parts from the atlas marks of ``kind``; returns the new indexes.
+
+        Parts made from mapped marks record their origin. Making parts again
+        from the same mapped unit replaces that unit's earlier parts. Undoable.
+        """
+        with self.undoable("Make {} parts".format(kind)):
+            return self._make_pieces_of(kind)
+
+    def _make_pieces_of(self, kind):
+        maker = {"probe": self.make_probe_piece, "expression": self.make_virus_piece,
+                 "cells": self.make_cell_piece, "drawing": self.make_drawing_piece,
+                 "contour": self.make_contour_piece}[kind]
+        record = self.atlas_marks_origin(kind)
+        o = self.object_ctrl
+        before = len(o.obj_name)
+        maker()
+        created = list(range(before, len(o.obj_name)))
+        if record is None or not created:
+            return created
+        for index in created:
+            o.obj_derivation[index] = derivation([record])
+        earlier = [index for index in range(before)
+                   if "piece" in o.obj_type[index]
+                   and any(unit == record.unit_id for unit, _rev in o.obj_derivation[index])]
+        if earlier:
+            o.delete_objects(earlier)
+            created = [index - len(earlier) for index in created]
+            self.print_message("Replaced {} earlier part(s) made from the same mapped marks."
+                               .format(len(earlier)), self.reminder_color)
+        return created
+
+    def mapping_status(self, record):
+        """Status of a mapping record (see mapping_records)."""
+        return record.status(self.section_id, self.current_registration_fingerprint())
+
+    def object_mapping_status(self, index):
+        """Whether object ``index`` is current, out of date or of unknown origin."""
+        return derivation_status(self.object_ctrl.obj_derivation[index], self.mapping_ledger,
+                                 self.section_id, self.current_registration_fingerprint())
+
+    def out_of_date_objects(self, indexes=None):
+        o = self.object_ctrl
+        indexes = range(len(o.obj_name)) if indexes is None else indexes
+        return [i for i in indexes if is_out_of_date(self.object_mapping_status(i))]
+
+    def mapping_overview(self):
+        """Statuses of the loaded section's records and of every object.
+
+        Returns ``(records, objects)``: ``[(record, status)]`` and one status
+        per object, computed against a single registration fingerprint.
+        """
+        fingerprint = self.current_registration_fingerprint()
+        records = [(r, r.status(self.section_id, fingerprint)) for r in self.kept_marks()]
+        objects = [derivation_status(entries, self.mapping_ledger, self.section_id, fingerprint)
+                   for entries in self.object_ctrl.obj_derivation]
+        return records, objects
+
+    def kept_marks(self):
+        """Mapping records of the loaded section."""
+        return [r for r in self.mapping_ledger.records() if r.section_id == self.section_id]
+
+    def refresh_kept_marks(self):
+        """Show the loaded section's kept (mapped) marks as a read-only overlay."""
+        item = getattr(self, "_kept_marks_item", None)
+        if item is None:
+            item = self._kept_marks_item = pg.ScatterPlotItem(
+                # Dark outline, light fill: visible on brightfield and fluorescence.
+                size=8, pen=pg.mkPen(20, 20, 20, 200, width=1.5),
+                brush=pg.mkBrush(255, 255, 255, 110),
+                symbol="o", pxMode=True)
+            item.setZValue(5)
+            item.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+            self.image_view.img_stacks.vb.addItem(item)
+        points = [r.source["points"] for r in self.kept_marks() if "points" in r.source
+                  and len(r.source["points"]) and r.unit_id not in self.editing_units]
+        item.setData(pos=np.vstack(points) if points else np.zeros((0, 2)))
 
     # ------------------------------------------------------------------
     #
@@ -4428,7 +5049,9 @@ class DriftlessMap(QMainWindow, FORM_Main):
             else:
                 # only one layer is allowed to work on
                 da_layer = [
-                    ind for ind in range(4) if self.image_view.channel_visible[ind]
+                    ind
+                    for ind in range(self.image_view.image_file.n_channels)
+                    if self.image_view.channel_visible[ind]
                 ]
                 n_layers = len(da_layer)
                 if n_layers == 0:
@@ -5782,10 +6405,9 @@ class DriftlessMap(QMainWindow, FORM_Main):
                     "cell_layer_index",
                 ]:
                     self.working_img_data[da_key] = []
-                self.working_img_data["cell_count"] = [0 for i in range(5)]
+                self.working_img_data["cell_count"] = [0] * CELL_COUNT_SLOTS
                 if self.a2h_transferred or not self.h2a_transferred:
-                    for i in range(5):
-                        self.tool_box.cell_count_val_list[i].setText("0")
+                    self.tool_box.update_cell_count_label([])
 
             if da_link == "atlas-cells":
                 for da_key in [
@@ -5795,9 +6417,8 @@ class DriftlessMap(QMainWindow, FORM_Main):
                     "cell_layer_index",
                 ]:
                     self.working_atlas_data[da_key] = []
-                self.working_atlas_data["cell_count"] = [0 for _ in range(5)]
-                for i in range(5):
-                    self.tool_box.cell_count_val_list[i].setText("0")
+                self.working_atlas_data["cell_count"] = [0] * CELL_COUNT_SLOTS
+                self.tool_box.update_cell_count_label([])
 
             if da_link == "atlas-overlay":
                 self.remove_h2a_transferred_layers()
@@ -6046,12 +6667,13 @@ class DriftlessMap(QMainWindow, FORM_Main):
         data = self.atlas_view.get_3d_data_from_2d_view(
             processing_data, self.atlas_display
         )
-        for i in range(5):
+        cell_count = padded_cell_count(self.working_atlas_data["cell_count"])
+        for i in range(CELL_COUNT_SLOTS):
             if i == 0:
                 object_type = "cells - piece"
             else:
                 object_type = "cells {} - piece".format(i)
-            if self.working_atlas_data["cell_count"][i] != 0:
+            if cell_count[i] != 0:
                 piece_data = data[
                     np.where(
                         np.ravel(self.working_atlas_data["cell_layer_index"]) == i
@@ -6069,10 +6691,14 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.working_atlas_data["cell_size"].clear()
         self.working_atlas_data["cell_symbol"].clear()
         self.working_atlas_data["cell_layer_index"].clear()
-        self.working_atlas_data["cell_count"] = [0 for _ in range(5)]
+        self.working_atlas_data["cell_count"] = [0] * CELL_COUNT_SLOTS
         self.tool_box.update_cell_count_label(self.working_atlas_data["cell_count"])
 
     def make_object_pieces(self):
+        with self.undoable("Make parts"):
+            self._make_object_pieces()
+
+    def _make_object_pieces(self):
         if self.num_windows == 4:
             msg = "Can not make pieces with all slice windows turned on."
             self.print_message(msg, self.error_message_color)
@@ -6082,11 +6708,8 @@ class DriftlessMap(QMainWindow, FORM_Main):
         # transferred with Accept and Transfer, which applies the
         # registration; their raw pixel positions are not atlas positions.
         untransferred = self._untransferred_histology_annotations()
-        self.make_probe_piece()
-        self.make_virus_piece()
-        self.make_cell_piece()
-        self.make_drawing_piece()
-        self.make_contour_piece()
+        for kind in ("probe", "expression", "cells", "drawing", "contour"):
+            self.make_pieces_of(kind)
         if untransferred:
             self.print_message(
                 "These histology annotations were not made into pieces: {}. "
@@ -6180,17 +6803,49 @@ class DriftlessMap(QMainWindow, FORM_Main):
         label_data = np.transpose(self.atlas_view.atlas_label, (1, 2, 0))[:, :, ::-1]
         return label_data, None
 
+    def _drop_superseded_pieces(self, piece_type):
+        """Delete parts replaced by a newer part made from the same mapped marks.
+
+        A part restored by Edit parts after its marks were mapped again would
+        otherwise be built together with its replacement.
+        """
+        o = self.object_ctrl
+        newest = {}
+        for index, entries in enumerate(o.obj_derivation):
+            if o.obj_type[index] == piece_type:
+                for unit, revision in entries:
+                    newest[unit] = max(newest.get(unit, 0), revision)
+        superseded = [index for index, entries in enumerate(o.obj_derivation)
+                      if o.obj_type[index] == piece_type and entries
+                      and any(revision < newest[unit] for unit, revision in entries)]
+        if superseded:
+            o.delete_objects(superseded)
+            self.print_message("Left out {} part(s) replaced by newer mappings of the same "
+                               "marks.".format(len(superseded)), self.reminder_color)
+        return len(superseded)
+
     def _count_pieces(self, piece_type):
         return sum(1 for da_type in self.object_ctrl.obj_type if da_type == piece_type)
 
     def _commit_merged_objects(self, piece_indexes, merged_objects):
-        self.object_ctrl.delete_objects(piece_indexes)
+        o = self.object_ctrl
+        # Each built object keeps its parts' mapping origin, part by part, in
+        # the order collect_pieces groups them, so Edit parts restores it.
+        origins = {}
+        for index in piece_indexes:
+            origins.setdefault(o.piece_group(o.obj_name[index]), []).append(
+                o.obj_derivation[index])
+        o.delete_objects(piece_indexes)
         for obj_name, obj_type, info_dict in merged_objects:
-            self.object_ctrl.add_object(
+            parts = origins.get(obj_name, [])
+            o.add_object(
                 obj_name,
                 obj_type,
                 object_data=info_dict,
                 object_mode=self.obj_display_mode,
+                derivation=[pair for part in parts for pair in part]
+                if all(parts) else [],
+                piece_derivation=parts,
             )
 
     def _merge_failed(self, obj_name, reason):
@@ -6199,11 +6854,24 @@ class DriftlessMap(QMainWindow, FORM_Main):
             self.error_message_color,
         )
 
-    def merge_probes(self):
+    def merge_probes(self, only=None):
+        # Qt passes the button's checked state when this is a slot.
+        only = only if isinstance(only, (list, tuple, set)) else None
+        with self.undoable("Build probes" if only is None
+                           else "Build {}".format(", ".join(sorted(only)))):
+            return self._merge_probes(only)
+
+    def _merge_probes(self, only=None):
+        """Build 3D probes from probe pieces, grouped by name.
+
+        ``only`` limits the build to probes with these names; other probes'
+        pieces are left untouched.
+        """
         if self.num_windows == 4:
             msg = "Can not merge probe pieces with all slice windows turned on."
             self.print_message(msg, self.error_message_color)
             return
+        self._drop_superseded_pieces("probe piece")
         if self._count_pieces("probe piece") == 0:
             return
 
@@ -6219,6 +6887,20 @@ class DriftlessMap(QMainWindow, FORM_Main):
         data, obj_names, pieces_names, piece_indexes = self.object_ctrl.collect_pieces(
             "probe piece"
         )
+        if only is not None:
+            wanted = set(only)
+            keep = [i for i, name in enumerate(obj_names) if name in wanted]
+            if not keep:
+                self.print_message("There are no parts to build for {}.".format(
+                    ", ".join(sorted(wanted))), self.reminder_color)
+                return
+            data = [data[i] for i in keep]
+            pieces_names = [pieces_names[i] for i in keep]
+            obj_names = [obj_names[i] for i in keep]
+            piece_indexes = [
+                index for index in piece_indexes
+                if self.object_ctrl.obj_name[index].split("-")[0].strip() in wanted
+            ]
         probe_setting_data = self.probe_settings.get_settings()
         merge_sites = self.tool_box.merge_sites
         pre_surgery = self.image_view.image_file is None
@@ -6273,6 +6955,11 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self._commit_merged_objects(piece_indexes, merged_objects)
 
     def _merge_point_pieces(self, piece_type, merged_type, calculate):
+        with self.undoable("Build {}".format(merged_type.replace("merged ", ""))):
+            return self._merge_point_pieces_now(piece_type, merged_type, calculate)
+
+    def _merge_point_pieces_now(self, piece_type, merged_type, calculate):
+        self._drop_superseded_pieces(piece_type)
         if self._count_pieces(piece_type) == 0:
             return
         label_data, label_error = self._merge_label_volume()
@@ -6362,13 +7049,19 @@ class DriftlessMap(QMainWindow, FORM_Main):
 
     # contour related functions
     def merge_contour(self):
+        with self.undoable("Build contours"):
+            return self._merge_contour()
+
+    def _merge_contour(self):
+        self._drop_superseded_pieces("contour piece")
         if self._count_pieces("contour piece") == 0:
             return
         data, obj_names, pieces_names, piece_indexes = self.object_ctrl.collect_pieces(
             "contour piece"
         )
         merged_objects = [
-            (obj_names[i], "merged contour", {"object_type": "contour", "data": data[i]})
+            (obj_names[i], "merged contour", {"object_type": "contour", "data": data[i],
+                                              "pieces_names": pieces_names[i]})
             for i in range(len(data))
         ]
         self._commit_merged_objects(piece_indexes, merged_objects)
@@ -6437,7 +7130,6 @@ class DriftlessMap(QMainWindow, FORM_Main):
         else:
             file_path = self.current_img_path
         file_options = QFileDialog.Option(0)
-        file_options |= QFileDialog.Option.DontUseNativeDialog
         file_dialog = QFileDialog()
         file_dialog.setFileMode(QFileDialog.FileMode.ExistingFiles)
         image_file_path = file_dialog.getOpenFileName(
@@ -6469,8 +7161,49 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 self.statusbar.showMessage("No new image file is selected.")
             return
 
+    def select_image_planes(self, planes):
+        """Re-read the current TIFF showing other planes of its fixed axes.
+
+        ``planes`` maps a fixed axis to a plane, e.g. ``{"T": 3}``. The file is
+        read again as a new section, which clears the section's landmarks as
+        any load does; the registration channels are kept, since the channel
+        layout is unchanged.
+        """
+        path = self.current_img_path
+        if not path or os.path.splitext(path)[1].lower() not in (".tif", ".tiff"):
+            self.print_message("Choosing planes needs a TIFF section loaded from a file.",
+                               self.error_message_color)
+            return False
+        if (self._loaded_histology_signature is not None
+                and path_stat_signature(path) != self._loaded_histology_signature):
+            self.print_message("The section file changed after it was loaded; load it "
+                               "again before choosing planes.", self.error_message_color)
+            return False
+        recipe = self.registration_input
+        page = self.image_view.display_img_index
+        if not self.load_single_image_file(path, os.path.splitext(path)[1].lower(),
+                                           planes=plane_selection(planes),
+                                           scale=self.image_view.current_scale):
+            return False
+        self._loaded_histology_signature = path_stat_signature(path)
+        self.registration_input = recipe
+        if self.image_view.image_file.n_pages > 1:
+            self.image_view.page_ctrl.page_slider.setValue(
+                min(page, self.image_view.image_file.n_pages - 1))
+        return True
+
+    def open_preview_interface(self):
+        """Start the 2.0 preview in its own process and window."""
+        if start_interface("preview"):
+            self.print_message(
+                "Opening the 2.0 preview in a new window. It saves the same project "
+                "files; open a copy of a project to try it.", self.normal_color)
+        else:
+            self.print_message("The 2.0 preview could not be started.",
+                               self.error_message_color)
+
     def load_single_image_file(
-        self, image_file_path, image_file_type, scene_index=None
+        self, image_file_path, image_file_type, scene_index=None, planes=None, scale=None
     ):
         with pg.BusyCursor():
             if image_file_type == ".czi":
@@ -6514,7 +7247,10 @@ class DriftlessMap(QMainWindow, FORM_Main):
                         self.tool_box.cell_count_val_list[i + 1].setVisible(True)
             elif image_file_type in (".tif", ".tiff"):
                 try:
-                    image_file = TIFFReader(image_file_path)
+                    image_file = TIFFReader(image_file_path, planes=planes)
+                    scale = _valid_read_scale(scale)
+                    if image_file.error_index == 0 and image_file.has_levels and scale:
+                        image_file.read_data(scale, scene_index=0)
                 except (IOError, OSError, IndexError, AttributeError, TypeError, ValueError):
                     self.print_message(
                         "Load TIF file failed.", self.error_message_color
@@ -6522,7 +7258,8 @@ class DriftlessMap(QMainWindow, FORM_Main):
                     return False
                 if image_file.error_index != 0:
                     self.print_message(
-                        "Error Index: {}".format(image_file.error_index),
+                        image_file.error_message
+                        or "Error Index: {}".format(image_file.error_index),
                         self.error_message_color,
                     )
                     return False
@@ -6551,9 +7288,23 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 self.tool_box.cell_count_val_list[0].setVisible(True)
 
             self.image_view.set_data(image_file)
+            self.section_id = new_identifier()
+            self.atlas_mark_origin = {}
+            self.editing_units = set()
+            self.undo_history.clear()
+            self.sync_mapping_undo_actions()
+            self.refresh_kept_marks()
+            self.registration_input = None
+            self.registration_review = RegistrationReview()
+            self.mapping_review_state = None
+            self.suggested_landmarks = None
             self.reset_corners_hist()
             self.layerpanel.setEnabled(True)
-        self.statusbar.showMessage("Image file loaded.")
+        notes = getattr(image_file, "notes", None)
+        if notes:
+            self.print_message("Image file loaded. " + " ".join(notes), self.reminder_color)
+        else:
+            self.statusbar.showMessage("Image file loaded.")
 
         # if self.image_view.image_file.n_pages > 1:
         #     da_data = self.image_view.volume_img.copy()
@@ -6864,7 +7615,6 @@ class DriftlessMap(QMainWindow, FORM_Main):
         else:
             file_path = self.current_atlas_path
         file_options = QFileDialog.Option(0)
-        file_options |= QFileDialog.Option.DontUseNativeDialog
         atlas_folder = str(
             QFileDialog.getExistingDirectory(
                 self, dialog_title, file_path, options=file_options
@@ -6988,6 +7738,8 @@ class DriftlessMap(QMainWindow, FORM_Main):
                     "data": self.object_ctrl.obj_data[da_ind],
                     "name": self.object_ctrl.obj_name[da_ind],
                     "provenance": provenance,
+                    # Out-of-date results stay exportable, with this note.
+                    "mapping_status": self.object_mapping_status(da_ind),
                 }
                 s_path = os.path.join(save_path, file_stem)
                 success, error = save_driftlessmap_file(
@@ -7000,8 +7752,18 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 "Exported {} objects to {}.".format(len(valid_index), save_path),
                 self.normal_color,
             )
+            self._note_out_of_date_export(valid_index)
         else:
             return
+
+    def _note_out_of_date_export(self, indexes):
+        stale = self.out_of_date_objects(indexes)
+        if stale:
+            self.print_message(
+                "Exported, but out of date: {}. The registration or the mapped marks "
+                "changed after they were made; the files record this.".format(
+                    ", ".join(self.object_ctrl.obj_name[i] for i in stale)),
+                self.reminder_color)
 
     def save_current_object(self):
         if self.object_ctrl.current_obj_index is None:
@@ -7039,6 +7801,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 "data": self.object_ctrl.obj_data[self.object_ctrl.current_obj_index],
                 "name": self.object_ctrl.obj_name[self.object_ctrl.current_obj_index],
                 "provenance": provenance,
+                "mapping_status": self.object_mapping_status(current_index),
             }
             success, error = save_driftlessmap_file(file_name[0], da_data, "object")
             if not success:
@@ -7047,6 +7810,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
             self.print_message(
                 "Current object is saved successfully.", self.normal_color
             )
+            self._note_out_of_date_export([current_index])
         else:
             self.print_message("", self.normal_color)
 
@@ -7090,7 +7854,6 @@ class DriftlessMap(QMainWindow, FORM_Main):
             self.print_message(msg, self.error_message_color)
             return
         file_options = QFileDialog.Option(0)
-        file_options |= QFileDialog.Option.DontUseNativeDialog
         dlg = QFileDialog()
         dlg.setFileMode(QFileDialog.FileMode.ExistingFiles)
         object_file_path = dlg.getOpenFileNames(
@@ -7472,7 +8235,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
             self.working_img_data["cell_size"] = layer_dict["cell_size"]
             self.working_img_data["cell_symbol"] = layer_dict["cell_symbol"]
             self.working_img_data["cell_layer_index"] = layer_dict["cell_layer_index"]
-            self.working_img_data["cell_count"] = layer_dict["cell_count"]
+            self.working_img_data["cell_count"] = padded_cell_count(layer_dict["cell_count"])
             self.tool_box.update_cell_count_label(self.working_img_data["cell_count"])
         elif layer_link == "img-overlay":
             if not np.all(layer_dict["data"].shape[:2] == self.image_view.img_size):
@@ -7587,15 +8350,14 @@ class DriftlessMap(QMainWindow, FORM_Main):
         elif layer_link == "atlas-cells":
             self.tool_box.cell_color_btn.setColor(layer_dict["color"])
             self.working_atlas_data[layer_link] = layer_dict["data"]
-            self.working_atlas_data["cell_count"] = layer_dict["cell_count"]
+            self.working_atlas_data["cell_count"] = padded_cell_count(layer_dict["cell_count"])
             self.working_atlas_data["cell_size"] = layer_dict["cell_size"]
             self.working_atlas_data["cell_symbol"] = layer_dict["cell_symbol"]
             self.working_atlas_data["cell_layer_index"] = layer_dict["cell_layer_index"]
             if not self.working_img_data["img-cells"]:
-                for i in range(5):
-                    self.tool_box.cell_count_val_list[i].setText(
-                        str(self.working_atlas_data["cell_count"][i])
-                    )
+                self.tool_box.update_cell_count_label(
+                    self.working_atlas_data["cell_count"]
+                )
         elif layer_link == "atlas-drawing":
             self.tool_box.pencil_color_btn.setColor(layer_dict["color"])
             self.working_atlas_data[layer_link] = layer_dict["data"]
@@ -7647,7 +8409,6 @@ class DriftlessMap(QMainWindow, FORM_Main):
     def load_layers_called(self):
         self.print_message("Loading layers ...", self.normal_color)
         file_options = QFileDialog.Option(0)
-        file_options |= QFileDialog.Option.DontUseNativeDialog
         dlg = QFileDialog()
         dlg.setFileMode(QFileDialog.FileMode.ExistingFiles)
         layer_files_path = dlg.getOpenFileNames(
@@ -7969,7 +8730,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
                         return False
 
             project_data = {
-                "project_schema_version": 2,
+                "project_schema_version": PROJECT_SCHEMA_VERSION,
                 "software": {"name": "DriftlessMap", "version": __version__},
                 "created_at": self.project_created_at,
                 "saved_at": saved_at,
@@ -8000,6 +8761,15 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 "num_windows": self.num_windows,
                 "probe_settings": probe_settings,
                 "probe_planning": probe_planning,
+                "registration_input": (
+                    self.registration_input.to_dict()
+                    if self.registration_input is not None else None
+                ),
+                "registration_review": self.registration_review.to_dict(),
+                "mapping_review_state": self.mapping_review_state,
+                "section_id": self.section_id,
+                "mapping_records": self.mapping_ledger.to_list(),
+                "atlas_mark_origin": self.atlas_mark_origin,
                 "np_onside": self.np_onside,
                 "processing_slice": self.atlas_view.processing_slice,
                 "processing_img": self.image_view.processing_img,
@@ -8076,7 +8846,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
     def prepare_project_sources(self, project_dict, project_path):
         """Resolve and verify linked inputs before mutating the active session."""
         schema_version = int(project_dict.get("project_schema_version", 1))
-        if schema_version > 2:
+        if schema_version > PROJECT_SCHEMA_VERSION:
             self.print_message(
                 "This project uses a newer persistence schema ({}). Upgrade "
                 "DriftlessMap before opening it.".format(schema_version),
@@ -8306,7 +9076,9 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 _, file_extension = os.path.splitext(self.current_img_path)
                 scene_index = img_ctrl_data["current_scene"]
                 if not self.load_single_image_file(
-                    self.current_img_path, file_extension.lower(), scene_index
+                    self.current_img_path, file_extension.lower(), scene_index,
+                    planes=plane_selection(img_ctrl_data.get("plane_selection")),
+                    scale=img_ctrl_data.get("image_scale"),
                 ):
                     return
                 self.image_view.load_img_ctrl_data(img_ctrl_data)
@@ -8329,6 +9101,22 @@ class DriftlessMap(QMainWindow, FORM_Main):
                     self.show_slice_and_histology()
             else:
                 self.show_only_image_window()
+
+        self.registration_input = self._saved_registration_input(p_dict)
+        self.registration_review = self._saved_registration_review(p_dict)
+        self.mapping_review_state = p_dict.get("mapping_review_state")
+        saved_section = p_dict.get("section_id")
+        self.section_id = saved_section if is_identifier(saved_section) else new_identifier()
+        self.mapping_ledger, problems = MappingLedger.from_list(p_dict.get("mapping_records"))
+        self.atlas_mark_origin = _saved_atlas_mark_origin(p_dict.get("atlas_mark_origin"))
+        self.editing_units = set()
+        self.undo_history.clear()
+        self.sync_mapping_undo_actions()
+        self.refresh_kept_marks()
+        if problems:
+            self.print_message(
+                "{} mapping record(s) could not be restored and were left out: {}".format(
+                    len(problems), "; ".join(problems)), self.reminder_color)
 
         # tool
         self.tool_box.bound_pnts_num.setText(str(self.np_onside))
@@ -8564,7 +9352,6 @@ class DriftlessMap(QMainWindow, FORM_Main):
 
         self.print_message("Loading project....", self.normal_color)
         file_options = QFileDialog.Option(0)
-        file_options |= QFileDialog.Option.DontUseNativeDialog
         dlg = QFileDialog()
         dlg.setFileMode(QFileDialog.FileMode.ExistingFiles)
         project_path = dlg.getOpenFileName(
@@ -8663,7 +9450,6 @@ class DriftlessMap(QMainWindow, FORM_Main):
             return
 
         file_options = QFileDialog.Option(0)
-        file_options |= QFileDialog.Option.DontUseNativeDialog
         dlg = QFileDialog()
         dlg.setFileMode(QFileDialog.FileMode.ExistingFiles)
         data_file_path = dlg.getOpenFileName(
@@ -8729,6 +9515,38 @@ class DriftlessMap(QMainWindow, FORM_Main):
 # -------------------------------------------------------------
 #                    Main run
 # -------------------------------------------------------------
+# Kinds of marks that are mapped: kind -> (section key, atlas key).
+MAPPED_KINDS = {
+    "contour": ("img-contour", "atlas-contour"),
+    "probe": ("img-probe", "atlas-probe"),
+    "drawing": ("img-drawing", "atlas-drawing"),
+    "cells": ("img-cells", "atlas-cells"),
+    "expression": ("img-virus", "atlas-virus"),
+}
+
+
+def _saved_atlas_mark_origin(value):
+    """Validated ``atlas_mark_origin`` from a project, or {}."""
+    if not isinstance(value, dict):
+        return {}
+    origin = {}
+    for kind, entry in value.items():
+        if (kind in MAPPED_KINDS and isinstance(entry, (list, tuple)) and len(entry) == 3
+                and is_identifier(entry[0]) and isinstance(entry[1], int)
+                and not isinstance(entry[1], bool) and isinstance(entry[2], str)):
+            origin[kind] = [entry[0], entry[1], entry[2]]
+    return origin
+
+
+def _valid_read_scale(value):
+    """A saved read scale in (0, 1], or None to read full resolution."""
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return None
+    return value if np.isfinite(value) and 0 < value < 1 else None
+
+
 def main():
     app = QApplication(sys.argv)
     app.setApplicationName("DriftlessMap")

@@ -1,6 +1,8 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 1.6.1**.
+This manual applies to **DriftlessMap 2.0.0a12**, a development preview of
+DriftlessMap 2.0 on the `v2-redesign` branch. The current stable release is
+1.6.1; its desktop downloads are described in Section 2.2.
 
 DriftlessMap - Histological E-data Registration in Brain Space - is a desktop
 application for aligning rodent histology with a reference atlas, reconstructing
@@ -107,7 +109,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-DriftlessMap 1.6.1 requires:
+DriftlessMap 2.0.0a12 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -174,7 +176,9 @@ python -m pip --version
 python -c "import driftlessmap; print(driftlessmap.__version__)"
 ```
 
-The final command should print `1.6.1`.
+The final command prints the installed version: `1.6.1` for the stable
+release, or `2.0.0a12` for this development preview installed from the
+`v2-redesign` branch.
 
 ### 2.5 Launching DriftlessMap
 
@@ -421,7 +425,9 @@ The transform actions are:
 - **Transform to Histological Image Window:** warp atlas data into histology
   space.
 - **Accept and Transfer:** transfer the current probe, virus, cell, drawing, or
-  contour annotations through the accepted registration.
+  contour annotations through the accepted registration. The transferred
+  section marks are kept in a mapping record (see **Kept marks** below) and stay
+  visible on the section as faint, read-only marks.
 
 Clicking an active transform action again removes its overlay so landmarks can
 be edited.
@@ -432,6 +438,83 @@ Watch the status bar throughout a workflow. It reports more than completion:
 invalid inputs, unmatched landmarks, unavailable tools, current pixel
 coordinates, atlas voxels, region hierarchy, configured Bregma coordinates,
 estimated Allen AP/ML coordinates, and surface depth can all appear there.
+
+
+### 4.5 The 2.0 preview interface
+
+A development preview of the redesigned interface is available on the
+`v2-redesign` branch. It runs on the same engine, reads and writes the same
+project files, and keeps its preferences separate from the stable interface.
+Start it with:
+
+```bash
+driftlessmap-v2
+# or
+python -m driftlessmap.v2
+# or
+driftlessmap --v2
+```
+
+In the stable interface, **Help > Open the 2.0 Preview** opens the preview in
+a new window; in the preview, **Help > Open the classic interface** does the
+reverse. This also works in the desktop application, which starts the stable
+interface by default. To start the desktop application directly in the
+preview, pass `--v2` (for example in a Windows shortcut's target) or set the
+environment variable `DRIFTLESSMAP_INTERFACE=v2`. Open a copy of a project
+when trying the preview: projects it saves use payload schema 3, which
+DriftlessMap 1.6 and earlier refuse.
+
+The window has four areas:
+
+- **Steps** on the left: Project, Section, Match, Register, Annotate and
+  Results. Each step shows its current state under its name (for example
+  "registers on DAPI only" or "10 pairs · review pending"). Steps are not a
+  wizard; move between them freely. Keys 1 to 6 switch steps.
+- **The canvas** in the middle, with Compare, Atlas, Section, 3D and
+  Multi-plane views. When a tool is active, its options appear in the row
+  above the image.
+- **Objects, Layers and Regions** on the right.
+- **The status line** at the bottom: the last message, the atlas and section,
+  and whether there are unsaved changes. Changing views, zooming or selecting
+  never counts as a change.
+
+What each step does:
+
+| Step | Main actions |
+| --- | --- |
+| Project | Load atlas, load or replace the section, open, save, save a portable copy, atlas download and slice-atlas tools |
+| Section | Per-channel name, colour, visibility and display range; brightness, contrast, gamma and Auto (ImageJ-style, saturating 0.35% of samples); **Register** ticks that choose the registration channels, with a preview of the registration input; rotation, flips, crop and clean-up |
+| Match | Find atlas section with the chosen channels; the plane, depth and tilt controls of the 1.x Atlasing Controller |
+| Register | Suggest landmarks; add, move and delete pairs; a list of pairs marked Outline, Internal, Edited or Manual; mesh check; **Mark review complete**; warp preview in either direction |
+| Annotate | **Probes:** a list of named, coloured probes. For each section that shows a track: **Mark track**, click along it, **Add this section to** the probe (this maps the marks with the current registration). **Build** one probe from all its sections; **Rebuild** after adding more. Cells, colour detection, drawing, erasing, lasso and measuring; **Map to atlas**; make parts and build other 3D objects |
+| Results | Region tables, show on plane, compare, 3D options, export and import |
+
+Probes are grouped by name, so the sections of one probe combine and different
+probes stay separate without renaming parts. Probe names cannot contain "-".
+In pre-surgical planning (no section loaded), click the entry point and the tip
+on the atlas instead.
+
+Buttons that cannot run yet are greyed out; hover over one to see what is
+missing (an atlas, a section, landmark pairs or a selected pair). Match and
+Register show a banner when the atlas or section is missing. Until something
+is loaded, the canvas shows buttons to load an atlas, load a section, open a
+project or download the Allen mouse atlas.
+
+Display settings (colour, visibility, brightness, contrast, gamma, curves)
+change only how the image looks; the pixel values, registration input and
+coordinates stay the same. Mapping without a review is allowed and is recorded
+as not reviewed.
+
+**Ctrl+K** (Cmd+K on macOS) opens a command search. It finds every 2.0
+command and every 1.x menu command by its old name, for example "merge" or
+"triangulation". Single-key shortcuts (P add or move landmark points,
+M measure, V no tool, Delete remove the selected landmark pair) do not fire
+while you type in a field; Escape stops the current tool.
+
+Known limits of the preview:
+
+- Building still replaces parts with the object (Edit parts restores them).
+  The interface says so before you act.
 
 ## 5. Downloading, processing, and loading atlases
 
@@ -619,8 +702,10 @@ Use **File > Load Image** or the histology-image toolbar button.
 | PNG `.png` | Loaded as 8-bit RGB. |
 | BMP `.bmp` | Loaded as 8-bit RGB. |
 
-DriftlessMap supports at most four non-RGB image channels. An RGB image has three
-display channels but is treated as one RGB cell-count category.
+DriftlessMap supports up to 16 non-RGB image channels, kept at their native 8-
+or 16-bit depth. Images with more channels are refused rather than truncated.
+An RGB image has three display channels but is treated as one RGB cell-count
+category.
 
 ### 7.2 CZI scenes and scale
 
@@ -639,12 +724,35 @@ work needs more detail. Higher scale increases time and memory use.
 A grayscale TIFF page stack shows page navigation under the image. RGB TIFF,
 multi-channel TIFF, and page-stack TIFF are intentionally distinct:
 
-- RGB samples display as three color channels.
-- A channel axis displays up to four independent grayscale channels.
-- A page axis displays one grayscale section at a time.
+- RGB samples display as three color channels. An alpha channel is not shown,
+  and DriftlessMap says so when it loads the file.
+- A channel axis displays up to 16 independent grayscale channels, at their
+  native bit depth.
+- A page axis displays one section at a time. In a hyperstack (for example
+  ZCYX from ImageJ or OME-TIFF), Z is browsed as pages and every channel is
+  kept. If the file has a further axis, such as time, one plane of it is used
+  (the first by default) and DriftlessMap reports which. In the 2.0 preview,
+  the Section step's Image card shows a plane box for each such axis; choose
+  a plane and press **Read plane**. This loads the section again, which
+  clears its landmarks. The chosen plane is saved in the project and read
+  again when the project reopens from the original file.
+- Several series in one file become scenes, read when first shown. They must
+  share one bit depth and channel layout.
+- Pyramidal TIFFs (for example OME-TIFF whole-slide images with stored
+  sub-resolutions) open at full resolution. The **Scale** slider, shown for
+  such files as for CZI, reads a lower level instead: it snaps to the coarsest
+  stored level that keeps at least the chosen resolution. The level read is
+  saved in the project and read again when the project reopens from the
+  original file. Pyramids of page stacks are read at full resolution only.
+- Channel names and colours are read from OME-TIFF or ImageJ metadata when the
+  file has them. A named channel without a stored colour gets its conventional
+  colour (DAPI and Hoechst blue; GFP, YFP, FITC and 488 green; tdTomato,
+  mCherry, RFP, Cy3 and 555–594 red; Cy5 and 647 magenta; brightfield grey),
+  each colour once. Colours are display settings and can be changed per
+  channel.
 
-If a TIFF is rejected, inspect its axes, series count, sample type, and channel
-count in the exporting microscopy software.
+If a TIFF is rejected, the message names the reason. Inspect the file's axes,
+series, sample type and channel count in the exporting microscopy software.
 
 ### 7.4 Display adjustments
 
@@ -720,6 +828,16 @@ DriftlessMap can propose a starting point for registration with a volume
 atlas. Both steps are suggestions: always review the result before
 transferring anything.
 
+**Choosing the registration channels.** Both assistants use the channels chosen
+with **Atlas > Registration Channels...**, not what is visible on screen. For a
+multichannel image, choose them before the first run (DriftlessMap asks if you
+have not): for example DAPI only, so a bright tracer channel does not change
+the tissue outline or the match. Each chosen channel is scaled between its
+0.5th and 99.5th percentile and the chosen channels are averaged. **Legacy**
+uses every channel exactly as DriftlessMap 1.6 did, and is used for RGB images
+and for projects saved before this option existed. The choice is saved with
+the project.
+
 **Atlas > Suggest Atlas Section...** compares the loaded histology with the
 atlas and ranks candidate sections:
 
@@ -734,8 +852,13 @@ atlas and ranks candidate sections:
    sections. Each shows your section on the left and the atlas on the right,
    with its depth and cutting-angle tilt.
 4. Pick the candidate that looks best. Brain outlines are left-right
-   symmetric, so the hemisphere cannot be detected: choose **Other
-   hemisphere** if the section comes from the other side.
+   symmetric, so the side cannot be detected; choose it from what you know
+   about the tissue, such as the injected or implanted side. For coronal and
+   horizontal sections the choice says where the **animal's right side** is
+   in your section as currently shown (for example "toward the left of your
+   section"). For sagittal sections it names the **Right** or **Left
+   hemisphere**. The atlas convention is that positive medio-lateral
+   coordinates are on the animal's right, as in the probe exports.
 5. Leave **Apply the suggested cutting-angle tilt** on to use the tilt, and
    **Rotate/flip the histology to match** on to orient the image. Rotating
    the histology resets its landmarks.
@@ -868,6 +991,60 @@ Once the registration is accepted:
 Object pieces are always made from atlas-layer data. Annotations that are
 still only in the histology window are not converted by **Make Pieces**; the
 status bar lists them so they can be transferred first.
+
+**Kept marks (2.0 development preview).** Transferring keeps a copy of the
+section marks in a *mapping record*: one per kind of mark on the section (cells,
+drawing, contour, expression) and, in the 2.0 preview, one per named probe. The
+section shows them as faint, read-only marks; the editable marks are cleared as
+before, so the next annotation starts empty. Records are saved with the project.
+Pieces made from transferred marks remember which record they came from:
+transferring the same kind again replaces its record, and making pieces again
+from it replaces the earlier pieces instead of adding duplicates. Marks added
+or moved on the atlas after transferring are no longer tied to the record, and
+pieces made from them have no recorded origin.
+
+**Out of date.** A mapping of the loaded section is *out of date* when its
+landmarks, frame points, atlas plane, page or tilt have changed since it was
+mapped; returning them to the mapped values makes it current again. Pieces and
+built objects are out of date when their mapping is, or when the same marks
+were mapped again after they were made. Display changes (brightness, colours,
+visibility, theme) never make anything out of date. Mappings of sections that
+are no longer loaded stay valid, so a probe built from several sections is not
+flagged when the next section is loaded. Objects made before 2.0.0a8, imported
+objects and pieces made from marks placed on the atlas show *origin not
+recorded*. Out-of-date objects can still be exported; the exported file records
+`mapping_status`, and the status bar names them. In the 2.0 preview, Annotate
+lists the section's mapped marks with their status, Results shows the selected
+object's status, and each object's tooltip in the Objects list names it.
+
+**Update mapping and Edit marks (2.0 preview, Annotate step).** Select a mapping
+in *Mapped marks on this section*:
+
+- **Update mapping** maps the kept marks again with the current registration.
+  Only that mapping changes; other unmapped marks on the section stay as they
+  are. For a probe, the section's part is replaced at once; build the probe
+  again to use it. For other kinds, make parts again to replace the earlier
+  parts. When building, parts that a newer mapping of the same marks replaced
+  are left out, also after Edit parts restores an earlier build.
+- **Edit marks** puts the kept marks back on the section as editable marks
+  (refused while the section has unmapped marks of the same kind). Mapping
+  them again replaces the mapping. For a probe, the probe is selected so that
+  Add this section files the edited track under it.
+
+Both need the section the marks were mapped from to be loaded.
+
+**Undoing mapping steps.** Accept and Transfer (Map), Update mapping, Make
+Pieces (Make parts) and the Merge/Build actions can be undone and redone as
+whole steps: undo restores the section marks, atlas marks, mapping records,
+pieces, built objects and review state together. Use **Edit > Undo** *step*
+(Ctrl+Alt+Z) and **Edit > Redo** *step* (Ctrl+Alt+Shift+Z); the menu names the
+step, for example "Undo Map cells". The last 10 steps are kept, within 500 MB;
+masks are stored compressed. A step too large for that budget says so and is not
+undoable. Steps that change nothing are not recorded. Loading a section or
+opening a project starts a new history, and the history is not saved. The
+existing Edit > Undo and Redo (Ctrl+Z) still undo individual drawing and erasing
+edits; a mapping step clears that shorter history, because its snapshots
+describe the marks the step replaced.
 
 Points outside the registration mesh cannot be assigned a valid atlas
 coordinate. DriftlessMap preserves or rejects them according to the data type and

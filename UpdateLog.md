@@ -1,5 +1,65 @@
 # Update Log
 
+### 27th October 2026
+##### DriftlessMap 2.0.0a12
+
+Map, Update mapping, Make parts and Build can be undone and redone as whole steps (Ctrl+Alt+Z / Ctrl+Alt+Shift+Z).
+
+### 27th October 2026
+##### DriftlessMap 2.0.0a11
+
+Update mapping and Edit marks for kept marks; rebuilding leaves out replaced parts; Edit parts works for built contours.
+
+### 27th October 2026
+##### DriftlessMap 2.0.0a10
+
+Mappings, parts and built objects are labelled out of date when the registration changes or the marks are mapped again; object exports record the status.
+
+### 27th October 2026
+##### DriftlessMap 2.0.0a9
+
+Mapping keeps the section's marks in mapping records; mapping or making parts again replaces earlier results instead of duplicating them.
+
+### 27th October 2026
+##### DriftlessMap 2.0.0a8
+
+Projects save mapping records and each object's mapping origin (groundwork for keeping section marks after mapping).
+
+### 27th October 2026
+##### DriftlessMap 2.0.0a7
+
+Pyramidal TIFFs can be read at a stored lower resolution with the Scale slider; the level is saved and restored with the project.
+
+### 27th October 2026
+##### DriftlessMap 2.0.0a6
+
+The desktop application can open the 2.0 preview (Help > Open the 2.0 Preview, or `--v2`), and the preview can open the classic interface.
+
+### 27th October 2026
+##### DriftlessMap 2.0.0a5
+
+The 2.0 preview's light and dark themes now restyle the 1.x tool options, atlas controller and region tree.
+
+### 27th October 2026
+##### DriftlessMap 2.0.0a4
+
+Choose which time point (or other further axis plane) of a TIFF to read; the choice is saved in the project.
+
+### 27th October 2026
+##### DriftlessMap 2.0.0a3
+
+Channels named in a file without stored colours get conventional colours (DAPI blue, GFP green, tdTomato red, Cy5 magenta).
+
+### 27th October 2026
+##### DriftlessMap 2.0.0a2
+
+**Suggest Atlas Section** names the anatomical side: where the animal's right is in the section, or the Right or Left hemisphere for sagittal sections.
+
+### 27th October 2026
+##### DriftlessMap 2.0.0a1
+
+In the 2.0 preview, actions that cannot run yet are greyed out with the reason in their tooltip, Match and Register show what to load first, and empty views and side panels are replaced by short guidance.
+
 ### 28th September 2026
 ##### DriftlessMap 1.6.1
 

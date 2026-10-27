@@ -20,6 +20,7 @@ from PyQt6.QtWidgets import (
 import pyqtgraph as pg
 import numpy as np
 from .resources import resource_path
+from .image_reader import MAX_CHANNELS
 
 
 def read_int_field(line_edit, minimum=None, maximum=None):
@@ -444,11 +445,11 @@ class ToolBox(QObject):
         self.cell_count_label_list = [QLabel('Count: ')]
         self.cell_count_val_list = [QLabel('0')]
 
-        for i in range(4):
+        for i in range(MAX_CHANNELS):
             self.cell_count_label_list.append(QLabel('Count {}: '.format(i+1)))
             self.cell_count_val_list.append(QLabel('0'))
 
-        for i in range(5):
+        for i in range(MAX_CHANNELS + 1):
             self.cell_count_label_list[i].setVisible(False)
             self.cell_count_val_list[i].setVisible(False)
 
@@ -490,7 +491,7 @@ class ToolBox(QObject):
         cell_layout.addSpacing(10)
         cell_layout.addWidget(self.cell_count_label_list[0])
         cell_layout.addWidget(self.cell_count_val_list[0])
-        for i in range(1, 5):
+        for i in range(1, MAX_CHANNELS + 1):
             cell_layout.addWidget(self.cell_count_label_list[i])
             cell_layout.addWidget(self.cell_count_val_list[i])
             cell_layout.addSpacing(10)
@@ -515,11 +516,12 @@ class ToolBox(QObject):
         # self.eraser_cursor = QCursor(QPixmap(resource_path('icons/eraser_cursor.png')), hotX=7, hotY=27)
 
     def update_cell_count_label(self, cell_count_list):
-        for layer_index in range(5):
+        for layer_index in range(len(self.cell_count_val_list)):
             self.update_single_cell_count_label(cell_count_list, layer_index)
 
     def update_single_cell_count_label(self, cell_count_list, layer_index):
-        self.cell_count_val_list[layer_index].setText(str(cell_count_list[layer_index]))
+        value = cell_count_list[layer_index] if layer_index < len(cell_count_list) else 0
+        self.cell_count_val_list[layer_index].setText(str(value))
 
     def lasso_type_changed(self):
         if self.lasso_type_btn.isChecked():

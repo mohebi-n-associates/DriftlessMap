@@ -1,0 +1,49 @@
+"""Match step: find the atlas plane, depth and tilt that match the section."""
+
+from PyQt6.QtWidgets import QLabel
+
+from . import state
+from .widgets import Card, StepPanel, button, hint_label, set_status, status_label
+
+
+class MatchPanel(StepPanel):
+    title = "Match"
+    hint = ("Find the atlas section that matches the histology, automatically or by "
+            "hand. Manual matching is always available below.")
+
+    def build(self):
+        engine, shell = self.engine, self.shell
+        self.require(shell.needs_both)
+
+        find = self.add(Card("Find atlas section"))
+        self.recipe = find.add(status_label(""))
+        find.add_row(self.gate(button("Find atlas section", lambda: shell.run("match.find"),
+                                      primary=True), shell.needs_both),
+                     button("Change channels", lambda: shell.go_to("section")), None)
+        find.add(hint_label(
+            "Compares the tissue outline with every plane, ranks depths by internal "
+            "anatomy and tries small tilts. You choose among the candidates, "
+            "including the hemisphere, before anything is applied."))
+
+        manual = self.add(Card(
+            "Plane, depth and tilt",
+            "Choose the plane, then set depth with the slider under the atlas view "
+            "and the tilt here. Keep Slice Angles keeps the tilt when the depth "
+            "changes; it is off by default, as in 1.x. Navigation makes the other "
+            "planes follow the cursor in the multi-plane view."))
+        self.plane = manual.add(QLabel(""))
+        view = engine.atlas_view
+        # The V2 theme restyles these 1.x controls (see adopted.py).
+        manual.add(self.gate(view.sidebar_wrap, shell.needs_volume))
+
+    def refresh(self):
+        engine = self.engine
+        recipe = engine.registration_input
+        if engine.image_view.current_img is None:
+            set_status(self.recipe, "Load a section first.", "warn")
+        elif recipe is None:
+            set_status(self.recipe, "Registration channels not chosen yet; you will be "
+                       "asked, or choose them in Section.", "warn")
+        else:
+            set_status(self.recipe, "Registration input: " + recipe.describe(), None)
+        self.plane.setText(state.plane_summary(engine))

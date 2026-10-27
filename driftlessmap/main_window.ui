@@ -328,6 +328,7 @@ border-color: rgb(75, 78, 84);</string>
     <addaction name="separator"/>
     <addaction name="actionAtlas_Processor"/>
     <addaction name="separator"/>
+    <addaction name="actionRegistration_Channels"/>
     <addaction name="actionSuggest_Atlas_Section"/>
     <addaction name="actionPropose_Landmarks"/>
     <addaction name="separator"/>
@@ -716,6 +717,14 @@ selection-background-color: rgb(50, 50, 50);</string>
    </property>
    <property name="toolTip">
     <string>Crop off the area not slected</string>
+   </property>
+  </action>
+  <action name="actionRegistration_Channels">
+   <property name="text">
+    <string>Registration Channels...</string>
+   </property>
+   <property name="toolTip">
+    <string>Choose the histology channels used by Suggest Atlas Section and Propose Landmarks</string>
    </property>
   </action>
   <action name="actionSuggest_Atlas_Section">

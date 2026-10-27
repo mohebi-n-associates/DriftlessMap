@@ -1,6 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 """Native macOS/Windows desktop bundle definition."""
 
+import re
 import sys
 from pathlib import Path
 
@@ -13,6 +14,9 @@ IS_MACOS = sys.platform == "darwin"
 version_namespace = {}
 exec((PACKAGE / "version.py").read_text(encoding="utf-8"), version_namespace)
 VERSION = version_namespace["__version__"]
+# macOS bundle versions must be numeric; a pre-release such as 2.0.0a8 is
+# recorded as 2.0.0 there and keeps its full label in the app and file names.
+BUNDLE_VERSION = re.match(r"\d+(?:\.\d+)*", VERSION).group(0)
 ICON = PACKAGE / "icons" / "app" / (
     "driftlessmap.icns" if IS_MACOS else "driftlessmap.ico"
 )
@@ -66,8 +70,8 @@ if IS_MACOS:
         info_plist={
             "CFBundleDisplayName": "DriftlessMap",
             "CFBundleName": "DriftlessMap",
-            "CFBundleShortVersionString": VERSION,
-            "CFBundleVersion": VERSION,
+            "CFBundleShortVersionString": BUNDLE_VERSION,
+            "CFBundleVersion": BUNDLE_VERSION,
             "NSHighResolutionCapable": True,
         },
     )

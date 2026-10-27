@@ -3,6 +3,214 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.0.0a12
+
+Development preview, 27 October 2026 (`v2-redesign` branch; not a release)
+
+- **Undo and redo mapping steps.** Map (Accept and Transfer), Update mapping,
+  Make parts and Build can be undone and redone as whole steps: section marks,
+  atlas marks, mapping records, parts, built objects and review state are
+  restored together. **Edit > Undo** *step* (Ctrl+Alt+Z) and **Redo** *step*
+  (Ctrl+Alt+Shift+Z) name the step, for example "Undo Map cells".
+- The last 10 steps are kept within 500 MB, with masks compressed; a step too
+  large for the budget says so. Steps that change nothing are not recorded.
+  Loading a section or opening a project starts a new history, which is not
+  saved. The existing Ctrl+Z history for drawing and erasing is cleared by a
+  mapping step, since it describes marks that step replaced.
+- This completes the Phase 3 design (`phase3_mapping_design.md`).
+
+## DriftlessMap 2.0.0a11
+
+Development preview, 27 October 2026 (`v2-redesign` branch; not a release)
+
+- **Update mapping.** In the 2.0 preview's Annotate step, select a mapped
+  unit and map its kept marks again with the current registration. Other
+  unmapped marks on the section are not touched. For probes the section's
+  part is replaced at once; for other kinds, making parts again replaces the
+  earlier parts.
+- **Edit marks** puts a mapping's kept marks back on the section for editing;
+  mapping them again replaces that mapping.
+- **No stale duplicates when rebuilding.** Building leaves out parts that a
+  newer mapping of the same marks replaced, including parts restored by Edit
+  parts from an earlier build.
+- **Fixed:** Edit parts on a built contour failed because contours did not
+  store their part names. New contours store them; older ones restore their
+  parts as "<name> - piece".
+
+## DriftlessMap 2.0.0a10
+
+Development preview, 27 October 2026 (`v2-redesign` branch; not a release)
+
+- **Out-of-date labels.** A mapping is out of date when the section's
+  landmarks, frame points, atlas plane, page or tilt change after mapping;
+  pieces and built objects are out of date when their mapping is, or when the
+  same marks were mapped again. Display changes never count. Mappings of
+  sections that are no longer loaded stay valid, so probes built from several
+  sections are not flagged.
+- In the 2.0 preview, Annotate lists the section's mapped marks with their
+  status, the step rail counts out-of-date mappings and objects, Results shows
+  the selected object's status, and the Objects list names it in a tooltip.
+- Out-of-date objects remain exportable: object files record
+  `mapping_status`, and the status bar names out-of-date objects after an
+  export.
+
+## DriftlessMap 2.0.0a9
+
+Development preview, 27 October 2026 (`v2-redesign` branch; not a release)
+
+- **Mapping keeps the section's marks.** Map to atlas (Accept and Transfer)
+  still copies the marks onto the atlas with the same coordinates, but now
+  keeps the section's marks in a mapping record: one per kind of mark on the
+  section, and one per named probe in the 2.0 preview. They stay visible on
+  the section as faint, read-only marks; the editable marks are cleared as
+  before, so the next annotation, or the next probe, starts empty.
+- **No duplicates.** Mapping the same kind again replaces its record. Parts
+  made from mapped marks remember their record, and making parts again from
+  it replaces the earlier parts. In the 2.0 preview, adding a section to a
+  probe again replaces that section's part.
+- Records and the origin of the current atlas marks are saved with the
+  project.
+
+## DriftlessMap 2.0.0a8
+
+Development preview, 27 October 2026 (`v2-redesign` branch; not a release)
+
+- **Projects record where mapped results came from.** Each loaded section
+  gets an identity, and projects now save mapping records and, for every
+  object, which mapping it was made from. Building keeps this for each part,
+  so **Edit parts** restores it. Nothing changes in mapping yet; this is the
+  saved groundwork for keeping section marks, out-of-date labels and undo
+  (see `phase3_mapping_design.md`).
+- Projects from earlier versions open with no records; their objects are
+  shown as "origin not recorded", never as current. Damaged records are left
+  out with a message instead of stopping the project from opening.
+
+## DriftlessMap 2.0.0a7
+
+Development preview, 27 October 2026 (`v2-redesign` branch; not a release)
+
+- **Read large pyramidal TIFFs at a lower resolution.** For TIFFs that store
+  sub-resolution levels (such as whole-slide OME-TIFFs), the **Scale** slider
+  now appears as it does for CZI files and reads the coarsest stored level that
+  keeps at least the chosen resolution. Files open at full resolution, as
+  before. The level read is saved in the project (through the existing image
+  scale) and read again on reopening from the original file; measurements use
+  the level's scale, as for CZI.
+- Pyramids of page stacks are still read at full resolution only.
+
+## DriftlessMap 2.0.0a6
+
+Development preview, 27 October 2026 (`v2-redesign` branch; not a release)
+
+- **Try the 2.0 preview from the desktop application.** **Help > Open the
+  2.0 Preview** opens the preview in a new window, and the preview's **Help >
+  Open the classic interface** goes back. The desktop application still starts
+  the stable interface; `--v2` on the command line (or
+  `DRIFTLESSMAP_INTERFACE=v2`) starts the preview directly, also with
+  `driftlessmap --v2` in a Python install.
+- Each interface runs in its own process with its own preferences. Use a copy
+  of a project to try the preview: its saves use payload schema 3.
+
+## DriftlessMap 2.0.0a5
+
+Development preview, 27 October 2026 (`v2-redesign` branch; not a release)
+
+- **The 2.0 preview's light theme now covers the 1.x controls it reuses.**
+  Tool options above the image, the plane, opacity, Show Boundary and tilt
+  controls of the Match step, and the Regions tree follow the light and dark
+  themes. Their white icons are recoloured to the theme's text colour, so
+  they stay visible on light backgrounds; coloured parts of icons are kept.
+  Region names, which were white on white in the light theme, are readable.
+
+## DriftlessMap 2.0.0a4
+
+Development preview, 27 October 2026 (`v2-redesign` branch; not a release)
+
+- **Choose the time point (or other plane) of a TIFF.** When a TIFF has an
+  axis beyond its channels and Z, such as time, DriftlessMap used only its
+  first plane. The 2.0 preview's Section step now shows a plane box for each
+  such axis; **Read plane** loads the chosen plane. As with loading a section,
+  this clears the section's landmarks; the registration channels are kept.
+- The chosen plane is saved in the project (`plane_selection`) and read again
+  when the project reopens from the original file. Projects without it use the
+  first plane, as before. A plane outside the file's range is refused with a
+  message.
+
+## DriftlessMap 2.0.0a3
+
+Development preview, 27 October 2026 (`v2-redesign` branch; not a release)
+
+- **Channel colours from channel names.** When a TIFF or CZI file names its
+  channels but does not store their colours, recognised names get their
+  conventional colour: DAPI and Hoechst blue; GFP, YFP, FITC and 488 green;
+  tdTomato, mCherry, RFP, Cy3 and 555–594 red; Cy5 and 647 magenta;
+  brightfield grey. Each colour is used once; other channels keep the earlier
+  defaults. Before, a channel named GFP could appear red.
+- Colours stored in the file, and colours saved in projects, are unchanged.
+  Pixel values and the registration input are unaffected. The new defaults do
+  also colour the composite made by **Make cleaned copy** (Image > Process
+  Image) for newly loaded files, as the file's colours always have.
+
+## DriftlessMap 2.0.0a2
+
+Development preview, 27 October 2026 (`v2-redesign` branch; not a release)
+
+- **Find atlas section names the side.** Instead of "As suggested" and
+  "Other hemisphere", the choice now says where the animal's right side is in
+  your section (for example "toward the left of your section") for coronal
+  and horizontal sections, and names the Right or Left hemisphere for
+  sagittal sections. The result of each choice is unchanged. This applies to
+  Atlas > Suggest Atlas Section... in the stable interface and to Find atlas
+  section in the 2.0 preview.
+
+## DriftlessMap 2.0.0a1
+
+Development preview, 27 October 2026 (`v2-redesign` branch; not a release)
+
+Changes to the 2.0 preview interface (`driftlessmap-v2`). The stable interface
+is unchanged.
+
+- **Unavailable actions are greyed out:** buttons that need an atlas, a
+  section, landmark pairs or a selected pair are disabled until they can run.
+  Hover over one to see what is missing.
+- **Match and Register say what they need:** when the atlas or section is
+  missing, a banner at the top of the step says so, with a button that opens
+  the Project step. Manual landmarks and warp previews also accept a slice
+  atlas; finding the atlas section and suggesting landmarks need a volume
+  atlas.
+- **A starting card instead of empty views:** with nothing loaded, the canvas
+  offers Load atlas, Load section, Open project and the Allen atlas download
+  instead of an empty atlas view with its intensity bar and slider.
+- **Clearer side panels:** Objects, Layers and Regions explain what will appear
+  there instead of showing empty lists and their controls.
+- **Mark review complete** is available once there are at least three complete
+  landmark pairs, matching what the review requires.
+
+## DriftlessMap 2.0 preview: first preview (before 2.0.0a1)
+
+A development preview of the redesigned interface. It is not a release; the
+stable application is unchanged.
+
+- **New interface:** `driftlessmap-v2` opens a task-oriented window organised
+  as Project, Section, Match, Register, Annotate and Results, with a command
+  search (Ctrl/Cmd+K), light and dark themes and clear status. It runs on the
+  same engine and saves the same project files. See Section 4.5 of the manual.
+- **Register on chosen channels:** automatic matching and landmark
+  suggestion can use DAPI (or any chosen channels) alone, independent of what
+  is visible. Also in the stable interface: Atlas > Registration Channels….
+- **Native multichannel microscopy input:** up to 16 channels at 8 or 16 bits,
+  ImageJ/OME hyperstacks, several series as scenes, and channel names and
+  colours from the file's metadata.
+- **Brightness and contrast per channel,** with ImageJ-style Auto, without
+  changing the pixel values.
+- **Probes by name:** create named probes, add each section's track to the
+  right probe in one step, and build one probe at a time. No more renaming
+  parts by hand to keep probes apart.
+- **Registration review:** mark a registration reviewed; any change to its
+  landmarks or plane clears the review.
+- Projects are saved with payload schema 3. DriftlessMap 1.x refuses them with
+  a clear message rather than opening them without the new information.
+
 ## DriftlessMap 1.6.1
 
 Release date: 28 September 2026

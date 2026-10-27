@@ -39,6 +39,7 @@ from PyQt6.QtCore import (
 from .wtiles import QDoubleButton
 from .probe_csv import write_probe_csv_files
 from .roi_analysis import write_roi_csv
+from .mapping_records import valid_derivation
 from .utils import read_qss_file
 from .resources import resource_path
 
@@ -1278,6 +1279,11 @@ class ObjectControl(QObject):
         self.obj_opacity = []
         self.obj_comp_mode = []
         self.obj_drawing_mode = []
+        # Mapping origin (see mapping_records): (unit, revision) pairs per
+        # object, and for built objects the pairs of each part, so Edit parts
+        # restores them.
+        self.obj_derivation = []
+        self.obj_piece_derivation = []
         self.obj_visibility = []
         self.obj_merged = []
 
@@ -1574,6 +1580,8 @@ class ObjectControl(QObject):
             del self.obj_opacity[da_ind]
             del self.obj_size[da_ind]
             del self.obj_drawing_mode[da_ind]
+            del self.obj_derivation[da_ind]
+            del self.obj_piece_derivation[da_ind]
             self.sig_delete_object.emit(da_ind)
         if self.current_obj_index in del_ind:
             if self.obj_list:
@@ -1617,12 +1625,17 @@ class ObjectControl(QObject):
         return "area" if "area" in str(object_name).lower() else "line"
 
     def add_object(
-        self, object_name, object_type, object_data, object_mode, drawing_mode=None
+        self, object_name, object_type, object_data, object_mode, drawing_mode=None,
+        derivation=None, piece_derivation=None,
     ):
         object_icon = self.get_object_icon(object_type)
         # group_count = self.get_group_count(object_type)
         if object_icon is None:
             return
+        self.obj_derivation.append(valid_derivation(derivation))
+        self.obj_piece_derivation.append(
+            [valid_derivation(item) for item in piece_derivation]
+            if isinstance(piece_derivation, (list, tuple)) else [])
         if drawing_mode is None:
             drawing_mode = self._default_drawing_mode(
                 object_name, object_type, object_data
@@ -1739,6 +1752,12 @@ class ObjectControl(QObject):
             # data[i] = temp.T
         return data, merging_object_names, pieces_names, cind
 
+    @staticmethod
+    def piece_group(piece_name):
+        """The built object a part belongs to, as ``collect_pieces`` groups it."""
+        name = str(piece_name).split("-")[0]
+        return name[:-1] if name.endswith(" ") else name
+
     def merge_pieces(self, obj_type="probe piece"):
         """Collect pieces of one type and remove them from the object list."""
         data, merging_object_names, pieces_names, cind = self.collect_pieces(obj_type)
@@ -1753,8 +1772,15 @@ class ObjectControl(QObject):
         current_data = self.obj_data[self.current_obj_index]
         m_obj_type = current_type.split(" ")[1]
         data_list = current_data["data"]
-        pieces_names = current_data["pieces_names"]
+        # Contours built before 2.0.0a11 kept no part names.
+        pieces_names = current_data.get("pieces_names") or [
+            "{} - piece".format(self.obj_name[self.current_obj_index])] * len(data_list)
         drawing_mode = current_data.get("plot_mode") if m_obj_type == "drawing" else None
+        piece_derivation = self.obj_piece_derivation[self.current_obj_index]
+        if len(piece_derivation) != len(data_list):
+            # Older builds kept no per-part origin; every part then carries
+            # the whole object's, so none is shown as current by mistake.
+            piece_derivation = [self.obj_derivation[self.current_obj_index]] * len(data_list)
         self.delete_objects([self.current_obj_index])
         for i in range(len(data_list)):
             self.add_object(
@@ -1763,6 +1789,7 @@ class ObjectControl(QObject):
                 data_list[i],
                 None,
                 drawing_mode=drawing_mode,
+                derivation=piece_derivation[i],
             )
 
     def drawing_mode_of_piece(self, piece_name):
@@ -1782,12 +1809,21 @@ class ObjectControl(QObject):
             "obj_opacity": self.obj_opacity,
             "obj_comp_mode": self.obj_comp_mode,
             "obj_drawing_mode": self.obj_drawing_mode,
+            "obj_derivation": self.obj_derivation,
+            "obj_piece_derivation": self.obj_piece_derivation,
             "current_obj_index": self.current_obj_index,
         }
         return data
 
     def set_obj_data(self, data):
         saved_modes = data.get("obj_drawing_mode")
+        derivations = data.get("obj_derivation")
+        piece_derivations = data.get("obj_piece_derivation")
+
+        def saved(values, i):
+            ok = isinstance(values, (list, tuple)) and len(values) == len(data["obj_type"])
+            return values[i] if ok else None
+
         for i in range(len(data["obj_type"])):
             mode = None
             if isinstance(saved_modes, (list, tuple)) and i < len(saved_modes):
@@ -1798,6 +1834,8 @@ class ObjectControl(QObject):
                 data["obj_data"][i],
                 data["obj_comp_mode"][i],
                 drawing_mode=mode,
+                derivation=saved(derivations, i),
+                piece_derivation=saved(piece_derivations, i),
             )
 
         self.obj_size = data["obj_size"]
@@ -1850,6 +1888,8 @@ class ObjectControl(QObject):
         self.obj_opacity = []
         self.obj_comp_mode = []
         self.obj_drawing_mode = []
+        self.obj_derivation = []
+        self.obj_piece_derivation = []
         self.obj_count = 0
         self.current_obj_index = None
         self.linked_indexes = []

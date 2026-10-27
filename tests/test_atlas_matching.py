@@ -7,6 +7,8 @@ import numpy as np
 
 from driftlessmap.atlas_matching import (
     ORIENTATIONS,
+    Orientation,
+    animal_right_edge,
     atlas_slice,
     best_by_plane,
     hemisphere_indexes,
@@ -17,6 +19,7 @@ from driftlessmap.atlas_matching import (
     mirror_hemisphere,
     mirrored_tilt,
     same_up_to_hemisphere,
+    sagittal_side,
     search_planes,
     tissue_mask,
 )
@@ -185,6 +188,29 @@ class HemisphereTests(unittest.TestCase):
                 self.assertEqual(mirror_hemisphere(plane, mirrored), orientation)
         self.assertEqual(mirror_hemisphere("sagittal", ORIENTATIONS[3]), ORIENTATIONS[3])
 
+
+    def test_animal_right_is_named_on_the_unoriented_section(self):
+        # Coronal views show the animal's right on the right, horizontal views
+        # at the bottom (positive ML is right).
+        self.assertEqual(animal_right_edge("coronal", Orientation(0, False)), "right")
+        self.assertEqual(animal_right_edge("coronal", Orientation(0, True)), "left")
+        self.assertEqual(animal_right_edge("horizontal", Orientation(0, False)), "bottom")
+        # Rotating 90° counter-clockwise brings the section's bottom to the right.
+        self.assertEqual(animal_right_edge("coronal", Orientation(1, False)), "bottom")
+        self.assertEqual(animal_right_edge("coronal", Orientation(2, False)), "left")
+        self.assertIsNone(animal_right_edge("sagittal", Orientation(0, False)))
+        opposite = {"left": "right", "right": "left", "top": "bottom", "bottom": "top"}
+        for plane in ("coronal", "horizontal"):
+            for orientation in ORIENTATIONS:
+                self.assertEqual(
+                    animal_right_edge(plane, mirror_hemisphere(plane, orientation)),
+                    opposite[animal_right_edge(plane, orientation)])
+
+    def test_sagittal_side_follows_the_ml_axis(self):
+        self.assertEqual(sagittal_side(30, 25), "right")
+        self.assertEqual(sagittal_side(mirrored_index(30, 25), 25), "left")
+        self.assertEqual(sagittal_side(25, 25), "midline")
+        self.assertIsNone(sagittal_side(25, None))
 
 class MirroredTiltTests(unittest.TestCase):
     def test_mirrored_tilt_reproduces_the_mirror_image_cut(self):

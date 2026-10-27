@@ -8,7 +8,10 @@ or important workflows change.
 
 ## Project identity
 
-- Current release: DriftlessMap 1.6.1.
+- Current stable release: DriftlessMap 1.6.1. The `v2-redesign` branch is the
+  2.0 development preview, versioned 2.0.0aN (currently 2.0.0a12); each
+  feature there increments N. Plain 2.0.0 is reserved for the release that
+  passes the gates in `version2_redesign.md`. Never give V2 work 1.x numbers.
 - Desktop application for histology registration, atlas mapping, probe
   reconstruction, anatomical annotation, and data export.
 - Python package: `driftlessmap`; GUI: PyQt6 + pyqtgraph/OpenGL.
@@ -33,16 +36,32 @@ or important workflows change.
 - `driftlessmap/provenance.py`: SHA-256 input identity, relative/absolute path
   hints, relocation and verification, portable source packing/extraction.
 - `driftlessmap/image_reader.py`: conventional, TIFF, folder, and embedded
-  active-raster readers. `czi_reader.py` handles optional CZI input.
+  active-raster readers. TIFF axes beyond C and the paged axis are read at
+  the plane in `plane_selection` (saved in `img_ctrl_data`; default first
+  plane); `DriftlessMap.select_image_planes` re-reads the section.
+  Pyramidal single-plane TIFFs (`has_levels`) are read at a stored level
+  chosen by the Scale slider, recorded through the saved `image_scale`. `czi_reader.py` handles optional CZI input.
 - `driftlessmap/image_view.py`: image scene/page/channel/LUT state.
 - `driftlessmap/atlas_matching.py`: GUI-free suggestion of the atlas plane,
   orientation and slice that match a histology section (silhouette search on
   slices exactly as `AtlasView` displays them). Coronal/horizontal matches are
-  ambiguous up to a left-right mirror; the user chooses the hemisphere.
+  ambiguous up to a left-right mirror; the user chooses the side, which the
+  dialog names anatomically (`animal_right_edge`, `sagittal_side`; positive
+  ML is the animal's right).
   `section_suggestion_dialog.py` shows ranked candidates for confirmation and
   `DriftlessMap.apply_section_suggestion` sets the view, page, tilt and
   histology orientation. Tilted matches use `tilted_slice`, which must stay
   identical to `AtlasView.rotate_*_current_slice`.
+- `driftlessmap/registration_input.py`: GUI-free registration-input recipe
+  (Legacy = unchanged raw image, 1.6 behaviour; or explicit channels, each
+  percentile-normalised and averaged into one analysis plane). Display
+  settings never enter it. `DriftlessMap.registration_section()` applies it
+  for Suggest Atlas Section and Propose Landmarks; a new multichannel image
+  has no recipe until the user chooses (`registration_channels_dialog.py`).
+- `driftlessmap/registration_review.py`: human review of the current
+  registration, tied to a fingerprint of landmarks, frame points, plane, page,
+  tilt and image size; any change makes it lapse. Pre-schema-3 work is
+  "not recorded", never "reviewed". Saved as `registration_review`.
 - `driftlessmap/auto_registration.py`: SimpleITK registration (moment-based
   affine on silhouettes, then a B-spline on intensities with Mattes MI) that
   proposes atlas-to-histology landmark pairs in DriftlessMap pixel-edge
@@ -55,6 +74,20 @@ or important workflows change.
   processed atlas loading, display, coordinate transforms.
 - `driftlessmap/triangulation.py`: deterministic piecewise-affine registration,
   topology, validation, transforms, and warping.
+- `driftlessmap/mapping_records.py` and `transactions.py`: Phase 3 (see
+  `phase3_mapping_design.md`). `MappingLedger` keeps one record per mapped
+  unit (section, kind, probe) with the kept section marks and the
+  registration fingerprint. `DriftlessMap.transform_accept(probe=...)`
+  records each mapped kind; `make_pieces_of(kind)` gives parts their
+  `(unit, revision)` origin (object control `obj_derivation`) and replaces
+  earlier parts of the same unit; `atlas_mark_origin` ties atlas marks to
+  their record until they are edited. `update_mapping(unit)` re-maps one
+  unit's kept marks without touching other live marks; `edit_mapped_marks`
+  returns them to the section; merges call `_drop_superseded_pieces`.
+  `TransactionHistory` (10 steps, 500 MB, compressed masks) backs
+  `DriftlessMap.undoable(label)`, which records only the outermost action
+  (wrap new mapping, part or build entry points in it), and
+  `undo_mapping_step` / `redo_mapping_step`.
 - `driftlessmap/landmarks.py`: `LandmarkModel` owns paired landmark lists,
   topology, the cached registration and label items (the `DriftlessMap`
   attributes of the same names delegate to it), plus `.dmaptri` validation.
@@ -70,6 +103,27 @@ or important workflows change.
   and raster layers.
 - `driftlessmap/utils.py`: shared image, label and geometry helpers (formerly
   `uuuuuu.py`).
+- `driftlessmap/v2/`: the 2.0 preview interface (`driftlessmap-v2`,
+  `python -m driftlessmap.v2`, or `--v2` / `DRIFTLESSMAP_INTERFACE=v2` with
+  the normal entry point and desktop bundle; see `interfaces.py`, which also
+  starts one interface from the other in a separate process).
+  `shell.V2Window` hosts a hidden `DriftlessMap` as its engine: it moves the engine's view splitter,
+  toolbar (tool options only), object/layer panels and label tree into its
+  own layout and calls engine methods and QActions for every operation. The
+  shell must never hold its own copy of scientific state. Panels per step
+  (`*_panel.py`), `commands.py` (registry and Ctrl/Cmd+K palette; every 1.x
+  QAction is registered under its old name), `state.py` (read-only status and
+  the unsaved-change digest, which ignores navigation), `channel_display.py`
+  (per-channel display range/gamma written into the 1.x curve state so saves
+  restore it), `theme.py` (design tokens and stylesheet) and `adopted.py`
+  (restyles the adopted 1.x toolbar, atlas controller and label tree from
+  the tokens and recolours their white icons; call it on theme changes). Preview
+  preferences use a separate QSettings namespace. V2 dialogs subclass the
+  1.x ones and only rebuild the layout (`allen_download_dialog.py`), so
+  download, validation and processing code stays shared. `probes.py` manages
+  named probes on top of the engine's name-prefix grouping of probe pieces
+  (`"<probe> - piece"`, `"<probe> shank N - piece"`); `merge_probes(only=...)`
+  builds selected groups only.
 - `driftlessmap/main_window.ui`: Qt menu/action definitions.
 - `driftlessmap/icons/app/`: canonical PNG plus native Windows ICO and macOS
   ICNS application artwork.
@@ -89,7 +143,10 @@ or important workflows change.
 
 - New files are never executable pickle payloads. They are atomic ZIP archives
   containing `manifest.json`, `.npy` arrays, and optional streamed attachments.
-- Archive format version is currently 1. Project payload schema is version 2.
+- Archive format version is currently 1. Project payload schema is version 3
+  (`project_io.PROJECT_SCHEMA_VERSION`); schema 3 adds `registration_input`,
+  `registration_review` and `mapping_review_state`, and up to 16 channels.
+  Schemas 1 and 2 load with Legacy registration input.
   Do not bump either without a backward-compatible reader/migration path.
 - Supported primary extensions:
   - `.dmap`: project.

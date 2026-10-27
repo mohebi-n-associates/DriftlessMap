@@ -45,7 +45,8 @@ class CurvesPlotTests(unittest.TestCase):
         one = np.random.default_rng(1).integers(0, 255, (8, 8, 1)).astype(np.uint8)
         plot.set_data(make_hist_data(one, 255), [(0, 255, 0)], 255)
         self.assertEqual(len(plot.active_pen), 1)
-        self.assertEqual(plot.enable_channel, [True, False, False, False])
+        self.assertEqual(plot.enable_channel[:4], [True, False, False, False])
+        self.assertFalse(any(plot.enable_channel[1:]))
         self.assertFalse(plot.hist_list[3].isVisible())
 
 
