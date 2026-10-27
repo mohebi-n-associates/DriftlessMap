@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 import unittest
 
@@ -43,6 +44,10 @@ class PackagingMetadataTests(unittest.TestCase):
         self.assertTrue(
             (REPOSITORY_ROOT / "packaging/constraints-desktop.txt").is_file()
         )
+        spec = (REPOSITORY_ROOT / "packaging/DriftlessMap.spec").read_text(encoding="utf-8")
+        self.assertIn('"CFBundleShortVersionString": BUNDLE_VERSION', spec)
+        bundle = re.match(r"\d+(?:\.\d+)*", "2.0.0a8").group(0)
+        self.assertEqual(bundle, "2.0.0")
         for script in ("packaging/build_windows.ps1", "packaging/build_macos.sh"):
             text = (REPOSITORY_ROOT / script).read_text(encoding="utf-8")
             self.assertIn("constraints-desktop.txt", text)

@@ -8,7 +8,10 @@ or important workflows change.
 
 ## Project identity
 
-- Current release: DriftlessMap 1.14.0.
+- Current stable release: DriftlessMap 1.6.1. The `v2-redesign` branch is the
+  2.0 development preview, versioned 2.0.0aN (currently 2.0.0a8); each
+  feature there increments N. Plain 2.0.0 is reserved for the release that
+  passes the gates in `version2_redesign.md`. Never give V2 work 1.x numbers.
 - Desktop application for histology registration, atlas mapping, probe
   reconstruction, anatomical annotation, and data export.
 - Python package: `driftlessmap`; GUI: PyQt6 + pyqtgraph/OpenGL.

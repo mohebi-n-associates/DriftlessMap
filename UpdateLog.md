@@ -1,42 +1,42 @@
 # Update Log
 
 ### 27th October 2026
-##### DriftlessMap 1.14.0
+##### DriftlessMap 2.0.0a8
 
 Projects save mapping records and each object's mapping origin (groundwork for keeping section marks after mapping).
 
 ### 27th October 2026
-##### DriftlessMap 1.13.0
+##### DriftlessMap 2.0.0a7
 
 Pyramidal TIFFs can be read at a stored lower resolution with the Scale slider; the level is saved and restored with the project.
 
 ### 27th October 2026
-##### DriftlessMap 1.12.0
+##### DriftlessMap 2.0.0a6
 
 The desktop application can open the 2.0 preview (Help > Open the 2.0 Preview, or `--v2`), and the preview can open the classic interface.
 
 ### 27th October 2026
-##### DriftlessMap 1.11.0
+##### DriftlessMap 2.0.0a5
 
 The 2.0 preview's light and dark themes now restyle the 1.x tool options, atlas controller and region tree.
 
 ### 27th October 2026
-##### DriftlessMap 1.10.0
+##### DriftlessMap 2.0.0a4
 
 Choose which time point (or other further axis plane) of a TIFF to read; the choice is saved in the project.
 
 ### 27th October 2026
-##### DriftlessMap 1.9.0
+##### DriftlessMap 2.0.0a3
 
 Channels named in a file without stored colours get conventional colours (DAPI blue, GFP green, tdTomato red, Cy5 magenta).
 
 ### 27th October 2026
-##### DriftlessMap 1.8.0
+##### DriftlessMap 2.0.0a2
 
 **Suggest Atlas Section** names the anatomical side: where the animal's right is in the section, or the Right or Left hemisphere for sagittal sections.
 
 ### 27th October 2026
-##### DriftlessMap 1.7.0
+##### DriftlessMap 2.0.0a1
 
 In the 2.0 preview, actions that cannot run yet are greyed out with the reason in their tooltip, Match and Register show what to load first, and empty views and side panels are replaced by short guidance.
 

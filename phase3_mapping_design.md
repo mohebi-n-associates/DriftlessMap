@@ -110,7 +110,7 @@ this way).
 ## 6. Persistence
 
 Payload schema stays 3: the new fields are optional and absent in files made
-by 1.7–1.13 preview builds, which were never released.
+by the 2.0.0a1–2.0.0a7 preview builds, which were never released.
 
 | Field | Default when absent |
 | --- | --- |
@@ -129,12 +129,12 @@ Undo history is never saved.
   round trip; invalid records rejected.
 - Out of date: landmark, frame-point, plane, page and tilt changes; display
   changes do not count; section replacement; parts follow their units.
-- Mapping (engine): same coordinates as 1.13 for every kind; kept marks;
+- Mapping (engine): same coordinates as 2.0.0a7 for every kind; kept marks;
   Edit marks; Update mapping equals a fresh map with the new registration.
 - Undo/redo for Map, Update, Make parts and Build, including review state;
   budget eviction and the over-budget refusal; history reset on load.
 - Projects: save and reopen with records, derivation and out-of-date state;
-  1.13 projects open with "origin not recorded".
+  2.0.0a7 projects open with "origin not recorded".
 - V2: out-of-date labels, Update mapping, Edit marks and named Undo entries.
 
 ## 8. Points to confirm in review

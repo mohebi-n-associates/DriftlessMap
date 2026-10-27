@@ -3,9 +3,9 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
-## DriftlessMap 1.14.0
+## DriftlessMap 2.0.0a8
 
-Release date: 27 October 2026
+Development preview, 27 October 2026 (`v2-redesign` branch; not a release)
 
 - **Projects record where mapped results came from.** Each loaded section
   gets an identity, and projects now save mapping records and, for every
@@ -17,9 +17,9 @@ Release date: 27 October 2026
   shown as "origin not recorded", never as current. Damaged records are left
   out with a message instead of stopping the project from opening.
 
-## DriftlessMap 1.13.0
+## DriftlessMap 2.0.0a7
 
-Release date: 27 October 2026
+Development preview, 27 October 2026 (`v2-redesign` branch; not a release)
 
 - **Read large pyramidal TIFFs at a lower resolution.** For TIFFs that store
   sub-resolution levels (such as whole-slide OME-TIFFs), the **Scale** slider
@@ -30,9 +30,9 @@ Release date: 27 October 2026
   the level's scale, as for CZI.
 - Pyramids of page stacks are still read at full resolution only.
 
-## DriftlessMap 1.12.0
+## DriftlessMap 2.0.0a6
 
-Release date: 27 October 2026
+Development preview, 27 October 2026 (`v2-redesign` branch; not a release)
 
 - **Try the 2.0 preview from the desktop application.** **Help > Open the
   2.0 Preview** opens the preview in a new window, and the preview's **Help >
@@ -43,9 +43,9 @@ Release date: 27 October 2026
 - Each interface runs in its own process with its own preferences. Use a copy
   of a project to try the preview: its saves use payload schema 3.
 
-## DriftlessMap 1.11.0
+## DriftlessMap 2.0.0a5
 
-Release date: 27 October 2026
+Development preview, 27 October 2026 (`v2-redesign` branch; not a release)
 
 - **The 2.0 preview's light theme now covers the 1.x controls it reuses.**
   Tool options above the image, the plane, opacity, Show Boundary and tilt
@@ -54,9 +54,9 @@ Release date: 27 October 2026
   they stay visible on light backgrounds; coloured parts of icons are kept.
   Region names, which were white on white in the light theme, are readable.
 
-## DriftlessMap 1.10.0
+## DriftlessMap 2.0.0a4
 
-Release date: 27 October 2026
+Development preview, 27 October 2026 (`v2-redesign` branch; not a release)
 
 - **Choose the time point (or other plane) of a TIFF.** When a TIFF has an
   axis beyond its channels and Z, such as time, DriftlessMap used only its
@@ -68,9 +68,9 @@ Release date: 27 October 2026
   first plane, as before. A plane outside the file's range is refused with a
   message.
 
-## DriftlessMap 1.9.0
+## DriftlessMap 2.0.0a3
 
-Release date: 27 October 2026
+Development preview, 27 October 2026 (`v2-redesign` branch; not a release)
 
 - **Channel colours from channel names.** When a TIFF or CZI file names its
   channels but does not store their colours, recognised names get their
@@ -83,9 +83,9 @@ Release date: 27 October 2026
   also colour the composite made by **Make cleaned copy** (Image > Process
   Image) for newly loaded files, as the file's colours always have.
 
-## DriftlessMap 1.8.0
+## DriftlessMap 2.0.0a2
 
-Release date: 27 October 2026
+Development preview, 27 October 2026 (`v2-redesign` branch; not a release)
 
 - **Find atlas section names the side.** Instead of "As suggested" and
   "Other hemisphere", the choice now says where the animal's right side is in
@@ -95,9 +95,9 @@ Release date: 27 October 2026
   Atlas > Suggest Atlas Section... in the stable interface and to Find atlas
   section in the 2.0 preview.
 
-## DriftlessMap 1.7.0 (2.0 preview update)
+## DriftlessMap 2.0.0a1
 
-Release date: 27 October 2026
+Development preview, 27 October 2026 (`v2-redesign` branch; not a release)
 
 Changes to the 2.0 preview interface (`driftlessmap-v2`). The stable interface
 is unchanged.
@@ -118,7 +118,7 @@ is unchanged.
 - **Mark review complete** is available once there are at least three complete
   landmark pairs, matching what the review requires.
 
-## DriftlessMap 2.0 preview (unreleased, `v2-redesign` branch)
+## DriftlessMap 2.0 preview: first preview (before 2.0.0a1)
 
 A development preview of the redesigned interface. It is not a release; the
 stable application is unchanged.
