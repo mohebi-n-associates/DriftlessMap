@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th October 2026
+##### DriftlessMap 1.12.0
+
+The desktop application can open the 2.0 preview (Help > Open the 2.0 Preview, or `--v2`), and the preview can open the classic interface.
+
+### 27th October 2026
 ##### DriftlessMap 1.11.0
 
 The 2.0 preview's light and dark themes now restyle the 1.x tool options, atlas controller and region tree.

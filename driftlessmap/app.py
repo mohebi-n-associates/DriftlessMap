@@ -28,6 +28,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import QSize, QTimer, Qt
 from PyQt6.QtGui import (
+    QAction,
     QIcon,
     QKeySequence,
     QPainter,
@@ -93,6 +94,7 @@ from .triangulation import (
     warp_image_piecewise,
 )
 
+from .interfaces import start_interface
 from .image_reader import (
     EmbeddedImageReader,
     HISTOLOGY_IMAGE_FILTER,
@@ -605,6 +607,12 @@ class DriftlessMap(QMainWindow, FORM_Main):
 
         # about menu related
         self.actionAbout_HERBS.triggered.connect(self.about_driftlessmap_info)
+        self.actionOpen_Preview = QAction("Open the 2.0 Preview", self)
+        self.actionOpen_Preview.setObjectName("actionOpen_Preview")
+        # The 2.0 preview offers its own way back; it does not list this.
+        self.actionOpen_Preview.setProperty("classic_only", True)
+        self.actionOpen_Preview.triggered.connect(self.open_preview_interface)
+        self.menuHelp.insertAction(self.actionAbout_HERBS, self.actionOpen_Preview)
 
         self.init_tool_bar()
         self.init_side_bar()
@@ -6660,6 +6668,16 @@ class DriftlessMap(QMainWindow, FORM_Main):
             self.image_view.page_ctrl.page_slider.setValue(
                 min(page, self.image_view.image_file.n_pages - 1))
         return True
+
+    def open_preview_interface(self):
+        """Start the 2.0 preview in its own process and window."""
+        if start_interface("preview"):
+            self.print_message(
+                "Opening the 2.0 preview in a new window. It saves the same project "
+                "files; open a copy of a project to try it.", self.normal_color)
+        else:
+            self.print_message("The 2.0 preview could not be started.",
+                               self.error_message_color)
 
     def load_single_image_file(
         self, image_file_path, image_file_type, scene_index=None, planes=None

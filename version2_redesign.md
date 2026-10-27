@@ -54,10 +54,12 @@ Done, with tests:
   T) is chosen in the Section step and saved in the project.
 - Adopted 1.x controls (tool options, atlas controller, region tree) follow
   the light and dark themes, with white icons recoloured to the theme text.
+- Desktop bundles contain both interfaces: the stable one starts by default;
+  `--v2`, `DRIFTLESSMAP_INTERFACE=v2` or Help > Open the 2.0 Preview starts
+  the preview, and the preview's Help menu opens the classic interface.
 
 Not yet done (see Sections 3, 6 and 15): source retention and staleness,
-undo for mapping and building, pyramid levels, and a desktop bundle that
-starts the preview.
+undo for mapping and building, and pyramid levels.
 
 ## Contents
 

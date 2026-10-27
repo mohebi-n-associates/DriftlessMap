@@ -34,6 +34,7 @@ from PyQt6.QtWidgets import (
 )
 
 from ..app import DriftlessMap
+from ..interfaces import start_interface
 from ..version import __version__
 from . import adopted, state
 from .annotate_panel import AnnotatePanel
@@ -554,6 +555,8 @@ class V2Window(QMainWindow):
         add(Command("help.manual", "Open the user manual", self.open_manual, "Help", ("docs",)))
         add(Command("help.shortcuts", "Keyboard shortcuts", self.show_shortcuts, "Help", ()))
         add(Command("help.about", "About DriftlessMap", engine.actionAbout_HERBS.trigger, "Help"))
+        add(Command("help.classic", "Open the classic interface", self.open_classic, "Help",
+                    ("1.x interface", "stable interface", "old interface")))
         for number, (key, title, _panel) in enumerate(STEPS, start=1):
             add(Command("step." + key, "Go to {}".format(title), lambda k=key: self.go_to(k),
                         "Steps", (title.lower(),), str(number)))
@@ -566,6 +569,8 @@ class V2Window(QMainWindow):
         for action in engine.findChildren(QAction):
             text = action.text().replace("&", "").strip()
             if not text or action.isSeparator() or action.menu() is not None or id(action) in seen:
+                continue
+            if action.property("classic_only"):
                 continue
             seen.add(id(action))
             self.registry.add(Command("legacy.{}".format(action.objectName() or id(action)),
@@ -634,6 +639,8 @@ class V2Window(QMainWindow):
         item(help_menu, "palette")
         item(help_menu, "help.shortcuts")
         item(help_menu, "help.manual")
+        help_menu.addSeparator()
+        item(help_menu, "help.classic")
         about = item(help_menu, "help.about")
         about.setMenuRole(QAction.MenuRole.AboutRole)
 
@@ -724,6 +731,13 @@ class V2Window(QMainWindow):
         if dialog.continue_process and dialog.process_finished:
             self.engine._open_downloaded_atlas(dialog)
             self.set_view("compare")
+
+    def open_classic(self):
+        """Start the classic interface in its own process and window."""
+        if start_interface("classic"):
+            self.message("Opening the classic interface in a new window.")
+        else:
+            self.message("The classic interface could not be started.", "bad")
 
     def open_palette(self):
         palette = CommandPalette(self.registry, self)

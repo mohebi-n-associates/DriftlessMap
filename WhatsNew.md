@@ -3,6 +3,19 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.12.0
+
+Release date: 27 October 2026
+
+- **Try the 2.0 preview from the desktop application.** **Help > Open the
+  2.0 Preview** opens the preview in a new window, and the preview's **Help >
+  Open the classic interface** goes back. The desktop application still starts
+  the stable interface; `--v2` on the command line (or
+  `DRIFTLESSMAP_INTERFACE=v2`) starts the preview directly, also with
+  `driftlessmap --v2` in a Python install.
+- Each interface runs in its own process with its own preferences. Use a copy
+  of a project to try the preview: its saves use payload schema 3.
+
 ## DriftlessMap 1.11.0
 
 Release date: 27 October 2026

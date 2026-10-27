@@ -85,12 +85,16 @@ class V2ShellTests(unittest.TestCase):
             names = {c.name for c in window.registry.all()}
             engine_actions = [a for a in window.engine.findChildren(QAction)
                               if a.text().replace("&", "").strip() and not a.isSeparator()
-                              and a.menu() is None]
+                              and a.menu() is None and not a.property("classic_only")]
             reachable = {c.handler for c in window.registry.all()}
             for action in engine_actions:
                 with self.subTest(action.text()):
                     self.assertIn(action.trigger, reachable)
             self.assertIn("Suggest landmarks", names)
+            # The preview offers the classic interface, not another preview.
+            self.assertIn("Open the classic interface", names)
+            self.assertNotIn("Open the 2.0 Preview", names)
+            self.assertIn(window.engine.actionOpen_Preview, window.engine.menuHelp.actions())
             merge = [c.name for c in window.registry.search("merge")]
             self.assertIn("Build 3D probe", merge)
             self.assertIn("Suggest landmarks",

@@ -8,7 +8,7 @@ or important workflows change.
 
 ## Project identity
 
-- Current release: DriftlessMap 1.11.0.
+- Current release: DriftlessMap 1.12.0.
 - Desktop application for histology registration, atlas mapping, probe
   reconstruction, anatomical annotation, and data export.
 - Python package: `driftlessmap`; GUI: PyQt6 + pyqtgraph/OpenGL.
@@ -85,8 +85,10 @@ or important workflows change.
 - `driftlessmap/utils.py`: shared image, label and geometry helpers (formerly
   `uuuuuu.py`).
 - `driftlessmap/v2/`: the 2.0 preview interface (`driftlessmap-v2`,
-  `python -m driftlessmap.v2`). `shell.V2Window` hosts a hidden
-  `DriftlessMap` as its engine: it moves the engine's view splitter,
+  `python -m driftlessmap.v2`, or `--v2` / `DRIFTLESSMAP_INTERFACE=v2` with
+  the normal entry point and desktop bundle; see `interfaces.py`, which also
+  starts one interface from the other in a separate process).
+  `shell.V2Window` hosts a hidden `DriftlessMap` as its engine: it moves the engine's view splitter,
   toolbar (tool options only), object/layer panels and label tree into its
   own layout and calls engine methods and QActions for every operation. The
   shell must never hold its own copy of scientific state. Panels per step

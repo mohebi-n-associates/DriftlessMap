@@ -1,6 +1,6 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 1.11.0**.
+This manual applies to **DriftlessMap 1.12.0**.
 
 DriftlessMap - Histological E-data Registration in Brain Space - is a desktop
 application for aligning rodent histology with a reference atlas, reconstructing
@@ -107,7 +107,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-DriftlessMap 1.11.0 requires:
+DriftlessMap 1.12.0 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -126,7 +126,7 @@ page. The macOS DMG (`-macOS-arm64.dmg`) is built for Apple Silicon; on an Intel
 Mac, use the developer installation below.
 The desktop builds include Python and all runtime dependencies. Windows users
 extract the entire ZIP and run `DriftlessMap.exe`; macOS users open the DMG and
-drag `DriftlessMap.app` to Applications. The 1.11.0 release is unsigned, so the
+drag `DriftlessMap.app` to Applications. The 1.12.0 release is unsigned, so the
 first launch may require Windows SmartScreen confirmation or Control-clicking
 the macOS app and choosing **Open**.
 
@@ -174,7 +174,7 @@ python -m pip --version
 python -c "import driftlessmap; print(driftlessmap.__version__)"
 ```
 
-The final command should print `1.11.0`.
+The final command should print `1.12.0`.
 
 ### 2.5 Launching DriftlessMap
 
@@ -445,7 +445,18 @@ Start it with:
 driftlessmap-v2
 # or
 python -m driftlessmap.v2
+# or
+driftlessmap --v2
 ```
+
+In the stable interface, **Help > Open the 2.0 Preview** opens the preview in
+a new window; in the preview, **Help > Open the classic interface** does the
+reverse. This also works in the desktop application, which starts the stable
+interface by default. To start the desktop application directly in the
+preview, pass `--v2` (for example in a Windows shortcut's target) or set the
+environment variable `DRIFTLESSMAP_INTERFACE=v2`. Open a copy of a project
+when trying the preview: projects it saves use payload schema 3, which
+DriftlessMap 1.6 and earlier refuse.
 
 The window has four areas:
 
@@ -499,7 +510,6 @@ Known limits of the preview:
 - Mapping and building keep their 1.x behaviour: mapping moves section marks
   to the atlas, and building replaces parts with the object (Edit parts
   restores them). The interface says so before you act.
-- The desktop application bundles still start the stable interface.
 
 ## 5. Downloading, processing, and loading atlases
 
