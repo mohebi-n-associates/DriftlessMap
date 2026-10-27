@@ -4602,7 +4602,9 @@ class DriftlessMap(QMainWindow, FORM_Main):
         item = getattr(self, "_kept_marks_item", None)
         if item is None:
             item = self._kept_marks_item = pg.ScatterPlotItem(
-                size=7, pen=pg.mkPen(255, 255, 255, 150), brush=pg.mkBrush(255, 255, 255, 60),
+                # Dark outline, light fill: visible on brightfield and fluorescence.
+                size=8, pen=pg.mkPen(20, 20, 20, 200, width=1.5),
+                brush=pg.mkBrush(255, 255, 255, 110),
                 symbol="o", pxMode=True)
             item.setZValue(5)
             item.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
