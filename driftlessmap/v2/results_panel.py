@@ -21,7 +21,8 @@ class ResultsPanel(StepPanel):
             button("Region table…", o.info_btn.click),
             button("Show on plane", o.vis2d_btn.click),
             button("Compare…", o.compare_btn.click),
-            button("Show 3D view", lambda: shell.set_view("3d")),
+            self.gate(button("Show 3D view", lambda: shell.set_view("3d")),
+                      shell.needs_volume),
         ], columns=2))
         selected.add(hint_label("Select an object in the Objects list on the right."))
 

@@ -171,6 +171,50 @@ class V2ShellTests(unittest.TestCase):
 
 
     @isolated_gui_test
+    def test_actions_that_need_data_are_disabled_with_a_reason(self):
+        import tifffile
+        from PyQt6.QtWidgets import QPushButton
+
+        def find(panel, text):
+            return next(b for b in panel.findChildren(QPushButton) if b.text() == text)
+
+        with tempfile.TemporaryDirectory() as folder:
+            window = self.make_window(folder)
+            engine = window.engine
+            window.go_to("register")
+            register = window.panels["register"]
+            card, _reason = register._requirement
+            self.assertTrue(card.isVisibleTo(register))
+            suggest = find(register, "Suggest landmarks")
+            self.assertFalse(suggest.isEnabled())
+            self.assertIn("Load", suggest.toolTip())
+            self.assertFalse(find(register, "Mark review complete").isEnabled())
+            # Nothing loaded: a starting card replaces the empty 1.x views.
+            self.assertTrue(window.empty_canvas.isVisibleTo(window))
+            self.assertFalse(window.views.isVisibleTo(window))
+            self.assertTrue(window.objects_empty.isVisibleTo(window.inspector_tabs.widget(0)))
+            self.assertFalse(engine.object_ctrl.outer_frame.isVisibleTo(window))
+
+            path = Path(folder) / "two.ome.tif"
+            data = np.random.default_rng(3).integers(0, 4000, (2, 30, 40), dtype=np.uint16)
+            tifffile.imwrite(path, data, ome=True, metadata={"axes": "CYX"})
+            self.assertTrue(engine.load_single_image_file(str(path), ".tif"))
+            window.refresh()
+            self.assertFalse(window.empty_canvas.isVisibleTo(window))
+            self.assertTrue(window.views.isVisibleTo(window))
+            # A section alone enables the Section step but not atlas matching.
+            window.go_to("section")
+            self.assertTrue(find(window.panels["section"], "Auto").isEnabled())
+            window.go_to("match")
+            self.assertFalse(find(window.panels["match"], "Find atlas section").isEnabled())
+            window.go_to("register")
+            self.assertTrue(card.isVisibleTo(register))
+            self.assertIn("atlas", register._requirement_text.text())
+            window.go_to("annotate")
+            self.assertTrue(find(window.panels["annotate"], "Cells").isEnabled())
+            self.assertFalse(find(window.panels["annotate"], "Map to atlas").isEnabled())
+
+    @isolated_gui_test
     def test_allen_download_dialog_reuses_verified_files(self):
         import json
         from unittest.mock import patch

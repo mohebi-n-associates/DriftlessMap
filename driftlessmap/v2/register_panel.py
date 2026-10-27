@@ -20,20 +20,24 @@ class RegisterPanel(StepPanel):
     def build(self):
         engine, shell = self.engine, self.shell
         self._table_key = None
+        self.require(shell.needs_atlas_and_image)
+        needs_both = shell.needs_both
+        needs_pair_views = shell.needs_atlas_and_image
 
         points = self.add(Card("Landmarks"))
-        points.add_row(button("Suggest landmarks", lambda: shell.run("register.suggest"),
-                              primary=True), None)
+        points.add_row(self.gate(button("Suggest landmarks", lambda: shell.run("register.suggest"),
+                                        primary=True), needs_both), None)
         self.add_point = button("Add or move points", lambda: shell.toggle_tool("triang"),
                                 checkable=True,
                                 tooltip="Click the atlas, then the matching place in the "
                                         "section. Drag points to move them. (P)")
         points.add(grid_of([
-            self.add_point,
-            button("Delete pair", self._delete_selected,
-                   tooltip="Delete / Backspace"),
-            button("Centre on pair", self._centre_selected),
-            button("Mesh lines", engine.tool_box.triang_vis_btn.click),
+            self.gate(self.add_point, needs_pair_views),
+            self.gate(button("Delete pair", self._delete_selected,
+                             tooltip="Delete / Backspace"), self._needs_selection),
+            self.gate(button("Centre on pair", self._centre_selected), self._needs_selection),
+            self.gate(button("Mesh lines", engine.tool_box.triang_vis_btn.click),
+                      needs_pair_views),
         ], columns=2))
         self.table = QTableWidget(0, 4)
         self.table.setHorizontalHeaderLabels(["#", "Kind", "Atlas x, y", "Section x, y"])
@@ -57,8 +61,9 @@ class RegisterPanel(StepPanel):
 
         review = self.add(Card("Review"))
         self.review_status = review.add(status_label(""))
-        review.add_row(button("Mark review complete", lambda: shell.run("register.review")),
-                       None)
+        review.add_row(self.gate(button("Mark review complete",
+                                        lambda: shell.run("register.review")),
+                                 self._needs_review_pairs), None)
         review.add(hint_label(
             "Mark the registration reviewed after checking internal anatomy as well as "
             "the outline. Moving any landmark or changing the atlas plane clears it."))
@@ -69,7 +74,8 @@ class RegisterPanel(StepPanel):
                                checkable=True)
         self.to_section = button("Atlas on section", engine.tool_box.toh_btn.trigger,
                                  checkable=True)
-        warp.add(grid_of([self.to_atlas, self.to_section], columns=2))
+        warp.add(grid_of([self.gate(self.to_atlas, self._needs_warp_atlas),
+                          self.gate(self.to_section, self._needs_warp_section)], columns=2))
         warp.add(hint_label(
             "Previewing shows a warped image only. Annotations move to the atlas only "
             "with Map annotations to atlas, in the Annotate step. Press the active "
@@ -84,10 +90,38 @@ class RegisterPanel(StepPanel):
         self.frame_box = frame_box
         advanced.add_row(hint_label("Frame points per side"), frame_box, None)
         advanced.add(grid_of([
-            button("Fit frame to tissue", engine.tool_box.triang_match_bnd.click),
+            self.gate(button("Fit frame to tissue", engine.tool_box.triang_match_bnd.click),
+                      needs_pair_views),
             button("Import landmarks…", engine.actionLoad_Triangulation_Points.trigger),
             button("Export landmarks…", engine.actionSave_Triangulation_Points.trigger),
         ], columns=2))
+
+    # --------------------------------------------------------- availability
+    def _needs_pairs(self, minimum=1):
+        engine = self.engine
+        atlas, histology = engine.atlas_tri_inside_data, engine.histo_tri_inside_data
+        if len(atlas) != len(histology) or len(atlas) < minimum:
+            return self.shell.needs_atlas_and_image() or (
+                "Place at least {} complete landmark pair{} first.".format(
+                    minimum, "" if minimum == 1 else "s"))
+        return None
+
+    def _needs_review_pairs(self):
+        return self._needs_pairs(3)
+
+    def _needs_selection(self):
+        return (None if self._selected_row() is not None
+                else "Select a landmark pair in the list first.")
+
+    def _needs_warp_atlas(self):
+        if self.engine.a2h_transferred:
+            return "Remove the atlas-on-section preview first."
+        return self.shell.needs_atlas_and_image()
+
+    def _needs_warp_section(self):
+        if self.engine.h2a_transferred:
+            return "Remove the section-on-atlas preview first."
+        return self.shell.needs_atlas_and_image()
 
     # -------------------------------------------------------------- helpers
     def _kinds(self):
@@ -198,8 +232,6 @@ class RegisterPanel(StepPanel):
 
         self.to_atlas.setChecked(bool(engine.h2a_transferred))
         self.to_section.setChecked(bool(engine.a2h_transferred))
-        self.to_section.setEnabled(not engine.h2a_transferred)
-        self.to_atlas.setEnabled(not engine.a2h_transferred)
         if engine.h2a_transferred:
             set_status(self.warp_status, "Showing the section warped onto the atlas.", "good")
         elif engine.a2h_transferred:

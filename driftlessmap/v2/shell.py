@@ -44,6 +44,7 @@ from .register_panel import RegisterPanel
 from .results_panel import ResultsPanel
 from .section_panel import SectionPanel
 from .theme import stylesheet
+from .widgets import Card, button, hint_label
 
 STEPS = (
     ("project", "Project", ProjectPanel),
@@ -215,6 +216,9 @@ class V2Window(QMainWindow):
         views = engine.splitter_3
         views.setParent(canvas)
         canvas_layout.addWidget(views, 1)
+        self.views = views
+        self.empty_canvas = self._build_empty_canvas()
+        canvas_layout.addWidget(self.empty_canvas, 1)
         body.addWidget(canvas)
 
         # Inspector column: objects, layers and atlas regions.
@@ -226,12 +230,26 @@ class V2Window(QMainWindow):
         objects = QWidget()
         objects_layout = QVBoxLayout(objects)
         objects_layout.setContentsMargins(0, 6, 0, 0)
+        self.objects_empty = hint_label(
+            "No objects yet. Parts made in Annotate, built 3D objects and imported "
+            "objects appear here.")
+        objects_layout.addWidget(self.objects_empty, 0, Qt.AlignmentFlag.AlignTop)
         objects_layout.addWidget(engine.object_ctrl.outer_frame)
         self.inspector_tabs.addTab(objects, "Objects")
-        self.inspector_tabs.addTab(engine.layer_ctrl, "Layers")
+        layers = QWidget()
+        layers_layout = QVBoxLayout(layers)
+        layers_layout.setContentsMargins(0, 6, 0, 0)
+        self.layers_empty = hint_label(
+            "No layers yet. Loading a section, warp previews and annotations add layers "
+            "here.")
+        layers_layout.addWidget(self.layers_empty, 0, Qt.AlignmentFlag.AlignTop)
+        layers_layout.addWidget(engine.layer_ctrl)
+        self.inspector_tabs.addTab(layers, "Layers")
         regions = QWidget()
         regions_layout = QVBoxLayout(regions)
         regions_layout.setContentsMargins(0, 6, 0, 0)
+        self.regions_empty = hint_label("Load an atlas to browse its regions.")
+        regions_layout.addWidget(self.regions_empty, 0, Qt.AlignmentFlag.AlignTop)
         regions_layout.addWidget(engine.atlas_view.label_tree)
         self.inspector_tabs.addTab(regions, "Regions")
         inspector_layout.addWidget(self.inspector_tabs)
@@ -265,6 +283,44 @@ class V2Window(QMainWindow):
         status_layout.addWidget(self.theme_button)
         outer.addWidget(status)
         self.setCentralWidget(root)
+
+    def _build_empty_canvas(self):
+        """Shown instead of the empty 1.x views until an atlas or section is loaded."""
+        frame = QWidget()
+        frame.setObjectName("Canvas")
+        layout = QVBoxLayout(frame)
+        layout.addStretch(1)
+        card = Card("Nothing to show yet",
+                    "Load a processed atlas and a histology section, or open a project. "
+                    "Without a section, probes can be planned on the atlas alone.")
+        card.setMaximumWidth(460)
+        card.add_row(button("Load atlas…", lambda: self.run("atlas.load"), primary=True),
+                     button("Load section…", lambda: self.run("section.load")),
+                     button("Open project…", lambda: self.run("project.open")), None)
+        card.add_row(button("Download Allen mouse atlas…", self.download_allen_atlas), None)
+        row = QHBoxLayout()
+        row.addStretch(1)
+        row.addWidget(card)
+        row.addStretch(1)
+        layout.addLayout(row)
+        layout.addStretch(2)
+        return frame
+
+    def _sync_empty_states(self):
+        engine = self.engine
+        view = engine.atlas_view
+        has_atlas = view.atlas_data is not None or getattr(view, "slice_image_data", None) is not None
+        nothing = not has_atlas and engine.image_view.current_img is None
+        self.views.setVisible(not nothing)
+        self.empty_canvas.setVisible(nothing)
+        no_objects = not engine.object_ctrl.obj_list
+        self.objects_empty.setVisible(no_objects)
+        engine.object_ctrl.outer_frame.setVisible(not no_objects)
+        no_layers = not engine.layer_ctrl.layer_list
+        self.layers_empty.setVisible(no_layers)
+        engine.layer_ctrl.setVisible(not no_layers)
+        self.regions_empty.setVisible(view.atlas_data is None)
+        view.label_tree.setVisible(view.atlas_data is not None)
 
     # ------------------------------------------------------------ messages
     def _wrap_engine_messages(self):
@@ -304,6 +360,7 @@ class V2Window(QMainWindow):
         self.stack.setCurrentWidget(self.panels[step])
         self.rail_buttons[step].setChecked(True)
         self.panels[step].refresh()
+        self.panels[step].apply_gates()
         if step in ("annotate", "results") and self.inspector_tabs.currentIndex() != 0:
             self.inspector_tabs.setCurrentIndex(0)
 
@@ -393,18 +450,40 @@ class V2Window(QMainWindow):
             self.message(reason, "warn")
         self.refresh()
 
+    # Availability checks: None when possible, otherwise the reason.
+    def needs_image(self):
+        return None if self.engine.image_view.current_img is not None else "Load a section first."
+
+    def needs_volume(self):
+        return (None if self.engine.atlas_view.atlas_data is not None
+                else "Load a volume atlas first.")
+
+    def needs_both(self):
+        if self.needs_volume() and self.needs_image():
+            return "Load a volume atlas and a section first."
+        return self.needs_volume() or self.needs_image()
+
+    def needs_atlas_and_image(self):
+        """Manual landmarks and warping also work on a calibrated slice atlas."""
+        view = self.engine.atlas_view
+        no_atlas = view.atlas_data is None and getattr(view, "slice_image_data", None) is None
+        if no_atlas and self.needs_image():
+            return "Load an atlas and a section first."
+        return "Load an atlas first." if no_atlas else self.needs_image()
+
+    def command_reason(self, command_id):
+        """A check for StepPanel.gate that follows a registered command."""
+        return lambda: self.registry.get(command_id).reason_unavailable()
+
+    def needs_either(self):
+        if self.needs_volume() and self.needs_image():
+            return "Load a volume atlas or a section first."
+        return None
+
     def _register_commands(self):
         engine = self.engine
         add = self.registry.add
-
-        def needs_image():
-            return None if engine.image_view.current_img is not None else "Load a section first."
-
-        def needs_volume():
-            return None if engine.atlas_view.atlas_data is not None else "Load a volume atlas first."
-
-        def needs_both():
-            return needs_volume() or needs_image()
+        needs_both = self.needs_both
 
         add(Command("atlas.load", "Load atlas…", engine.actionAtlas.trigger, "Project",
                     ("open atlas", "volume atlas"), "Ctrl+Shift+A"))
@@ -691,6 +770,7 @@ class V2Window(QMainWindow):
         current = self.stack.currentWidget()
         if current is not None:
             current.refresh()
+            current.apply_gates()
         self.plane_label.setText(state.plane_summary(engine))
         tool = engine.current_checked_tool
         self.tool_options.setVisible(tool is not None)
@@ -699,6 +779,7 @@ class V2Window(QMainWindow):
             "ruler": "Measure", "probe": "Probe", "pencil": "Drawing", "eraser": "Eraser",
             "lasso": "Lasso"}.get(tool, str(tool).capitalize())) if tool else "")
         self._sync_view_buttons()
+        self._sync_empty_states()
         atlas, _ = state.atlas_summary(engine)
         section, _ = state.section_summary(engine)
         self.context_label.setText("{} · {}".format(atlas, section))

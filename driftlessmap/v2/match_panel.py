@@ -13,11 +13,12 @@ class MatchPanel(StepPanel):
 
     def build(self):
         engine, shell = self.engine, self.shell
+        self.require(shell.needs_both)
 
         find = self.add(Card("Find atlas section"))
         self.recipe = find.add(status_label(""))
-        find.add_row(button("Find atlas section", lambda: shell.run("match.find"),
-                            primary=True),
+        find.add_row(self.gate(button("Find atlas section", lambda: shell.run("match.find"),
+                                      primary=True), shell.needs_both),
                      button("Change channels", lambda: shell.go_to("section")), None)
         find.add(hint_label(
             "Compares the tissue outline with every plane, ranks depths by internal "
@@ -36,7 +37,7 @@ class MatchPanel(StepPanel):
         for radio in (view.section_rabnt1, view.section_rabnt2, view.section_rabnt3):
             radio.setStyleSheet("")
         view.radio_group.setStyleSheet("")
-        manual.add(view.sidebar_wrap)
+        manual.add(self.gate(view.sidebar_wrap, shell.needs_volume))
 
     def refresh(self):
         engine = self.engine

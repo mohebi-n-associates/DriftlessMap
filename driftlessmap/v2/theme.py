@@ -60,6 +60,9 @@ QWidget#V2Root, QWidget#TaskColumn, QWidget#InspectorColumn {{ background: {bg};
 QFrame#Card {{
     background: {surface}; border: 1px solid {border}; border-radius: {radius}px;
 }}
+QFrame#Requirement {{
+    background: {surface}; border: 1px solid {warning}; border-radius: {radius}px;
+}}
 QLabel#CardTitle {{ font-size: {title}px; font-weight: 600; }}
 QLabel#StepTitle {{ font-size: {heading}px; font-weight: 600; }}
 QLabel#Muted, QLabel#Hint {{ color: {muted}; font-size: {label}px; }}
@@ -83,7 +86,9 @@ QPushButton:disabled, QToolButton:disabled {{ color: {muted}; border-color: {sur
 QPushButton[primary="true"] {{
     background: {accent}; border-color: {accent}; color: {accent_text}; font-weight: 600;
 }}
-QPushButton[primary="true"]:disabled {{ background: {raised}; color: {muted}; }}
+QPushButton[primary="true"]:disabled {{
+    background: {raised}; border-color: {surface_alt}; color: {muted}; font-weight: 400;
+}}
 
 QToolButton#RailButton {{
     background: transparent; border: none; border-radius: 6px; padding: 8px 10px;

@@ -1,6 +1,6 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 1.6.1**.
+This manual applies to **DriftlessMap 1.7.0**.
 
 DriftlessMap - Histological E-data Registration in Brain Space - is a desktop
 application for aligning rodent histology with a reference atlas, reconstructing
@@ -107,7 +107,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-DriftlessMap 1.6.1 requires:
+DriftlessMap 1.7.0 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -126,7 +126,7 @@ page. The macOS DMG (`-macOS-arm64.dmg`) is built for Apple Silicon; on an Intel
 Mac, use the developer installation below.
 The desktop builds include Python and all runtime dependencies. Windows users
 extract the entire ZIP and run `DriftlessMap.exe`; macOS users open the DMG and
-drag `DriftlessMap.app` to Applications. The 1.6.1 release is unsigned, so the
+drag `DriftlessMap.app` to Applications. The 1.7.0 release is unsigned, so the
 first launch may require Windows SmartScreen confirmation or Control-clicking
 the macOS app and choosing **Open**.
 
@@ -174,7 +174,7 @@ python -m pip --version
 python -c "import driftlessmap; print(driftlessmap.__version__)"
 ```
 
-The final command should print `1.6.1`.
+The final command should print `1.7.0`.
 
 ### 2.5 Launching DriftlessMap
 
@@ -476,6 +476,12 @@ Probes are grouped by name, so the sections of one probe combine and different
 probes stay separate without renaming parts. Probe names cannot contain "-".
 In pre-surgical planning (no section loaded), click the entry point and the tip
 on the atlas instead.
+
+Buttons that cannot run yet are greyed out; hover over one to see what is
+missing (an atlas, a section, landmark pairs or a selected pair). Match and
+Register show a banner when the atlas or section is missing. Until something
+is loaded, the canvas shows buttons to load an atlas, load a section, open a
+project or download the Allen mouse atlas.
 
 Display settings (colour, visibility, brightness, contrast, gamma, curves)
 change only how the image looks; the pixel values, registration input and

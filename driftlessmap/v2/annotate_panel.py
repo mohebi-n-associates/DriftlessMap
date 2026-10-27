@@ -24,22 +24,24 @@ class AnnotatePanel(StepPanel):
         engine, shell = self.engine, self.shell
         self.tool_buttons = {}
         self.probes = self.add(ProbeCard(shell))
+        self.gate(self.probes.mark, shell.needs_either)
         tools = self.add(Card("Other annotations",
                               "Cells, expression, contours and drawings. Map them to the "
                               "atlas and make parts below."))
         widgets = []
         for key, label, tip in TOOLS:
-            widget = button(label, lambda k=key: shell.toggle_tool(k), checkable=True,
-                            tooltip=tip)
+            widget = self.gate(button(label, lambda k=key: shell.toggle_tool(k),
+                                      checkable=True, tooltip=tip), shell.needs_either)
             self.tool_buttons[key] = widget
             widgets.append(widget)
         tools.add(grid_of(widgets, columns=2))
         mapping = self.add(Card("Map annotations to atlas"))
         self.review = mapping.add(status_label(""))
         self.map_button = mapping.add_row(
-            button("Mark reviewed", lambda: shell.run("register.review")),
-            button("Map to atlas", lambda: shell.run("annotate.map"),
-                   primary=True), None)
+            self.gate(button("Mark reviewed", lambda: shell.run("register.review")),
+                      lambda: shell.panels["register"]._needs_review_pairs()),
+            self.gate(button("Map to atlas", lambda: shell.run("annotate.map"), primary=True),
+                      shell.command_reason("annotate.map")), None)
         mapping.add(hint_label(
             "Requires the section → atlas warp preview. Mapping moves the section's marks "
             "onto the atlas: they are removed from the section. Mapping without a review "
@@ -67,7 +69,10 @@ class AnnotatePanel(StepPanel):
         for key, widget in self.tool_buttons.items():
             widget.setChecked(engine.tool_box.checkable_btn_dict["{}_btn".format(key)].isChecked())
         review = engine.registration_review_state()
-        if not engine.h2a_transferred:
+        missing = self.shell.needs_atlas_and_image()
+        if missing:
+            set_status(self.review, missing, "warn")
+        elif not engine.h2a_transferred:
             set_status(self.review, "Preview the section on the atlas first (Register step).",
                        "warn")
         elif review == "reviewed":

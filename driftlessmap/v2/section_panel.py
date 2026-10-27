@@ -143,10 +143,13 @@ class SectionPanel(StepPanel):
         grid.addWidget(self.auto_note, 5, 0, 1, 4)
         self.adjust = adjust
         self.channel_card.add(adjust)
+        needs_image = self.shell.needs_image
         self.channel_card.add_row(
-            button("Auto", self._auto, tooltip="Saturate 0.35% of samples, as ImageJ Auto"),
-            button("Reset", self._reset, tooltip="Full data range, gamma 1"),
-            button("Auto all", self._auto_all), None)
+            self.gate(button("Auto", self._auto,
+                             tooltip="Saturate 0.35% of samples, as ImageJ Auto"), needs_image),
+            self.gate(button("Reset", self._reset, tooltip="Full data range, gamma 1"),
+                      needs_image),
+            self.gate(button("Auto all", self._auto_all), needs_image), None)
         self.channel_card.add(Disclosure("Curve editor and histogram", view.curve_widget))
 
         self.reg_card = self.add(Card(
@@ -156,12 +159,13 @@ class SectionPanel(StepPanel):
         self.reg_mode.addItems(["Channels ticked under Register",
                                 "Legacy: all channels, as DriftlessMap 1.6"])
         self.reg_mode.currentIndexChanged.connect(self._reg_mode_changed)
-        self.reg_card.add(self.reg_mode)
+        self.reg_card.add(self.gate(self.reg_mode, needs_image))
         self.reg_status = self.reg_card.add(status_label(""))
-        self.reg_card.add_row(button("Preview input…", self._preview_input), None)
+        self.reg_card.add_row(self.gate(button("Preview input…", self._preview_input),
+                                        needs_image), None)
 
         orient = self.add(Card("Orientation", "Rotations and flips apply to every channel."))
-        orient.add(grid_of([
+        orient.add(self.gate(grid_of([
             button("Rotate 90° left", engine.action90_Counter_Clockwise.trigger),
             button("Rotate 90° right", engine.action90_Clockwise.trigger),
             button("Rotate 1° left", engine.action1_Counter_Clockwise.trigger),
@@ -169,7 +173,7 @@ class SectionPanel(StepPanel):
             button("Rotate 180°", engine.action180.trigger),
             button("Flip horizontally", engine.actionFlip_Horizontal.trigger),
             button("Flip vertically", engine.actionFlip_Vertical.trigger),
-        ], columns=2))
+        ], columns=2), needs_image))
 
         clean = self.add(Card(
             "Crop and clean up",
@@ -177,12 +181,12 @@ class SectionPanel(StepPanel):
             "Make cleaned copy creates an editable copy for background removal."))
         self.lasso_button = button("Lasso", lambda: self.shell.toggle_tool("lasso"),
                                    checkable=True)
-        clean.add(grid_of([
+        clean.add(self.gate(grid_of([
             self.lasso_button,
             button("Crop to lasso", engine.actionCut.trigger),
             button("Make cleaned copy", engine.actionProcess_Image.trigger),
             button("Reset image", engine.actionReset_Image.trigger),
-        ], columns=2))
+        ], columns=2), needs_image))
 
     # ---------------------------------------------------------------- rows
     def _rebuild_rows(self):

@@ -3,6 +3,29 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.7.0 (2.0 preview update)
+
+Release date: 27 October 2026
+
+Changes to the 2.0 preview interface (`driftlessmap-v2`). The stable interface
+is unchanged.
+
+- **Unavailable actions are greyed out:** buttons that need an atlas, a
+  section, landmark pairs or a selected pair are disabled until they can run.
+  Hover over one to see what is missing.
+- **Match and Register say what they need:** when the atlas or section is
+  missing, a banner at the top of the step says so, with a button that opens
+  the Project step. Manual landmarks and warp previews also accept a slice
+  atlas; finding the atlas section and suggesting landmarks need a volume
+  atlas.
+- **A starting card instead of empty views:** with nothing loaded, the canvas
+  offers Load atlas, Load section, Open project and the Allen atlas download
+  instead of an empty atlas view with its intensity bar and slider.
+- **Clearer side panels:** Objects, Layers and Regions explain what will appear
+  there instead of showing empty lists and their controls.
+- **Mark review complete** is available once there are at least three complete
+  landmark pairs, matching what the review requires.
+
 ## DriftlessMap 2.0 preview (unreleased, `v2-redesign` branch)
 
 A development preview of the redesigned interface. It is not a release; the

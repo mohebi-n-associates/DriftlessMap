@@ -4,8 +4,8 @@ message: >-
   HERBS paper listed under references.
 title: DriftlessMap
 type: software
-version: 1.6.1
-date-released: 2026-09-28
+version: 1.7.0
+date-released: 2026-10-27
 authors:
   - name: Mohebi & Associates
     website: https://www.mohebi-associates.org/

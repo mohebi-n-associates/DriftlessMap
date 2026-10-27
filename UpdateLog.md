@@ -1,5 +1,10 @@
 # Update Log
 
+### 27th October 2026
+##### DriftlessMap 1.7.0
+
+In the 2.0 preview, actions that cannot run yet are greyed out with the reason in their tooltip, Match and Register show what to load first, and empty views and side panels are replaced by short guidance.
+
 ### 28th September 2026
 ##### DriftlessMap 1.6.1
 

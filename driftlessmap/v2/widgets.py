@@ -144,6 +144,8 @@ class StepPanel(QScrollArea):
         if self.hint:
             self.body.addWidget(hint_label(self.hint))
         self.setWidget(body)
+        self._gates = []
+        self._requirement = None
         self.build()
         self.body.addStretch(1)
 
@@ -156,3 +158,31 @@ class StepPanel(QScrollArea):
 
     def refresh(self):
         """Update from the engine; called periodically and after commands."""
+
+    # --------------------------------------------------------- availability
+    def gate(self, widget, reason):
+        """Disable ``widget`` while ``reason()`` returns a reason, shown as its tooltip."""
+        self._gates.append((widget, reason, widget.toolTip()))
+        return widget
+
+    def require(self, reason):
+        """Show a banner at the top of the step while ``reason()`` returns a reason."""
+        card = Card()
+        card.setObjectName("Requirement")
+        self._requirement_text = card.add(status_label(""))
+        card.add_row(button("Go to Project", lambda: self.shell.go_to("project")), None)
+        self.body.insertWidget(2 if self.hint else 1, card)
+        self._requirement = (card, reason)
+
+    def apply_gates(self):
+        for widget, reason, tooltip in self._gates:
+            text = reason()
+            widget.setEnabled(text is None)
+            widget.setToolTip(tooltip if text is None else
+                              "{}{}".format(tooltip + "\n" if tooltip else "", text))
+        if self._requirement is not None:
+            card, reason = self._requirement
+            text = reason()
+            card.setVisible(text is not None)
+            if text is not None:
+                set_status(self._requirement_text, text, "warn")
