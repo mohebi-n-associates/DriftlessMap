@@ -619,6 +619,68 @@ class ProjectPersistenceIntegrationTests(unittest.TestCase):
             self.assertFalse(window.edit_mapped_marks(record.unit_id))
 
     @isolated_gui_test
+    def test_map_parts_and_build_undo_and_redo_together(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window = self._window_with_volume_atlas(root)
+            source = root / "section.png"
+            image = np.zeros((32, 24, 3), dtype=np.uint8)
+            image[4:28, 4:20] = 200
+            cv2.imwrite(str(source), image)
+            self.assertTrue(window.load_single_image_file(str(source), ".png"))
+            history = window.undo_history
+            self.assertIsNone(history.undo_label())
+            contour = [[6.0, 6.0], [18.0, 6.0], [18.0, 26.0]]
+            window.working_img_data["img-contour"] = [list(p) for p in contour]
+            window.transfer_to_atlas_clicked()
+            window.transform_accept()
+            self.assertEqual(history.undo_label(), "Map contour")
+            window.sync_mapping_undo_actions()
+            self.assertEqual(window.actionUndo_Mapping.text(), "Undo Map contour")
+            mapped = [list(p) for p in window.working_atlas_data["atlas-contour"]]
+            window.make_object_pieces()
+            self.assertEqual(history.undo_label(), "Make parts")
+            window.merge_contour()
+            self.assertEqual(history.undo_label(), "Build contours")
+            o = window.object_ctrl
+            self.assertEqual(o.obj_type, ["merged contour"])
+
+            # Undo Build restores the part and its origin.
+            self.assertTrue(window.undo_mapping_step())
+            self.assertEqual(o.obj_type, ["contour piece"])
+            record = window.mapping_ledger.get(window.section_id, "contour")
+            self.assertEqual(o.obj_derivation, [[[record.unit_id, 1]]])
+            # Undo Make parts restores the atlas marks.
+            self.assertTrue(window.undo_mapping_step())
+            self.assertEqual(o.obj_type, [])
+            np.testing.assert_allclose(window.working_atlas_data["atlas-contour"], mapped)
+            self.assertIsNotNone(window.atlas_marks_origin("contour"))
+            # Undo Map restores the section's marks and removes the record.
+            self.assertTrue(window.undo_mapping_step())
+            self.assertEqual(window.working_img_data["img-contour"], contour)
+            self.assertEqual(window.working_atlas_data["atlas-contour"], [])
+            self.assertEqual(len(window.mapping_ledger), 0)
+            self.assertEqual(len(window._kept_marks_item.getData()[0]), 0)
+            self.assertFalse(window.undo_mapping_step())
+
+            # Redo replays all three, in order.
+            for label in ("Map contour", "Make parts", "Build contours"):
+                self.assertEqual(history.redo_label(), label)
+                self.assertTrue(window.redo_mapping_step())
+            self.assertEqual(o.obj_type, ["merged contour"])
+            self.assertEqual(len(window.mapping_ledger), 1)
+
+            # A new action clears redo; an action that changes nothing is not
+            # recorded; loading a section starts a fresh history.
+            window.undo_mapping_step()
+            window.merge_contour()
+            self.assertIsNone(history.redo_label())
+            window.make_object_pieces()
+            self.assertEqual(history.undo_label(), "Build contours")
+            self.assertTrue(window.load_single_image_file(str(source), ".png"))
+            self.assertIsNone(history.undo_label())
+
+    @isolated_gui_test
     def test_portable_project_streams_and_reopens_original_histology(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

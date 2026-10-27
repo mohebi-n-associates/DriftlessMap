@@ -317,6 +317,18 @@ class V2ShellTests(unittest.TestCase):
             self.assertEqual(panel.mapped_list.item(0).text(), "Drawing · 2 marks · current")
             self.assertEqual(panel.selected_unit(), panel.mapped_list.item(0).data(
                 Qt.ItemDataRole.UserRole))
+            record = engine.mapping_ledger.records()[0]
+            self.assertEqual(record.revision, 2)
+            window._name_undo_steps()
+            self.assertEqual(window.undo_step_item.text(), "Undo Update mapping")
+            self.assertIsNone(window.registry.run("edit.undo_step"))
+            self.assertEqual(engine.mapping_ledger.records()[0].revision, 1)
+            window._name_undo_steps()
+            self.assertEqual(window.redo_step_item.text(), "Redo Update mapping")
+            window.run("edit.redo_step")
+            self.assertEqual(engine.mapping_ledger.records()[0].revision, 2)
+            panel.refresh()
+            panel.mapped_list.setCurrentRow(0)
             panel.edit_selected()
             self.assertEqual(engine.working_img_data["img-drawing"], [[6.0, 6.0], [18.0, 20.0]])
             self.assertIn("Edit mapped marks", [c.name for c in window.registry.all()])

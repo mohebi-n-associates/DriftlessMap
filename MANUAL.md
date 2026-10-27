@@ -1,6 +1,6 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 2.0.0a11**, a development preview of
+This manual applies to **DriftlessMap 2.0.0a12**, a development preview of
 DriftlessMap 2.0 on the `v2-redesign` branch. The current stable release is
 1.6.1; its desktop downloads are described in Section 2.2.
 
@@ -109,7 +109,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-DriftlessMap 2.0.0a11 requires:
+DriftlessMap 2.0.0a12 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -177,7 +177,7 @@ python -c "import driftlessmap; print(driftlessmap.__version__)"
 ```
 
 The final command prints the installed version: `1.6.1` for the stable
-release, or `2.0.0a11` for this development preview installed from the
+release, or `2.0.0a12` for this development preview installed from the
 `v2-redesign` branch.
 
 ### 2.5 Launching DriftlessMap
@@ -1032,6 +1032,19 @@ in *Mapped marks on this section*:
   Add this section files the edited track under it.
 
 Both need the section the marks were mapped from to be loaded.
+
+**Undoing mapping steps.** Accept and Transfer (Map), Update mapping, Make
+Pieces (Make parts) and the Merge/Build actions can be undone and redone as
+whole steps: undo restores the section marks, atlas marks, mapping records,
+pieces, built objects and review state together. Use **Edit > Undo** *step*
+(Ctrl+Alt+Z) and **Edit > Redo** *step* (Ctrl+Alt+Shift+Z); the menu names the
+step, for example "Undo Map cells". The last 10 steps are kept, within 500 MB;
+masks are stored compressed. A step too large for that budget says so and is not
+undoable. Steps that change nothing are not recorded. Loading a section or
+opening a project starts a new history, and the history is not saved. The
+existing Edit > Undo and Redo (Ctrl+Z) still undo individual drawing and erasing
+edits; a mapping step clears that shorter history, because its snapshots
+describe the marks the step replaced.
 
 Points outside the registration mesh cannot be assigned a valid atlas
 coordinate. DriftlessMap preserves or rejects them according to the data type and

@@ -143,6 +143,10 @@ class ProbeBook:
         the probe's mapping record for this section; adding the section again
         replaces its earlier part. Marks placed on the atlas are used directly.
         """
+        with self.engine.undoable("Add section to {}".format(probe)):
+            return self._add_section(probe)
+
+    def _add_section(self, probe):
         engine = self.engine
         on_section, on_atlas = self.marks()
         if on_section == 0 and on_atlas == 0:
@@ -173,6 +177,10 @@ class ProbeBook:
 
     def update_section(self, unit_id):
         """Update a probe section's mapping and replace its part."""
+        with self.engine.undoable("Update mapping"):
+            return self._update_section(unit_id)
+
+    def _update_section(self, unit_id):
         record = self.engine.update_mapping(unit_id)
         if record is None:
             return False, "The mapping could not be updated; see the message below the image."
@@ -186,6 +194,10 @@ class ProbeBook:
     # ------------------------------------------------------------ build
     def build(self, probe):
         """Build ``probe`` from all its sections; returns ``(ok, message)``."""
+        with self.engine.undoable("Build {}".format(probe)):
+            return self._build(probe)
+
+    def _build(self, probe):
         engine = self.engine
         o = engine.object_ctrl
         if not self.parts(probe) and not self.built(probe):

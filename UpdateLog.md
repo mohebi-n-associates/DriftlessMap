@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th October 2026
+##### DriftlessMap 2.0.0a12
+
+Map, Update mapping, Make parts and Build can be undone and redone as whole steps (Ctrl+Alt+Z / Ctrl+Alt+Shift+Z).
+
+### 27th October 2026
 ##### DriftlessMap 2.0.0a11
 
 Update mapping and Edit marks for kept marks; rebuilding leaves out replaced parts; Edit parts works for built contours.

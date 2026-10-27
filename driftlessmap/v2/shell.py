@@ -307,6 +307,14 @@ class V2Window(QMainWindow):
         layout.addStretch(2)
         return frame
 
+    def _name_undo_steps(self):
+        history = self.engine.undo_history
+        for menu_item, label, verb in ((self.undo_step_item, history.undo_label(), "Undo"),
+                                       (self.redo_step_item, history.redo_label(), "Redo")):
+            menu_item.setText("{} {}".format(verb, label) if label
+                              else "{} mapping step".format(verb))
+            menu_item.setEnabled(label is not None)
+
     def _sync_object_tooltips(self):
         """Name each object's mapping status in its tooltip in the Objects list."""
         o = self.engine.object_ctrl
@@ -565,6 +573,15 @@ class V2Window(QMainWindow):
                     ("pointer", "cancel tool"), "V"))
         add(Command("edit.undo", "Undo", engine.actionUndo.trigger, "Edit", (), "Ctrl+Z"))
         add(Command("edit.redo", "Redo", engine.actionRedo.trigger, "Edit", (), "Ctrl+Shift+Z"))
+        add(Command("edit.undo_step", "Undo mapping step", engine.undo_mapping_step, "Edit",
+                    ("undo map", "undo build", "undo parts"), "Ctrl+Alt+Z",
+                    available=lambda: None if engine.undo_history.undo_label()
+                    else "Nothing to undo: Map, Update mapping, Make parts and Build are "
+                         "undoable."))
+        add(Command("edit.redo_step", "Redo mapping step", engine.redo_mapping_step, "Edit",
+                    ("redo map", "redo build"), "Ctrl+Alt+Shift+Z",
+                    available=lambda: None if engine.undo_history.redo_label()
+                    else "Nothing to redo."))
         add(Command("palette", "Search commands", self.open_palette, "Help", ("command palette",),
                     "Ctrl+K"))
         add(Command("view.theme", "Switch light / dark theme", self.toggle_theme, "View",
@@ -637,6 +654,10 @@ class V2Window(QMainWindow):
         edit_menu = bar.addMenu("&Edit")
         item(edit_menu, "edit.undo")
         item(edit_menu, "edit.redo")
+        edit_menu.addSeparator()
+        self.undo_step_item = item(edit_menu, "edit.undo_step")
+        self.redo_step_item = item(edit_menu, "edit.redo_step")
+        edit_menu.aboutToShow.connect(self._name_undo_steps)
 
         view_menu = bar.addMenu("&View")
         for key, _title, _tip in VIEWS:

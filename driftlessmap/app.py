@@ -3,6 +3,7 @@ import sys
 from os.path import dirname, realpath, join
 import copy
 import hashlib
+from contextlib import contextmanager
 from pathlib import Path
 import tempfile
 
@@ -96,6 +97,7 @@ from .triangulation import (
 )
 
 from .interfaces import start_interface
+from .transactions import TransactionHistory
 from .mapping_records import (
     MappingLedger,
     derivation,
@@ -217,6 +219,9 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.atlas_mark_origin = {}
         # Units whose kept marks are back on the section for editing.
         self.editing_units = set()
+        # Undo for Map, Update mapping, Make parts and Build (not saved).
+        self.undo_history = TransactionHistory()
+        self._transaction_depth = 0
         self.atlas_provenance = None
         self.histology_provenance = None
         self._portable_source_directories = []
@@ -553,6 +558,21 @@ class DriftlessMap(QMainWindow, FORM_Main):
         )
         self.actionUndo.triggered.connect(self.undo_called)
         self.actionRedo.triggered.connect(self.redo_called)
+        # Undo for Map, Update mapping, Make parts and Build; their text names
+        # the step. The 2.0 preview has its own commands for these.
+        self.actionUndo_Mapping = QAction("Undo Mapping Step", self)
+        self.actionUndo_Mapping.setObjectName("actionUndo_Mapping")
+        self.actionUndo_Mapping.setShortcut(QKeySequence("Ctrl+Alt+Z"))
+        self.actionRedo_Mapping = QAction("Redo Mapping Step", self)
+        self.actionRedo_Mapping.setObjectName("actionRedo_Mapping")
+        self.actionRedo_Mapping.setShortcut(QKeySequence("Ctrl+Alt+Shift+Z"))
+        for action, handler in ((self.actionUndo_Mapping, self.undo_mapping_step),
+                                (self.actionRedo_Mapping, self.redo_mapping_step)):
+            action.setProperty("classic_only", True)
+            action.triggered.connect(lambda _checked=False, h=handler: h())
+            self.menuEdit.insertAction(None, action)
+        self.menuEdit.aboutToShow.connect(self.sync_mapping_undo_actions)
+        self.sync_mapping_undo_actions()
         self.actionClear.triggered.connect(self.clear_all_layers)
 
         # atlas menu related
@@ -3986,8 +4006,15 @@ class DriftlessMap(QMainWindow, FORM_Main):
 
         The marks are kept in a mapping record per kind (and per ``probe`` for
         probe marks named in the 2.0 preview), so they can be edited or mapped
-        again; the section's live mark lists are emptied as before.
+        again; the section's live mark lists are emptied as before. Undoable.
         """
+        # Qt passes the action's checked state when this is a slot.
+        probe = probe if isinstance(probe, str) else None
+        kinds = [kind for kind in MAPPED_KINDS if self._section_marks(kind) is not None]
+        with self.undoable("Map {}".format(", ".join(kinds) or "marks")):
+            return self._transform_accept(probe)
+
+    def _transform_accept(self, probe):
         if not self.h2a_transferred:
             self.print_message(
                 "Please transfer image to atlas first", self.error_message_color
@@ -4293,12 +4320,163 @@ class DriftlessMap(QMainWindow, FORM_Main):
             return None
         return record
 
+    # ------------------------------------------------------------------
+    #
+    #           Undo for Map, Update mapping, Make parts and Build
+    #
+    # ------------------------------------------------------------------
+    ATLAS_MARK_KEYS = ("atlas-probe", "atlas-cells", "cell_size", "cell_symbol",
+                       "cell_layer_index", "cell_count", "atlas-drawing", "atlas-contour",
+                       "atlas-virus")
+
+    def _transaction_state(self):
+        """Everything Map, Update, Make parts and Build can change."""
+        objects = self.object_ctrl.get_obj_data()
+        return {
+            "live": self._live_marks(),
+            "atlas": {key: copy.deepcopy(self.working_atlas_data[key])
+                      for key in self.ATLAS_MARK_KEYS},
+            "records": self.mapping_ledger.to_list(),
+            "atlas_mark_origin": copy.deepcopy(self.atlas_mark_origin),
+            "editing_units": sorted(self.editing_units),
+            "objects": {key: copy.deepcopy(value) for key, value in objects.items()},
+            "registration_review": self.registration_review.to_dict(),
+            "mapping_review_state": self.mapping_review_state,
+        }
+
+    def _transaction_signature(self):
+        """A cheap summary that changes whenever an undoable action changed something."""
+        o = self.object_ctrl
+        return repr((
+            [(r.unit_id, r.revision) for r in self.mapping_ledger.records()],
+            list(o.obj_name), list(o.obj_type), copy.deepcopy(o.obj_derivation),
+            [self._atlas_marks_digest(kind) for kind in MAPPED_KINDS],
+            [len(self.working_img_data[key] or []) if key != "img-virus"
+             else self.working_img_data[key] is None
+             for key in ("img-probe", "img-cells", "img-drawing", "img-contour", "img-virus")],
+            self.mapping_review_state,
+        ))
+
+    @contextmanager
+    def undoable(self, label):
+        """Record the enclosed action for undo; nested actions join the outer one."""
+        if self._transaction_depth:
+            self._transaction_depth += 1
+            try:
+                yield
+            finally:
+                self._transaction_depth -= 1
+            return
+        before = self._transaction_signature()
+        transaction = self.undo_history.prepare(label, self._transaction_state())
+        if transaction is None:
+            self.print_message("{} is too large to undo (over the undo memory budget); it "
+                               "will not be undoable.".format(label), self.reminder_color)
+        self._transaction_depth = 1
+        try:
+            yield
+        finally:
+            self._transaction_depth = 0
+        if transaction is not None and self._transaction_signature() != before:
+            self.undo_history.commit(transaction)
+            # The per-tool edit history refers to state this action replaced.
+            self.action_list = []
+            self.action_id = 0
+            self.sync_mapping_undo_actions()
+
+    def sync_mapping_undo_actions(self):
+        """Name the next undo and redo step in the Edit menu."""
+        for action, label, verb in (
+                (self.actionUndo_Mapping, self.undo_history.undo_label(), "Undo"),
+                (self.actionRedo_Mapping, self.undo_history.redo_label(), "Redo")):
+            action.setText("{} {}".format(verb, label) if label else
+                           "{} Mapping Step".format(verb))
+            action.setEnabled(label is not None)
+
+    def undo_mapping_step(self):
+        return self._step_history(self.undo_history.undo, self.undo_history.undo_label(), "Undid")
+
+    def redo_mapping_step(self):
+        return self._step_history(self.undo_history.redo, self.undo_history.redo_label(), "Redid")
+
+    def _step_history(self, step, label, verb):
+        if label is None:
+            self.print_message("Nothing to {}.".format(verb.lower()[:-1] if verb == "Undid"
+                                                         else "redo"), self.reminder_color)
+            return False
+        state = step(self._transaction_state())
+        self._restore_transaction_state(state)
+        self.action_list = []
+        self.action_id = 0
+        self.sync_mapping_undo_actions()
+        self.print_message("{} {}.".format(verb, label), self.normal_color)
+        return True
+
+    def _restore_transaction_state(self, state):
+        o = self.object_ctrl
+        if o.obj_name:
+            o.delete_objects(list(range(len(o.obj_name))))
+        o.current_obj_index = None
+        if state["objects"]["obj_name"]:
+            o.set_obj_data(state["objects"])
+        self.mapping_ledger, _problems = MappingLedger.from_list(state["records"])
+        self.atlas_mark_origin = state["atlas_mark_origin"]
+        self.editing_units = set(state["editing_units"])
+        self.registration_review = RegistrationReview.from_dict(state["registration_review"])
+        self.mapping_review_state = state["mapping_review_state"]
+        for key, value in state["atlas"].items():
+            self.working_atlas_data[key] = value
+        for kind in MAPPED_KINDS:
+            self._show_atlas_marks(kind)
+        self._set_live_marks(state["live"])
+        self.refresh_kept_marks()
+
+    def _show_atlas_marks(self, kind):
+        """Redraw the atlas marks of ``kind`` and their layer."""
+        key = MAPPED_KINDS[kind][1]
+        items = self.atlas_view.working_atlas.image_dict
+        points = np.asarray(self.working_atlas_data[key] or [], dtype=float).reshape(-1, 2)
+        if not len(points):
+            if key in self.layer_ctrl.layer_link:
+                self.remove_single_link_related(key)
+            else:
+                items[key].clear()
+            if kind == "probe":
+                items["atlas-trajectory"].clear()
+            return
+        if kind == "cells":
+            symbols = list(self.working_atlas_data["cell_symbol"])
+            items[key].setData(pos=points,
+                               symbol=symbols if len(symbols) == len(points) else None)
+        elif kind in ("probe", "expression"):
+            items[key].setData(pos=points)
+            if kind == "probe" and len(points) > 1:
+                vis_points, msg = line_fit_2d(points.tolist(),
+                                              self.atlas_view.working_atlas.label_img.image)
+                if msg is None:
+                    items["atlas-trajectory"].setData(vis_points)
+        else:
+            items[key].setData(points)
+        colour, style = {"cells": (self.cell_color, "p"), "probe": (self.probe_color, "p"),
+                         "drawing": (self.pencil_color, "l"),
+                         "contour": (self.contour_color, "l"),
+                         "expression": (self.virus_lut[1], "p")}[kind]
+        res = cv2.resize(create_vis_img(self.atlas_view.slice_size, points, colour, style),
+                         self.atlas_view.slice_tb_size, interpolation=cv2.INTER_AREA)
+        self.layer_ctrl.master_layers(res, layer_type=key, color=colour)
+
     def update_mapping(self, unit_id):
         """Map a record's kept marks again with the current registration.
 
         Only that unit is mapped: other unmapped section marks are left as
-        they are. Returns the updated record, or None.
+        they are. Returns the updated record, or None. Undoable.
         """
+        record = self.mapping_ledger.by_unit(unit_id)
+        name = record.probe or record.kind if record is not None else "marks"
+        with self.undoable("Update mapping of {}".format(name)):
+            return self._update_mapping(unit_id)
+
+    def _update_mapping(self, unit_id):
         record = self._loaded_record(unit_id, "Update mapping")
         if record is None:
             return None
@@ -4361,8 +4539,12 @@ class DriftlessMap(QMainWindow, FORM_Main):
         """Make parts from the atlas marks of ``kind``; returns the new indexes.
 
         Parts made from mapped marks record their origin. Making parts again
-        from the same mapped unit replaces that unit's earlier parts.
+        from the same mapped unit replaces that unit's earlier parts. Undoable.
         """
+        with self.undoable("Make {} parts".format(kind)):
+            return self._make_pieces_of(kind)
+
+    def _make_pieces_of(self, kind):
         maker = {"probe": self.make_probe_piece, "expression": self.make_virus_piece,
                  "cells": self.make_cell_piece, "drawing": self.make_drawing_piece,
                  "contour": self.make_contour_piece}[kind]
@@ -6511,6 +6693,10 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.tool_box.update_cell_count_label(self.working_atlas_data["cell_count"])
 
     def make_object_pieces(self):
+        with self.undoable("Make parts"):
+            self._make_object_pieces()
+
+    def _make_object_pieces(self):
         if self.num_windows == 4:
             msg = "Can not make pieces with all slice windows turned on."
             self.print_message(msg, self.error_message_color)
@@ -6667,6 +6853,13 @@ class DriftlessMap(QMainWindow, FORM_Main):
         )
 
     def merge_probes(self, only=None):
+        # Qt passes the button's checked state when this is a slot.
+        only = only if isinstance(only, (list, tuple, set)) else None
+        with self.undoable("Build probes" if only is None
+                           else "Build {}".format(", ".join(sorted(only)))):
+            return self._merge_probes(only)
+
+    def _merge_probes(self, only=None):
         """Build 3D probes from probe pieces, grouped by name.
 
         ``only`` limits the build to probes with these names; other probes'
@@ -6760,6 +6953,10 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self._commit_merged_objects(piece_indexes, merged_objects)
 
     def _merge_point_pieces(self, piece_type, merged_type, calculate):
+        with self.undoable("Build {}".format(merged_type.replace("merged ", ""))):
+            return self._merge_point_pieces_now(piece_type, merged_type, calculate)
+
+    def _merge_point_pieces_now(self, piece_type, merged_type, calculate):
         self._drop_superseded_pieces(piece_type)
         if self._count_pieces(piece_type) == 0:
             return
@@ -6850,6 +7047,10 @@ class DriftlessMap(QMainWindow, FORM_Main):
 
     # contour related functions
     def merge_contour(self):
+        with self.undoable("Build contours"):
+            return self._merge_contour()
+
+    def _merge_contour(self):
         self._drop_superseded_pieces("contour piece")
         if self._count_pieces("contour piece") == 0:
             return
@@ -7088,6 +7289,8 @@ class DriftlessMap(QMainWindow, FORM_Main):
             self.section_id = new_identifier()
             self.atlas_mark_origin = {}
             self.editing_units = set()
+            self.undo_history.clear()
+            self.sync_mapping_undo_actions()
             self.refresh_kept_marks()
             self.registration_input = None
             self.registration_review = RegistrationReview()
@@ -8904,6 +9107,9 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.section_id = saved_section if is_identifier(saved_section) else new_identifier()
         self.mapping_ledger, problems = MappingLedger.from_list(p_dict.get("mapping_records"))
         self.atlas_mark_origin = _saved_atlas_mark_origin(p_dict.get("atlas_mark_origin"))
+        self.editing_units = set()
+        self.undo_history.clear()
+        self.sync_mapping_undo_actions()
         self.refresh_kept_marks()
         if problems:
             self.print_message(

@@ -61,9 +61,14 @@ Done, with tests:
 - Pyramidal single-plane TIFFs can be read at a stored lower level with the
   Scale slider; the level is saved through the existing image scale.
 
-Not yet done (see Sections 3, 6 and 15): source retention and staleness, and
-undo for mapping and building. These need the Section 16 decisions on
-annotation identity and the undo memory budget first.
+- Phase 3 (`phase3_mapping_design.md`): mapping keeps section marks in
+  per-unit records; mappings, parts and built objects are labelled out of
+  date; Update mapping and Edit marks; whole-step undo for Map, Update,
+  Make parts and Build (10 steps, 500 MB).
+
+Not yet done: the Phase 4 release-candidate work in Section 15 (installable
+builds tested on both platforms, tutorials, copied-project trials, user
+evaluation and the Section 17 performance comparison).
 
 ## Contents
 

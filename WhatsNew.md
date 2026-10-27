@@ -3,6 +3,22 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.0.0a12
+
+Development preview, 27 October 2026 (`v2-redesign` branch; not a release)
+
+- **Undo and redo mapping steps.** Map (Accept and Transfer), Update mapping,
+  Make parts and Build can be undone and redone as whole steps: section marks,
+  atlas marks, mapping records, parts, built objects and review state are
+  restored together. **Edit > Undo** *step* (Ctrl+Alt+Z) and **Redo** *step*
+  (Ctrl+Alt+Shift+Z) name the step, for example "Undo Map cells".
+- The last 10 steps are kept within 500 MB, with masks compressed; a step too
+  large for the budget says so. Steps that change nothing are not recorded.
+  Loading a section or opening a project starts a new history, which is not
+  saved. The existing Ctrl+Z history for drawing and erasing is cleared by a
+  mapping step, since it describes marks that step replaced.
+- This completes the Phase 3 design (`phase3_mapping_design.md`).
+
 ## DriftlessMap 2.0.0a11
 
 Development preview, 27 October 2026 (`v2-redesign` branch; not a release)

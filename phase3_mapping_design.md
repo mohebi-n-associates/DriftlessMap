@@ -1,6 +1,6 @@
 # Phase 3 design: mapping records, staleness and undo
 
-Status: for review before the mapping code changes. It implements the
+Status: implemented in 2.0.0a8–2.0.0a12 (approved 27 October 2026). It implements the
 decisions taken on 27 October 2026 for the V2 redesign (Section 3 and
 Section 12 of `version2_redesign.md`):
 

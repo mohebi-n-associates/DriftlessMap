@@ -1,5 +1,6 @@
 import os
 import unittest
+from contextlib import contextmanager
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -76,6 +77,7 @@ class FakeEngine:
 
     def __init__(self, section_image=True):
         self.object_ctrl = FakeObjects()
+        self.undo_labels = []
         self.working_img_data = {"img-probe": []}
         self.working_atlas_data = {"atlas-probe": []}
         self.h2a_transferred = False
@@ -91,6 +93,11 @@ class FakeEngine:
         self.mapped_for = probe
         self.working_atlas_data["atlas-probe"] = list(self.working_img_data["img-probe"])
         self.working_img_data["img-probe"] = []
+
+    @contextmanager
+    def undoable(self, label):
+        self.undo_labels.append(label)
+        yield
 
     def make_pieces_of(self, kind):
         before = len(self.object_ctrl.obj_name)

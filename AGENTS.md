@@ -9,7 +9,7 @@ or important workflows change.
 ## Project identity
 
 - Current stable release: DriftlessMap 1.6.1. The `v2-redesign` branch is the
-  2.0 development preview, versioned 2.0.0aN (currently 2.0.0a11); each
+  2.0 development preview, versioned 2.0.0aN (currently 2.0.0a12); each
   feature there increments N. Plain 2.0.0 is reserved for the release that
   passes the gates in `version2_redesign.md`. Never give V2 work 1.x numbers.
 - Desktop application for histology registration, atlas mapping, probe
@@ -84,8 +84,10 @@ or important workflows change.
   their record until they are edited. `update_mapping(unit)` re-maps one
   unit's kept marks without touching other live marks; `edit_mapped_marks`
   returns them to the section; merges call `_drop_superseded_pieces`.
-  `TransactionHistory` is the bounded
-  (10 steps, 500 MB, compressed masks) undo history.
+  `TransactionHistory` (10 steps, 500 MB, compressed masks) backs
+  `DriftlessMap.undoable(label)`, which records only the outermost action
+  (wrap new mapping, part or build entry points in it), and
+  `undo_mapping_step` / `redo_mapping_step`.
 - `driftlessmap/landmarks.py`: `LandmarkModel` owns paired landmark lists,
   topology, the cached registration and label items (the `DriftlessMap`
   attributes of the same names delegate to it), plus `.dmaptri` validation.
