@@ -3,6 +3,18 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.0.0a19
+
+Development preview, 27 October 2026 (`v2-implants` branch; not a release)
+
+- **Checked on the Allen 25 µm atlas** with a brightfield frontal section:
+  the suggestion is now upright (it was upside down) and lands among the
+  anterior pages where the lateral ventricles sit low near the midline.
+- **Faster depth ranking.** Depth is ranked in two passes: every few pages,
+  then page by page around the best eight. Close orientations are told apart
+  on every few pages before the winner is ranked in full. On the Allen 25 µm
+  atlas the search takes about 12 s.
+
 ## DriftlessMap 2.0.0a18
 
 Development preview, 27 October 2026 (`v2-implants` branch; not a release)

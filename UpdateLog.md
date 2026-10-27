@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th October 2026
+##### DriftlessMap 2.0.0a19
+
+Find atlas section ranks depth in two passes and compares close orientations on sampled pages; checked on the Allen 25 µm atlas.
+
+### 27th October 2026
 ##### DriftlessMap 2.0.0a18
 
 Find atlas section prefers upright orientations and compares close ones by anatomy; the coronal atlas slider previews pages while dragging.
