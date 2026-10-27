@@ -11,6 +11,8 @@ from driftlessmap.atlas_matching import (
     animal_right_edge,
     atlas_slice,
     best_by_plane,
+    bright_background,
+    histology_gray,
     hemisphere_indexes,
     mirrored_index,
     rank_depths,
@@ -67,6 +69,46 @@ class TissueMaskTests(unittest.TestCase):
         mask = tissue_mask(image)
         self.assertTrue(mask[100, 150])
         self.assertFalse(mask[6, 6])
+
+
+def brightfield(section, gradient=60):
+    """A fluorescence-like fake section as brightfield: dark tissue on a white
+    slide, lit unevenly (darker toward the bottom)."""
+    rows = np.linspace(0, gradient, section.shape[0])[:, None, None]
+    slide = 245.0 - rows
+    tissue = section.astype(np.float32) / 255.0
+    return np.clip(slide * (1.0 - 0.6 * tissue), 0, 255).astype(np.uint8)
+
+
+class BrightfieldTests(unittest.TestCase):
+    def test_tissue_on_a_white_unevenly_lit_slide_is_found(self):
+        image = np.zeros((200, 300, 3), np.uint8)
+        # Tissue touching both side edges, so the background is split in two.
+        cv2.ellipse(image, (150, 90), (160, 60), 0, 0, 360, (200, 180, 90), -1)
+        cv2.circle(image, (150, 90), 15, (0, 0, 0), -1)        # a ventricle
+        image = brightfield(image)
+        self.assertTrue(bright_background(image))
+        mask = tissue_mask(image)
+        self.assertTrue(mask[90, 150])                           # hole filled
+        self.assertTrue(mask[90, 5])
+        self.assertFalse(mask[190, 150])                         # dim slide, not tissue
+        self.assertFalse(mask[5, 150])
+        gray = histology_gray(image, mask)
+        self.assertEqual(gray[190, 150], 0)                      # black background
+        self.assertGreater(gray[90, 60], 100)                    # bright tissue
+
+    def test_fluorescence_is_not_inverted(self):
+        section, _ = fake_section(synthetic_brain(), "coronal", 42, 0)
+        self.assertFalse(bright_background(section))
+
+    def test_brightfield_sections_find_their_plane_and_slice(self):
+        labels = synthetic_brain()
+        for plane, index, orientation_index in (("sagittal", 18, 0), ("coronal", 42, 5)):
+            with self.subTest(plane=plane):
+                section, expected = fake_section(labels, plane, index, orientation_index)
+                best = search_planes(brightfield(section), labels)[0]
+                self.assertEqual(best.plane, plane)
+                self.assertTrue(same_up_to_hemisphere(plane, best.orientation, expected))
 
 
 class PlaneSearchTests(unittest.TestCase):

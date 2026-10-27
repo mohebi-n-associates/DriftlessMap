@@ -62,21 +62,77 @@ class Candidate:
     silhouette: float
 
 
+def bright_background(image):
+    """Whether the section lies on a bright background (brightfield).
+
+    The image border is mostly background: it is bright when its median is
+    clearly above the image's median.
+    """
+    image = np.asarray(image, dtype=np.float32)
+    gray = image[..., :3].mean(axis=2) if image.ndim == 3 else image
+    gray = cv2.normalize(gray, None, 0, 255, cv2.NORM_MINMAX)
+    band = max(1, int(0.03 * min(gray.shape)))
+    border = np.concatenate([gray[:band].ravel(), gray[-band:].ravel(),
+                             gray[:, :band].ravel(), gray[:, -band:].ravel()])
+    return float(np.median(border)) > float(np.median(gray)) + 10.0
+
+
+def _absorbance(gray, rounds=4):
+    """How much darker than the slide each pixel is, under uneven illumination.
+
+    Brightfield backgrounds are seldom flat (vignetting, uneven light), so a
+    smooth quadratic surface is fitted to the background, starting from the
+    image border and refined from the pixels it then classifies as
+    background, and the image is subtracted from it.
+    """
+    h, w = gray.shape
+    yy, xx = np.mgrid[0:h, 0:w]
+    x, y = xx.ravel() / w, yy.ravel() / h
+    terms = np.stack([np.ones_like(x), x, y, x * x, y * y, x * y], axis=1)
+    values = gray.ravel()
+    band = max(1, int(0.03 * min(h, w)))
+    background = np.zeros((h, w), bool)
+    background[:band] = background[-band:] = True
+    background[:, :band] = background[:, -band:] = True
+    signal = np.zeros((h, w), np.float32)
+    for _round in range(rounds):
+        chosen = background.ravel()
+        # Every 4th background pixel is plenty for six coefficients.
+        chosen = np.flatnonzero(chosen)[::4]
+        coefficients, *_ = np.linalg.lstsq(terms[chosen], values[chosen], rcond=None)
+        signal = np.clip((terms @ coefficients).reshape(h, w) - gray, 0, None)
+        threshold, _ = cv2.threshold(np.clip(signal, 0, 255).astype(np.uint8), 0, 255,
+                                     cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        background = signal < 0.5 * threshold
+        if background.sum() < 100:
+            break
+    return signal
+
+
 def tissue_mask(image):
-    """Return the tissue mask of a histology image (H x W or H x W x C)."""
+    """Return the tissue mask of a histology image (H x W or H x W x C).
+
+    Tissue is brighter than the background in fluorescence and darker in
+    brightfield; brightfield images are inverted first.
+    """
     image = np.asarray(image)
+    bright = bright_background(image)
     if image.ndim == 3:
         planes = [
             cv2.normalize(image[..., c].astype(np.float32), None, 0, 255, cv2.NORM_MINMAX)
             for c in range(image.shape[2])
         ]
-        gray = np.max(planes, axis=0)
+        # Brightfield: tissue absorbs in at least one channel.
+        gray = np.min(planes, axis=0) if bright else np.max(planes, axis=0)
     else:
         gray = cv2.normalize(image.astype(np.float32), None, 0, 255, cv2.NORM_MINMAX)
     scale = 1024.0 / max(gray.shape)
     small = cv2.resize(gray, None, fx=min(1.0, scale), fy=min(1.0, scale),
                        interpolation=cv2.INTER_AREA) if scale < 1 else gray
-    small = cv2.GaussianBlur(small, (0, 0), 2).astype(np.uint8)
+    small = cv2.GaussianBlur(small, (0, 0), 2)
+    if bright:
+        small = _absorbance(small)
+    small = np.clip(small, 0, 255).astype(np.uint8)
     _, mask = cv2.threshold(small, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     kernel = np.ones((9, 9), np.uint8)
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
@@ -88,9 +144,12 @@ def tissue_mask(image):
                             if stats[i, cv2.CC_STAT_AREA] > 0.02 * largest])
     keep = keep.astype(np.uint8) * 255
     # Fill holes (ventricles, tears) so the silhouette is the outer outline.
-    flood = keep.copy()
-    cv2.floodFill(flood, np.zeros((keep.shape[0] + 2, keep.shape[1] + 2), np.uint8), (0, 0), 255)
-    filled = (keep | cv2.bitwise_not(flood)) > 0
+    # A one-pixel frame joins every stretch of background that reaches the
+    # image edge, also where the tissue itself touches two edges.
+    flood = np.pad(keep, 1)
+    cv2.floodFill(flood, np.zeros((flood.shape[0] + 2, flood.shape[1] + 2), np.uint8),
+                  (0, 0), 255)
+    filled = (keep | cv2.bitwise_not(flood[1:-1, 1:-1])) > 0
     if filled.shape != gray.shape:
         filled = cv2.resize(filled.astype(np.uint8), (gray.shape[1], gray.shape[0]),
                             interpolation=cv2.INTER_NEAREST) > 0
@@ -216,15 +275,24 @@ class DepthMatch:
     score: float
 
 
-def histology_gray(image):
-    """Luminance with local contrast equalised, as 8-bit."""
+def histology_gray(image, mask=None):
+    """Luminance with local contrast equalised, as 8-bit, shaped like the atlas.
+
+    Brightfield images are inverted so tissue is bright, as in the atlas
+    template; with ``mask`` (see :func:`tissue_mask`) the background is black.
+    """
     image = np.asarray(image)
     if image.ndim == 3:
         gray = image[..., :3].astype(np.float32).mean(axis=2)
     else:
         gray = image.astype(np.float32)
     gray = cv2.normalize(gray, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
-    return cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8)).apply(gray)
+    if bright_background(image):
+        gray = 255 - gray
+    gray = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8)).apply(gray)
+    if mask is not None:
+        gray = np.where(np.asarray(mask, dtype=bool), gray, 0).astype(np.uint8)
+    return gray
 
 
 def _edges(image, mask):
@@ -309,8 +377,9 @@ def rank_depths(histology, label_volume, intensity_volume, plane, orientation,
 
 
 def _prepared_section(histology, orientation):
-    section_mask = orientation.apply(tissue_mask(histology))
-    section_gray = orientation.apply(histology_gray(histology)).astype(np.float32)
+    mask = tissue_mask(histology)
+    section_mask = orientation.apply(mask)
+    section_gray = orientation.apply(histology_gray(histology, mask)).astype(np.float32)
     return normalise(section_mask, section_gray)
 
 

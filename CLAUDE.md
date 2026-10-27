@@ -9,7 +9,7 @@ or important workflows change.
 ## Project identity
 
 - Current stable release: DriftlessMap 1.6.1. `main` now carries the 2.0
-  development preview (merged from `v2-redesign`), versioned 2.0.0aN (currently 2.0.0a16); each
+  development preview (merged from `v2-redesign`), versioned 2.0.0aN (currently 2.0.0a17); each
   feature there increments N. Plain 2.0.0 is reserved for the release that
   passes the gates in `version2_redesign.md`. Never give V2 work 1.x numbers.
 - Desktop application for histology registration, atlas mapping, probe
@@ -50,7 +50,10 @@ or important workflows change.
   ML is the animal's right). `suggest_sections` searches a copy sampled by
   `search_factor` (at most `SEARCH_MAX_SIDE` voxels per side) and refines
   each suggested page at full resolution (`_refine_page`); suggested and
-  candidate indexes are always full-resolution pages.
+  candidate indexes are always full-resolution pages. `tissue_mask` and
+  `histology_gray` detect brightfield sections (`bright_background`),
+  flatten their illumination (`_absorbance`) and present tissue bright on
+  black, as the atlas template is; auto-registration shares them.
   `section_suggestion_dialog.py` shows ranked candidates for confirmation and
   `DriftlessMap.apply_section_suggestion` sets the view, page, tilt and
   histology orientation. Tilted matches use `tilted_slice`, which must stay

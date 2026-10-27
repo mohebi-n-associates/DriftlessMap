@@ -21,6 +21,7 @@ from .atlas_matching import (
     animal_right_edge,
     atlas_slice,
     histology_gray,
+    tissue_mask,
     mirror_hemisphere,
     mirrored_index,
     mirrored_tilt,
@@ -120,7 +121,7 @@ class SectionSuggestionDialog(QDialog):
             best.orientation.quarter_turns != 0 or best.orientation.mirrored
         )
 
-        section = best.orientation.apply(histology_gray(histology))
+        section = best.orientation.apply(histology_gray(histology, tissue_mask(histology)))
         self.list = QListWidget()
         self.list.setIconSize(QSize(2 * THUMB_WIDTH + 6, THUMB_HEIGHT))
         for suggestion in report.suggestions:
