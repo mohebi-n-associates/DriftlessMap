@@ -483,6 +483,27 @@ class DrawingInfoWindow(QDialog):
         self.close()
 
 
+class ImplantInfoWindow(QDialog):
+    """The report of a built fiber or microprism."""
+
+    def __init__(self, name, data):
+        super().__init__()
+        from .implants import TYPE_NAMES, describe_specs, report_lines
+
+        report = data["report"]
+        self.setWindowTitle("{} — {}".format(name, TYPE_NAMES[report["kind"]]))
+        layout = QVBoxLayout(self)
+        title = QLabel("{} · {}".format(name, describe_specs(report["kind"], report["specs"])))
+        colour = data.get("vis_color", (128, 128, 128, 255))
+        title.setStyleSheet("QLabel {{background-color: {}; font-size: 18px; padding: 4px}}"
+                            .format(QColor(*colour[:3]).name()))
+        layout.addWidget(title)
+        text = QLabel("\n".join(report_lines(report)))
+        text.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        text.setWordWrap(True)
+        layout.addWidget(text)
+
+
 class VirusInfoWindow(QDialog):
     def __init__(self, name, data):
         super().__init__()
@@ -1261,6 +1282,10 @@ class ObjectControl(QObject):
             "merged contour",
             "drawing piece",
             "merged drawing",
+            "fiber piece",
+            "merged fiber",
+            "prism piece",
+            "merged prism",
         ]
 
         self.current_obj_index = None
@@ -1292,6 +1317,8 @@ class ObjectControl(QObject):
         self.drawing_icon = QIcon(resource_path("icons/toolbar/pencil.svg"))
         self.cell_icon = QIcon(resource_path("icons/toolbar/location.svg"))
         self.contour_icon = QIcon(resource_path("icons/sidebar/contour.svg"))
+        self.fiber_icon = QIcon(resource_path("icons/sidebar/fiber.svg"))
+        self.prism_icon = QIcon(resource_path("icons/sidebar/prism.svg"))
         self.compare_icon = QIcon(resource_path("icons/sidebar/compare.svg"))
 
         combo_label = QLabel("Composition:")
@@ -1490,7 +1517,9 @@ class ObjectControl(QObject):
         da_data = self.obj_data[self.current_obj_index]
         da_name = self.obj_name[self.current_obj_index]
         object_type = self.obj_type[self.current_obj_index]
-        if "probe" in object_type:
+        if object_type in ("merged fiber", "merged prism"):
+            self.info_window = ImplantInfoWindow(da_name, da_data)
+        elif "probe" in object_type:
             self.info_window = ProbeInfoWindow(da_name, da_data)
         elif "virus" in object_type:
             self.info_window = VirusInfoWindow(da_name, da_data)
@@ -1595,7 +1624,11 @@ class ObjectControl(QObject):
 
     #
     def get_object_icon(self, object_type):
-        if "probe" in object_type:
+        if "fiber" in object_type:
+            object_icon = self.fiber_icon
+        elif "prism" in object_type:
+            object_icon = self.prism_icon
+        elif "probe" in object_type:
             object_icon = self.probe_icon
         elif "virus" in object_type:
             object_icon = self.virus_icon
@@ -1713,6 +1746,8 @@ class ObjectControl(QObject):
             "contour piece",
             "drawing piece",
             "cells piece",
+            "fiber piece",
+            "prism piece",
         ]:
             return
         n_obj = len(self.obj_id)

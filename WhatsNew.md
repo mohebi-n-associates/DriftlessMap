@@ -3,6 +3,24 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.0.0a14
+
+Development preview, 27 October 2026 (`v2-implants` branch; not a release)
+
+- **Implants in the engine.** Fibers and microprisms are mapped from outlines
+  on the loaded section: the outline is resampled, mapped with the current
+  registration and placed in 3D, recorded as a mapping record (so it is kept,
+  labelled out of date, updated, edited and undone like other mapped marks),
+  and the section's part is made at once; mapping again replaces it.
+- **Build** fits the implant to all its parts as a `merged fiber` or
+  `merged prism` object carrying the full report; rebuilding restores and
+  reuses the parts. Building, mapping and deleting an implant are undoable.
+- Projects save the implants and their unmapped outlines; older projects open
+  with none. Fibers and prisms show in 3D as a cylinder or block with their
+  mapped outlines, have their own icons and report window, export as
+  `.dmapobj` (importing one adds it to the project's implants), and export
+  to a one-row-per-implant CSV.
+
 ## DriftlessMap 2.0.0a13
 
 Development preview, 27 October 2026 (`v2-implants` branch; not a release)
