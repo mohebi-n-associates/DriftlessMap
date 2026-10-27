@@ -275,6 +275,35 @@ class V2ShellTests(unittest.TestCase):
             self.assertTrue(icons)
 
     @isolated_gui_test
+    def test_annotate_lists_mapped_marks_and_flags_out_of_date_ones(self):
+        import cv2
+
+        from tests.atlas_fixture import make_processed_atlas
+
+        with tempfile.TemporaryDirectory() as folder:
+            window = self.make_window(folder)
+            engine = window.engine
+            self.assertTrue(engine.load_volume_atlas(str(make_processed_atlas(
+                Path(folder) / "atlas"))))
+            image = np.zeros((32, 24, 3), dtype=np.uint8)
+            image[4:28, 4:20] = 200
+            cv2.imwrite(str(Path(folder) / "s.png"), image)
+            self.assertTrue(engine.load_single_image_file(str(Path(folder) / "s.png"), ".png"))
+            engine.working_img_data["img-drawing"] = [[6.0, 6.0], [18.0, 20.0]]
+            engine.transfer_to_atlas_clicked()
+            engine.transform_accept()
+            window.go_to("annotate")
+            panel = window.panels["annotate"]
+            panel.refresh()
+            self.assertEqual(panel.mapped_list.count(), 1)
+            self.assertEqual(panel.mapped_list.item(0).text(), "Drawing · 2 marks · current")
+            engine.atlas_view.current_coronal_index += 1
+            panel.refresh()
+            self.assertTrue(panel.mapped_list.item(0).text().startswith("⚠ Drawing"))
+            from driftlessmap.v2 import state
+            self.assertIn("1 mapping out of date", state.step_status(engine)["annotate"])
+
+    @isolated_gui_test
     def test_allen_download_dialog_reuses_verified_files(self):
         import json
         from unittest.mock import patch

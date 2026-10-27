@@ -1,7 +1,27 @@
 """Annotate step: marking tools, mapping to the atlas and building 3D objects."""
 
+from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QListWidget, QListWidgetItem
+
+from . import state
 from .probe_card import ProbeCard
 from .widgets import Card, StepPanel, button, grid_of, hint_label, set_status, status_label
+
+KIND_NAMES = {"cells": "Cells", "probe": "Probe", "drawing": "Drawing",
+              "contour": "Contour", "expression": "Expression"}
+
+
+def record_label(record, status):
+    if record.kind == "probe" and record.probe:
+        name = "Probe {}".format(record.probe)
+    else:
+        name = KIND_NAMES.get(record.kind, record.kind)
+    if "points" in record.source:
+        count = len(record.source["points"])
+        size = "{} mark{}".format(count, "" if count == 1 else "s")
+    else:
+        size = "{} pixels".format(int((record.source["mask"] != 0).sum()))
+    return "{} · {} · {}".format(name, size, state.mapping_status_text(status))
 
 TOOLS = (
     ("loc", "Cells", "Click cells, select one cell body, or detect similar cells."),
@@ -48,6 +68,17 @@ class AnnotatePanel(StepPanel):
             "kind again replaces the earlier mapping. Mapping without a review "
             "is allowed; the result is recorded as not reviewed."))
 
+        mapped = self.add(Card(
+            "Mapped marks on this section",
+            "Marks mapped to the atlas are kept here and shown faintly on the section. "
+            "They are out of date when the landmarks, atlas plane, page or tilt change "
+            "after mapping."))
+        self.mapped_list = QListWidget()
+        self.mapped_list.setMaximumHeight(130)
+        mapped.add(self.mapped_list)
+        self.mapped_note = mapped.add(hint_label(""))
+        self._mapped_key = None
+
         objects = self.add(Card(
             "Parts and 3D objects",
             "Make parts turns this section's atlas marks into parts; Build turns parts "
@@ -64,9 +95,25 @@ class AnnotatePanel(StepPanel):
         ], columns=2))
         objects.add(hint_label("Select objects in the Objects list on the right first."))
 
+    def refresh_mapped(self):
+        records, _objects = self.engine.mapping_overview()
+        rows = [(record.unit_id, record_label(record, status), state.is_out_of_date(status))
+                for record, status in records]
+        if rows == self._mapped_key:
+            return
+        self._mapped_key = rows
+        self.mapped_list.clear()
+        for unit_id, text, stale in rows:
+            item = QListWidgetItem(("⚠ " if stale else "") + text)
+            item.setData(Qt.ItemDataRole.UserRole, unit_id)
+            self.mapped_list.addItem(item)
+        self.mapped_list.setVisible(bool(rows))
+        self.mapped_note.setText("" if rows else "Nothing mapped from this section yet.")
+
     def refresh(self):
         engine = self.engine
         self.probes.refresh()
+        self.refresh_mapped()
         for key, widget in self.tool_buttons.items():
             widget.setChecked(engine.tool_box.checkable_btn_dict["{}_btn".format(key)].isChecked())
         review = engine.registration_review_state()

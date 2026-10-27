@@ -2,7 +2,8 @@
 
 from PyQt6.QtWidgets import QLabel
 
-from .widgets import Card, StepPanel, button, grid_of, hint_label
+from . import state as v2_state
+from .widgets import Card, StepPanel, button, grid_of, hint_label, set_status, status_label
 
 
 class ResultsPanel(StepPanel):
@@ -16,6 +17,7 @@ class ResultsPanel(StepPanel):
 
         selected = self.add(Card("Selected object"))
         self.selected = selected.add(QLabel(""))
+        self.origin = selected.add(status_label(""))
         self.mapping = selected.add(hint_label(""))
         selected.add(grid_of([
             button("Region table…", o.info_btn.click),
@@ -60,8 +62,16 @@ class ResultsPanel(StepPanel):
         index = o.current_obj_index
         if index is None or index >= len(o.obj_name):
             self.selected.setText("No object selected.")
+            set_status(self.origin, "", None)
         else:
             self.selected.setText("{} · {}".format(o.obj_name[index], o.obj_type[index]))
+            status = self.engine.object_mapping_status(index)
+            kind = ("warn" if v2_state.is_out_of_date(status)
+                    else "good" if status == v2_state.CURRENT else None)
+            text = "Mapping: " + v2_state.mapping_status_text(status)
+            if v2_state.is_out_of_date(status):
+                text += ". Update the mapping in Annotate, then make parts (and build) again."
+            set_status(self.origin, text, kind)
         state = self.engine.mapping_review_state
         self.mapping.setText({
             "reviewed": "Last mapping used a reviewed registration.",

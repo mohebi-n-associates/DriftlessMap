@@ -469,6 +469,56 @@ class ProjectPersistenceIntegrationTests(unittest.TestCase):
             self.assertEqual(len(window.mapping_ledger), 3)
 
     @isolated_gui_test
+    def test_mappings_and_parts_go_out_of_date_with_the_registration(self):
+        from driftlessmap.mapping_records import CURRENT, REGISTRATION_CHANGED
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window = self._window_with_volume_atlas(root)
+            source = root / "section.png"
+            image = np.zeros((32, 24, 3), dtype=np.uint8)
+            image[4:28, 4:20] = 200
+            cv2.imwrite(str(source), image)
+            self.assertTrue(window.load_single_image_file(str(source), ".png"))
+            window.current_img_path = str(source)
+            window.working_img_data["img-contour"] = [[6.0, 6.0], [18.0, 6.0], [18.0, 26.0]]
+            window.transfer_to_atlas_clicked()
+            window.transform_accept()
+            part = window.make_pieces_of("contour")[0]
+            record = window.mapping_ledger.get(window.section_id, "contour")
+            self.assertEqual(window.mapping_status(record), CURRENT)
+            self.assertEqual(window.object_mapping_status(part), CURRENT)
+
+            # Changing the atlas page changes the registration.
+            view = window.atlas_view
+            page = view.current_coronal_index
+            view.current_coronal_index = page + 1
+            self.assertEqual(window.mapping_status(record), REGISTRATION_CHANGED)
+            self.assertEqual(window.out_of_date_objects(), [part])
+            # Display changes do not count.
+            window.image_view.set_channel_visible(False, 1)
+            view.current_coronal_index = page
+            self.assertEqual(window.out_of_date_objects(), [])
+
+            view.current_coronal_index = page + 1
+            exported = root / "contour.dmapobj"
+            window.object_ctrl.current_obj_index = part
+            with patch.object(QFileDialog, "getSaveFileName",
+                              return_value=(str(exported), "")), \
+                    patch.object(window, "get_object_export_provenance", return_value={}):
+                window.save_current_object()
+            data, error = load_driftlessmap_file(exported, "object")
+            self.assertIsNone(error)
+            self.assertEqual(data["mapping_status"], REGISTRATION_CHANGED)
+
+            # Loading another section leaves parts of the earlier one current.
+            other = root / "other.png"
+            cv2.imwrite(str(other), image)
+            self.assertTrue(window.load_single_image_file(str(other), ".png"))
+            self.assertEqual(window.object_mapping_status(part), CURRENT)
+            self.assertEqual(window.kept_marks(), [])
+
+    @isolated_gui_test
     def test_portable_project_streams_and_reopens_original_histology(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

@@ -25,7 +25,7 @@ KINDS = ("cells", "probe", "drawing", "contour", "expression")
 
 CURRENT = "current"
 REGISTRATION_CHANGED = "registration changed"
-SECTION_REPLACED = "section replaced"
+OTHER_SECTION = "another section"
 REMAPPED = "mapped again since"
 NOT_RECORDED = "origin not recorded"
 
@@ -102,9 +102,14 @@ class MappingRecord:
         return (self.section_id, self.kind, self.probe)
 
     def status(self, section_id, registration):
-        """CURRENT, SECTION_REPLACED or REGISTRATION_CHANGED."""
+        """CURRENT, OTHER_SECTION or REGISTRATION_CHANGED.
+
+        A record of a section that is no longer loaded is OTHER_SECTION: its
+        registration can no longer change, so its mapping stays valid. Probes
+        built from several sections rely on this.
+        """
         if section_id != self.section_id:
-            return SECTION_REPLACED
+            return OTHER_SECTION
         if registration != self.registration:
             return REGISTRATION_CHANGED
         return CURRENT
@@ -238,8 +243,15 @@ def valid_derivation(value):
     return entries
 
 
+def is_out_of_date(status):
+    return status in (REGISTRATION_CHANGED, REMAPPED)
+
+
 def derivation_status(entries, ledger, section_id, registration):
-    """CURRENT, NOT_RECORDED, or the first reason an object is out of date."""
+    """CURRENT, NOT_RECORDED, or the first reason an object is out of date.
+
+    Parts mapped from sections that are no longer loaded count as current.
+    """
     if not entries:
         return NOT_RECORDED
     for unit_id, revision in entries:
@@ -248,7 +260,6 @@ def derivation_status(entries, ledger, section_id, registration):
             return NOT_RECORDED
         if record.revision != revision:
             return REMAPPED
-        status = record.status(section_id, registration)
-        if status != CURRENT:
-            return status
+        if record.status(section_id, registration) == REGISTRATION_CHANGED:
+            return REGISTRATION_CHANGED
     return CURRENT

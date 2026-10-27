@@ -3,6 +3,23 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.0.0a10
+
+Development preview, 27 October 2026 (`v2-redesign` branch; not a release)
+
+- **Out-of-date labels.** A mapping is out of date when the section's
+  landmarks, frame points, atlas plane, page or tilt change after mapping;
+  pieces and built objects are out of date when their mapping is, or when the
+  same marks were mapped again. Display changes never count. Mappings of
+  sections that are no longer loaded stay valid, so probes built from several
+  sections are not flagged.
+- In the 2.0 preview, Annotate lists the section's mapped marks with their
+  status, the step rail counts out-of-date mappings and objects, Results shows
+  the selected object's status, and the Objects list names it in a tooltip.
+- Out-of-date objects remain exportable: object files record
+  `mapping_status`, and the status bar names out-of-date objects after an
+  export.
+
 ## DriftlessMap 2.0.0a9
 
 Development preview, 27 October 2026 (`v2-redesign` branch; not a release)

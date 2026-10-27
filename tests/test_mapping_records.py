@@ -7,7 +7,7 @@ from driftlessmap.mapping_records import (
     NOT_RECORDED,
     REGISTRATION_CHANGED,
     REMAPPED,
-    SECTION_REPLACED,
+    OTHER_SECTION,
     MappingLedger,
     MappingRecord,
     derivation,
@@ -75,7 +75,7 @@ class MappingLedgerTests(unittest.TestCase):
                                     FIRST, "reviewed", "t")
         self.assertEqual(record.status(self.section, FIRST), CURRENT)
         self.assertEqual(record.status(self.section, SECOND), REGISTRATION_CHANGED)
-        self.assertEqual(record.status(new_identifier(), FIRST), SECTION_REPLACED)
+        self.assertEqual(record.status(new_identifier(), FIRST), OTHER_SECTION)
 
     def test_parts_are_out_of_date_when_their_unit_is_mapped_again(self):
         record = self.ledger.record(self.section, "cells", cells(), FIRST, "r", "t")
@@ -84,6 +84,9 @@ class MappingLedgerTests(unittest.TestCase):
         self.assertEqual(derivation_status(entries, self.ledger, self.section, FIRST), CURRENT)
         self.assertEqual(derivation_status(entries, self.ledger, self.section, SECOND),
                          REGISTRATION_CHANGED)
+        # A part from a section that is no longer loaded stays current.
+        self.assertEqual(derivation_status(entries, self.ledger, new_identifier(), SECOND),
+                         CURRENT)
         self.ledger.record(self.section, "cells", cells(5), FIRST, "r", "t2")
         self.assertEqual(derivation_status(entries, self.ledger, self.section, FIRST), REMAPPED)
         self.assertEqual(derivation_status([], self.ledger, self.section, FIRST), NOT_RECORDED)

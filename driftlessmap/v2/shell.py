@@ -307,6 +307,15 @@ class V2Window(QMainWindow):
         layout.addStretch(2)
         return frame
 
+    def _sync_object_tooltips(self):
+        """Name each object's mapping status in its tooltip in the Objects list."""
+        o = self.engine.object_ctrl
+        _records, statuses = self.engine.mapping_overview()
+        for widget, name, status in zip(o.obj_list, o.obj_name, statuses):
+            text = "{} · mapping {}".format(name, state.mapping_status_text(status))
+            if widget.toolTip() != text:
+                widget.setToolTip(text)
+
     def _sync_empty_states(self):
         engine = self.engine
         view = engine.atlas_view
@@ -795,6 +804,7 @@ class V2Window(QMainWindow):
             "lasso": "Lasso"}.get(tool, str(tool).capitalize())) if tool else "")
         self._sync_view_buttons()
         self._sync_empty_states()
+        self._sync_object_tooltips()
         atlas, _ = state.atlas_summary(engine)
         section, _ = state.section_summary(engine)
         self.context_label.setText("{} · {}".format(atlas, section))

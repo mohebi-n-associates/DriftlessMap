@@ -66,14 +66,15 @@ imported or older objects ("origin not recorded").
 
 ## 4. Out-of-date rules
 
-A record is **current** when its section is loaded and the current
-registration fingerprint equals `registration`. Otherwise it is out of date,
-with one reason:
+A record of the loaded section is **current** when the current registration
+fingerprint equals `registration`. Otherwise:
 
 - **registration changed** — landmarks, frame points, plane, page or tilt
   changed since mapping. Update mapping is offered.
-- **section replaced** — its section is no longer the loaded one. The record
-  and its parts remain as historical results; Update is not offered.
+- (not out of date) **another section** — its section is no longer the
+  loaded one. That section's registration can no longer change, so the record
+  and its parts stay valid; Update and Edit marks are not offered. Probes built
+  from several sections rely on this.
 
 A part or built object is out of date when any of its units is, or when a
 unit was re-mapped after the part was made (the part's stored revision is

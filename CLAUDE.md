@@ -9,7 +9,7 @@ or important workflows change.
 ## Project identity
 
 - Current stable release: DriftlessMap 1.6.1. The `v2-redesign` branch is the
-  2.0 development preview, versioned 2.0.0aN (currently 2.0.0a9); each
+  2.0 development preview, versioned 2.0.0aN (currently 2.0.0a10); each
   feature there increments N. Plain 2.0.0 is reserved for the release that
   passes the gates in `version2_redesign.md`. Never give V2 work 1.x numbers.
 - Desktop application for histology registration, atlas mapping, probe

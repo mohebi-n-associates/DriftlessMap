@@ -1,6 +1,6 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 2.0.0a9**, a development preview of
+This manual applies to **DriftlessMap 2.0.0a10**, a development preview of
 DriftlessMap 2.0 on the `v2-redesign` branch. The current stable release is
 1.6.1; its desktop downloads are described in Section 2.2.
 
@@ -109,7 +109,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-DriftlessMap 2.0.0a9 requires:
+DriftlessMap 2.0.0a10 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -177,7 +177,7 @@ python -c "import driftlessmap; print(driftlessmap.__version__)"
 ```
 
 The final command prints the installed version: `1.6.1` for the stable
-release, or `2.0.0a9` for this development preview installed from the
+release, or `2.0.0a10` for this development preview installed from the
 `v2-redesign` branch.
 
 ### 2.5 Launching DriftlessMap
@@ -1002,6 +1002,20 @@ transferring the same kind again replaces its record, and making pieces again
 from it replaces the earlier pieces instead of adding duplicates. Marks added
 or moved on the atlas after transferring are no longer tied to the record, and
 pieces made from them have no recorded origin.
+
+**Out of date.** A mapping of the loaded section is *out of date* when its
+landmarks, frame points, atlas plane, page or tilt have changed since it was
+mapped; returning them to the mapped values makes it current again. Pieces and
+built objects are out of date when their mapping is, or when the same marks
+were mapped again after they were made. Display changes (brightness, colours,
+visibility, theme) never make anything out of date. Mappings of sections that
+are no longer loaded stay valid, so a probe built from several sections is not
+flagged when the next section is loaded. Objects made before 2.0.0a8, imported
+objects and pieces made from marks placed on the atlas show *origin not
+recorded*. Out-of-date objects can still be exported; the exported file records
+`mapping_status`, and the status bar names them. In the 2.0 preview, Annotate
+lists the section's mapped marks with their status, Results shows the selected
+object's status, and each object's tooltip in the Objects list names it.
 
 Points outside the registration mesh cannot be assigned a valid atlas
 coordinate. DriftlessMap preserves or rejects them according to the data type and

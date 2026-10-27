@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th October 2026
+##### DriftlessMap 2.0.0a10
+
+Mappings, parts and built objects are labelled out of date when the registration changes or the marks are mapped again; object exports record the status.
+
+### 27th October 2026
 ##### DriftlessMap 2.0.0a9
 
 Mapping keeps the section's marks in mapping records; mapping or making parts again replaces earlier results instead of duplicating them.

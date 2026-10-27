@@ -96,7 +96,14 @@ from .triangulation import (
 )
 
 from .interfaces import start_interface
-from .mapping_records import MappingLedger, derivation, is_identifier, new_identifier
+from .mapping_records import (
+    MappingLedger,
+    derivation,
+    derivation_status,
+    is_identifier,
+    is_out_of_date,
+    new_identifier,
+)
 from .image_reader import (
     EmbeddedImageReader,
     HISTOLOGY_IMAGE_FILTER,
@@ -4237,6 +4244,32 @@ class DriftlessMap(QMainWindow, FORM_Main):
                                .format(len(earlier)), self.reminder_color)
         return created
 
+    def mapping_status(self, record):
+        """Status of a mapping record (see mapping_records)."""
+        return record.status(self.section_id, self.current_registration_fingerprint())
+
+    def object_mapping_status(self, index):
+        """Whether object ``index`` is current, out of date or of unknown origin."""
+        return derivation_status(self.object_ctrl.obj_derivation[index], self.mapping_ledger,
+                                 self.section_id, self.current_registration_fingerprint())
+
+    def out_of_date_objects(self, indexes=None):
+        o = self.object_ctrl
+        indexes = range(len(o.obj_name)) if indexes is None else indexes
+        return [i for i in indexes if is_out_of_date(self.object_mapping_status(i))]
+
+    def mapping_overview(self):
+        """Statuses of the loaded section's records and of every object.
+
+        Returns ``(records, objects)``: ``[(record, status)]`` and one status
+        per object, computed against a single registration fingerprint.
+        """
+        fingerprint = self.current_registration_fingerprint()
+        records = [(r, r.status(self.section_id, fingerprint)) for r in self.kept_marks()]
+        objects = [derivation_status(entries, self.mapping_ledger, self.section_id, fingerprint)
+                   for entries in self.object_ctrl.obj_derivation]
+        return records, objects
+
     def kept_marks(self):
         """Mapping records of the loaded section."""
         return [r for r in self.mapping_ledger.records() if r.section_id == self.section_id]
@@ -7333,6 +7366,8 @@ class DriftlessMap(QMainWindow, FORM_Main):
                     "data": self.object_ctrl.obj_data[da_ind],
                     "name": self.object_ctrl.obj_name[da_ind],
                     "provenance": provenance,
+                    # Out-of-date results stay exportable, with this note.
+                    "mapping_status": self.object_mapping_status(da_ind),
                 }
                 s_path = os.path.join(save_path, file_stem)
                 success, error = save_driftlessmap_file(
@@ -7345,8 +7380,18 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 "Exported {} objects to {}.".format(len(valid_index), save_path),
                 self.normal_color,
             )
+            self._note_out_of_date_export(valid_index)
         else:
             return
+
+    def _note_out_of_date_export(self, indexes):
+        stale = self.out_of_date_objects(indexes)
+        if stale:
+            self.print_message(
+                "Exported, but out of date: {}. The registration or the mapped marks "
+                "changed after they were made; the files record this.".format(
+                    ", ".join(self.object_ctrl.obj_name[i] for i in stale)),
+                self.reminder_color)
 
     def save_current_object(self):
         if self.object_ctrl.current_obj_index is None:
@@ -7384,6 +7429,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 "data": self.object_ctrl.obj_data[self.object_ctrl.current_obj_index],
                 "name": self.object_ctrl.obj_name[self.object_ctrl.current_obj_index],
                 "provenance": provenance,
+                "mapping_status": self.object_mapping_status(current_index),
             }
             success, error = save_driftlessmap_file(file_name[0], da_data, "object")
             if not success:
@@ -7392,6 +7438,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
             self.print_message(
                 "Current object is saved successfully.", self.normal_color
             )
+            self._note_out_of_date_export([current_index])
         else:
             self.print_message("", self.normal_color)
 

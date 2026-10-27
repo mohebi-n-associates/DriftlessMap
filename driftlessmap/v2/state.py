@@ -10,6 +10,15 @@ import hashlib
 
 import numpy as np
 
+from ..mapping_records import (
+    CURRENT,
+    NOT_RECORDED,
+    OTHER_SECTION,
+    REGISTRATION_CHANGED,
+    REMAPPED,
+    is_out_of_date,
+)
+
 
 def _describe_len(value):
     try:
@@ -135,4 +144,25 @@ def step_status(engine):
     objects = len(engine.object_ctrl.obj_name)
     status["results"] = "{} stored object{} or part{}".format(
         objects, "" if objects == 1 else "s", "" if objects == 1 else "s")
+    records, object_states = engine.mapping_overview()
+    stale_records = sum(is_out_of_date(state) for _record, state in records)
+    stale_objects = sum(is_out_of_date(state) for state in object_states)
+    if stale_records:
+        status["annotate"] += " · {} mapping{} out of date".format(
+            stale_records, "" if stale_records == 1 else "s")
+    if stale_objects:
+        status["results"] += " · {} out of date".format(stale_objects)
     return status
+
+
+STATUS_TEXT = {
+    CURRENT: "current",
+    REGISTRATION_CHANGED: "out of date: registration changed",
+    REMAPPED: "out of date: marks mapped again since",
+    OTHER_SECTION: "from another section",
+    NOT_RECORDED: "origin not recorded",
+}
+
+
+def mapping_status_text(status):
+    return STATUS_TEXT.get(status, str(status))
