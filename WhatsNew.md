@@ -3,6 +3,25 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.0.0a13
+
+Development preview, 27 October 2026 (`v2-implants` branch; not a release)
+
+- **Implant model: optical fibers and microprisms.** A new GUI-free module
+  (`driftlessmap/implants.py`) defines fibers (diameter, NA) and microprisms
+  (width, depth, imaging face) with validated specifications, and fits them to
+  section outlines mapped to the atlas, from coronal or sagittal sections.
+- **Fiber fit:** the axis through the outlines and the tip (the deepest
+  outline point along it, or a marked tip), with its ML/AP/DV and region,
+  entry point, depth below the brain surface and tilt.
+- **Microprism fit:** the bottom DV (centre and corners), the ML of the
+  medial edge, lateral edge, centre and imaging face, the AP extent and the
+  regions just outside the face.
+- Reports warn about single sections, outlines much wider or narrower than
+  the fiber, prism outlines off their specified size, and extents limited by
+  section spacing. Mapping records accept implant outlines (kinds `fiber` and
+  `prism`).
+
 ## DriftlessMap 2.0.0a12
 
 Development preview, 27 October 2026 (`v2-redesign` branch; not a release)

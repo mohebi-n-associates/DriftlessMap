@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th October 2026
+##### DriftlessMap 2.0.0a13
+
+Implant model: fibers and microprisms are fitted to mapped section outlines (fiber tip; prism bottom DV and ML edges), with warnings.
+
+### 27th October 2026
 ##### DriftlessMap 2.0.0a12
 
 Map, Update mapping, Make parts and Build can be undone and redone as whole steps (Ctrl+Alt+Z / Ctrl+Alt+Shift+Z).
