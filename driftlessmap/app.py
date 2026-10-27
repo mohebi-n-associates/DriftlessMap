@@ -98,7 +98,9 @@ from .triangulation import (
 
 from .interfaces import start_interface
 from .transactions import TransactionHistory
+from .implant_engine import ImplantEngineMixin
 from .mapping_records import (
+    IMPLANT_KINDS,
     MappingLedger,
     derivation,
     derivation_status,
@@ -186,7 +188,7 @@ script_dir = dirname(realpath(__file__))
 FORM_Main, _ = loadUiType((join(dirname(__file__), "main_window.ui")))
 
 
-class DriftlessMap(QMainWindow, FORM_Main):
+class DriftlessMap(ImplantEngineMixin, QMainWindow, FORM_Main):
     def __init__(self, parent=FORM_Main):
         super(DriftlessMap, self).__init__()
         QMainWindow.__init__(self)
@@ -222,6 +224,8 @@ class DriftlessMap(QMainWindow, FORM_Main):
         # Undo for Map, Update mapping, Make parts and Build (not saved).
         self.undo_history = TransactionHistory()
         self._transaction_depth = 0
+        # Fibers and prisms, and their outlines on the loaded section.
+        self._init_implants()
         self.atlas_provenance = None
         self.histology_provenance = None
         self._portable_source_directories = []
@@ -4342,6 +4346,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
             "objects": {key: copy.deepcopy(value) for key, value in objects.items()},
             "registration_review": self.registration_review.to_dict(),
             "mapping_review_state": self.mapping_review_state,
+            "implants": self._implant_state(),
         }
 
     def _transaction_signature(self):
@@ -4355,6 +4360,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
              else self.working_img_data[key] is None
              for key in ("img-probe", "img-cells", "img-drawing", "img-contour", "img-virus")],
             self.mapping_review_state,
+            self._implant_signature(),
         ))
 
     @contextmanager
@@ -4424,6 +4430,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.editing_units = set(state["editing_units"])
         self.registration_review = RegistrationReview.from_dict(state["registration_review"])
         self.mapping_review_state = state["mapping_review_state"]
+        self._restore_implant_state(state["implants"])
         for key, value in state["atlas"].items():
             self.working_atlas_data[key] = value
         for kind in MAPPED_KINDS:
@@ -4472,7 +4479,10 @@ class DriftlessMap(QMainWindow, FORM_Main):
         they are. Returns the updated record, or None. Undoable.
         """
         record = self.mapping_ledger.by_unit(unit_id)
-        name = record.probe or record.kind if record is not None else "marks"
+        if record is not None and record.kind in IMPLANT_KINDS:
+            name = self.implant_record_name(record)
+        else:
+            name = record.probe or record.kind if record is not None else "marks"
         with self.undoable("Update mapping of {}".format(name)):
             return self._update_mapping(unit_id)
 
@@ -4480,6 +4490,8 @@ class DriftlessMap(QMainWindow, FORM_Main):
         record = self._loaded_record(unit_id, "Update mapping")
         if record is None:
             return None
+        if record.kind in IMPLANT_KINDS:
+            return self._update_implant_mapping(record)
         if not self.h2a_transferred:
             self.transfer_to_atlas_clicked()
             if not self.h2a_transferred:
@@ -4511,6 +4523,8 @@ class DriftlessMap(QMainWindow, FORM_Main):
         record = self._loaded_record(unit_id, "Edit marks")
         if record is None:
             return False
+        if record.kind in IMPLANT_KINDS:
+            return self._edit_implant_marks(record)
         current = self._section_marks(record.kind)
         if current is not None and (record.kind != "expression"
                                     or np.any(current["mask"])):
@@ -4609,9 +4623,11 @@ class DriftlessMap(QMainWindow, FORM_Main):
             item.setZValue(5)
             item.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
             self.image_view.img_stacks.vb.addItem(item)
-        points = [r.source["points"] for r in self.kept_marks() if "points" in r.source
-                  and len(r.source["points"]) and r.unit_id not in self.editing_units]
+        kept = [r for r in self.kept_marks() if r.unit_id not in self.editing_units]
+        points = [r.source["points"] for r in kept if r.kind not in IMPLANT_KINDS
+                  and "points" in r.source and len(r.source["points"])]
         item.setData(pos=np.vstack(points) if points else np.zeros((0, 2)))
+        self.refresh_kept_outlines([r for r in kept if r.kind in IMPLANT_KINDS])
 
     # ------------------------------------------------------------------
     #
@@ -7111,7 +7127,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
         obj_type = ev[0]
         val = ev[1]
 
-        if "probe" in obj_type or "drawing" in obj_type or "contour" in obj_type:
+        if any(kind in obj_type for kind in ("probe", "drawing", "contour", "fiber", "prism")):
             self.object_3d_list[self.object_ctrl.current_obj_index].setData(width=val)
         else:
             self.object_3d_list[self.object_ctrl.current_obj_index].setData(size=val)
@@ -7291,6 +7307,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
             self.section_id = new_identifier()
             self.atlas_mark_origin = {}
             self.editing_units = set()
+            self.implant_outlines = {}
             self.undo_history.clear()
             self.sync_mapping_undo_actions()
             self.refresh_kept_marks()
@@ -7822,7 +7839,8 @@ class DriftlessMap(QMainWindow, FORM_Main):
             else:
                 pieces = [object_dict["data"]]
             points = np.vstack(
-                [np.asarray(piece, dtype=float).reshape(-1, 3) for piece in pieces]
+                [np.asarray(piece["outline"] if isinstance(piece, dict) else piece,
+                            dtype=float).reshape(-1, 3) for piece in pieces]
             )
         except (KeyError, TypeError, ValueError):
             return False
@@ -7905,9 +7923,13 @@ class DriftlessMap(QMainWindow, FORM_Main):
                         )
                         continue
 
-                if not self._object_points_in_atlas(object_dict):
+                implant_problem = self.imported_implant_problem(object_dict)
+                if implant_problem:
+                    problem_obj_name.append("{} ({})".format(file_name, implant_problem))
+                elif not self._object_points_in_atlas(object_dict):
                     problem_obj_name.append(file_name)
                 else:
+                    self.adopt_imported_implant(object_dict)
                     self.object_ctrl.add_object(
                         object_dict["name"],
                         object_dict["type"],
@@ -8770,6 +8792,8 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 "section_id": self.section_id,
                 "mapping_records": self.mapping_ledger.to_list(),
                 "atlas_mark_origin": self.atlas_mark_origin,
+                "implants": self.implants.to_list(),
+                "implant_outlines": self.implant_outlines,
                 "np_onside": self.np_onside,
                 "processing_slice": self.atlas_view.processing_slice,
                 "processing_img": self.image_view.processing_img,
@@ -9110,6 +9134,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.mapping_ledger, problems = MappingLedger.from_list(p_dict.get("mapping_records"))
         self.atlas_mark_origin = _saved_atlas_mark_origin(p_dict.get("atlas_mark_origin"))
         self.editing_units = set()
+        self._load_implants(p_dict)
         self.undo_history.clear()
         self.sync_mapping_undo_actions()
         self.refresh_kept_marks()

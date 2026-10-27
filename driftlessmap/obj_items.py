@@ -57,8 +57,23 @@ def create_contour_line_in_3d(data_dict):
     return contour_obj
 
 
+def create_implant_in_3d(data_dict):
+    """The fitted fiber or prism with the mapped outlines it was fitted to."""
+    from .implants import model_segments
+
+    segments = [model_segments(data_dict['report']['model'])]
+    for piece in data_dict['data']:
+        outline = np.asarray(piece['outline'], dtype=float)
+        closed = np.vstack([outline, outline[:1]])
+        segments.append(np.repeat(closed, 2, axis=0)[1:-1])
+    vis_color = get_object_vis_color(data_dict['vis_color'])
+    return gl.GLLinePlotItem(pos=np.vstack(segments), color=vis_color, width=2, mode='lines')
+
+
 def make_3d_gl_widget(data_dict, obj_type):
-    if obj_type == 'merged probe':
+    if obj_type in ('merged fiber', 'merged prism'):
+        obj_3d = create_implant_in_3d(data_dict)
+    elif obj_type == 'merged probe':
         obj_3d = create_probe_line_in_3d(data_dict)
     elif obj_type == 'merged virus':
         obj_3d = create_plot_points_in_3d(data_dict)
