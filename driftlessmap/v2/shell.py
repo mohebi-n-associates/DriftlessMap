@@ -534,6 +534,14 @@ class V2Window(QMainWindow):
                     "Annotate", ("accept and transfer", "transfer", "map"),
                     available=lambda: None if engine.h2a_transferred else
                     "Preview the section on the atlas first (Register step)."))
+        annotate = self.panels["annotate"]
+        add(Command("annotate.update_mapping", "Update mapping",
+                    lambda: (self.go_to("annotate"), annotate.update_selected()), "Annotate",
+                    ("remap", "map again", "out of date"),
+                    available=annotate._needs_mapped_selection))
+        add(Command("annotate.edit_marks", "Edit mapped marks",
+                    lambda: (self.go_to("annotate"), annotate.edit_selected()), "Annotate",
+                    ("edit marks", "unmap"), available=annotate._needs_mapped_selection))
         add(Command("annotate.parts", "Make parts from atlas marks",
                     engine.object_ctrl.add_object_btn.click, "Annotate",
                     ("add piece", "pieces", "add object")))

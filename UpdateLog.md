@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th October 2026
+##### DriftlessMap 2.0.0a11
+
+Update mapping and Edit marks for kept marks; rebuilding leaves out replaced parts; Edit parts works for built contours.
+
+### 27th October 2026
 ##### DriftlessMap 2.0.0a10
 
 Mappings, parts and built objects are labelled out of date when the registration changes or the marks are mapped again; object exports record the status.

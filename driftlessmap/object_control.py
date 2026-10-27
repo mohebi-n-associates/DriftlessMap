@@ -1772,7 +1772,9 @@ class ObjectControl(QObject):
         current_data = self.obj_data[self.current_obj_index]
         m_obj_type = current_type.split(" ")[1]
         data_list = current_data["data"]
-        pieces_names = current_data["pieces_names"]
+        # Contours built before 2.0.0a11 kept no part names.
+        pieces_names = current_data.get("pieces_names") or [
+            "{} - piece".format(self.obj_name[self.current_obj_index])] * len(data_list)
         drawing_mode = current_data.get("plot_mode") if m_obj_type == "drawing" else None
         piece_derivation = self.obj_piece_derivation[self.current_obj_index]
         if len(piece_derivation) != len(data_list):

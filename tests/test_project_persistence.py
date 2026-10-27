@@ -519,6 +519,106 @@ class ProjectPersistenceIntegrationTests(unittest.TestCase):
             self.assertEqual(window.kept_marks(), [])
 
     @isolated_gui_test
+    def test_update_mapping_and_edit_marks(self):
+        from driftlessmap.mapping_records import CURRENT, REMAPPED
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window = self._window_with_volume_atlas(root)
+            source = root / "section.png"
+            image = np.zeros((32, 24, 3), dtype=np.uint8)
+            image[4:28, 4:20] = 200
+            cv2.imwrite(str(source), image)
+            self.assertTrue(window.load_single_image_file(str(source), ".png"))
+            window.current_img_path = str(source)
+            drawing = [[6.0, 6.0], [18.0, 20.0], [10.0, 26.0]]
+            window.working_img_data["img-drawing"] = [list(p) for p in drawing]
+            window.transfer_to_atlas_clicked()
+            window.transform_accept()
+            first_atlas = [list(p) for p in window.working_atlas_data["atlas-drawing"]]
+            part = window.make_pieces_of("drawing")[0]
+            record = window.mapping_ledger.get(window.section_id, "drawing")
+            view = window.atlas_view
+            view.current_coronal_index += 1
+            self.assertEqual(window.out_of_date_objects(), [part])
+
+            # Unmapped cells on the section are not touched by the update.
+            window.working_img_data["img-cells"] = [[9.0, 9.0]]
+            window.working_img_data["cell_size"] = [5]
+            window.working_img_data["cell_symbol"] = ["o"]
+            window.working_img_data["cell_layer_index"] = [0]
+            updated = window.update_mapping(record.unit_id)
+            self.assertEqual((updated.unit_id, updated.revision), (record.unit_id, 2))
+            self.assertEqual(window.mapping_status(updated), CURRENT)
+            self.assertEqual(window.working_img_data["img-cells"], [[9.0, 9.0]])
+            self.assertEqual(window.working_img_data["img-drawing"], [])
+            self.assertEqual(window.working_atlas_data["atlas-cells"], [])
+            np.testing.assert_allclose(window.working_atlas_data["atlas-drawing"], first_atlas)
+            self.assertEqual(window.object_mapping_status(part), REMAPPED)
+            parts = window.make_pieces_of("drawing")
+            self.assertEqual(window.object_ctrl.obj_type.count("drawing piece"), 1)
+            self.assertEqual(window.object_mapping_status(parts[0]), CURRENT)
+
+            # Edit parts on a build made before the update restores the old
+            # part; building again leaves it out instead of using both.
+            window.working_img_data["img-contour"] = [[6.0, 6.0], [18.0, 6.0], [18.0, 26.0]]
+            for key in ("img-cells", "cell_size", "cell_symbol", "cell_layer_index"):
+                window.working_img_data[key] = []
+            window.transform_accept()
+            window.make_pieces_of("contour")
+            window.merge_contour()
+            contour = window.mapping_ledger.get(window.section_id, "contour")
+            window.update_mapping(contour.unit_id)
+            window.make_pieces_of("contour")
+            o = window.object_ctrl
+            o.current_obj_index = o.obj_type.index("merged contour")
+            o.unmerge_objects()
+            self.assertEqual(o.obj_type.count("contour piece"), 2)
+            window.merge_contour()
+            self.assertEqual(o.obj_type.count("contour piece"), 0)
+            built = o.obj_type.index("merged contour")
+            self.assertEqual(o.obj_derivation[built], [[contour.unit_id, 2]])
+            self.assertEqual(window.object_mapping_status(built), CURRENT)
+            # Contours built by earlier versions kept no part names.
+            o.add_object("old", "merged contour",
+                         {"object_type": "contour", "data": [np.zeros((3, 3))]},
+                         window.obj_display_mode)
+            o.current_obj_index = len(o.obj_name) - 1
+            o.unmerge_objects()
+            self.assertEqual(o.obj_name[-1], "old - piece")
+            o.delete_objects([len(o.obj_name) - 1])
+
+            # Edit marks: refused while unmapped marks of that kind exist.
+            window.working_img_data["img-drawing"] = [[1.0, 1.0]]
+            self.assertFalse(window.edit_mapped_marks(record.unit_id))
+            window.working_img_data["img-drawing"] = []
+            self.assertTrue(window.edit_mapped_marks(record.unit_id))
+            self.assertEqual(window.working_img_data["img-drawing"], drawing)
+
+            def overlay_count():
+                return len(window._kept_marks_item.getData()[0])
+
+            def kept(kinds):
+                return sum(len(r.source["points"]) for r in window.kept_marks()
+                           if r.kind in kinds)
+
+            # The drawing being edited is no longer shown as kept.
+            self.assertEqual(overlay_count(), kept({"contour"}))
+            window.working_img_data["img-drawing"][0] = [7.0, 7.0]
+            window.transform_accept()
+            again = window.mapping_ledger.get(window.section_id, "drawing")
+            self.assertEqual((again.unit_id, again.revision), (record.unit_id, 3))
+            self.assertEqual(again.source["points"][0].tolist(), [7.0, 7.0])
+            self.assertEqual(overlay_count(), kept({"contour", "drawing"}))
+
+            # Records of a section that is no longer loaded cannot be changed.
+            other = root / "other.png"
+            cv2.imwrite(str(other), image)
+            self.assertTrue(window.load_single_image_file(str(other), ".png"))
+            self.assertIsNone(window.update_mapping(record.unit_id))
+            self.assertFalse(window.edit_mapped_marks(record.unit_id))
+
+    @isolated_gui_test
     def test_portable_project_streams_and_reopens_original_histology(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

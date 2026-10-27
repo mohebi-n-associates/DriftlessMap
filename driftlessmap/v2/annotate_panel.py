@@ -76,6 +76,13 @@ class AnnotatePanel(StepPanel):
         self.mapped_list = QListWidget()
         self.mapped_list.setMaximumHeight(130)
         mapped.add(self.mapped_list)
+        mapped.add_row(
+            self.gate(button("Update mapping", self.update_selected,
+                             tooltip="Map the kept marks again with the current registration"),
+                      self._needs_mapped_selection),
+            self.gate(button("Edit marks", self.edit_selected,
+                             tooltip="Put the kept marks back on the section to edit them"),
+                      self._needs_mapped_selection), None)
         self.mapped_note = mapped.add(hint_label(""))
         self._mapped_key = None
 
@@ -95,6 +102,33 @@ class AnnotatePanel(StepPanel):
         ], columns=2))
         objects.add(hint_label("Select objects in the Objects list on the right first."))
 
+    def selected_unit(self):
+        item = self.mapped_list.currentItem()
+        return item.data(Qt.ItemDataRole.UserRole) if item is not None else None
+
+    def _needs_mapped_selection(self):
+        return None if self.selected_unit() else "Select a mapping in the list first."
+
+    def update_selected(self):
+        unit_id = self.selected_unit()
+        if unit_id is None:
+            return
+        ok, message = self.probes.book.update_section(unit_id)
+        self.shell.message(message, "good" if ok else "bad")
+        self.shell.refresh()
+
+    def edit_selected(self):
+        unit_id = self.selected_unit()
+        if unit_id is None:
+            return
+        record = self.engine.mapping_ledger.by_unit(unit_id)
+        if self.engine.edit_mapped_marks(unit_id):
+            if record is not None and record.kind == "probe" and record.probe:
+                self.probes.refresh(select=record.probe)
+            self.shell.message("Edit the marks on the section, then map them again to "
+                               "replace this mapping.", "good")
+        self.shell.refresh()
+
     def refresh_mapped(self):
         records, _objects = self.engine.mapping_overview()
         rows = [(record.unit_id, record_label(record, status), state.is_out_of_date(status))
@@ -102,11 +136,14 @@ class AnnotatePanel(StepPanel):
         if rows == self._mapped_key:
             return
         self._mapped_key = rows
+        selected = self.selected_unit()
         self.mapped_list.clear()
         for unit_id, text, stale in rows:
             item = QListWidgetItem(("⚠ " if stale else "") + text)
             item.setData(Qt.ItemDataRole.UserRole, unit_id)
             self.mapped_list.addItem(item)
+            if unit_id == selected:
+                self.mapped_list.setCurrentItem(item)
         self.mapped_list.setVisible(bool(rows))
         self.mapped_note.setText("" if rows else "Nothing mapped from this section yet.")
 

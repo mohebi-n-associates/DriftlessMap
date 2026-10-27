@@ -156,16 +156,32 @@ class ProbeBook:
                     return False, ("The section could not be warped onto the atlas. Place "
                                    "or check the landmarks in the Register step.")
             engine.transform_accept(probe=probe)
-        created = engine.make_pieces_of("probe")
-        if not created:
+        if not self.file_parts(probe):
             return False, "No part was made; see the message below the image."
+        return True, "Added this section to {}.".format(probe)
+
+    def file_parts(self, probe):
+        """Make parts from the atlas probe marks and file them under ``probe``."""
+        created = self.engine.make_pieces_of("probe")
         for shank, index in enumerate(created):
             name = "{} shank {} - piece".format(probe, shank + 1) if len(created) > 1 \
                 else "{} - piece".format(probe)
             self._set_name(index, name)
-        if probe in self._empty:
+        if created and probe in self._empty:
             self._empty.remove(probe)
-        return True, "Added this section to {}.".format(probe)
+        return created
+
+    def update_section(self, unit_id):
+        """Update a probe section's mapping and replace its part."""
+        record = self.engine.update_mapping(unit_id)
+        if record is None:
+            return False, "The mapping could not be updated; see the message below the image."
+        if record.kind == "probe" and record.probe:
+            if not self.file_parts(record.probe):
+                return False, "Mapped again, but no part was made."
+            return True, ("Updated this section of {}; build it again to use the new "
+                          "part.".format(record.probe))
+        return True, "Mapping updated. Make parts again to replace the earlier parts."
 
     # ------------------------------------------------------------ build
     def build(self, probe):

@@ -3,6 +3,24 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.0.0a11
+
+Development preview, 27 October 2026 (`v2-redesign` branch; not a release)
+
+- **Update mapping.** In the 2.0 preview's Annotate step, select a mapped
+  unit and map its kept marks again with the current registration. Other
+  unmapped marks on the section are not touched. For probes the section's
+  part is replaced at once; for other kinds, making parts again replaces the
+  earlier parts.
+- **Edit marks** puts a mapping's kept marks back on the section for editing;
+  mapping them again replaces that mapping.
+- **No stale duplicates when rebuilding.** Building leaves out parts that a
+  newer mapping of the same marks replaced, including parts restored by Edit
+  parts from an earlier build.
+- **Fixed:** Edit parts on a built contour failed because contours did not
+  store their part names. New contours store them; older ones restore their
+  parts as "<name> - piece".
+
 ## DriftlessMap 2.0.0a10
 
 Development preview, 27 October 2026 (`v2-redesign` branch; not a release)

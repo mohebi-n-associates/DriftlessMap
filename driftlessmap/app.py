@@ -215,6 +215,8 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.mapping_ledger = MappingLedger()
         # kind -> [unit_id, revision, digest of the atlas marks it produced]
         self.atlas_mark_origin = {}
+        # Units whose kept marks are back on the section for editing.
+        self.editing_units = set()
         self.atlas_provenance = None
         self.histology_provenance = None
         self._portable_source_directories = []
@@ -4206,7 +4208,146 @@ class DriftlessMap(QMainWindow, FORM_Main):
             # The atlas marks now come from this record, until they are edited.
             self.atlas_mark_origin[kind] = [record.unit_id, record.revision,
                                             self._atlas_marks_digest(kind)]
+            self.editing_units.discard(record.unit_id)
         self.refresh_kept_marks()
+
+    # Section mark keys a mapping can change.
+    LIVE_MARK_KEYS = ("img-probe", "img-cells", "cell_size", "cell_symbol",
+                      "cell_layer_index", "cell_count", "img-drawing", "img-contour",
+                      "img-virus")
+
+    def _live_marks(self):
+        return {key: copy.deepcopy(self.working_img_data[key]) for key in self.LIVE_MARK_KEYS}
+
+    def _set_live_marks(self, marks):
+        for key, value in marks.items():
+            self.working_img_data[key] = value
+        self.working_img_data["cell_count"] = padded_cell_count(
+            self.working_img_data["cell_count"])
+        for kind in MAPPED_KINDS:
+            self._show_section_marks(kind)
+
+    def _empty_live_marks(self):
+        return {"img-probe": [], "img-cells": [], "cell_size": [], "cell_symbol": [],
+                "cell_layer_index": [], "cell_count": [0] * CELL_COUNT_SLOTS,
+                "img-drawing": [], "img-contour": [], "img-virus": None}
+
+    def _marks_from_source(self, kind, source):
+        marks = {}
+        if kind == "expression":
+            marks["img-virus"] = np.array(source["mask"], copy=True)
+        else:
+            marks[MAPPED_KINDS[kind][0]] = np.asarray(source["points"], dtype=float).tolist()
+        if kind == "cells":
+            marks.update(cell_size=list(source["size"]), cell_symbol=list(source["symbol"]),
+                         cell_layer_index=list(source["layer_index"]),
+                         cell_count=[int(v) for v in get_cell_count(source["layer_index"])])
+        return marks
+
+    def _show_section_marks(self, kind):
+        """Redraw the section's live marks of ``kind`` and their layer thumbnail."""
+        data = self.working_img_data
+        items = self.image_view.img_stacks.image_dict
+        size, thumb = self.image_view.img_size, self.image_view.tb_size
+        if kind == "expression":
+            mask = data["img-virus"]
+            if mask is None:
+                return
+            items["img-virus"].setImage(mask)
+            res = cv2.resize(color_vis_img(mask, self.virus_lut[1]), thumb,
+                             interpolation=cv2.INTER_AREA)
+            self.layer_ctrl.master_layers(res, layer_type="img-virus", color=self.virus_lut[1])
+            return
+        key = MAPPED_KINDS[kind][0]
+        points = np.asarray(data[key], dtype=float).reshape(-1, 2)
+        if kind == "cells":
+            symbols = list(data["cell_symbol"])
+            items[key].setData(pos=points,
+                               symbol=symbols if len(symbols) == len(points) else None)
+            self.tool_box.update_cell_count_label(data["cell_count"])
+        elif kind == "probe":
+            items[key].setData(pos=points)
+            if len(points) > 1:
+                vis_points, msg = line_fit_2d(points.tolist())
+                if msg is None:
+                    items["img-trajectory"].setData(vis_points)
+        else:
+            items[key].setData(points)
+        if not len(points):
+            return
+        colour, style = {"cells": (self.cell_color, "p"), "probe": (self.probe_color, "p"),
+                         "drawing": (self.pencil_color, "l"),
+                         "contour": (self.contour_color, "l")}[kind]
+        res = cv2.resize(create_vis_img(size, points, colour, style), thumb,
+                         interpolation=cv2.INTER_AREA)
+        self.layer_ctrl.master_layers(res, layer_type=key, color=colour)
+
+    def _loaded_record(self, unit_id, action):
+        record = self.mapping_ledger.by_unit(unit_id)
+        if record is None:
+            self.print_message("That mapping no longer exists.", self.error_message_color)
+            return None
+        if record.section_id != self.section_id:
+            self.print_message("{} needs the section these marks were mapped from; it is "
+                               "no longer loaded.".format(action), self.error_message_color)
+            return None
+        return record
+
+    def update_mapping(self, unit_id):
+        """Map a record's kept marks again with the current registration.
+
+        Only that unit is mapped: other unmapped section marks are left as
+        they are. Returns the updated record, or None.
+        """
+        record = self._loaded_record(unit_id, "Update mapping")
+        if record is None:
+            return None
+        if not self.h2a_transferred:
+            self.transfer_to_atlas_clicked()
+            if not self.h2a_transferred:
+                return None
+        live = self._live_marks()
+        marks = self._empty_live_marks()
+        marks.update(self._marks_from_source(record.kind, record.source))
+        for key, value in marks.items():
+            self.working_img_data[key] = value
+        try:
+            self.transform_accept(probe=record.probe)
+        finally:
+            self._set_live_marks(live)
+            self.refresh_kept_marks()
+        updated = self.mapping_ledger.by_unit(unit_id)
+        if updated is None or updated.revision == record.revision:
+            return None
+        self.print_message("Mapping updated with the current registration. Make parts again "
+                           "to replace the parts made from the earlier mapping.",
+                           self.normal_color)
+        return updated
+
+    def edit_mapped_marks(self, unit_id):
+        """Return a record's kept marks to the section as editable marks.
+
+        The record stays, so mapping the marks again replaces it. Refused
+        while the section has unmapped marks of the same kind.
+        """
+        record = self._loaded_record(unit_id, "Edit marks")
+        if record is None:
+            return False
+        current = self._section_marks(record.kind)
+        if current is not None and (record.kind != "expression"
+                                    or np.any(current["mask"])):
+            self.print_message("Map or clear the section's current {} marks before editing "
+                               "mapped ones.".format(record.kind), self.error_message_color)
+            return False
+        for key, value in self._marks_from_source(record.kind, record.source).items():
+            self.working_img_data[key] = value
+        self._show_section_marks(record.kind)
+        self.editing_units.add(record.unit_id)
+        self.refresh_kept_marks()
+        self.print_message("The mapped {} marks are editable on the section again. Map them "
+                           "to replace the earlier mapping.".format(record.kind),
+                           self.normal_color)
+        return True
 
     def atlas_marks_origin(self, kind):
         """The record the current atlas marks of ``kind`` were mapped from, or None."""
@@ -4285,7 +4426,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
             item.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
             self.image_view.img_stacks.vb.addItem(item)
         points = [r.source["points"] for r in self.kept_marks() if "points" in r.source
-                  and len(r.source["points"])]
+                  and len(r.source["points"]) and r.unit_id not in self.editing_units]
         item.setData(pos=np.vstack(points) if points else np.zeros((0, 2)))
 
     # ------------------------------------------------------------------
@@ -6474,6 +6615,27 @@ class DriftlessMap(QMainWindow, FORM_Main):
         label_data = np.transpose(self.atlas_view.atlas_label, (1, 2, 0))[:, :, ::-1]
         return label_data, None
 
+    def _drop_superseded_pieces(self, piece_type):
+        """Delete parts replaced by a newer part made from the same mapped marks.
+
+        A part restored by Edit parts after its marks were mapped again would
+        otherwise be built together with its replacement.
+        """
+        o = self.object_ctrl
+        newest = {}
+        for index, entries in enumerate(o.obj_derivation):
+            if o.obj_type[index] == piece_type:
+                for unit, revision in entries:
+                    newest[unit] = max(newest.get(unit, 0), revision)
+        superseded = [index for index, entries in enumerate(o.obj_derivation)
+                      if o.obj_type[index] == piece_type and entries
+                      and any(revision < newest[unit] for unit, revision in entries)]
+        if superseded:
+            o.delete_objects(superseded)
+            self.print_message("Left out {} part(s) replaced by newer mappings of the same "
+                               "marks.".format(len(superseded)), self.reminder_color)
+        return len(superseded)
+
     def _count_pieces(self, piece_type):
         return sum(1 for da_type in self.object_ctrl.obj_type if da_type == piece_type)
 
@@ -6514,6 +6676,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
             msg = "Can not merge probe pieces with all slice windows turned on."
             self.print_message(msg, self.error_message_color)
             return
+        self._drop_superseded_pieces("probe piece")
         if self._count_pieces("probe piece") == 0:
             return
 
@@ -6597,6 +6760,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self._commit_merged_objects(piece_indexes, merged_objects)
 
     def _merge_point_pieces(self, piece_type, merged_type, calculate):
+        self._drop_superseded_pieces(piece_type)
         if self._count_pieces(piece_type) == 0:
             return
         label_data, label_error = self._merge_label_volume()
@@ -6686,13 +6850,15 @@ class DriftlessMap(QMainWindow, FORM_Main):
 
     # contour related functions
     def merge_contour(self):
+        self._drop_superseded_pieces("contour piece")
         if self._count_pieces("contour piece") == 0:
             return
         data, obj_names, pieces_names, piece_indexes = self.object_ctrl.collect_pieces(
             "contour piece"
         )
         merged_objects = [
-            (obj_names[i], "merged contour", {"object_type": "contour", "data": data[i]})
+            (obj_names[i], "merged contour", {"object_type": "contour", "data": data[i],
+                                              "pieces_names": pieces_names[i]})
             for i in range(len(data))
         ]
         self._commit_merged_objects(piece_indexes, merged_objects)
@@ -6921,6 +7087,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
             self.image_view.set_data(image_file)
             self.section_id = new_identifier()
             self.atlas_mark_origin = {}
+            self.editing_units = set()
             self.refresh_kept_marks()
             self.registration_input = None
             self.registration_review = RegistrationReview()

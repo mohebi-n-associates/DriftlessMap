@@ -1,6 +1,6 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 2.0.0a10**, a development preview of
+This manual applies to **DriftlessMap 2.0.0a11**, a development preview of
 DriftlessMap 2.0 on the `v2-redesign` branch. The current stable release is
 1.6.1; its desktop downloads are described in Section 2.2.
 
@@ -109,7 +109,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-DriftlessMap 2.0.0a10 requires:
+DriftlessMap 2.0.0a11 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -177,7 +177,7 @@ python -c "import driftlessmap; print(driftlessmap.__version__)"
 ```
 
 The final command prints the installed version: `1.6.1` for the stable
-release, or `2.0.0a10` for this development preview installed from the
+release, or `2.0.0a11` for this development preview installed from the
 `v2-redesign` branch.
 
 ### 2.5 Launching DriftlessMap
@@ -1016,6 +1016,22 @@ recorded*. Out-of-date objects can still be exported; the exported file records
 `mapping_status`, and the status bar names them. In the 2.0 preview, Annotate
 lists the section's mapped marks with their status, Results shows the selected
 object's status, and each object's tooltip in the Objects list names it.
+
+**Update mapping and Edit marks (2.0 preview, Annotate step).** Select a mapping
+in *Mapped marks on this section*:
+
+- **Update mapping** maps the kept marks again with the current registration.
+  Only that mapping changes; other unmapped marks on the section stay as they
+  are. For a probe, the section's part is replaced at once; build the probe
+  again to use it. For other kinds, make parts again to replace the earlier
+  parts. When building, parts that a newer mapping of the same marks replaced
+  are left out, also after Edit parts restores an earlier build.
+- **Edit marks** puts the kept marks back on the section as editable marks
+  (refused while the section has unmapped marks of the same kind). Mapping
+  them again replaces the mapping. For a probe, the probe is selected so that
+  Add this section files the edited track under it.
+
+Both need the section the marks were mapped from to be loaded.
 
 Points outside the registration mesh cannot be assigned a valid atlas
 coordinate. DriftlessMap preserves or rejects them according to the data type and

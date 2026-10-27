@@ -16,7 +16,8 @@ from driftlessmap.v2 import channel_display
 if V2_TEST_CHILD:
     from PyQt6.QtCore import QSettings
     from PyQt6.QtGui import QAction
-    from PyQt6.QtWidgets import QAbstractButton, QApplication
+    from PyQt6.QtCore import Qt
+    from PyQt6.QtWidgets import QAbstractButton, QApplication, QPushButton
 
     from driftlessmap.v2.shell import V2Window
 
@@ -302,6 +303,23 @@ class V2ShellTests(unittest.TestCase):
             self.assertTrue(panel.mapped_list.item(0).text().startswith("⚠ Drawing"))
             from driftlessmap.v2 import state
             self.assertIn("1 mapping out of date", state.step_status(engine)["annotate"])
+
+            update = next(b for b in panel.findChildren(QPushButton)
+                          if b.text() == "Update mapping")
+            panel.mapped_list.setCurrentRow(-1)
+            panel.apply_gates()
+            self.assertFalse(update.isEnabled())
+            panel.mapped_list.setCurrentRow(0)
+            panel.apply_gates()
+            self.assertTrue(update.isEnabled())
+            panel.update_selected()
+            panel.refresh()
+            self.assertEqual(panel.mapped_list.item(0).text(), "Drawing · 2 marks · current")
+            self.assertEqual(panel.selected_unit(), panel.mapped_list.item(0).data(
+                Qt.ItemDataRole.UserRole))
+            panel.edit_selected()
+            self.assertEqual(engine.working_img_data["img-drawing"], [[6.0, 6.0], [18.0, 20.0]])
+            self.assertIn("Edit mapped marks", [c.name for c in window.registry.all()])
 
     @isolated_gui_test
     def test_allen_download_dialog_reuses_verified_files(self):
