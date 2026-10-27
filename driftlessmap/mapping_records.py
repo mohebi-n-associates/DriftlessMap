@@ -21,7 +21,9 @@ from dataclasses import dataclass, field, replace
 
 import numpy as np
 
-KINDS = ("cells", "probe", "drawing", "contour", "expression")
+KINDS = ("cells", "probe", "drawing", "contour", "expression", "fiber", "prism")
+# Implant outlines: the record's ``probe`` field holds the implant identifier.
+IMPLANT_KINDS = ("fiber", "prism")
 
 CURRENT = "current"
 REGISTRATION_CHANGED = "registration changed"
@@ -44,6 +46,8 @@ def _validated_source(kind, source):
     """Return a normalised copy of ``source`` or raise ValueError."""
     if not isinstance(source, dict):
         raise ValueError("Kept marks must be a mapping.")
+    if kind in IMPLANT_KINDS:
+        return _validated_outline_source(source)
     if kind == "expression":
         mask = np.asarray(source.get("mask"))
         if mask.ndim not in (2, 3) or mask.size == 0:
@@ -66,6 +70,27 @@ def _validated_source(kind, source):
     if kind == "drawing":
         result["closed"] = bool(source.get("closed", False))
     return result
+
+
+def _validated_outline_source(source):
+    outline = np.asarray(source.get("points", []), dtype=float)
+    if outline.ndim != 2 or outline.shape[1:] != (2,) or len(outline) < 3 \
+            or not np.all(np.isfinite(outline)):
+        raise ValueError("A kept implant outline needs at least three finite x, y vertices.")
+    point = np.asarray(source.get("point", []), dtype=float).reshape(-1, 2) \
+        if np.size(source.get("point", [])) else np.zeros((0, 2))
+    if len(point) > 1 or not np.all(np.isfinite(point)):
+        raise ValueError("A kept implant outline has at most one finite marked point.")
+    return {"points": outline.copy(), "point": point.copy()}
+
+
+def _check_owner(kind, probe):
+    """Probe records may name a probe; implant records must name their implant."""
+    if kind in IMPLANT_KINDS:
+        if not is_identifier(probe):
+            raise ValueError("An implant record must name its implant.")
+    elif probe is not None and (kind != "probe" or not isinstance(probe, str)):
+        raise ValueError("Only probe records name a probe.")
 
 
 def source_digest(kind, source):
@@ -133,8 +158,7 @@ class MappingRecord:
         if kind not in KINDS:
             raise ValueError("A saved mapping record has an unknown kind.")
         probe = data.get("probe")
-        if probe is not None and (kind != "probe" or not isinstance(probe, str)):
-            raise ValueError("Only probe records name a probe.")
+        _check_owner(kind, probe)
         source = _validated_source(kind, data.get("source"))
         digest = str(data.get("source_digest", ""))
         if digest != source_digest(kind, source):
@@ -177,8 +201,7 @@ class MappingLedger:
             raise ValueError("Unknown kind of mark: {!r}.".format(kind))
         if not is_identifier(section_id):
             raise ValueError("Invalid section identifier.")
-        if probe is not None and kind != "probe":
-            raise ValueError("Only probe marks name a probe.")
+        _check_owner(kind, probe)
         source = _validated_source(kind, source)
         earlier = self._records.get((section_id, kind, probe))
         record = MappingRecord(
