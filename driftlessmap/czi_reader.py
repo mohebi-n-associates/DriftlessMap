@@ -4,7 +4,7 @@ from pathlib import Path
 import numpy as np
 import colorsys
 from .utils import hex2rgb
-from .image_reader import CHANNEL_COLORS, MAX_CHANNELS
+from .image_reader import MAX_CHANNELS, default_channel_colors
 
 # czi_path = '~/Work/Kavli/Data/HERBS_DATA/abraham/Pecorino_mec_slide_1.czi'
 
@@ -47,6 +47,9 @@ def parse_czi_metadata(metadata, n_channels, is_rgb):
             gamma_val,
         )
 
+    short_names = [channels[index].findtext("ShortName") if index < len(channels) else None
+                   for index in range(n_channels)]
+    defaults = default_channel_colors(short_names, n_channels)
     rgb_colors, names = [], []
     for index in range(n_channels):
         channel = channels[index] if index < len(channels) else None
@@ -59,8 +62,8 @@ def parse_czi_metadata(metadata, n_channels, is_rgb):
             except (TypeError, ValueError):
                 rgb = None
         if rgb is None:
-            rgb = CHANNEL_COLORS[index % len(CHANNEL_COLORS)]
-        name = channel.findtext("ShortName") if channel is not None else None
+            rgb = defaults[index]
+        name = short_names[index]
         rgb_colors.append(rgb)
         names.append(name or "Channel {}".format(index + 1))
     return scaling_val, rgb_colors, [_hsv(rgb) for rgb in rgb_colors], names, gamma_val

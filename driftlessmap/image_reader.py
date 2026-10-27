@@ -1,6 +1,7 @@
 """Readers that normalize supported image files for :class:`ImageView`."""
 
 import colorsys
+import re
 from pathlib import Path
 
 import cv2
@@ -22,6 +23,61 @@ CHANNEL_COLORS = [
 CHANNEL_NAMES = ["Gray", "Red", "Green", "Blue"] + [
     "Channel {}".format(i + 1) for i in range(4, MAX_CHANNELS)
 ]
+# Display colours for common fluorophore and stain names, used only when a
+# file names its channels without giving their colours. Checked in order; the
+# first match wins.
+NAMED_CHANNEL_COLORS = (
+    (("dapi", "hoechst", "draq", "405"), (0, 90, 255)),
+    (("cy5", "647", "far red", "far-red", "alexa 680", "nir"), (255, 0, 255)),
+    (("gfp", "yfp", "fitc", "488", "alexa 488", "venus", "citrine", "gcamp"), (0, 255, 0)),
+    (("rfp", "tdtomato", "tomato", "mcherry", "cy3", "tritc", "dsred", "555", "561",
+      "568", "594", "texas red"), (255, 0, 0)),
+    (("brightfield", "bright field", "transmitted", "dic", "nissl"), (200, 200, 200)),
+)
+
+
+def _name_matches(key, text, tokens):
+    if " " in key or "-" in key:
+        return " {} ".format(key.replace("-", " ")) in text
+    for token in tokens:
+        # Whole words, plus one-letter prefixes (EGFP, mCherry) and dye
+        # prefixes on wavelengths (AF488).
+        if token == key or (token.endswith(key) and (key.isdigit() or len(token) - len(key) <= 1)):
+            return True
+        # Variants such as GCaMP6s.
+        if key.isalpha() and len(key) >= 4 and token.startswith(key):
+            return True
+    return False
+
+
+def named_channel_color(name):
+    """The conventional display colour for a channel name, or None."""
+    text = " {} ".format(re.sub(r"[^a-z0-9]+", " ", str(name or "").lower()).strip())
+    tokens = text.split()
+    for keys, rgb in NAMED_CHANNEL_COLORS:
+        if any(_name_matches(key, text, tokens) for key in keys):
+            return rgb
+    return None
+
+
+def default_channel_colors(names, n_channels):
+    """Display colours for channels without stored colours.
+
+    Recognised names (DAPI, GFP, tdTomato, Cy5, ...) get their conventional
+    colour, each colour used once; other channels keep the positional default.
+    """
+    names = list(names or [])
+    colours, used = [], set()
+    for index in range(n_channels):
+        rgb = named_channel_color(names[index]) if index < len(names) else None
+        if rgb is None or rgb in used:
+            rgb = CHANNEL_COLORS[index % len(CHANNEL_COLORS)]
+        else:
+            used.add(rgb)
+        colours.append(rgb)
+    return colours
+
+
 HISTOLOGY_IMAGE_FILTERS = (
     "TIFF (*.tif *.tiff)",
     "CZI (*.czi)",
@@ -260,9 +316,8 @@ class TIFFReader(object):
                 for i in range(self.n_scenes)
             ]
         if not self.is_rgb:
-            default_colours = [CHANNEL_COLORS[i % len(CHANNEL_COLORS)]
-                               for i in range(self.n_channels)]
             default_names = CHANNEL_NAMES[: self.n_channels]
+            default_colours = default_channel_colors(names, self.n_channels)
             colours = [c if c is not None else default_colours[i]
                        for i, c in enumerate(colours or default_colours)]
             _set_channel_metadata(self, colours, names or default_names)

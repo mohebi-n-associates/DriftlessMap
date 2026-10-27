@@ -3,6 +3,21 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.9.0
+
+Release date: 27 October 2026
+
+- **Channel colours from channel names.** When a TIFF or CZI file names its
+  channels but does not store their colours, recognised names get their
+  conventional colour: DAPI and Hoechst blue; GFP, YFP, FITC and 488 green;
+  tdTomato, mCherry, RFP, Cy3 and 555–594 red; Cy5 and 647 magenta;
+  brightfield grey. Each colour is used once; other channels keep the earlier
+  defaults. Before, a channel named GFP could appear red.
+- Colours stored in the file, and colours saved in projects, are unchanged.
+  Pixel values and the registration input are unaffected. The new defaults do
+  also colour the composite made by **Make cleaned copy** (Image > Process
+  Image) for newly loaded files, as the file's colours always have.
+
 ## DriftlessMap 1.8.0
 
 Release date: 27 October 2026

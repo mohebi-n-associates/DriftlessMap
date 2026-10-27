@@ -232,6 +232,31 @@ class TiffLayoutTests(unittest.TestCase):
         self.assertEqual(reader.rgb_colors[1], (0, 255, 0))
         self.assertEqual(reader.rgb_colors[2], (255, 0, 0))
 
+    def test_named_channels_without_colours_get_conventional_colours(self):
+        data = np.zeros((4, 6, 7), dtype=np.uint16)
+        metadata = {"axes": "CYX", "Channel": {"Name": ["GFP", "Hoechst 33342", "tdTomato",
+                                                        "Tracer"]}}
+        with tempfile.TemporaryDirectory() as folder:
+            path = self.write(folder, "named.ome.tif", data, ome=True, metadata=metadata)
+            reader = image_reader.TIFFReader(path)
+        self.assertEqual(reader.error_index, 0)
+        self.assertEqual(reader.rgb_colors[:3], [(0, 255, 0), (0, 90, 255), (255, 0, 0)])
+        # Unrecognised names keep the positional default.
+        self.assertEqual(reader.rgb_colors[3], image_reader.CHANNEL_COLORS[3])
+
+    def test_named_colours_are_used_once_and_unnamed_files_are_unchanged(self):
+        self.assertEqual(image_reader.default_channel_colors(["GFP", "YFP"], 2),
+                         [(0, 255, 0), image_reader.CHANNEL_COLORS[1]])
+        self.assertEqual(image_reader.default_channel_colors(None, 3),
+                         image_reader.CHANNEL_COLORS[:3])
+        self.assertIsNone(image_reader.named_channel_color("Channel 2"))
+        for name, rgb in (("EGFP", (0, 255, 0)), ("AF488", (0, 255, 0)),
+                          ("Alexa Fluor 647", (255, 0, 255)), ("GCaMP6s", (0, 255, 0)),
+                          ("mCherry", (255, 0, 0)), ("Far-red", (255, 0, 255))):
+            self.assertEqual(image_reader.named_channel_color(name), rgb, name)
+        for name in ("Indicator", "Synapsin", "Iba1", "Tracer"):
+            self.assertIsNone(image_reader.named_channel_color(name), name)
+
     def test_rgba_alpha_is_reported_not_silently_dropped(self):
         data = np.zeros((6, 7, 4), dtype=np.uint8)
         with tempfile.TemporaryDirectory() as folder:
