@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th October 2026
+##### DriftlessMap 2.0.0a9
+
+Mapping keeps the section's marks in mapping records; mapping or making parts again replaces earlier results instead of duplicating them.
+
+### 27th October 2026
 ##### DriftlessMap 2.0.0a8
 
 Projects save mapping records and each object's mapping origin (groundwork for keeping section marks after mapping).

@@ -9,7 +9,7 @@ or important workflows change.
 ## Project identity
 
 - Current stable release: DriftlessMap 1.6.1. The `v2-redesign` branch is the
-  2.0 development preview, versioned 2.0.0aN (currently 2.0.0a8); each
+  2.0 development preview, versioned 2.0.0aN (currently 2.0.0a9); each
   feature there increments N. Plain 2.0.0 is reserved for the release that
   passes the gates in `version2_redesign.md`. Never give V2 work 1.x numbers.
 - Desktop application for histology registration, atlas mapping, probe
@@ -74,12 +74,15 @@ or important workflows change.
   processed atlas loading, display, coordinate transforms.
 - `driftlessmap/triangulation.py`: deterministic piecewise-affine registration,
   topology, validation, transforms, and warping.
-- `driftlessmap/mapping_records.py` and `transactions.py`: Phase 3
-  groundwork (see `phase3_mapping_design.md`), not yet used by mapping.
-  `MappingLedger` keeps one record per mapped unit (section, kind, probe)
-  with the kept section marks and the registration fingerprint, for
-  out-of-date detection; `TransactionHistory` is the bounded (10 steps,
-  500 MB, compressed masks) undo history for Map, Update, Make parts, Build.
+- `driftlessmap/mapping_records.py` and `transactions.py`: Phase 3 (see
+  `phase3_mapping_design.md`). `MappingLedger` keeps one record per mapped
+  unit (section, kind, probe) with the kept section marks and the
+  registration fingerprint. `DriftlessMap.transform_accept(probe=...)`
+  records each mapped kind; `make_pieces_of(kind)` gives parts their
+  `(unit, revision)` origin (object control `obj_derivation`) and replaces
+  earlier parts of the same unit; `atlas_mark_origin` ties atlas marks to
+  their record until they are edited. `TransactionHistory` is the bounded
+  (10 steps, 500 MB, compressed masks) undo history.
 - `driftlessmap/landmarks.py`: `LandmarkModel` owns paired landmark lists,
   topology, the cached registration and label items (the `DriftlessMap`
   attributes of the same names delegate to it), plus `.dmaptri` validation.

@@ -3,6 +3,23 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.0.0a9
+
+Development preview, 27 October 2026 (`v2-redesign` branch; not a release)
+
+- **Mapping keeps the section's marks.** Map to atlas (Accept and Transfer)
+  still copies the marks onto the atlas with the same coordinates, but now
+  keeps the section's marks in a mapping record: one per kind of mark on the
+  section, and one per named probe in the 2.0 preview. They stay visible on
+  the section as faint, read-only marks; the editable marks are cleared as
+  before, so the next annotation, or the next probe, starts empty.
+- **No duplicates.** Mapping the same kind again replaces its record. Parts
+  made from mapped marks remember their record, and making parts again from
+  it replaces the earlier parts. In the 2.0 preview, adding a section to a
+  probe again replaces that section's part.
+- Records and the origin of the current atlas marks are saved with the
+  project.
+
 ## DriftlessMap 2.0.0a8
 
 Development preview, 27 October 2026 (`v2-redesign` branch; not a release)

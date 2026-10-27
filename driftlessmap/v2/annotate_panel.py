@@ -43,8 +43,9 @@ class AnnotatePanel(StepPanel):
             self.gate(button("Map to atlas", lambda: shell.run("annotate.map"), primary=True),
                       shell.command_reason("annotate.map")), None)
         mapping.add(hint_label(
-            "Requires the section → atlas warp preview. Mapping moves the section's marks "
-            "onto the atlas: they are removed from the section. Mapping without a review "
+            "Requires the section → atlas warp preview. Mapping copies the section's marks "
+            "onto the atlas and keeps them, shown faintly on the section; mapping the same "
+            "kind again replaces the earlier mapping. Mapping without a review "
             "is allowed; the result is recorded as not reviewed."))
 
         objects = self.add(Card(

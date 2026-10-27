@@ -389,6 +389,86 @@ class ProjectPersistenceIntegrationTests(unittest.TestCase):
             self.assertIsInstance(old_window.mapping_ledger, MappingLedger)
 
     @isolated_gui_test
+    def test_mapping_keeps_marks_and_parts_record_their_origin(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window = self._window_with_volume_atlas(root)
+            source = root / "section.png"
+            project = root / "kept.dmap"
+            image = np.zeros((32, 24, 3), dtype=np.uint8)
+            image[4:28, 4:20] = 200
+            cv2.imwrite(str(source), image)
+            self.assertTrue(window.load_single_image_file(str(source), ".png"))
+            window.current_img_path = str(source)
+            window._loaded_histology_signature = path_stat_signature(source)
+
+            def click_cells(points):
+                window.working_img_data["img-cells"] = [list(p) for p in points]
+                window.working_img_data["cell_size"] = [5] * len(points)
+                window.working_img_data["cell_symbol"] = ["o"] * len(points)
+                window.working_img_data["cell_layer_index"] = [0] * len(points)
+                window.working_img_data["cell_count"][0] = len(points)
+
+            click_cells([[8.0, 8.0], [12.0, 20.0]])
+            window.transfer_to_atlas_clicked()
+            self.assertTrue(window.h2a_transferred)
+            window.transform_accept()
+            mapped = [list(p) for p in window.working_atlas_data["atlas-cells"]]
+            self.assertEqual(len(mapped), 2)
+            # The live list is emptied as before; the marks are kept.
+            self.assertEqual(window.working_img_data["img-cells"], [])
+            record = window.mapping_ledger.get(window.section_id, "cells")
+            self.assertEqual(record.revision, 1)
+            np.testing.assert_array_equal(record.source["points"], [[8, 8], [12, 20]])
+            xs, ys = window._kept_marks_item.getData()
+            self.assertEqual(sorted(zip(xs.tolist(), ys.tolist())), [(8.0, 8.0), (12.0, 20.0)])
+            self.assertIs(window.atlas_marks_origin("cells"), record)
+
+            # Saved before making parts, the atlas marks keep their origin.
+            with patch.object(
+                QFileDialog,
+                "getSaveFileName",
+                return_value=(str(project), "DriftlessMap Project (*.dmap)"),
+            ):
+                window.save_project_called(portable=False)
+            payload, error = load_driftlessmap_file(project, "project")
+            self.assertIsNone(error)
+            restored = self.create_window()
+            self.assertTrue(restored.load_volume_atlas(window.volume_atlas_path))
+            prepared = restored.prepare_project_sources(payload, str(project))
+            restored.load_project(prepared)
+            self.assertEqual(restored.atlas_marks_origin("cells").unit_id, record.unit_id)
+            self.assertEqual(len(restored._kept_marks_item.getData()[0]), 2)
+
+            parts = window.make_pieces_of("cells")
+            self.assertEqual(len(parts), 1)
+            o = window.object_ctrl
+            self.assertEqual(o.obj_derivation[parts[0]], [[record.unit_id, 1]])
+
+            # Mapping more cells replaces the unit; making parts again
+            # replaces the earlier part instead of adding a second.
+            click_cells([[8.0, 8.0], [12.0, 20.0], [16.0, 10.0]])
+            window.transform_accept()
+            again = window.mapping_ledger.get(window.section_id, "cells")
+            self.assertEqual((again.unit_id, again.revision), (record.unit_id, 2))
+            self.assertEqual(len(window.mapping_ledger), 1)
+            parts = window.make_pieces_of("cells")
+            self.assertEqual(o.obj_type, ["cells piece"])
+            self.assertEqual(o.obj_derivation[parts[0]], [[record.unit_id, 2]])
+            self.assertEqual(len(o.obj_data[0]), 3)
+
+            # Atlas marks edited after mapping lose their origin.
+            window.working_img_data["img-probe"] = [[6.0, 6.0], [10.0, 26.0]]
+            window.transform_accept(probe="A")
+            window.working_atlas_data["atlas-probe"].append([1.0, 1.0])
+            self.assertIsNone(window.atlas_marks_origin("probe"))
+            window.working_img_data["img-probe"] = [[7.0, 6.0], [11.0, 26.0]]
+            window.transform_accept(probe="B")
+            self.assertIsNotNone(window.mapping_ledger.get(window.section_id, "probe", "A"))
+            self.assertIsNotNone(window.mapping_ledger.get(window.section_id, "probe", "B"))
+            self.assertEqual(len(window.mapping_ledger), 3)
+
+    @isolated_gui_test
     def test_portable_project_streams_and_reopens_original_histology(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

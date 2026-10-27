@@ -2,6 +2,7 @@ import os
 import sys
 from os.path import dirname, realpath, join
 import copy
+import hashlib
 from pathlib import Path
 import tempfile
 
@@ -95,7 +96,7 @@ from .triangulation import (
 )
 
 from .interfaces import start_interface
-from .mapping_records import MappingLedger, is_identifier, new_identifier
+from .mapping_records import MappingLedger, derivation, is_identifier, new_identifier
 from .image_reader import (
     EmbeddedImageReader,
     HISTOLOGY_IMAGE_FILTER,
@@ -205,6 +206,8 @@ class DriftlessMap(QMainWindow, FORM_Main):
         # every load) and one record per mapped unit of marks.
         self.section_id = new_identifier()
         self.mapping_ledger = MappingLedger()
+        # kind -> [unit_id, revision, digest of the atlas marks it produced]
+        self.atlas_mark_origin = {}
         self.atlas_provenance = None
         self.histology_provenance = None
         self._portable_source_directories = []
@@ -3969,12 +3972,20 @@ class DriftlessMap(QMainWindow, FORM_Main):
         res_pnts = self.transfer_pnt(data, registration)
         return res_pnts
 
-    def transform_accept(self):
+    def transform_accept(self, probe=None):
+        """Map the section's marks onto the atlas with the current registration.
+
+        The marks are kept in a mapping record per kind (and per ``probe`` for
+        probe marks named in the 2.0 preview), so they can be edited or mapped
+        again; the section's live mark lists are emptied as before.
+        """
         if not self.h2a_transferred:
             self.print_message(
                 "Please transfer image to atlas first", self.error_message_color
             )
             return
+        sources = {kind: self._section_marks(kind) for kind in MAPPED_KINDS}
+        fingerprint = self.current_registration_fingerprint()
         self.mapping_review_state = self.registration_review_state()
         self.print_message(
             "Transform accepted, start transferring..."
@@ -4146,7 +4157,103 @@ class DriftlessMap(QMainWindow, FORM_Main):
             self.working_img_data["img-virus"] = None
             self.print_message("Virus transferred.", self.normal_color)
 
+        self._record_mappings(sources, fingerprint, probe)
         self.print_message("All objects transferred.", self.normal_color)
+
+    # ------------------------------------------------------------------
+    #
+    #      Mapping records: kept section marks and the origin of parts
+    #
+    # ------------------------------------------------------------------
+    def _section_marks(self, kind):
+        """The section's live marks of ``kind`` as a record source, or None."""
+        data = self.working_img_data
+        if kind == "expression":
+            mask = data.get("img-virus")
+            return None if mask is None else {"mask": np.array(mask, copy=True)}
+        points = data.get(MAPPED_KINDS[kind][0]) or []
+        if len(points) == 0:
+            return None
+        source = {"points": np.asarray(points, dtype=float).reshape(-1, 2)}
+        if kind == "cells":
+            source.update(size=list(data["cell_size"]), symbol=list(data["cell_symbol"]),
+                          layer_index=list(data["cell_layer_index"]))
+        if kind == "drawing":
+            source["closed"] = bool(self.tool_box.is_closed)
+        return source
+
+    def _atlas_marks_digest(self, kind):
+        values = self.working_atlas_data.get(MAPPED_KINDS[kind][1])
+        array = np.ascontiguousarray(
+            np.asarray(values if values is not None else [], dtype=float))
+        return hashlib.sha256(str(array.shape).encode("utf-8") + array.tobytes()).hexdigest()
+
+    def _record_mappings(self, sources, fingerprint, probe):
+        mapped_at = utc_now_iso()
+        for kind, source in sources.items():
+            if source is None:
+                continue
+            record = self.mapping_ledger.record(
+                self.section_id, kind, source, fingerprint, self.mapping_review_state,
+                mapped_at, probe=probe if kind == "probe" else None)
+            # The atlas marks now come from this record, until they are edited.
+            self.atlas_mark_origin[kind] = [record.unit_id, record.revision,
+                                            self._atlas_marks_digest(kind)]
+        self.refresh_kept_marks()
+
+    def atlas_marks_origin(self, kind):
+        """The record the current atlas marks of ``kind`` were mapped from, or None."""
+        origin = self.atlas_mark_origin.get(kind)
+        if not origin or origin[2] != self._atlas_marks_digest(kind):
+            return None
+        record = self.mapping_ledger.by_unit(origin[0])
+        return record if record is not None and record.revision == origin[1] else None
+
+    def make_pieces_of(self, kind):
+        """Make parts from the atlas marks of ``kind``; returns the new indexes.
+
+        Parts made from mapped marks record their origin. Making parts again
+        from the same mapped unit replaces that unit's earlier parts.
+        """
+        maker = {"probe": self.make_probe_piece, "expression": self.make_virus_piece,
+                 "cells": self.make_cell_piece, "drawing": self.make_drawing_piece,
+                 "contour": self.make_contour_piece}[kind]
+        record = self.atlas_marks_origin(kind)
+        o = self.object_ctrl
+        before = len(o.obj_name)
+        maker()
+        created = list(range(before, len(o.obj_name)))
+        if record is None or not created:
+            return created
+        for index in created:
+            o.obj_derivation[index] = derivation([record])
+        earlier = [index for index in range(before)
+                   if "piece" in o.obj_type[index]
+                   and any(unit == record.unit_id for unit, _rev in o.obj_derivation[index])]
+        if earlier:
+            o.delete_objects(earlier)
+            created = [index - len(earlier) for index in created]
+            self.print_message("Replaced {} earlier part(s) made from the same mapped marks."
+                               .format(len(earlier)), self.reminder_color)
+        return created
+
+    def kept_marks(self):
+        """Mapping records of the loaded section."""
+        return [r for r in self.mapping_ledger.records() if r.section_id == self.section_id]
+
+    def refresh_kept_marks(self):
+        """Show the loaded section's kept (mapped) marks as a read-only overlay."""
+        item = getattr(self, "_kept_marks_item", None)
+        if item is None:
+            item = self._kept_marks_item = pg.ScatterPlotItem(
+                size=7, pen=pg.mkPen(255, 255, 255, 150), brush=pg.mkBrush(255, 255, 255, 60),
+                symbol="o", pxMode=True)
+            item.setZValue(5)
+            item.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+            self.image_view.img_stacks.vb.addItem(item)
+        points = [r.source["points"] for r in self.kept_marks() if "points" in r.source
+                  and len(r.source["points"])]
+        item.setData(pos=np.vstack(points) if points else np.zeros((0, 2)))
 
     # ------------------------------------------------------------------
     #
@@ -6239,11 +6346,8 @@ class DriftlessMap(QMainWindow, FORM_Main):
         # transferred with Accept and Transfer, which applies the
         # registration; their raw pixel positions are not atlas positions.
         untransferred = self._untransferred_histology_annotations()
-        self.make_probe_piece()
-        self.make_virus_piece()
-        self.make_cell_piece()
-        self.make_drawing_piece()
-        self.make_contour_piece()
+        for kind in ("probe", "expression", "cells", "drawing", "contour"):
+            self.make_pieces_of(kind)
         if untransferred:
             self.print_message(
                 "These histology annotations were not made into pieces: {}. "
@@ -6783,6 +6887,8 @@ class DriftlessMap(QMainWindow, FORM_Main):
 
             self.image_view.set_data(image_file)
             self.section_id = new_identifier()
+            self.atlas_mark_origin = {}
+            self.refresh_kept_marks()
             self.registration_input = None
             self.registration_review = RegistrationReview()
             self.mapping_review_state = None
@@ -8244,6 +8350,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 "mapping_review_state": self.mapping_review_state,
                 "section_id": self.section_id,
                 "mapping_records": self.mapping_ledger.to_list(),
+                "atlas_mark_origin": self.atlas_mark_origin,
                 "np_onside": self.np_onside,
                 "processing_slice": self.atlas_view.processing_slice,
                 "processing_img": self.image_view.processing_img,
@@ -8582,6 +8689,8 @@ class DriftlessMap(QMainWindow, FORM_Main):
         saved_section = p_dict.get("section_id")
         self.section_id = saved_section if is_identifier(saved_section) else new_identifier()
         self.mapping_ledger, problems = MappingLedger.from_list(p_dict.get("mapping_records"))
+        self.atlas_mark_origin = _saved_atlas_mark_origin(p_dict.get("atlas_mark_origin"))
+        self.refresh_kept_marks()
         if problems:
             self.print_message(
                 "{} mapping record(s) could not be restored and were left out: {}".format(
@@ -8984,6 +9093,29 @@ class DriftlessMap(QMainWindow, FORM_Main):
 # -------------------------------------------------------------
 #                    Main run
 # -------------------------------------------------------------
+# Kinds of marks that are mapped: kind -> (section key, atlas key).
+MAPPED_KINDS = {
+    "contour": ("img-contour", "atlas-contour"),
+    "probe": ("img-probe", "atlas-probe"),
+    "drawing": ("img-drawing", "atlas-drawing"),
+    "cells": ("img-cells", "atlas-cells"),
+    "expression": ("img-virus", "atlas-virus"),
+}
+
+
+def _saved_atlas_mark_origin(value):
+    """Validated ``atlas_mark_origin`` from a project, or {}."""
+    if not isinstance(value, dict):
+        return {}
+    origin = {}
+    for kind, entry in value.items():
+        if (kind in MAPPED_KINDS and isinstance(entry, (list, tuple)) and len(entry) == 3
+                and is_identifier(entry[0]) and isinstance(entry[1], int)
+                and not isinstance(entry[1], bool) and isinstance(entry[2], str)):
+            origin[kind] = [entry[0], entry[1], entry[2]]
+    return origin
+
+
 def _valid_read_scale(value):
     """A saved read scale in (0, 1], or None to read full resolution."""
     try:

@@ -87,9 +87,15 @@ class FakeEngine:
     def transfer_to_atlas_clicked(self):
         self.h2a_transferred = not self.h2a_transferred
 
-    def transform_accept(self):
+    def transform_accept(self, probe=None):
+        self.mapped_for = probe
         self.working_atlas_data["atlas-probe"] = list(self.working_img_data["img-probe"])
         self.working_img_data["img-probe"] = []
+
+    def make_pieces_of(self, kind):
+        before = len(self.object_ctrl.obj_name)
+        self.make_probe_piece()
+        return list(range(before, len(self.object_ctrl.obj_name)))
 
     def make_probe_piece(self):
         if not self.working_atlas_data["atlas-probe"]:

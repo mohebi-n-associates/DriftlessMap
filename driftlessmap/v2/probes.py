@@ -139,8 +139,9 @@ class ProbeBook:
         """Map this section's marks and file them as a part of ``probe``.
 
         Returns ``(ok, message)``. Section marks are mapped with the current
-        registration (the warp preview is switched on if needed); marks
-        placed on the atlas are used directly.
+        registration (the warp preview is switched on if needed) and kept in
+        the probe's mapping record for this section; adding the section again
+        replaces its earlier part. Marks placed on the atlas are used directly.
         """
         engine = self.engine
         on_section, on_atlas = self.marks()
@@ -154,10 +155,8 @@ class ProbeBook:
                 if not engine.h2a_transferred:
                     return False, ("The section could not be warped onto the atlas. Place "
                                    "or check the landmarks in the Register step.")
-            engine.transform_accept()
-        before = len(engine.object_ctrl.obj_name)
-        engine.make_probe_piece()
-        created = list(range(before, len(engine.object_ctrl.obj_name)))
+            engine.transform_accept(probe=probe)
+        created = engine.make_pieces_of("probe")
         if not created:
             return False, "No part was made; see the message below the image."
         for shank, index in enumerate(created):

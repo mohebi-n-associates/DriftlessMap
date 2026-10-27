@@ -1,6 +1,6 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 2.0.0a8**, a development preview of
+This manual applies to **DriftlessMap 2.0.0a9**, a development preview of
 DriftlessMap 2.0 on the `v2-redesign` branch. The current stable release is
 1.6.1; its desktop downloads are described in Section 2.2.
 
@@ -109,7 +109,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-DriftlessMap 2.0.0a8 requires:
+DriftlessMap 2.0.0a9 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -177,7 +177,7 @@ python -c "import driftlessmap; print(driftlessmap.__version__)"
 ```
 
 The final command prints the installed version: `1.6.1` for the stable
-release, or `2.0.0a8` for this development preview installed from the
+release, or `2.0.0a9` for this development preview installed from the
 `v2-redesign` branch.
 
 ### 2.5 Launching DriftlessMap
@@ -425,7 +425,9 @@ The transform actions are:
 - **Transform to Histological Image Window:** warp atlas data into histology
   space.
 - **Accept and Transfer:** transfer the current probe, virus, cell, drawing, or
-  contour annotations through the accepted registration.
+  contour annotations through the accepted registration. The transferred
+  section marks are kept in a mapping record (see **Kept marks** below) and stay
+  visible on the section as faint, read-only marks.
 
 Clicking an active transform action again removes its overlay so landmarks can
 be edited.
@@ -511,9 +513,8 @@ while you type in a field; Escape stops the current tool.
 
 Known limits of the preview:
 
-- Mapping and building keep their 1.x behaviour: mapping moves section marks
-  to the atlas, and building replaces parts with the object (Edit parts
-  restores them). The interface says so before you act.
+- Building still replaces parts with the object (Edit parts restores them).
+  The interface says so before you act.
 
 ## 5. Downloading, processing, and loading atlases
 
@@ -990,6 +991,17 @@ Once the registration is accepted:
 Object pieces are always made from atlas-layer data. Annotations that are
 still only in the histology window are not converted by **Make Pieces**; the
 status bar lists them so they can be transferred first.
+
+**Kept marks (2.0 development preview).** Transferring keeps a copy of the
+section marks in a *mapping record*: one per kind of mark on the section (cells,
+drawing, contour, expression) and, in the 2.0 preview, one per named probe. The
+section shows them as faint, read-only marks; the editable marks are cleared as
+before, so the next annotation starts empty. Records are saved with the project.
+Pieces made from transferred marks remember which record they came from:
+transferring the same kind again replaces its record, and making pieces again
+from it replaces the earlier pieces instead of adding duplicates. Marks added
+or moved on the atlas after transferring are no longer tied to the record, and
+pieces made from them have no recorded origin.
 
 Points outside the registration mesh cannot be assigned a valid atlas
 coordinate. DriftlessMap preserves or rejects them according to the data type and
