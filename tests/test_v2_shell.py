@@ -16,7 +16,7 @@ from driftlessmap.v2 import channel_display
 if V2_TEST_CHILD:
     from PyQt6.QtCore import QSettings
     from PyQt6.QtGui import QAction
-    from PyQt6.QtWidgets import QApplication
+    from PyQt6.QtWidgets import QAbstractButton, QApplication
 
     from driftlessmap.v2.shell import V2Window
 
@@ -240,6 +240,35 @@ class V2ShellTests(unittest.TestCase):
             self.assertTrue(np.all(engine.image_view.current_img == 30))
             panel.refresh()
             self.assertEqual(panel._plane_boxes["T"].value(), 3)
+
+    @isolated_gui_test
+    def test_adopted_1x_controls_follow_the_light_theme(self):
+        from PyQt6.QtGui import QColor, QImage, QPixmap
+
+        from driftlessmap.v2 import adopted
+
+        image = QImage(3, 1, QImage.Format.Format_ARGB32)
+        image.setPixelColor(0, 0, QColor(255, 255, 255, 255))
+        image.setPixelColor(1, 0, QColor(105, 159, 76, 255))
+        image.setPixelColor(2, 0, QColor(0, 0, 0, 0))
+        result = adopted.recolour_white(QPixmap.fromImage(image), "#1a1e23").toImage()
+        self.assertEqual(result.pixelColor(0, 0).name(), "#1a1e23")
+        self.assertEqual(result.pixelColor(1, 0).name(), "#699f4c")
+        self.assertEqual(result.pixelColor(2, 0).alpha(), 0)
+
+        with tempfile.TemporaryDirectory() as folder:
+            window = self.make_window(folder)
+            window.apply_theme("light")
+            engine = window.engine
+            self.assertNotIn("rgb(50, 50, 50)", engine.toolbar.styleSheet())
+            self.assertNotIn("color: white", engine.atlas_view.label_tree.styleSheet())
+            self.assertEqual(engine.atlas_view.show_boundary_btn.styleSheet(), "")
+            # Switching back and forth recolours from the original icons.
+            window.apply_theme("dark")
+            window.apply_theme("light")
+            icons = [b for b in engine.toolbar.findChildren(QAbstractButton)
+                     if getattr(b, "_v2_original_icon", None) is not None]
+            self.assertTrue(icons)
 
     @isolated_gui_test
     def test_allen_download_dialog_reuses_verified_files(self):

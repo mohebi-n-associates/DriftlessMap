@@ -35,7 +35,7 @@ from PyQt6.QtWidgets import (
 
 from ..app import DriftlessMap
 from ..version import __version__
-from . import state
+from . import adopted, state
 from .annotate_panel import AnnotatePanel
 from .commands import Command, CommandPalette, CommandRegistry
 from .match_panel import MatchPanel
@@ -753,6 +753,7 @@ class V2Window(QMainWindow):
         self.theme = theme
         self.settings.setValue("theme", theme)
         QApplication.instance().setStyleSheet(stylesheet(theme))
+        adopted.restyle(self.engine, theme)
         self.theme_button.setText("Light theme" if theme == "dark" else "Dark theme")
 
     def toggle_theme(self):

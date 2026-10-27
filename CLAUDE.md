@@ -8,7 +8,7 @@ or important workflows change.
 
 ## Project identity
 
-- Current release: DriftlessMap 1.10.0.
+- Current release: DriftlessMap 1.11.0.
 - Desktop application for histology registration, atlas mapping, probe
   reconstruction, anatomical annotation, and data export.
 - Python package: `driftlessmap`; GUI: PyQt6 + pyqtgraph/OpenGL.
@@ -94,7 +94,9 @@ or important workflows change.
   QAction is registered under its old name), `state.py` (read-only status and
   the unsaved-change digest, which ignores navigation), `channel_display.py`
   (per-channel display range/gamma written into the 1.x curve state so saves
-  restore it) and `theme.py` (design tokens and stylesheet). Preview
+  restore it), `theme.py` (design tokens and stylesheet) and `adopted.py`
+  (restyles the adopted 1.x toolbar, atlas controller and label tree from
+  the tokens and recolours their white icons; call it on theme changes). Preview
   preferences use a separate QSettings namespace. V2 dialogs subclass the
   1.x ones and only rebuild the layout (`allen_download_dialog.py`), so
   download, validation and processing code stays shared. `probes.py` manages

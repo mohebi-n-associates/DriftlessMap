@@ -45,7 +45,6 @@ Done, with tests:
   warp preview; Annotate and Results steps wrapping the 1.x operations.
 - End-to-end check on a 16-bit DAPI/GFP/tracer OME-TIFF: DAPI-only match and
   landmarks, review, warp, probe mapping, build, save and reopen.
-
 - Find atlas section names the anatomical side: where the animal's right is
   in the section (coronal, horizontal), or the Right or Left hemisphere
   (sagittal).
@@ -53,10 +52,12 @@ Done, with tests:
   inspector states explain what to load.
 - Series are scenes, Z is paged, and the plane of any further axis (such as
   T) is chosen in the Section step and saved in the project.
+- Adopted 1.x controls (tool options, atlas controller, region tree) follow
+  the light and dark themes, with white icons recoloured to the theme text.
 
 Not yet done (see Sections 3, 6 and 15): source retention and staleness,
-undo for mapping and building, pyramid levels, a fully themed restyle of adopted 1.x controls, and a desktop
-bundle that starts the preview.
+undo for mapping and building, pyramid levels, and a desktop bundle that
+starts the preview.
 
 ## Contents
 

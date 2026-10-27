@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th October 2026
+##### DriftlessMap 1.11.0
+
+The 2.0 preview's light and dark themes now restyle the 1.x tool options, atlas controller and region tree.
+
+### 27th October 2026
 ##### DriftlessMap 1.10.0
 
 Choose which time point (or other further axis plane) of a TIFF to read; the choice is saved in the project.

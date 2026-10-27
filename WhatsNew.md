@@ -3,6 +3,17 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.11.0
+
+Release date: 27 October 2026
+
+- **The 2.0 preview's light theme now covers the 1.x controls it reuses.**
+  Tool options above the image, the plane, opacity, Show Boundary and tilt
+  controls of the Match step, and the Regions tree follow the light and dark
+  themes. Their white icons are recoloured to the theme's text colour, so
+  they stay visible on light backgrounds; coloured parts of icons are kept.
+  Region names, which were white on white in the light theme, are readable.
+
 ## DriftlessMap 1.10.0
 
 Release date: 27 October 2026
