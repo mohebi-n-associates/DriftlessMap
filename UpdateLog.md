@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th October 2026
+##### DriftlessMap 1.10.0
+
+Choose which time point (or other further axis plane) of a TIFF to read; the choice is saved in the project.
+
+### 27th October 2026
 ##### DriftlessMap 1.9.0
 
 Channels named in a file without stored colours get conventional colours (DAPI blue, GFP green, tdTomato red, Cy5 magenta).

@@ -13,9 +13,11 @@ from PyQt6.QtWidgets import (
     QDialog,
     QDoubleSpinBox,
     QGridLayout,
+    QHBoxLayout,
     QLabel,
     QLineEdit,
     QMenu,
+    QMessageBox,
     QRadioButton,
     QSlider,
     QSpinBox,
@@ -94,6 +96,13 @@ class SectionPanel(StepPanel):
         self.image_card.add(view.scale_wrap)
         self.image_card.add(view.scene_wrap)
         self.page_note = self.image_card.add(hint_label(""))
+        # Planes of further TIFF axes (for example time), read on request.
+        self.planes_host = self.image_card.add(QWidget())
+        self.planes_row = QHBoxLayout(self.planes_host)
+        self.planes_row.setContentsMargins(0, 0, 0, 0)
+        self.planes_row.setSpacing(6)
+        self._plane_boxes = {}
+        self._planes_key = None
 
         self.channel_card = self.add(Card(
             "Channels", "Show: visible on screen. Register: used by automatic "
@@ -187,6 +196,48 @@ class SectionPanel(StepPanel):
             button("Make cleaned copy", engine.actionProcess_Image.trigger),
             button("Reset image", engine.actionReset_Image.trigger),
         ], columns=2), needs_image))
+
+    # -------------------------------------------------------------- planes
+    def _rebuild_planes(self, image_file):
+        while self.planes_row.count():
+            item = self.planes_row.takeAt(0)
+            if item.widget() is not None:
+                item.widget().deleteLater()
+        self._plane_boxes = {}
+        sizes = dict(getattr(image_file, "fixed_axis_sizes", {}) or {})
+        chosen = dict(getattr(image_file, "fixed_axes", {}) or {})
+        self.planes_host.setVisible(bool(sizes))
+        for axis, size in sorted(sizes.items()):
+            box = QSpinBox()
+            box.setRange(1, size)
+            box.setValue(chosen.get(axis, 0) + 1)
+            box.setSuffix(" of {}".format(size))
+            box.setToolTip("{} plane to read from the file".format(axis))
+            self.planes_row.addWidget(QLabel("{} plane".format(axis)))
+            self.planes_row.addWidget(box)
+            self._plane_boxes[axis] = box
+        if sizes:
+            self.planes_row.addWidget(button("Read plane", self._read_planes,
+                                             tooltip="Read the chosen planes from the file "
+                                                     "as the section's pixels"))
+            self.planes_row.addStretch(1)
+
+    def _read_planes(self):
+        planes = {axis: box.value() - 1 for axis, box in self._plane_boxes.items()}
+        engine = self.engine
+        if planes == dict(getattr(engine.image_view.image_file, "fixed_axes", {}) or {}):
+            return
+        if engine.histo_tri_inside_data and QMessageBox.question(
+                self, "Read another plane",
+                "Reading another plane loads the section again, which clears its "
+                "landmarks, as loading a section does. Continue?") \
+                != QMessageBox.StandardButton.Yes:
+            return
+        if engine.select_image_planes(planes):
+            self.shell.message("Read {}.".format(", ".join(
+                "{} plane {}".format(axis, index + 1)
+                for axis, index in sorted(planes.items()))), "good")
+        self.shell.refresh()
 
     # ---------------------------------------------------------------- rows
     def _rebuild_rows(self):
@@ -434,6 +485,11 @@ class SectionPanel(StepPanel):
             self._rebuild_rows()
         elif self._rows and not self._updating:
             self._sync_rows()
+        planes_key = (id(view.image_file),
+                      tuple(sorted((getattr(view.image_file, "fixed_axes", {}) or {}).items())))
+        if planes_key != self._planes_key:
+            self._planes_key = planes_key
+            self._rebuild_planes(view.image_file)
         from . import state
         self.image_summary.setText(" · ".join(state.section_summary(self.engine)))
         view.check_scenes.setVisible(bool(getattr(view.image_file, "is_czi", False)))

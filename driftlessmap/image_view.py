@@ -494,6 +494,9 @@ class ImageView(QObject):
                 'processing_img': self.processing_img,
                 'current_scene': self.scene_slider.value(),
                 'current_page': self.display_img_index,
+                # Chosen plane of each fixed TIFF axis (e.g. T); absent in
+                # older files, meaning the first plane.
+                'plane_selection': dict(getattr(self.image_file, 'fixed_axes', {}) or {}),
                 # ``current_scale`` is the scale slider percentage kept for
                 # older readers; ``image_scale`` is the fraction of full
                 # resolution the active raster was read at.

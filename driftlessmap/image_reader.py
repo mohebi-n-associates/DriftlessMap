@@ -203,9 +203,29 @@ TIFF_ERRORS = {
     2: "Only unsigned 8- and 16-bit TIFF data is supported.",
     7: "This TIFF's axis layout is not supported.",
     8: "The TIFF has more than {} channels.".format(MAX_CHANNELS),
+    9: "A chosen plane is outside this TIFF's axis range.",
 }
 # Axes browsed as pages, in order of preference; other extra axes are fixed.
 PAGE_AXES = ("Z", "T", "I", "Q", "R", "H", "E", "A", "V", "L", "P", "M")
+
+
+def plane_selection(value):
+    """Validate a chosen plane per fixed TIFF axis, e.g. ``{"T": 3}``.
+
+    Anything malformed becomes ``{}`` (the first plane of every axis, as in
+    files saved before the choice existed).
+    """
+    if not isinstance(value, dict):
+        return {}
+    selection = {}
+    for axis, index in value.items():
+        if not (isinstance(axis, str) and len(axis) == 1 and axis.isalpha()
+                and axis not in "YXCS"):
+            return {}
+        if isinstance(index, bool) or not isinstance(index, (int, np.integer)) or index < 0:
+            return {}
+        selection[axis] = int(index)
+    return selection
 
 
 def _ome_channels(tiff_file, n_channels):
@@ -258,16 +278,18 @@ class TIFFReader(object):
 
     Samples keep their native dtype. A channel axis (C) becomes the channel
     dimension; one further axis (Z preferred, then T and others) is browsed as
-    pages; any remaining extra axes are fixed at index 0 and reported in
-    :attr:`notes`. Several series become scenes, read when first shown, and
+    pages; any remaining extra axes are fixed at the plane chosen in
+    ``planes`` (default 0), recorded in :attr:`fixed_axes` with their sizes
+    in :attr:`fixed_axis_sizes`, and reported in :attr:`notes`. Several series become scenes, read when first shown, and
     must share one bit depth and channel layout. Channel names and colours
     come from OME or ImageJ metadata when present.
     """
 
-    def __init__(self, image_file_path):
+    def __init__(self, image_file_path, planes=None):
         self.error_index = 0
         self.error_message = None
         self.is_czi = False
+        self.planes = plane_selection(planes)
         self.path = str(image_file_path)
         self.file_name_list = [str(Path(image_file_path).with_suffix(""))]
         self.n_scenes = 0
@@ -286,6 +308,7 @@ class TIFFReader(object):
         self.axes = None
         self.page_axis = None
         self.fixed_axes = {}
+        self.fixed_axis_sizes = {}
         _set_channel_metadata(self, [], [])
 
         with tifffile.TiffFile(image_file_path) as tiff_file:
@@ -385,11 +408,15 @@ class TIFFReader(object):
             if axis == page_axis:
                 continue
             size = image.shape[axes.index(axis)]
-            image = np.take(image, 0, axis=axes.index(axis))
+            index = self.planes.get(axis, 0)
+            if index >= size:
+                return self._fail(9)
+            image = np.take(image, index, axis=axes.index(axis))
             axes = axes.replace(axis, "")
-            self.fixed_axes[axis] = 0
+            self.fixed_axes[axis] = index
+            self.fixed_axis_sizes[axis] = size
             self.notes.append(
-                "Only the first {} plane of {} is shown.".format(axis, size))
+                "{} plane {} of {} is shown.".format(axis, index + 1, size))
         if page_axis is not None:
             image = np.moveaxis(image, axes.index(page_axis), 0)
             axes = page_axis + axes.replace(page_axis, "")
@@ -416,8 +443,9 @@ class TIFFReader(object):
                 image = np.asarray(series.asarray())
                 axes = series.axes
             notes, fixed = list(self.notes), dict(self.fixed_axes)
+            sizes = dict(self.fixed_axis_sizes)
             layout = self._interpret(image, axes)
-            self.notes, self.fixed_axes = notes, fixed
+            self.notes, self.fixed_axes, self.fixed_axis_sizes = notes, fixed, sizes
             if layout is None:
                 raise ValueError(self.error_message or "The TIFF series could not be read.")
             self.data[key] = layout

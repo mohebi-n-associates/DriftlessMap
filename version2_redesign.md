@@ -51,10 +51,11 @@ Done, with tests:
   (sagittal).
 - Actions that cannot run are disabled with the reason; empty canvas and
   inspector states explain what to load.
+- Series are scenes, Z is paged, and the plane of any further axis (such as
+  T) is chosen in the Section step and saved in the project.
 
 Not yet done (see Sections 3, 6 and 15): source retention and staleness,
-undo for mapping and building, series/Z/T selectors beyond the page slider,
-pyramid levels, a fully themed restyle of adopted 1.x controls, and a desktop
+undo for mapping and building, pyramid levels, a fully themed restyle of adopted 1.x controls, and a desktop
 bundle that starts the preview.
 
 ## Contents

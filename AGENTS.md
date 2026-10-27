@@ -8,7 +8,7 @@ or important workflows change.
 
 ## Project identity
 
-- Current release: DriftlessMap 1.9.0.
+- Current release: DriftlessMap 1.10.0.
 - Desktop application for histology registration, atlas mapping, probe
   reconstruction, anatomical annotation, and data export.
 - Python package: `driftlessmap`; GUI: PyQt6 + pyqtgraph/OpenGL.
@@ -33,7 +33,9 @@ or important workflows change.
 - `driftlessmap/provenance.py`: SHA-256 input identity, relative/absolute path
   hints, relocation and verification, portable source packing/extraction.
 - `driftlessmap/image_reader.py`: conventional, TIFF, folder, and embedded
-  active-raster readers. `czi_reader.py` handles optional CZI input.
+  active-raster readers. TIFF axes beyond C and the paged axis are read at
+  the plane in `plane_selection` (saved in `img_ctrl_data`; default first
+  plane); `DriftlessMap.select_image_planes` re-reads the section. `czi_reader.py` handles optional CZI input.
 - `driftlessmap/image_view.py`: image scene/page/channel/LUT state.
 - `driftlessmap/atlas_matching.py`: GUI-free suggestion of the atlas plane,
   orientation and slice that match a histology section (silhouette search on

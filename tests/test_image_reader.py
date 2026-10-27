@@ -215,9 +215,28 @@ class TiffLayoutTests(unittest.TestCase):
             reader = image_reader.TIFFReader(path)
         self.assertEqual(reader.error_index, 0)
         self.assertEqual(reader.fixed_axes, {"T": 0})
-        self.assertTrue(any("T plane" in note for note in reader.notes))
+        self.assertTrue(any("T plane 1 of 2" in note for note in reader.notes))
         self.assertEqual(reader.data["scene 0"].shape, (4, 6, 7, 3))
         self.assertEqual(int(reader.data["scene 0"][1, ..., 2].max()), 9)
+
+    def test_chosen_time_plane_is_read(self):
+        data = np.zeros((3, 4, 2, 6, 7), dtype=np.uint16)
+        for t in range(3):
+            data[t] = t + 1
+        with tempfile.TemporaryDirectory() as folder:
+            path = self.write(folder, "tzcyx.tif", data, imagej=True, metadata={"axes": "TZCYX"})
+            reader = image_reader.TIFFReader(path, planes={"T": 2})
+            beyond = image_reader.TIFFReader(path, planes={"T": 3})
+        self.assertEqual(reader.error_index, 0)
+        self.assertEqual((reader.fixed_axes, reader.fixed_axis_sizes), ({"T": 2}, {"T": 3}))
+        self.assertTrue(np.all(reader.data["scene 0"] == 3))
+        self.assertEqual(beyond.error_index, 9)
+        self.assertIsNotNone(beyond.error_message)
+
+    def test_plane_selection_is_validated(self):
+        self.assertEqual(image_reader.plane_selection({"T": 2, "R": 0}), {"T": 2, "R": 0})
+        for bad in (None, [], {"T": -1}, {"T": 1.5}, {"C": 0}, {"TT": 0}, {"T": True}):
+            self.assertEqual(image_reader.plane_selection(bad), {}, bad)
 
     def test_ome_channel_names_and_colours(self):
         data = np.zeros((3, 6, 7), dtype=np.uint16)

@@ -3,6 +3,20 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.10.0
+
+Release date: 27 October 2026
+
+- **Choose the time point (or other plane) of a TIFF.** When a TIFF has an
+  axis beyond its channels and Z, such as time, DriftlessMap used only its
+  first plane. The 2.0 preview's Section step now shows a plane box for each
+  such axis; **Read plane** loads the chosen plane. As with loading a section,
+  this clears the section's landmarks; the registration channels are kept.
+- The chosen plane is saved in the project (`plane_selection`) and read again
+  when the project reopens from the original file. Projects without it use the
+  first plane, as before. A plane outside the file's range is refused with a
+  message.
+
 ## DriftlessMap 1.9.0
 
 Release date: 27 October 2026

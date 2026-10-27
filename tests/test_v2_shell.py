@@ -215,6 +215,33 @@ class V2ShellTests(unittest.TestCase):
             self.assertFalse(find(window.panels["annotate"], "Map to atlas").isEnabled())
 
     @isolated_gui_test
+    def test_section_step_reads_another_time_plane(self):
+        import tifffile
+
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "tzcyx.tif"
+            data = np.zeros((3, 2, 2, 10, 12), dtype=np.uint16)
+            for t in range(3):
+                data[t] = 10 * (t + 1)
+            tifffile.imwrite(path, data, imagej=True, metadata={"axes": "TZCYX"})
+            window = self.make_window(folder)
+            engine = window.engine
+            self.assertTrue(engine.load_single_image_file(str(path), ".tif"))
+            engine.current_img_path = str(path)
+            window.go_to("section")
+            panel = window.panels["section"]
+            panel.refresh()
+            self.assertTrue(panel.planes_host.isVisibleTo(panel))
+            box = panel._plane_boxes["T"]
+            self.assertEqual((box.minimum(), box.maximum(), box.value()), (1, 3, 1))
+            box.setValue(3)
+            panel._read_planes()
+            self.assertEqual(engine.image_view.image_file.fixed_axes, {"T": 2})
+            self.assertTrue(np.all(engine.image_view.current_img == 30))
+            panel.refresh()
+            self.assertEqual(panel._plane_boxes["T"].value(), 3)
+
+    @isolated_gui_test
     def test_allen_download_dialog_reuses_verified_files(self):
         import json
         from unittest.mock import patch

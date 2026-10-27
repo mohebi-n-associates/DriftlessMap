@@ -223,6 +223,53 @@ class ProjectPersistenceIntegrationTests(unittest.TestCase):
                 "not recorded")
 
     @isolated_gui_test
+    def test_chosen_time_plane_is_saved_and_reread_from_the_source(self):
+        import tifffile
+
+        from driftlessmap.registration_input import RegistrationInput
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            source = root / "tzcyx.tif"
+            project = root / "planes.dmap"
+            data = np.zeros((3, 4, 2, 12, 14), dtype=np.uint16)
+            for t in range(3):
+                data[t] = 100 * (t + 1)
+            data[2, 1] += 7  # Z plane 2 of time point 3
+            tifffile.imwrite(source, data, imagej=True, metadata={"axes": "TZCYX"})
+
+            window = self.create_window()
+            self.assertTrue(window.load_single_image_file(str(source), ".tif"))
+            window.current_img_path = str(source)
+            window._loaded_histology_signature = path_stat_signature(source)
+            window.registration_input = RegistrationInput.from_channels((1,), ["Channel 2"])
+            self.assertTrue(window.select_image_planes({"T": 2}))
+            self.assertEqual(window.image_view.image_file.fixed_axes, {"T": 2})
+            self.assertEqual(window.registration_input.channels, (1,))
+            window.image_view.page_ctrl.page_slider.setValue(1)
+            self.assertTrue(np.all(window.image_view.current_img == 307))
+            self.assertFalse(window.select_image_planes({"T": 3}))
+            self.assertEqual(window.image_view.image_file.fixed_axes, {"T": 2})
+            with patch.object(
+                QFileDialog,
+                "getSaveFileName",
+                return_value=(str(project), "DriftlessMap Project (*.dmap)"),
+            ):
+                window.save_project_called(portable=False)
+
+            payload, error = load_driftlessmap_file(project, "project")
+            self.assertIsNone(error)
+            self.assertEqual(payload["img_ctrl_data"]["plane_selection"], {"T": 2})
+            restored = self.create_window()
+            prepared = restored.prepare_project_sources(payload, str(project))
+            restored.current_project_path = str(project)
+            restored.load_project(prepared)
+            self.assertEqual(restored.image_view.image_file.fixed_axes, {"T": 2})
+            self.assertTrue(np.all(restored.image_view.current_img == 307))
+            restored.image_view.page_ctrl.page_slider.setValue(0)
+            self.assertTrue(np.all(restored.image_view.current_img == 300))
+
+    @isolated_gui_test
     def test_portable_project_streams_and_reopens_original_histology(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

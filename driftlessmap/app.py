@@ -99,6 +99,7 @@ from .image_reader import (
     ImageReader,
     ImagesReader,
     TIFFReader,
+    plane_selection,
     read_bitmap,
 )
 
@@ -6630,8 +6631,38 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 self.statusbar.showMessage("No new image file is selected.")
             return
 
+    def select_image_planes(self, planes):
+        """Re-read the current TIFF showing other planes of its fixed axes.
+
+        ``planes`` maps a fixed axis to a plane, e.g. ``{"T": 3}``. The file is
+        read again as a new section, which clears the section's landmarks as
+        any load does; the registration channels are kept, since the channel
+        layout is unchanged.
+        """
+        path = self.current_img_path
+        if not path or os.path.splitext(path)[1].lower() not in (".tif", ".tiff"):
+            self.print_message("Choosing planes needs a TIFF section loaded from a file.",
+                               self.error_message_color)
+            return False
+        if (self._loaded_histology_signature is not None
+                and path_stat_signature(path) != self._loaded_histology_signature):
+            self.print_message("The section file changed after it was loaded; load it "
+                               "again before choosing planes.", self.error_message_color)
+            return False
+        recipe = self.registration_input
+        page = self.image_view.display_img_index
+        if not self.load_single_image_file(path, os.path.splitext(path)[1].lower(),
+                                           planes=plane_selection(planes)):
+            return False
+        self._loaded_histology_signature = path_stat_signature(path)
+        self.registration_input = recipe
+        if self.image_view.image_file.n_pages > 1:
+            self.image_view.page_ctrl.page_slider.setValue(
+                min(page, self.image_view.image_file.n_pages - 1))
+        return True
+
     def load_single_image_file(
-        self, image_file_path, image_file_type, scene_index=None
+        self, image_file_path, image_file_type, scene_index=None, planes=None
     ):
         with pg.BusyCursor():
             if image_file_type == ".czi":
@@ -6675,7 +6706,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
                         self.tool_box.cell_count_val_list[i + 1].setVisible(True)
             elif image_file_type in (".tif", ".tiff"):
                 try:
-                    image_file = TIFFReader(image_file_path)
+                    image_file = TIFFReader(image_file_path, planes=planes)
                 except (IOError, OSError, IndexError, AttributeError, TypeError, ValueError):
                     self.print_message(
                         "Load TIF file failed.", self.error_message_color
@@ -8478,7 +8509,8 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 _, file_extension = os.path.splitext(self.current_img_path)
                 scene_index = img_ctrl_data["current_scene"]
                 if not self.load_single_image_file(
-                    self.current_img_path, file_extension.lower(), scene_index
+                    self.current_img_path, file_extension.lower(), scene_index,
+                    planes=plane_selection(img_ctrl_data.get("plane_selection")),
                 ):
                     return
                 self.image_view.load_img_ctrl_data(img_ctrl_data)

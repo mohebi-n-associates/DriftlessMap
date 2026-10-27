@@ -1,6 +1,6 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 1.9.0**.
+This manual applies to **DriftlessMap 1.10.0**.
 
 DriftlessMap - Histological E-data Registration in Brain Space - is a desktop
 application for aligning rodent histology with a reference atlas, reconstructing
@@ -107,7 +107,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-DriftlessMap 1.9.0 requires:
+DriftlessMap 1.10.0 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -126,7 +126,7 @@ page. The macOS DMG (`-macOS-arm64.dmg`) is built for Apple Silicon; on an Intel
 Mac, use the developer installation below.
 The desktop builds include Python and all runtime dependencies. Windows users
 extract the entire ZIP and run `DriftlessMap.exe`; macOS users open the DMG and
-drag `DriftlessMap.app` to Applications. The 1.9.0 release is unsigned, so the
+drag `DriftlessMap.app` to Applications. The 1.10.0 release is unsigned, so the
 first launch may require Windows SmartScreen confirmation or Control-clicking
 the macOS app and choosing **Open**.
 
@@ -174,7 +174,7 @@ python -m pip --version
 python -c "import driftlessmap; print(driftlessmap.__version__)"
 ```
 
-The final command should print `1.9.0`.
+The final command should print `1.10.0`.
 
 ### 2.5 Launching DriftlessMap
 
@@ -716,8 +716,12 @@ multi-channel TIFF, and page-stack TIFF are intentionally distinct:
   native bit depth.
 - A page axis displays one section at a time. In a hyperstack (for example
   ZCYX from ImageJ or OME-TIFF), Z is browsed as pages and every channel is
-  kept. If the file has a further axis, such as time, its first plane is used
-  and DriftlessMap reports it.
+  kept. If the file has a further axis, such as time, one plane of it is used
+  (the first by default) and DriftlessMap reports which. In the 2.0 preview,
+  the Section step's Image card shows a plane box for each such axis; choose
+  a plane and press **Read plane**. This loads the section again, which
+  clears its landmarks. The chosen plane is saved in the project and read
+  again when the project reopens from the original file.
 - Several series in one file become scenes, read when first shown. They must
   share one bit depth and channel layout.
 - Channel names and colours are read from OME-TIFF or ImageJ metadata when the
