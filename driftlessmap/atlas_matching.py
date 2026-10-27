@@ -36,6 +36,12 @@ ORIENTATION_MARGIN = 0.03
 # (dorsal side still on top) is preferred: sections are rarely mounted upside
 # down.
 UPRIGHT_PREFERENCE = 0.05
+# Pages per orientation used to tell close orientations apart.
+CONTENDER_PAGES = 150
+# Depth ranking: pages compared in the first pass, and how many of the best
+# are then examined page by page.
+DEPTH_PAGES = 120
+DEPTH_NEIGHBOURHOODS = 8
 
 
 @dataclass(frozen=True)
@@ -748,20 +754,41 @@ def suggest_sections(histology, label_volume, intensity_volume, midline, pivot,
     planes = best_by_plane(candidates)
     best = planes[0]
     length = plane_length(labels.shape, best.plane)
+    indexes = list(hemisphere_indexes(best.plane, length, coarse_midline))
     contenders = orientation_contenders(candidates, best)
-    ranked = []
-    for number, contender in enumerate(contenders):
-        share = 0.25 / len(contenders)
-        depths = rank_depths(
-            histology, labels, intensity, best.plane, contender.orientation,
-            indexes=hemisphere_indexes(best.plane, length, coarse_midline),
-            progress=stage(0.25 + number * share, 0.25 + (number + 1) * share),
-        )
-        if depths:
-            ranked.append((contender, depths))
-    if not ranked:
+    if len(contenders) > 1:
+        # Tell the orientations apart on every few pages; rank the winner's
+        # pages one by one below.
+        sample = indexes[::max(1, len(indexes) // CONTENDER_PAGES)]
+        ranked = []
+        for number, contender in enumerate(contenders):
+            share = 0.15 / len(contenders)
+            depths = rank_depths(
+                histology, labels, intensity, best.plane, contender.orientation,
+                indexes=sample,
+                progress=stage(0.25 + number * share, 0.25 + (number + 1) * share),
+            )
+            if depths:
+                ranked.append((contender, depths))
+        if ranked:
+            best = choose_orientation(ranked)[0]
+    # Depth in two passes: every few pages, then each page around the best
+    # few (scores are compared within one pass only).
+    stride = max(1, len(indexes) // DEPTH_PAGES)
+    depths = rank_depths(
+        histology, labels, intensity, best.plane, best.orientation,
+        indexes=indexes[::stride], progress=stage(0.4, 0.45),
+    )
+    if not depths:
         raise ValueError("No atlas slice could be compared with the section.")
-    best, depths = choose_orientation(ranked)
+    if stride > 1:
+        around = sorted({page for match in depths[:DEPTH_NEIGHBOURHOODS]
+                         for page in range(match.index - stride + 1, match.index + stride)
+                         if indexes[0] <= page <= indexes[-1]})
+        depths = rank_depths(
+            histology, labels, intensity, best.plane, best.orientation,
+            indexes=around, progress=stage(0.45, 0.5),
+        ) or depths
     spacing = max(2, length // 100)
     chosen = _distinct([match.index for match in depths], depth_candidates, spacing)
     tilts = refine_tilt(
