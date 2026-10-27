@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th October 2026
+##### DriftlessMap 1.14.0
+
+Projects save mapping records and each object's mapping origin (groundwork for keeping section marks after mapping).
+
+### 27th October 2026
 ##### DriftlessMap 1.13.0
 
 Pyramidal TIFFs can be read at a stored lower resolution with the Scale slider; the level is saved and restored with the project.

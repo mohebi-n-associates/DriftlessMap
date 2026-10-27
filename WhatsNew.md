@@ -3,6 +3,20 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 1.14.0
+
+Release date: 27 October 2026
+
+- **Projects record where mapped results came from.** Each loaded section
+  gets an identity, and projects now save mapping records and, for every
+  object, which mapping it was made from. Building keeps this for each part,
+  so **Edit parts** restores it. Nothing changes in mapping yet; this is the
+  saved groundwork for keeping section marks, out-of-date labels and undo
+  (see `phase3_mapping_design.md`).
+- Projects from earlier versions open with no records; their objects are
+  shown as "origin not recorded", never as current. Damaged records are left
+  out with a message instead of stopping the project from opening.
+
 ## DriftlessMap 1.13.0
 
 Release date: 27 October 2026

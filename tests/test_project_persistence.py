@@ -319,6 +319,76 @@ class ProjectPersistenceIntegrationTests(unittest.TestCase):
                                           np.moveaxis(data[:, ::2, ::2], 0, -1))
 
     @isolated_gui_test
+    def test_mapping_records_and_object_origin_are_saved(self):
+        from driftlessmap.mapping_records import MappingLedger, derivation, is_identifier
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            source = root / "section.png"
+            project = root / "records.dmap"
+            cv2.imwrite(str(source), np.full((20, 24, 3), 80, dtype=np.uint8))
+            window = self.create_window()
+            first_section = window.section_id
+            self.assertTrue(window.load_single_image_file(str(source), ".png"))
+            self.assertNotEqual(window.section_id, first_section)
+            self.assertTrue(is_identifier(window.section_id))
+            window.current_img_path = str(source)
+            window._loaded_histology_signature = path_stat_signature(source)
+            fingerprint = window.current_registration_fingerprint()
+            record = window.mapping_ledger.record(
+                window.section_id, "probe", {"points": [[1.0, 2.0], [5.0, 9.0]]},
+                fingerprint, "not reviewed", "2026-10-27T00:00:00Z", probe="A")
+            o = window.object_ctrl
+            # A built drawing with two parts of known origin: Edit parts
+            # restores each part's own origin.
+            other = window.mapping_ledger.record(
+                window.section_id, "drawing", {"points": [[0, 0], [3, 3]]},
+                fingerprint, "not reviewed", "t")
+            o.add_object("A", "merged drawing",
+                         {"object_type": "drawing", "data": [np.zeros((2, 3)), np.ones((2, 3))],
+                          "pieces_names": ["A - piece", "A - piece"]},
+                         window.obj_display_mode,
+                         derivation=derivation([record]) + derivation([other]),
+                         piece_derivation=[derivation([record]), derivation([other])])
+            with patch.object(
+                QFileDialog,
+                "getSaveFileName",
+                return_value=(str(project), "DriftlessMap Project (*.dmap)"),
+            ):
+                window.save_project_called(portable=False)
+
+            payload, error = load_driftlessmap_file(project, "project")
+            self.assertIsNone(error)
+            restored = self.create_window()
+            prepared = restored.prepare_project_sources(payload, str(project))
+            restored.current_project_path = str(project)
+            restored.load_project(prepared)
+            self.assertEqual(restored.section_id, window.section_id)
+            self.assertEqual({r.unit_id for r in restored.mapping_ledger.records()},
+                             {record.unit_id, other.unit_id})
+            ro = restored.object_ctrl
+            self.assertEqual(ro.obj_derivation, [derivation([record]) + derivation([other])])
+            ro.current_obj_index = 0
+            ro.unmerge_objects()
+            self.assertEqual(ro.obj_type, ["drawing piece", "drawing piece"])
+            self.assertEqual(ro.obj_derivation, [derivation([record]), derivation([other])])
+
+            # Projects from before mapping records: a new section, no records,
+            # objects without origin.
+            older, _ = load_driftlessmap_file(project, "project")
+            for key in ("section_id", "mapping_records"):
+                older.pop(key)
+            older["object_data"].pop("obj_derivation")
+            older["object_data"].pop("obj_piece_derivation")
+            old_window = self.create_window()
+            prepared = old_window.prepare_project_sources(older, str(project))
+            old_window.load_project(prepared)
+            self.assertTrue(is_identifier(old_window.section_id))
+            self.assertEqual(len(old_window.mapping_ledger), 0)
+            self.assertEqual(old_window.object_ctrl.obj_derivation, [[]])
+            self.assertIsInstance(old_window.mapping_ledger, MappingLedger)
+
+    @isolated_gui_test
     def test_portable_project_streams_and_reopens_original_histology(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

@@ -95,6 +95,7 @@ from .triangulation import (
 )
 
 from .interfaces import start_interface
+from .mapping_records import MappingLedger, is_identifier, new_identifier
 from .image_reader import (
     EmbeddedImageReader,
     HISTOLOGY_IMAGE_FILTER,
@@ -200,6 +201,10 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.suggested_landmarks = None
         self.registration_review = RegistrationReview()
         self.mapping_review_state = None
+        # Phase 3 mapping records: the loaded section's identity (new for
+        # every load) and one record per mapped unit of marks.
+        self.section_id = new_identifier()
+        self.mapping_ledger = MappingLedger()
         self.atlas_provenance = None
         self.histology_provenance = None
         self._portable_source_directories = []
@@ -6336,13 +6341,24 @@ class DriftlessMap(QMainWindow, FORM_Main):
         return sum(1 for da_type in self.object_ctrl.obj_type if da_type == piece_type)
 
     def _commit_merged_objects(self, piece_indexes, merged_objects):
-        self.object_ctrl.delete_objects(piece_indexes)
+        o = self.object_ctrl
+        # Each built object keeps its parts' mapping origin, part by part, in
+        # the order collect_pieces groups them, so Edit parts restores it.
+        origins = {}
+        for index in piece_indexes:
+            origins.setdefault(o.piece_group(o.obj_name[index]), []).append(
+                o.obj_derivation[index])
+        o.delete_objects(piece_indexes)
         for obj_name, obj_type, info_dict in merged_objects:
-            self.object_ctrl.add_object(
+            parts = origins.get(obj_name, [])
+            o.add_object(
                 obj_name,
                 obj_type,
                 object_data=info_dict,
                 object_mode=self.obj_display_mode,
+                derivation=[pair for part in parts for pair in part]
+                if all(parts) else [],
+                piece_derivation=parts,
             )
 
     def _merge_failed(self, obj_name, reason):
@@ -6766,6 +6782,7 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 self.tool_box.cell_count_val_list[0].setVisible(True)
 
             self.image_view.set_data(image_file)
+            self.section_id = new_identifier()
             self.registration_input = None
             self.registration_review = RegistrationReview()
             self.mapping_review_state = None
@@ -8225,6 +8242,8 @@ class DriftlessMap(QMainWindow, FORM_Main):
                 ),
                 "registration_review": self.registration_review.to_dict(),
                 "mapping_review_state": self.mapping_review_state,
+                "section_id": self.section_id,
+                "mapping_records": self.mapping_ledger.to_list(),
                 "np_onside": self.np_onside,
                 "processing_slice": self.atlas_view.processing_slice,
                 "processing_img": self.image_view.processing_img,
@@ -8560,6 +8579,13 @@ class DriftlessMap(QMainWindow, FORM_Main):
         self.registration_input = self._saved_registration_input(p_dict)
         self.registration_review = self._saved_registration_review(p_dict)
         self.mapping_review_state = p_dict.get("mapping_review_state")
+        saved_section = p_dict.get("section_id")
+        self.section_id = saved_section if is_identifier(saved_section) else new_identifier()
+        self.mapping_ledger, problems = MappingLedger.from_list(p_dict.get("mapping_records"))
+        if problems:
+            self.print_message(
+                "{} mapping record(s) could not be restored and were left out: {}".format(
+                    len(problems), "; ".join(problems)), self.reminder_color)
 
         # tool
         self.tool_box.bound_pnts_num.setText(str(self.np_onside))
