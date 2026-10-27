@@ -1,7 +1,7 @@
 # Implant workflow design: Neuropixels, optical fibers and microprisms
 
-Status: proposal for review (27 October 2026). Builds on the Phase 3 mapping
-records and undo (`phase3_mapping_design.md`).
+Status: implemented in 2.0.0a13–2.0.0a15 (approved 27 October 2026). Builds on
+the Phase 3 mapping records and undo (`phase3_mapping_design.md`).
 
 Decisions taken on 27 October 2026:
 
@@ -83,7 +83,8 @@ most 2 section pixels between points, because the piecewise-affine
 registration bends straight edges. The resampled points are transferred like
 contour points and placed in 3D with `get_3d_data_from_2d_view`, so coronal,
 sagittal and tilted slices all work. A part ("Fiber L - piece") holds one
-section's mapped outline.
+section's mapped outline; mapping makes it at once (there is no separate Make
+parts step for implants).
 
 ## 4. Building
 
@@ -158,22 +159,19 @@ absent in older files.
 
 | Field | Default when absent |
 | --- | --- |
-| `implants` | Neuropixels implants rebuilt from existing named probes; no fibers or prisms |
+| `implants` | No fibers or prisms (Neuropixels stay named probes and are listed from them) |
 | Mapping records of kind `fiber` / `prism` | None |
 
 Loading validates specs, identifiers, polygons (finite, at least 3
 vertices) and implant references; an invalid implant or record is dropped
 with a message rather than failing the project.
 
-## 7. Delivery (each a 2.0.0aN preview)
+## 7. Delivery
 
-1. Implant definitions and the Implants card; outline drawing, mapping, kept
-   outlines, Update and undo for fibers and prisms.
-2. Fiber build, report and checks.
-3. Prism build, report and checks.
-4. 3D display, `.dmapobj` and the implant CSV; manual and tutorial using the
-   example section.
-5. Later: fiber light-cone regions from NA and diameter.
+As delivered: 2.0.0a13, the GUI-free model, fiber and prism fits and reports;
+2.0.0a14, the engine (mapping, parts, building, undo, projects, 3D display,
+`.dmapobj` and the implant CSV); 2.0.0a15, the V2 Implants card and outline
+editor. Later: fiber light-cone regions from NA and diameter.
 
 ## 8. Tests
 

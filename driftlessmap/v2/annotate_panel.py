@@ -4,14 +4,19 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QListWidget, QListWidgetItem
 
 from . import state
+from .implant_card import ImplantCard
 from .probe_card import ProbeCard
 from .widgets import Card, StepPanel, button, grid_of, hint_label, set_status, status_label
 
 KIND_NAMES = {"cells": "Cells", "probe": "Probe", "drawing": "Drawing",
               "contour": "Contour", "expression": "Expression"}
+IMPLANT_KINDS = ("fiber", "prism")
 
 
-def record_label(record, status):
+def record_label(record, status, engine=None):
+    if record.kind in IMPLANT_KINDS:
+        name = engine.implant_record_name(record) if engine is not None else record.kind
+        return "{} · outline · {}".format(name, state.mapping_status_text(status))
     if record.kind == "probe" and record.probe:
         name = "Probe {}".format(record.probe)
     else:
@@ -43,7 +48,9 @@ class AnnotatePanel(StepPanel):
     def build(self):
         engine, shell = self.engine, self.shell
         self.tool_buttons = {}
-        self.probes = self.add(ProbeCard(shell))
+        self.probes = ProbeCard(shell)
+        self.implants = self.add(ImplantCard(shell, self.probes))
+        self.add(self.probes)
         self.gate(self.probes.mark, shell.needs_either)
         tools = self.add(Card("Other annotations",
                               "Cells, expression, contours and drawings. Map them to the "
@@ -125,13 +132,16 @@ class AnnotatePanel(StepPanel):
         if self.engine.edit_mapped_marks(unit_id):
             if record is not None and record.kind == "probe" and record.probe:
                 self.probes.refresh(select=record.probe)
+            if record is not None and record.kind in IMPLANT_KINDS:
+                self.implants.refresh(select=record.probe)
             self.shell.message("Edit the marks on the section, then map them again to "
                                "replace this mapping.", "good")
         self.shell.refresh()
 
     def refresh_mapped(self):
         records, _objects = self.engine.mapping_overview()
-        rows = [(record.unit_id, record_label(record, status), state.is_out_of_date(status))
+        rows = [(record.unit_id, record_label(record, status, self.engine),
+                 state.is_out_of_date(status))
                 for record, status in records]
         if rows == self._mapped_key:
             return
@@ -150,6 +160,7 @@ class AnnotatePanel(StepPanel):
     def refresh(self):
         engine = self.engine
         self.probes.refresh()
+        self.implants.refresh()
         self.refresh_mapped()
         for key, widget in self.tool_buttons.items():
             widget.setChecked(engine.tool_box.checkable_btn_dict["{}_btn".format(key)].isChecked())

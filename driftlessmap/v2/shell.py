@@ -565,6 +565,21 @@ class V2Window(QMainWindow):
         add(Command("annotate.build_probe", "Build 3D probe",
                     lambda: (self.go_to("annotate"), probes.build_probe()), "Probes",
                     ("merge probe", "merge")))
+        implants = self.panels["annotate"].implants
+        add(Command("implant.add", "Add implant (fiber, microprism, probe)…",
+                    lambda: (self.go_to("annotate"), implants.add_implant()), "Implants",
+                    ("optical fiber", "microprism", "prism", "cannula", "implant")))
+        add(Command("implant.draw", "Draw implant outline",
+                    lambda: (self.go_to("annotate"), implants.draw.click()), "Implants",
+                    ("outline", "fiber track", "prism footprint")))
+        add(Command("implant.map", "Map implant outline on this section",
+                    lambda: (self.go_to("annotate"), implants.map_section()), "Implants",
+                    ("map fiber", "map prism"), available=self.needs_both))
+        add(Command("implant.build", "Build implant",
+                    lambda: (self.go_to("annotate"), implants.build()), "Implants",
+                    ("fiber tip", "prism bottom", "fit implant")))
+        add(Command("implant.export", "Export implant table…", implants.export_table,
+                    "Implants", ("implant csv", "fiber csv", "prism csv")))
         add(Command("annotate.unmerge", "Edit parts (unmerge)", engine.object_ctrl.unmerge_btn.click,
                     "Annotate", ("unmerge", "split object")))
         add(Command("tool.measure", "Measure", lambda: self.toggle_tool("ruler"), "Tools",

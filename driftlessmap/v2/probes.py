@@ -184,6 +184,9 @@ class ProbeBook:
         record = self.engine.update_mapping(unit_id)
         if record is None:
             return False, "The mapping could not be updated; see the message below the image."
+        if record.kind in ("fiber", "prism"):
+            return True, ("Updated the mapping of {} on this section; build it again to use "
+                          "it.".format(self.engine.implant_record_name(record)))
         if record.kind == "probe" and record.probe:
             if not self.file_parts(record.probe):
                 return False, "Mapped again, but no part was made."

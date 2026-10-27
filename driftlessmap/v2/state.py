@@ -141,6 +141,13 @@ def step_status(engine):
                       ("atlas-probe", "atlas-cells", "atlas-drawing", "atlas-contour"))
     status["annotate"] = "{} section mark{}, {} atlas mark{}".format(
         marks, "" if marks == 1 else "s", atlas_marks, "" if atlas_marks == 1 else "s")
+    implants = len(engine.implants)
+    if implants:
+        outlines = sum(1 for entry in engine.implant_outlines.values() if entry["points"])
+        status["annotate"] += " · {} implant{}".format(implants, "" if implants == 1 else "s")
+        if outlines:
+            status["annotate"] += ", {} outline{} to map".format(
+                outlines, "" if outlines == 1 else "s")
     objects = len(engine.object_ctrl.obj_name)
     status["results"] = "{} stored object{} or part{}".format(
         objects, "" if objects == 1 else "s", "" if objects == 1 else "s")

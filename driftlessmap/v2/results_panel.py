@@ -46,6 +46,9 @@ class ResultsPanel(StepPanel):
             button("All expression…", engine.actionSave_Virus.trigger),
             button("All contours…", engine.actionSave_Contours.trigger),
             button("All drawings…", engine.actionSave_Drawings.trigger),
+            button("All fibers…", lambda: engine.save_merged_object("fiber")),
+            button("All prisms…", lambda: engine.save_merged_object("prism")),
+            button("Implant table…", lambda: shell.run("implant.export")),
             button("Current layer…", engine.actionCurrent_Layer.trigger),
             button("All layers…", engine.actionAll_Layer.trigger),
         ], columns=2))

@@ -1,7 +1,7 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 2.0.0a12**, a development preview of
-DriftlessMap 2.0 on the `v2-redesign` branch. The current stable release is
+This manual applies to **DriftlessMap 2.0.0a15**, a development preview of
+DriftlessMap 2.0 (the `main` branch, not a release). The current stable release is
 1.6.1; its desktop downloads are described in Section 2.2.
 
 DriftlessMap - Histological E-data Registration in Brain Space - is a desktop
@@ -109,7 +109,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-DriftlessMap 2.0.0a12 requires:
+DriftlessMap 2.0.0a15 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -177,7 +177,7 @@ python -c "import driftlessmap; print(driftlessmap.__version__)"
 ```
 
 The final command prints the installed version: `1.6.1` for the stable
-release, or `2.0.0a12` for this development preview installed from the
+release, or `2.0.0a15` for this development preview installed from the
 `v2-redesign` branch.
 
 ### 2.5 Launching DriftlessMap
@@ -486,7 +486,7 @@ What each step does:
 | Section | Per-channel name, colour, visibility and display range; brightness, contrast, gamma and Auto (ImageJ-style, saturating 0.35% of samples); **Register** ticks that choose the registration channels, with a preview of the registration input; rotation, flips, crop and clean-up |
 | Match | Find atlas section with the chosen channels; the plane, depth and tilt controls of the 1.x Atlasing Controller |
 | Register | Suggest landmarks; add, move and delete pairs; a list of pairs marked Outline, Internal, Edited or Manual; mesh check; **Mark review complete**; warp preview in either direction |
-| Annotate | **Probes:** a list of named, coloured probes. For each section that shows a track: **Mark track**, click along it, **Add this section to** the probe (this maps the marks with the current registration). **Build** one probe from all its sections; **Rebuild** after adding more. Cells, colour detection, drawing, erasing, lasso and measuring; **Map to atlas**; make parts and build other 3D objects |
+| Annotate | **Implants:** optical fibers and microprisms: outline each section, **Map this section**, **Build**; reports the fiber tip or the prism bottom and ML edges (Section 12.7). **Probes:** a list of named, coloured probes. For each section that shows a track: **Mark track**, click along it, **Add this section to** the probe (this maps the marks with the current registration). **Build** one probe from all its sections; **Rebuild** after adding more. Cells, colour detection, drawing, erasing, lasso and measuring; **Map to atlas**; make parts and build other 3D objects |
 | Results | Region tables, show on plane, compare, 3D options, export and import |
 
 Probes are grouped by name, so the sections of one probe combine and different
@@ -1367,6 +1367,91 @@ apart than one atlas voxel.
 Probe objects created by older versions may lack the `reconstruction` block.
 Load their original project with the same atlas, unmerge/re-merge the probe,
 and save a new `.dmapobj` before exporting CSV.
+
+### 12.7 Optical fibers and microprisms (2.0 preview)
+
+The **Implants** card at the top of the 2.0 preview's Annotate step locates
+optical fibers and microprisms. You outline what the implant left in each
+section that shows it; DriftlessMap maps the outlines to the atlas and fits
+the device's known shape to them. Neuropixels probes are listed in the same
+card but keep their own workflow in the Probes card below it (Section 12).
+
+**1. Add the implant.** Click **Add implant…**, choose the type and enter its
+specifications:
+
+- *Optical fiber*: core diameter (default 200 µm; 100, 105 and 400 µm are
+  offered) and NA (default 0.39). NA is stored for a later light-cone
+  estimate; the reported tip does not depend on it.
+- *Microprism*: width along the imaging face, depth away from it (default
+  1500 × 1500 µm), and which side is the imaging face (medial, lateral,
+  anterior or posterior). For a medial or lateral face the depth is the
+  prism's ML size.
+
+**Settings…** changes these later (build again to use them); names cannot
+contain "-".
+
+**2. Outline the implant on the section.** With the implant selected:
+
+- **Draw outline**: click around the track or footprint; click the first
+  point again to close it. Drag corners to correct it, or click an edge to
+  add a corner.
+- **Propose**: click inside a bright track; DriftlessMap outlines the
+  connected region of similar brightness, kept inside the brain even where
+  the track opens at the surface. Always check and correct it. Tears and
+  bubbles look like tracks, so DriftlessMap never decides on its own what
+  the track is; where the track is as bright as the tissue around it,
+  Propose declines and you draw it instead.
+- **Mark tip** (fiber) or **Mark bottom edge** (prism): optional; click the
+  deepest point. When given, it is reported instead of the deepest outline
+  point, together with the distance between the two.
+
+**3. Map this section.** The outline is resampled (at most 2 pixels between
+points, because the registration bends straight edges), mapped with the
+current registration and placed in 3D, coronal, sagittal or tilted. Mapping
+needs the volume atlas; the warp preview is switched on if needed, and every
+point of the outline must lie inside the landmark mesh. Each mapping makes
+the section's part straight away and is kept as a mapping record: the outline
+stays on the section as a dashed line, goes out of date when the registration
+changes, and can be updated, edited and undone like other mapped marks
+(Section 4.5). Repeat on every section that shows the implant.
+
+**4. Build.** **Build** fits the device to all mapped sections:
+
+- *Fiber*: the axis is fitted through the outlines; the **tip** is the
+  deepest outline point along it (or your marked tip). The report gives the
+  tip's ML, AP and DV and region, the entry point at the brain surface, the
+  depth below the surface along the axis, and the tilt.
+- *Microprism*: the insertion axis is the outline side closest to vertical.
+  The report gives the **bottom** (DV of the bottom-edge centre and corners),
+  the **ML of the medial edge, lateral edge, centre and imaging face**, the
+  AP extent, the regions just outside the imaging face, the depth below the
+  surface and the tilt.
+
+Coordinates are relative to the atlas Bregma voxel, with ML positive to the
+animal's right, AP positive anterior and DV positive ventral. For the Allen
+CCF, an estimated stereotaxic coordinate is added, as for probes.
+
+The report warns when:
+
+- only one section was mapped (the tilt out of that plane is unknown);
+- a fiber outline is more than 1.5 × the diameter wide (tissue damage, or a
+  tear included in the outline);
+- every fiber outline is narrower than half the diameter (no section passed
+  near the fiber's centre);
+- a prism outline differs from its specified size by more than 20 %;
+- sections cannot show an extent directly: coronal sections give AP only from
+  the first and last sections that contain the implant, and sagittal sections
+  give ML that way, so these are only as precise as the section spacing.
+
+**Results.** **Report…** opens the full report; **Show in 3D** shows the fitted
+cylinder or block with the mapped outlines. **Export table…** writes one CSV
+row per built implant (type, specifications, tip or bottom coordinates and
+region, stereotaxic estimate, depth, prism edges and face, tilt and
+warnings). Results > Export also saves fibers and prisms as `.dmapobj`
+files; importing one into another project adds it to that project's
+implants. Projects save the implants, their unmapped outlines, mapping
+records and built objects; projects from 2.0.0a15 and earlier open with no
+implants.
 
 ## 13. Virus, tracer, lesion, and expression registration
 
