@@ -74,6 +74,34 @@ class ProbeBook:
             return "{} section{} · not built".format(parts, "" if parts == 1 else "s")
         return "no sections yet"
 
+    # ------------------------------------------------- where the user left off
+    def state(self):
+        """Probes without parts yet and the colours in use, for the project."""
+        return {"empty": list(self._empty),
+                "colours": {name: list(colour) for name, colour in self._colours.items()}}
+
+    def restore(self, state):
+        """Restore :meth:`state`; invalid entries are skipped."""
+        state = state if isinstance(state, dict) else {}
+        colours = state.get("colours") if isinstance(state.get("colours"), dict) else {}
+        for name, colour in colours.items():
+            try:
+                colour = tuple(int(c) for c in colour)
+            except (TypeError, ValueError):
+                continue
+            if len(colour) == 3 and all(0 <= c <= 255 for c in colour):
+                self._colours[str(name)] = colour
+        known = set(self.names())
+        for name in state.get("empty") or []:
+            try:
+                name = self.check_name(name)
+            except ValueError:
+                continue
+            if name not in known:
+                self._empty.append(name)
+                known.add(name)
+                self.colour(name)
+
     # ---------------------------------------------------------- editing
     @staticmethod
     def check_name(name):

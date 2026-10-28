@@ -9,7 +9,7 @@ or important workflows change.
 ## Project identity
 
 - Current stable release: DriftlessMap 1.6.1. `main` now carries the 2.0
-  development preview (merged from `v2-redesign`), versioned 2.0.0aN (currently 2.0.0a24); each
+  development preview (merged from `v2-redesign`), versioned 2.0.0aN (currently 2.0.0a25); each
   feature there increments N. Plain 2.0.0 is reserved for the release that
   passes the gates in `version2_redesign.md`. Never give V2 work 1.x numbers.
 - Desktop application for histology registration, atlas mapping, probe
@@ -129,6 +129,14 @@ or important workflows change.
   writes a project copy (`save_project_called(path=, as_copy=True)` leaves
   the current project file and references alone), every built object, probe
   localisation CSVs, the implant table and layers into one folder.
+  Projects reopen where the user left off: the engine saves
+  `interface_state` (`project_io.clean_interface_state`; plain JSON, optional,
+  `{}` for older files) from `interface_state_provider` and hands it to
+  `on_project_loaded`; V2 fills it with `V2Window.leave_state` / `resume`
+  (step, view, `ImplantCard.leave_state`: selection, `ProbeBook.state`,
+  Mark track, an outline being drawn). Point layers are read through
+  `project_io.layer_points` / `plot_points`, so an empty layer (formerly
+  saved as `[None, None]`) saves and reopens.
 - `driftlessmap/landmarks.py`: `LandmarkModel` owns paired landmark lists,
   topology, the cached registration and label items (the `DriftlessMap`
   attributes of the same names delegate to it), plus `.dmaptri` validation.
@@ -187,6 +195,8 @@ or important workflows change.
 - Archive format version is currently 1. Project payload schema is version 3
   (`project_io.PROJECT_SCHEMA_VERSION`); schema 3 adds `registration_input`,
   `registration_review` and `mapping_review_state`, and up to 16 channels.
+  The optional `interface_state` (where the user left off) needs no schema
+  bump: it is absent in older files and dropped when unusable.
   Schemas 1 and 2 load with Legacy registration input.
   Do not bump either without a backward-compatible reader/migration path.
 - Supported primary extensions:

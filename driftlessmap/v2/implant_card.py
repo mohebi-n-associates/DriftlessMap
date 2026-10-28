@@ -383,6 +383,45 @@ class ImplantCard(Card):
         self._say(True, "Wrote {} implant row{} to {}.".format(count, "" if count == 1 else "s",
                                                               path))
 
+    # ------------------------------------------------- where the user left off
+    def leave_state(self):
+        """Selection, unmapped probes, Mark track and an outline being drawn."""
+        engine = self.engine
+        state = {"selected": self.current(),
+                 "probes": self.probe_card.book.state(),
+                 "marking": bool(self.probe_card.probe and engine.tool_box
+                                 .checkable_btn_dict["probe_btn"].isChecked())}
+        editor = self.editor
+        if editor.mode == "draw" and editor.vertices and editor.implant_id:
+            state["drawing"] = {"implant_id": editor.implant_id,
+                                "vertices": [[float(x), float(y)] for x, y in editor.vertices]}
+        return state
+
+    def resume(self, state):
+        """Restore :meth:`leave_state` after a project is opened."""
+        state = state if isinstance(state, dict) else {}
+        self.probe_card.book.restore(state.get("probes"))
+        selected = state.get("selected")
+        self.refresh(select=selected if isinstance(selected, str) else None)
+        drawing = state.get("drawing")
+        if isinstance(drawing, dict) and self.engine.implants.get(drawing.get("implant_id")):
+            try:
+                vertices = [[float(x), float(y)] for x, y in drawing.get("vertices") or []]
+            except (TypeError, ValueError):
+                vertices = []
+            if vertices:
+                self.refresh(select=drawing["implant_id"])
+                self.draw.setChecked(True)
+                self._mode("draw")
+                self.editor.vertices = vertices
+                self.editor._show_preview()
+                self.shell.message("Continue the outline: click around the track; click "
+                                   "the first point to close it.")
+        if state.get("marking") and self.probe_card.probe and not self.engine.tool_box \
+                .checkable_btn_dict["probe_btn"].isChecked():
+            self.probe_card.toggle_marking()
+        self._sync_actions()
+
     # ------------------------------------------------------------ refresh
     def _select_probe(self, probe):
         """Select ``probe`` in the list (None: keep or pick another row)."""

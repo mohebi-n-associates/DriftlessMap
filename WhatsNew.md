@@ -3,6 +3,14 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.0.0a25
+
+Development preview, 28 October 2026 (`v2-implants` branch; not a release)
+
+**Pick up exactly where you left off.** Saving a project half-way through now reopens it in the same place: the same step and view, the selected implant or probe, probes added but not yet mapped, track points marked but not yet mapped, Mark track switched back on, and an outline you were still drawing (keep clicking to finish it). Adding a probe now counts as an unsaved change.
+
+**Fixed: a project could not be reopened completely** after a drawing or contour tool had created an empty layer (for example a pencil click without a stroke); opening stopped part-way with an `isfinite` error. Such projects, including ones saved by earlier versions, now open, and new saves store the empty layer correctly.
+
 ## DriftlessMap 2.0.0a24
 
 Development preview, 28 October 2026 (`v2-implants` branch; not a release)
