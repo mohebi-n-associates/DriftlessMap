@@ -1,8 +1,9 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 2.0.0a27**, a development preview of
-DriftlessMap 2.0 (the `main` branch, not a release). The current stable release is
-1.6.1; its desktop downloads are described in Section 2.2.
+This manual applies to **DriftlessMap 2.0.0rc1**, the release candidate of
+DriftlessMap 2.0. The current stable release is 1.6.1; `pip install driftlessmap`
+keeps installing 1.6.1 until 2.0.0 is released, and Section 2 explains how to
+install the release candidate.
 
 DriftlessMap - Histological E-data Registration in Brain Space - is a desktop
 application for aligning rodent histology with a reference atlas, reconstructing
@@ -109,7 +110,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-DriftlessMap 2.0.0a27 requires:
+DriftlessMap 2.0.0rc1 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -128,9 +129,12 @@ page. The macOS DMG (`-macOS-arm64.dmg`) is built for Apple Silicon; on an Intel
 Mac, use the developer installation below.
 The desktop builds include Python and all runtime dependencies. Windows users
 extract the entire ZIP and run `DriftlessMap.exe`; macOS users open the DMG and
-drag `DriftlessMap.app` to Applications. The 1.6.1 release is unsigned, so the
-first launch may require Windows SmartScreen confirmation or Control-clicking
-the macOS app and choosing **Open**.
+drag `DriftlessMap.app` to Applications. The 2.0.0rc1 downloads are listed
+under that version on the Releases page (marked as a pre-release), named
+`DriftlessMap-2.0.0rc1-Windows-x64.zip` and `DriftlessMap-2.0.0rc1-macOS-arm64.dmg`.
+Release builds are unsigned unless the release notes say otherwise, so the first
+launch may require Windows SmartScreen confirmation or Control-clicking the
+macOS app and choosing **Open**.
 
 ### 2.3 Conda and pip installation for developers
 
@@ -141,16 +145,17 @@ conflict with unrelated software:
 conda create --name DriftlessMap python=3.14 -y
 conda activate DriftlessMap
 python -m pip install --upgrade pip
-python -m pip install driftlessmap
+python -m pip install --pre driftlessmap
 ```
 
-Use the following environment instead when opening CZI files is required:
+`--pre` installs the 2.0 release candidate; without it pip installs the stable
+1.6.1. Use the following environment instead when opening CZI files is required:
 
 ```bash
 conda create --name DriftlessMap-CZI python=3.13 -y
 conda activate DriftlessMap-CZI
 python -m pip install --upgrade pip
-python -m pip install "driftlessmap[czi]"
+python -m pip install --pre "driftlessmap[czi]"
 ```
 
 For source development, clone the repository and use an editable installation:
@@ -177,8 +182,7 @@ python -c "import driftlessmap; print(driftlessmap.__version__)"
 ```
 
 The final command prints the installed version: `1.6.1` for the stable
-release, or `2.0.0a27` for this development preview installed from the
-`v2-redesign` branch.
+release, or `2.0.0rc1` for the 2.0 release candidate.
 
 ### 2.5 Launching DriftlessMap
 
@@ -440,9 +444,9 @@ coordinates, atlas voxels, region hierarchy, configured Bregma coordinates,
 estimated Allen AP/ML coordinates, and surface depth can all appear there.
 
 
-### 4.5 The 2.0 preview interface
+### 4.5 The 2.0 interface
 
-Since 2.0.0a27 the redesigned 2.0 interface opens by default, from
+The redesigned 2.0 interface opens by default, from
 `driftlessmap`, `driftlessmap-v2`, `python -m driftlessmap.v2` and the desktop
 application. It runs on the same engine as the classic interface, reads and
 writes the same project files, and keeps its preferences separate.

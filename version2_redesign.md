@@ -12,8 +12,8 @@ open a native 16-bit TIFF, choose what to display, adjust its appearance and
 register using an explicitly selected channel such as DAPI, without an
 intermediate flattened export from ImageJ.
 
-The original `v2-redesign` integration is now on `main`; current previews remain
-versioned `2.0.0aN`. The published stable release is 1.6.1. The historical branch
+The original `v2-redesign` integration is now on `main`; the previews were
+versioned `2.0.0aN` and the release candidate is `2.0.0rc1`. The published stable release is 1.6.1. The historical branch
 strategy below does not imply that the 2.0 release gates have passed.
 
 The first implementation target is one complete workflow: **open → match →

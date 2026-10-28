@@ -1,6 +1,11 @@
 # Update Log
 
 ### 28th October 2026
+##### DriftlessMap 2.0.0rc1
+
+Release candidate of 2.0 (previews 2.0.0a1–a27). Version, citation, PyPI classifier (4 - Beta), README, manual installation (`pip install --pre`, release-candidate downloads) and release-validation status updated; no code changes since 2.0.0a27.
+
+### 28th October 2026
 ##### DriftlessMap 2.0.0a27
 
 `interfaces.requested_interface` defaults to the 2.0 interface; `--classic` and `DRIFTLESSMAP_INTERFACE=classic` select the classic one, flags before the environment. `interface_command("classic")` passes `--classic` (bundle and `-m driftlessmap`), and `run` strips interface flags before Qt sees them.

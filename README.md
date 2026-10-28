@@ -39,21 +39,52 @@ See [CITATION.cff](CITATION.cff) for machine-readable citation metadata.
 
 - 2D and 3D visualization of volumetric brain atlases and arbitrary slices.
 - Interactive histology-to-atlas registration with local elastic deformation.
-- Automatic suggestions for the matching atlas section and starting landmarks.
+- Automatic suggestions for the matching atlas section and starting landmarks,
+  including brightfield sections.
+- Direct multichannel microscopy input (up to 16 channels, TIFF hyperstacks,
+  series and CZI) with registration on explicitly chosen channels.
 - Probe planning, reconstruction, contact mapping, and CSV export.
+- Optical fiber and microprism reconstruction (tip, bottom, laterality and
+  regions) alongside probes.
 - Drawing, cell, virus-expression, and user-defined object workflows.
-- Safe, versioned project and object archives.
+- Registration review, out-of-date tracking and undo for mapped results.
+- Safe, versioned project and object archives that reopen where you left off.
 - Support for custom compatible atlases.
+
+## DriftlessMap 2.0 release candidate
+
+**2.0.0rc1** is the release candidate of DriftlessMap 2.0. It opens the
+redesigned step-by-step interface by default (Project, Section, Match, Register,
+Annotate, Results); the classic interface is still available with
+`driftlessmap --classic` or from Help > Open the classic interface. See
+[What’s New](WhatsNew.md) for the full list of changes.
+
+The stable release is still **1.6.1**: `pip install driftlessmap` installs 1.6.1
+until 2.0.0 is released. To try the release candidate:
+
+```bash
+python -m pip install --pre driftlessmap
+```
+
+or download the 2.0.0rc1 desktop builds from its
+[GitHub pre-release](https://github.com/mohebi-n-associates/DriftlessMap/releases/tag/v2.0.0rc1).
+Projects saved by 2.0 cannot be opened by 1.6.1 or earlier; 2.0 opens 1.x and
+HERBS projects. Keep a copy of important projects while evaluating it.
 
 ## Installation
 
-DriftlessMap 1.6.1 is available as a desktop application for end users and as
-a Python package for developers.
+DriftlessMap is available as a desktop application for end users and as a
+Python package for developers. The stable release is 1.6.1; the 2.0 release
+candidate is 2.0.0rc1.
 
 ### Mode 1: desktop application for end users
 
 No Python or Conda installation is required. Download the asset for your
-computer from [GitHub Releases](https://github.com/mohebi-n-associates/DriftlessMap/releases):
+computer from [GitHub Releases](https://github.com/mohebi-n-associates/DriftlessMap/releases).
+For the 2.0 release candidate, use `DriftlessMap-2.0.0rc1-Windows-x64.zip` or
+`DriftlessMap-2.0.0rc1-macOS-arm64.dmg` from the
+[2.0.0rc1 pre-release](https://github.com/mohebi-n-associates/DriftlessMap/releases/tag/v2.0.0rc1).
+For the stable 1.6.1 release:
 
 - **Windows 64-bit:** download `DriftlessMap-1.6.1-Windows-x64.zip`, extract
   the complete folder, and double-click `DriftlessMap.exe`. Do not move the
@@ -104,12 +135,18 @@ python -m pip install -e ".[test]"
 ```
 
 Launch the editable installation with `driftlessmap` or
-`python -m driftlessmap`. Library users can call `driftlessmap.run()`.
+`python -m driftlessmap`; both open the 2.0 interface, and `--classic` opens the
+classic one. Library users can call `driftlessmap.run()`.
 
-To use the stable PyPI package instead of an editable checkout, run:
+To use a PyPI package instead of an editable checkout, install the stable
+release or, with `--pre`, the 2.0 release candidate:
 
 ```bash
 python -m pip install driftlessmap
+```
+
+```bash
+python -m pip install --pre driftlessmap
 ```
 
 #### Check your version and upgrade
