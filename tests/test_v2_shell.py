@@ -347,6 +347,27 @@ class V2ShellTests(unittest.TestCase):
             self.assertTrue(icons)
 
     @isolated_gui_test
+    def test_theme_is_set_on_the_window_and_follows_separate_windows(self):
+        from PyQt6.QtWidgets import QApplication, QMessageBox
+        from driftlessmap.v2.theme import stylesheet
+
+        with tempfile.TemporaryDirectory() as folder:
+            window = self.make_window(folder)
+            window.apply_theme("dark")
+            # An application stylesheet restyles every widget of the program,
+            # hidden ones included, which made switching slow.
+            self.assertEqual(QApplication.instance().styleSheet(), "")
+            self.assertEqual(window.styleSheet(), stylesheet("dark"))
+            box = QMessageBox(QMessageBox.Icon.Information, "Title", "Text")
+            box.show()
+            QApplication.processEvents()
+            self.assertEqual(box.styleSheet(), stylesheet("dark"))
+            window.apply_theme("light")
+            self.assertEqual(box.styleSheet(), stylesheet("light"))
+            box.close()
+            box.deleteLater()
+
+    @isolated_gui_test
     def test_annotate_lists_mapped_marks_and_flags_out_of_date_ones(self):
         import cv2
 

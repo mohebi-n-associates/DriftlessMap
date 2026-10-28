@@ -3,6 +3,15 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.0.0rc2
+
+Release-candidate fix, 28 October 2026.
+
+Switching between the light and dark themes is about five times faster. The theme
+is now applied to the DriftlessMap window instead of to the whole program, which
+had restyled every hidden menu and colour dialog on each switch; dialogs and other
+separate windows take the theme when they open and follow later switches.
+
 ## DriftlessMap 2.0.0rc1
 
 Release candidate, 28 October 2026. The stable release remains 1.6.1 until 2.0.0.

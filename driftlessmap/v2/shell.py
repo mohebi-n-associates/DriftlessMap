@@ -65,6 +65,11 @@ VIEWS = (
 PREVIEW_LABEL = "DriftlessMap 2.0 preview (development build of {})".format(__version__)
 
 
+# Events after which the saved-state check runs at the next refresh.
+EDIT_EVENTS = frozenset({QEvent.Type.MouseButtonRelease, QEvent.Type.KeyRelease,
+                         QEvent.Type.Wheel, QEvent.Type.Drop, QEvent.Type.TouchEnd})
+
+
 class V2Window(QMainWindow):
     def __init__(self, settings=None):
         super().__init__()
@@ -785,13 +790,35 @@ class V2Window(QMainWindow):
         return state.scientific_digest(self.engine)
 
     def eventFilter(self, watched, event):
+        # This filter sees every event of the application, so it stays cheap.
         # Do not rescan microscopy rasters on idle timer ticks. User edits
         # request one check at the next refresh; close/open always check in
         # full, including edits performed by scripts or late worker results.
-        if event.type() in (QEvent.Type.MouseButtonRelease, QEvent.Type.KeyRelease,
-                            QEvent.Type.Wheel, QEvent.Type.Drop, QEvent.Type.TouchEnd):
+        kind = event.type()
+        if kind in EDIT_EVENTS:
             self._dirty_check_pending = True
-        return super().eventFilter(watched, event)
+        elif kind == QEvent.Type.Show and watched.isWidgetType() and watched.isWindow():
+            self._theme_window(watched)
+        return False
+
+    def _theme_window(self, window):
+        """Give a separate window (a dialog, menu or tooltip) the current theme.
+
+        The theme is set on this window, not on the application: an
+        application stylesheet restyles every widget of the program, hidden
+        ones included, which made switching themes slow. Windows parented to
+        this one inherit the theme; others receive it when they are shown.
+        """
+        if window is self:
+            return
+        parent = window.parentWidget()
+        while parent is not None:
+            if parent is self:
+                return
+            parent = parent.parentWidget()
+        if window.property("v2_theme") != self.theme:
+            window.setProperty("v2_theme", self.theme)
+            window.setStyleSheet(stylesheet(self.theme))
 
     def mark_saved(self):
         try:
@@ -880,9 +907,13 @@ class V2Window(QMainWindow):
     def apply_theme(self, theme):
         self.theme = theme
         self.settings.setValue("theme", theme)
-        QApplication.instance().setStyleSheet(stylesheet(theme))
-        adopted.restyle(self.engine, theme)
         self.theme_button.setText("Light theme" if theme == "dark" else "Dark theme")
+        self.setStyleSheet(stylesheet(theme))
+        adopted.restyle(self.engine, theme)
+        # Separate windows that already have a theme switch with this one.
+        for window in QApplication.topLevelWidgets():
+            if window.property("v2_theme") not in (None, theme):
+                self._theme_window(window)
 
     def toggle_theme(self):
         self.apply_theme("light" if self.theme == "dark" else "dark")
