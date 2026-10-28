@@ -189,7 +189,15 @@ from .project_io import (
     prefingerprint_inputs,
     with_defaults,
 )
-from .layer_geometry import layer_center, rotate_points, rotate_raster, shift_raster
+from .layer_geometry import (
+    lasso_closes,
+    lasso_point_closes,
+    lasso_tolerance,
+    layer_center,
+    rotate_points,
+    rotate_raster,
+    shift_raster,
+)
 from .resources import resource_path
 from .user_settings import load_last_atlas_path, save_last_atlas_path
 
@@ -1639,6 +1647,13 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, QMainWindow, FORM_Ma
         if self.image_view.image_file is None:
             self.print_message("Please load histological image.", self.reminder_color)
             return
+        if not self.img_lasso_is_closure:
+            if len(self.working_img_data["lasso_path"]) < 3:
+                self.print_message(
+                    "Draw a lasso around the tissue first (at least three points), "
+                    "then crop.", self.reminder_color)
+                return
+            self.close_image_lasso()
         if self.img_lasso_is_closure:
             cut_rect = cv2.boundingRect(
                 np.asarray(self.working_img_data["lasso_path"]).astype("int")
@@ -1764,6 +1779,13 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, QMainWindow, FORM_Ma
         if self.atlas_view.slice_image_data is None:
             self.print_message("Please load Atlas Slice image.", self.reminder_color)
             return
+        if not self.atlas_lasso_is_closure:
+            if len(self.working_atlas_data["lasso_path"]) < 3:
+                self.print_message(
+                    "Draw a lasso around the slice first (at least three points), "
+                    "then crop.", self.reminder_color)
+                return
+            self.close_slice_window_lasso()
         if self.atlas_lasso_is_closure:
             # print(self.atlas_view.slice_bregma)
             cut_rect = cv2.boundingRect(
@@ -2841,21 +2863,22 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, QMainWindow, FORM_Ma
         )
         self.img_lasso_is_closure = False
 
-    def lasso_points_clicked(self, points, ev):
-        clicked_ind = ev[0].index()
-        if clicked_ind == 0 and len(self.working_img_data["lasso_path"]) >= 3:
-            self.working_img_data["lasso_path"].append(
-                self.working_img_data["lasso_path"][0]
-            )
-            self.image_view.img_stacks.image_dict["lasso_path"].setData(
-                np.asarray(self.working_img_data["lasso_path"])
-            )
-            self.img_lasso_is_closure = True
-            self.image_view.img_stacks.image_dict["lasso_path"].setPen(
-                pg.mkPen(color=self.lasso_color, width=3, style=Qt.PenStyle.SolidLine)
-            )
-        else:
-            self.inactive_lasso()
+    def lasso_points_clicked(self, item, points):
+        # Clicking a drawn point never discards the lasso: the first point
+        # closes it, any other point is ignored. pyqtgraph lists overlapping
+        # points last-first, so look for the first point among all of them.
+        if not self.img_lasso_is_closure and lasso_point_closes(
+                self.working_img_data["lasso_path"], points):
+            self.close_image_lasso()
+
+    def close_image_lasso(self):
+        path = self.working_img_data["lasso_path"]
+        path.append(list(path[0]))
+        self.image_view.img_stacks.image_dict["lasso_path"].setData(np.asarray(path))
+        self.img_lasso_is_closure = True
+        self.image_view.img_stacks.image_dict["lasso_path"].setPen(
+            pg.mkPen(color=self.lasso_color, width=3, style=Qt.PenStyle.SolidLine)
+        )
 
     def inactive_slice_window_lasso(self):
         self.working_atlas_data["lasso_path"] = []
@@ -2866,21 +2889,19 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, QMainWindow, FORM_Ma
         )
         self.atlas_lasso_is_closure = False
 
-    def slice_window_lasso_points_clicked(self, points, ev):
-        clicked_ind = ev[0].index()
-        if clicked_ind == 0 and len(self.working_atlas_data["lasso_path"]) >= 3:
-            self.working_atlas_data["lasso_path"].append(
-                self.working_atlas_data["lasso_path"][0]
-            )
-            self.atlas_view.slice_stack.image_dict["lasso_path"].setData(
-                np.asarray(self.working_atlas_data["lasso_path"])
-            )
-            self.atlas_lasso_is_closure = True
-            self.atlas_view.slice_stack.image_dict["lasso_path"].setPen(
-                pg.mkPen(color=self.lasso_color, width=3, style=Qt.PenStyle.SolidLine)
-            )
-        else:
-            self.inactive_slice_window_lasso()
+    def slice_window_lasso_points_clicked(self, item, points):
+        if not self.atlas_lasso_is_closure and lasso_point_closes(
+                self.working_atlas_data["lasso_path"], points):
+            self.close_slice_window_lasso()
+
+    def close_slice_window_lasso(self):
+        path = self.working_atlas_data["lasso_path"]
+        path.append(list(path[0]))
+        self.atlas_view.slice_stack.image_dict["lasso_path"].setData(np.asarray(path))
+        self.atlas_lasso_is_closure = True
+        self.atlas_view.slice_stack.image_dict["lasso_path"].setPen(
+            pg.mkPen(color=self.lasso_color, width=3, style=Qt.PenStyle.SolidLine)
+        )
 
     # ------------------------------------------------------------------
     #
@@ -5051,27 +5072,14 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, QMainWindow, FORM_Ma
         if self.working_atlas_data["lasso_path"]:
             self.inactive_slice_window_lasso()
         if self.img_lasso_is_closure:
+            # A click after closing starts a new lasso.
             self.inactive_lasso()
-            return
-        new_pnt = np.array([x, y])
-        if len(self.working_img_data["lasso_path"]) > 1:
-            dists = np.sum(
-                (np.asarray(self.working_img_data["lasso_path"][0]) - new_pnt) ** 2
-            )
+        path = self.working_img_data["lasso_path"]
+        if lasso_closes(path, (x, y), lasso_tolerance(self.image_view.img_stacks.vb)):
+            self.close_image_lasso()
         else:
-            dists = 1e5
-        if dists < np.min(self.image_view.img_size) * 0.05:
-            self.working_img_data["lasso_path"].append(
-                self.working_img_data["lasso_path"][0]
-            )
-            self.image_view.img_stacks.image_dict["lasso_path"].setPen(
-                pg.mkPen(color="r", width=3, style=Qt.PenStyle.SolidLine)
-            )
-            self.img_lasso_is_closure = True
-        else:
-            self.working_img_data["lasso_path"].append([x, y])
-        drawing_pnts = np.asarray(self.working_img_data["lasso_path"])
-        self.image_view.img_stacks.image_dict["lasso_path"].setData(drawing_pnts)
+            path.append([x, y])
+            self.image_view.img_stacks.image_dict["lasso_path"].setData(np.asarray(path))
         # save action
         current_data = {"data": self.working_img_data["lasso_path"]}
         self.save_current_action("lasso_btn", "lasso_path", current_data, None)
@@ -5939,30 +5947,16 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, QMainWindow, FORM_Ma
         if self.working_img_data["lasso_path"]:
             self.inactive_lasso()
         if self.atlas_lasso_is_closure:
+            # A click after closing starts a new lasso.
             self.inactive_slice_window_lasso()
-            return
         if self.current_atlas == "volume":
             return
-        new_pnt = np.array([x, y])
-        if len(self.working_atlas_data["lasso_path"]) > 1:
-            dists = np.sum(
-                (np.asarray(self.working_atlas_data["lasso_path"][0]) - new_pnt)
-                ** 2
-            )
+        path = self.working_atlas_data["lasso_path"]
+        if lasso_closes(path, (x, y), lasso_tolerance(self.atlas_view.slice_stack.vb)):
+            self.close_slice_window_lasso()
         else:
-            dists = 1e5
-        if dists < 5:
-            self.working_atlas_data["lasso_path"].append(
-                self.working_atlas_data["lasso_path"][0]
-            )
-            self.atlas_view.slice_stack.image_dict["lasso_path"].setPen(
-                pg.mkPen(color="r", width=3, style=Qt.PenStyle.SolidLine)
-            )
-            self.atlas_lasso_is_closure = True
-        else:
-            self.working_atlas_data["lasso_path"].append([x, y])
-        drawing_pnts = np.asarray(self.working_atlas_data["lasso_path"])
-        self.atlas_view.slice_stack.image_dict["lasso_path"].setData(drawing_pnts)
+            path.append([x, y])
+            self.atlas_view.slice_stack.image_dict["lasso_path"].setData(np.asarray(path))
         current_data = {"data": self.working_atlas_data["lasso_path"].copy()}
         self.save_current_action("lasso_btn", "lasso_path", current_data, None)
 

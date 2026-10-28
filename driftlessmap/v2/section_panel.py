@@ -186,7 +186,8 @@ class SectionPanel(StepPanel):
 
         clean = self.add(Card(
             "Crop and clean up",
-            "Crop: draw a closed lasso around the tissue, then Crop to lasso. "
+            "Crop: click a lasso around the tissue, then Crop to lasso (an open lasso "
+            "is closed for you; clicking near the first point also closes it). "
             "Make cleaned copy creates an editable copy for background removal."))
         self.lasso_button = button("Lasso", lambda: self.shell.toggle_tool("lasso"),
                                    checkable=True)

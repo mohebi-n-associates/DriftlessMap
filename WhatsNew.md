@@ -3,6 +3,16 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.0.0rc3
+
+Release-candidate fix, 28 October 2026.
+
+Crop to lasso works as expected. Clicking on or near the first point of a lasso
+closes it at any zoom, clicking another drawn point no longer erases the lasso,
+and Crop to lasso closes an open lasso of three or more points itself instead of
+doing nothing. Without a lasso it says what to do. The same applies to the slice-
+atlas crop.
+
 ## DriftlessMap 2.0.0rc2
 
 Release-candidate fix, 28 October 2026.

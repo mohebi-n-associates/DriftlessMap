@@ -1,6 +1,6 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 2.0.0rc2**, the release candidate of
+This manual applies to **DriftlessMap 2.0.0rc3**, the release candidate of
 DriftlessMap 2.0. The current stable release is 1.6.1; `pip install driftlessmap`
 keeps installing 1.6.1 until 2.0.0 is released, and Section 2 explains how to
 install the release candidate.
@@ -110,7 +110,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-DriftlessMap 2.0.0rc2 requires:
+DriftlessMap 2.0.0rc3 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -807,11 +807,14 @@ horizontal and vertical flips. A reliable sequence is:
 2. Use large rotations or flips to establish orientation.
 3. Turn on View grids if helpful.
 4. Use one-degree rotations for fine adjustment.
-5. Select a closed Polygon Lasso around the retained region.
-6. Choose **Image > Crop**.
+5. With Polygon Lasso, click around the retained region. Clicking on or near
+   the first point (within about 12 screen pixels) closes the lasso; clicking
+   any other drawn point leaves it unchanged.
+6. Choose **Image > Crop** (**Crop to lasso** in the Section step). An open
+   lasso of three or more points is closed for you.
 
 Crop uses the lasso’s rectangular bounding box. It does not create an arbitrary
-non-rectangular image boundary.
+non-rectangular image boundary. A click after a lasso is closed starts a new one.
 
 ### 7.6 Creating a process layer and removing background
 
