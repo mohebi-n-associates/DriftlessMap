@@ -10,7 +10,7 @@ or important workflows change.
 
 - Current stable release: DriftlessMap 1.6.1. `main` carries DriftlessMap 2.0,
   published as the release candidate 2.0.0rc1 (after the 2.0.0aN previews).
-  Fixes before the final release become 2.0.0rcN. Plain 2.0.0 is reserved for
+  Fixes before the final release become 2.0.0rcN (currently 2.0.0rc2). Plain 2.0.0 is reserved for
   the release that passes the gates in `release_validation.md`. Never give V2
   work 1.x numbers. A published GitHub release runs `release.yml` (PyPI, trusted
   publishing) and `desktop-builds.yml` (Windows ZIP and macOS DMG attached to
@@ -193,7 +193,9 @@ or important workflows change.
   QAction is registered under its old name), `state.py` (read-only status and
   the unsaved-change digest, which ignores navigation), `channel_display.py`
   (per-channel display range/gamma written into the 1.x curve state so saves
-  restore it), `theme.py` (design tokens and stylesheet) and `adopted.py`
+  restore it), `theme.py` (design tokens and stylesheet, set on the V2 window,
+  never on the application: an application stylesheet restyles every hidden
+  widget; separate windows get it when shown) and `adopted.py`
   (restyles the adopted 1.x toolbar, atlas controller and label tree from
   the tokens and recolours their white icons; call it on theme changes). Preview
   preferences use a separate QSettings namespace. V2 dialogs subclass the

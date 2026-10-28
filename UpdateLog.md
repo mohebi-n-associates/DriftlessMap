@@ -1,6 +1,11 @@
 # Update Log
 
 ### 28th October 2026
+##### DriftlessMap 2.0.0rc2
+
+V2 theme stylesheet is set on `V2Window` instead of `QApplication` (an application stylesheet repolished all ~2,000 widgets, including ~940 hidden menu, colour-dialog and view-menu widgets); top-level windows outside the V2 window get it on `Show` via `_theme_window` (marked `v2_theme`) and follow `apply_theme`. The application event filter compares against a precomputed `EDIT_EVENTS` set and no longer calls the base filter. Toggle time 0.50 s → 0.10 s offscreen on macOS.
+
+### 28th October 2026
 ##### DriftlessMap 2.0.0rc1
 
 Release candidate of 2.0 (previews 2.0.0a1–a27). Auto-registration's B-spline now evaluates Mattes MI on every masked pixel instead of a seeded 30 % random sample and smooths every level (`BSPLINE_SMOOTHING` = 6, 3, 1.5 px): its accuracy had depended on the sample by up to 2 section pixels, which failed Linux CI from 2.0.0a17 on (median error 4.17 vs 3.41 px on macOS). Over eight noise realisations of the synthetic warp the median error is now 2.71 px mean, 2.79 px worst (was 3.56 / 4.55). Version, citation, PyPI classifier (4 - Beta), README, manual installation (`pip install --pre`, release-candidate downloads) and release-validation status updated; no other code changes since 2.0.0a27.
