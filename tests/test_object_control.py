@@ -1,3 +1,4 @@
+import tests.settings_isolation  # noqa: F401  (before the app reads settings)
 import os
 import unittest
 from unittest.mock import patch
@@ -148,7 +149,7 @@ class ProbeInfoWindowTests(unittest.TestCase):
 
         with (
             patch(
-                "driftlessmap.object_control.QFileDialog.getSaveFileName",
+                "PyQt6.QtWidgets.QFileDialog.getSaveFileName",
                 return_value=(
                     "/tmp/probe_export.csv",
                     "CSV files (*.csv)",

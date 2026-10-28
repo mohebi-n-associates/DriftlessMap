@@ -3,8 +3,9 @@
 import os
 import time
 
-from PyQt6.QtWidgets import QFileDialog, QLabel, QMessageBox
+from PyQt6.QtWidgets import QLabel, QMessageBox
 
+from .. import file_dialogs
 from . import state as v2_state
 from .widgets import (
     Card,
@@ -87,7 +88,7 @@ class ResultsPanel(StepPanel):
 
     def export_all(self):
         engine = self.engine
-        parent = QFileDialog.getExistingDirectory(
+        parent = file_dialogs.get_existing_directory(
             self, "Choose where to put the results folder",
             os.path.dirname(engine.current_project_path or engine.current_img_path or "")
             or os.path.expanduser("~"))

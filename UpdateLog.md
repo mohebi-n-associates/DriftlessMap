@@ -1,6 +1,11 @@
 # Update Log
 
 ### 28th October 2026
+##### DriftlessMap 2.0.0rc10
+
+New `file_dialogs` module wraps `QFileDialog.getOpenFileName(s)`, `getSaveFileName` and `getExistingDirectory` for all 32 call sites: a start directory that is empty, the home folder or missing is replaced by the last chosen folder (a suggested file name is kept), and every choice is remembered. `user_settings.update_settings` merges keys (`save_last_atlas_path` used to overwrite the file), with `load_last_folder`/`save_last_folder`; settings schema stays 1. Tests use `tests/settings_isolation.py` (temporary `DRIFTLESSMAP_CONFIG_DIR`).
+
+### 28th October 2026
 ##### DriftlessMap 2.0.0rc9
 
 `sig_label_changed`'s mesh logic is replaced by `sync_region_meshes`: mesh keys are strings and the tree's checked ids ints, so the second pass never matched; regions checked before enabling were not shown and disabling hid nothing. `show_small_area_in_3d(visible)` takes the button state and syncs. V2 had no control for `show_child_mesh` (default False), so checked regions never appeared in 3D; the Regions tab has a "Show checked regions in 3D" check box, on by default.

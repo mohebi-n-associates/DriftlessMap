@@ -1,5 +1,6 @@
 """Implants in the engine: outlines, mapping, undo, building and projects."""
 
+import tests.settings_isolation  # noqa: F401  (before the app reads settings)
 import csv
 import os
 from pathlib import Path

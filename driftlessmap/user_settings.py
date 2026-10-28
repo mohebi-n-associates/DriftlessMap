@@ -40,7 +40,8 @@ def _legacy_settings_path():
     return _platform_config_root() / "HERBS" / "settings.json"
 
 
-def load_last_atlas_path():
+def load_settings():
+    """The saved user settings, or {} (also for unreadable or newer files)."""
     current_path = settings_path()
     candidates = [current_path]
     legacy_path = _legacy_settings_path()
@@ -55,27 +56,27 @@ def load_last_atlas_path():
             break
         except (OSError, ValueError, TypeError):
             continue
-    if settings is None:
-        return None
+    if not isinstance(settings, dict):
+        return {}
     if settings.get("schema_version") != SETTINGS_SCHEMA_VERSION:
+        return {}
+    return settings
+
+
+def _saved_path(key):
+    value = load_settings().get(key)
+    if not isinstance(value, str) or not value:
         return None
-    atlas_path = settings.get("last_atlas_path")
-    if not isinstance(atlas_path, str) or not atlas_path:
-        return None
-    return atlas_path
+    return value
 
 
-def save_last_atlas_path(atlas_path):
-    atlas_path = os.fspath(atlas_path)
-    if not atlas_path:
-        raise ValueError("Atlas path must not be empty.")
-
+def update_settings(**values):
+    """Atomically store ``values``, keeping the other saved settings."""
     destination = settings_path()
     destination.parent.mkdir(parents=True, exist_ok=True)
-    settings = {
-        "schema_version": SETTINGS_SCHEMA_VERSION,
-        "last_atlas_path": atlas_path,
-    }
+    settings = load_settings()
+    settings.update(values)
+    settings["schema_version"] = SETTINGS_SCHEMA_VERSION
     temporary_path = None
     try:
         with tempfile.NamedTemporaryFile(
@@ -90,3 +91,26 @@ def save_last_atlas_path(atlas_path):
     finally:
         if temporary_path is not None and temporary_path.exists():
             temporary_path.unlink()
+
+
+def load_last_atlas_path():
+    return _saved_path("last_atlas_path")
+
+
+def save_last_atlas_path(atlas_path):
+    atlas_path = os.fspath(atlas_path)
+    if not atlas_path:
+        raise ValueError("Atlas path must not be empty.")
+    update_settings(last_atlas_path=atlas_path)
+
+
+def load_last_folder():
+    """The folder last used in a file dialog, or None."""
+    return _saved_path("last_folder")
+
+
+def save_last_folder(folder):
+    folder = os.fspath(folder)
+    if not folder:
+        raise ValueError("Folder must not be empty.")
+    update_settings(last_folder=folder)

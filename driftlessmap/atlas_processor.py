@@ -1,5 +1,6 @@
 import os
 import numpy as np
+from . import file_dialogs
 from .persistence import write_cache_pickle
 from PyQt6.QtGui import QIntValidator, QRegularExpressionValidator
 from PyQt6.QtCore import (
@@ -595,7 +596,7 @@ class AtlasProcessor(QDialog):
         """Return the chosen absolute path, or ``None`` if cancelled."""
         file_options = QFileDialog.Option(0)
         start = self.folder_path or ""
-        path = QFileDialog.getOpenFileName(self, title, start, options=file_options)[0]
+        path = file_dialogs.get_open_file_name(self, title, start, options=file_options)[0]
         if not path:
             return None
         path = os.path.abspath(path)

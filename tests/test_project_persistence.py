@@ -1,3 +1,4 @@
+import tests.settings_isolation  # noqa: F401  (before the app reads settings)
 import os
 from pathlib import Path
 import subprocess

@@ -3,6 +3,15 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.0.0rc10
+
+Release-candidate fix, 28 October 2026.
+
+File dialogs remember where you work. Open, save, export and folder dialogs start
+in the folder you last chose in any of them, also after restarting DriftlessMap,
+instead of your home folder. Dialogs that start at the current image's or
+project's folder keep doing so.
+
 ## DriftlessMap 2.0.0rc9
 
 Release-candidate fix, 28 October 2026.
