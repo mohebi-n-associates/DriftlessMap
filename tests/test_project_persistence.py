@@ -1513,6 +1513,14 @@ class ProjectPersistenceIntegrationTests(unittest.TestCase):
             self.assertEqual(window.image_view.processing_img.shape[:2], (151, 201))
             self.assertEqual(window.working_img_data["lasso_path"], [])
 
+            # The cropped section is still drawn: its channels add up on the
+            # black background instead of switching to Overlay (black).
+            from PyQt6.QtGui import QPainter
+            for channel in window.image_view.img_stacks.image_list[
+                    :window.image_view.image_file.n_channels]:
+                self.assertEqual(channel.paintMode,
+                                 QPainter.CompositionMode.CompositionMode_Plus)
+
             # Without a lasso, crop explains what to do and changes nothing.
             with patch.object(window, "print_message") as message:
                 window.cut_image()

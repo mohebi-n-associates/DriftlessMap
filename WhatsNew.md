@@ -3,6 +3,15 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.0.0rc12
+
+Release-candidate fix, 28 October 2026.
+
+The section no longer disappears after Crop to lasso or Make cleaned copy. The new
+image layer started in the Overlay blend mode, which turned the whole section
+black; it now adds its channels like the original image. The blend mode can still
+be changed in the Layers list.
+
 ## DriftlessMap 2.0.0rc11
 
 Release-candidate fix, 28 October 2026.

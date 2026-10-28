@@ -1,6 +1,11 @@
 # Update Log
 
 ### 28th October 2026
+##### DriftlessMap 2.0.0rc12
+
+`LayersControl.add_layer` gave every new layer `DEFAULT_BLEND_MODE` (Overlay) and emitted it; for `img-process` `layers_blend_mode_changed` applies the mode to the histology channel items, and Overlay over the black base layer renders black (inherited from HERBS). `CHANNEL_LAYERS` now starts `img-process` in Plus. Blend modes are not saved in projects, so no migration. Reproduced and verified on the user's 3-channel IM-1109 TIFF (view grab black before, section visible after) for crop and Process Image.
+
+### 28th October 2026
 ##### DriftlessMap 2.0.0rc11
 
 Channel `ImageItem`s in `image_stacks.ImageStacks` use `setAutoDownsample(True)`: `makeARGB` LUT application on the full 24.8 Mpx raster dominated each display change (0.57 s → 0.055 s per brightness step, measured through `SectionPanel.brightness` on the user's IM-1109 TIFF). Channels 5–16 now also use `CompositionMode_Plus` (only 1–4 did).

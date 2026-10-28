@@ -25,6 +25,10 @@ from .resources import resource_path
 
 
 DEFAULT_BLEND_MODE = "Overlay"
+# Layers that are the histology channels themselves: they must add up on the
+# black background (Overlay on black is black, so a crop or a cleaned copy
+# made the section disappear).
+CHANNEL_LAYERS = {"img-process": "Plus"}
 
 
 eye_button_style = '''
@@ -317,7 +321,7 @@ class LayersControl(QWidget):
         self.layer_id.append(self.layer_count)
         self.layer_link.append(widget_link)
         self.layer_opacity.append(100)
-        self.layer_blend_mode.append(DEFAULT_BLEND_MODE)
+        self.layer_blend_mode.append(CHANNEL_LAYERS.get(widget_link, DEFAULT_BLEND_MODE))
         self.sig_blend_mode_changed.emit((widget_link, 
                                           self.layer_blend_mode[-1]))
         self.layer_color.append(color)
