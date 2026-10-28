@@ -53,7 +53,8 @@ def run_in_background(parent, message, function, *args, **kwargs):
     dialog = QProgressDialog(message, None, 0, 0, parent)
     dialog.setWindowTitle("DriftlessMap")
     dialog.setWindowModality(Qt.WindowModality.WindowModal)
-    dialog.setMinimumDuration(400)
+    # Shown almost at once, so a click visibly starts the work.
+    dialog.setMinimumDuration(150)
     dialog.setCancelButton(None)
 
     thread.start()

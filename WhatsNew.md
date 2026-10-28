@@ -3,6 +3,16 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.0.0rc5
+
+Release-candidate fix, 28 October 2026.
+
+Buttons respond the moment they are clicked. The busy cursor appears at once,
+progress windows open within a fraction of a second, and Suggest Landmarks and
+Find atlas section prepare large images behind their progress window instead of
+freezing the window first. Clicks made while DriftlessMap is busy are ignored
+instead of running the action again afterwards.
+
 ## DriftlessMap 2.0.0rc4
 
 Release-candidate fix, 28 October 2026.
