@@ -29,6 +29,7 @@ CURRENT = "current"
 REGISTRATION_CHANGED = "registration changed"
 OTHER_SECTION = "another section"
 REMAPPED = "mapped again since"
+BUILD_CHANGED = "build settings changed"
 NOT_RECORDED = "origin not recorded"
 
 _IDENTIFIER = re.compile(r"^[0-9a-f]{32}$")
@@ -220,6 +221,30 @@ class MappingLedger:
             del self._records[record.key]
         return record
 
+    def restamp(self, section_id, old, new):
+        """Give ``section_id``'s records mapped with fingerprint ``old`` the equivalent ``new``.
+
+        Only for a fingerprint format change; the marks and revisions are kept.
+        Returns the number of records changed.
+        """
+        changed = [r for r in self.records()
+                   if r.section_id == section_id and r.registration == old]
+        for record in changed:
+            self._records[record.key] = replace(record, registration=new)
+        return len(changed)
+
+    def rename_probe(self, old, new):
+        """Rename an owner without changing unit IDs, revisions or derivations."""
+        if old == new:
+            return
+        affected = [r for r in self.records() if r.kind == "probe" and r.probe == old]
+        if any(self.get(r.section_id, "probe", new) is not None for r in affected):
+            raise ValueError("There are already mapping records for {}.".format(new))
+        for record in affected:
+            del self._records[record.key]
+            renamed = replace(record, probe=new)
+            self._records[renamed.key] = renamed
+
     def snapshot(self):
         """An independent copy for undo."""
         return MappingLedger(replace(r, source=_validated_source(r.kind, r.source))
@@ -267,7 +292,7 @@ def valid_derivation(value):
 
 
 def is_out_of_date(status):
-    return status in (REGISTRATION_CHANGED, REMAPPED)
+    return status in (REGISTRATION_CHANGED, REMAPPED, BUILD_CHANGED)
 
 
 def derivation_status(entries, ledger, section_id, registration):

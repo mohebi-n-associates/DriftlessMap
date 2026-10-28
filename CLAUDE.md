@@ -9,7 +9,7 @@ or important workflows change.
 ## Project identity
 
 - Current stable release: DriftlessMap 1.6.1. `main` now carries the 2.0
-  development preview (merged from `v2-redesign`), versioned 2.0.0aN (currently 2.0.0a25); each
+  development preview (merged from `v2-redesign`), versioned 2.0.0aN (currently 2.0.0a26); each
   feature there increments N. Plain 2.0.0 is reserved for the release that
   passes the gates in `version2_redesign.md`. Never give V2 work 1.x numbers.
 - Desktop application for histology registration, atlas mapping, probe
@@ -30,6 +30,18 @@ or important workflows change.
   Atlas kind, path and load fingerprint are committed only through
   `DriftlessMap._commit_atlas`; per-view display updates go through
   `DriftlessMap._atlas_view_items`.
+- `driftlessmap/project_session.py`: `ProjectSessionMixin.project_payload` is the
+  shared saved-state collector. `load_project` snapshots the active document and
+  restores it on failure, including its original reader, in-memory atlas and undo
+  history; `ProjectSnapshot` borrows arrays and copies mutable metadata, so rollback
+  never requires the old source files. If restoring widgets also fails, a recovery
+  `.dmap` is written to a reported temporary folder and partial-session saves are
+  disabled until a document is successfully opened. `_restore_project_payload` is the low-level
+  installer; do not call it directly outside loading/recovery.
+- `driftlessmap/state_digest.py`: exact recursive saved-state hashing, reading arrays
+  in chunks and deduplicating shared arrays within each call (never across mutable
+  edits). V2 checks after user input/commands instead of rescanning on idle timer
+  ticks; destructive transitions always check, and check failures count as dirty.
 - `driftlessmap/persistence.py`: safe versioned ZIP format, JSON manifest,
   NumPy arrays with pickling disabled, streamed portable attachments, and
   restricted legacy-pickle reader.
@@ -79,7 +91,12 @@ or important workflows change.
   has no recipe until the user chooses (`registration_channels_dialog.py`).
 - `driftlessmap/registration_review.py`: human review of the current
   registration, tied to a fingerprint of landmarks, frame points, plane, page,
-  tilt and image size; any change makes it lapse. Pre-schema-3 work is
+  tilt, image size and triangle connectivity; any change makes it lapse. Fingerprint
+  content version 2 (2.0.0a26) deliberately invalidates older review fingerprints;
+  old results remain loadable. Mapping records of the loaded section whose stored
+  fingerprint is the pre-a26 one for the unchanged registration are restamped on
+  load (`_migrate_mapping_fingerprints`), so they stay current. Unusable saved probe
+  planning warns and the project still opens. Pre-schema-3 work is
   "not recorded", never "reviewed". Saved as `registration_review`.
 - `driftlessmap/auto_registration.py`: SimpleITK registration (moment-based
   affine on silhouettes, then a B-spline on intensities with Mattes MI) that
@@ -106,7 +123,10 @@ or important workflows change.
   `TransactionHistory` (10 steps, 500 MB, compressed masks) backs
   `DriftlessMap.undoable(label)`, which records only the outermost action
   (wrap new mapping, part or build entry points in it), and
-  `undo_mapping_step` / `redo_mapping_step`.
+  `undo_mapping_step` / `redo_mapping_step`. Undo and redo share the memory budget;
+  unrecordable mutations clear both stacks as a history barrier. Transaction
+  signatures hash actual object/source contents, so rebuilding under the same
+  name is undoable; the packer borrows state and copies it once.
 - `driftlessmap/implants.py` (GUI-free) and `implant_engine.py`: optical
   fibers and microprisms (`implants_design.md`). `ImplantBook` holds the
   implants (id, name, kind, validated specs, colour); `fit_fiber` /
@@ -124,7 +144,9 @@ or important workflows change.
   (draw, Propose by flood fill inside the brain envelope, tip/bottom point).
   Probes are listed in the same Implants card but stay on the named-probe
   path: selecting one shows `v2/probe_card.ProbeControls`. The implant table
-  adds a summary row per built probe (`probe_csv_row`).
+  adds a summary row per built probe (`probe_csv_row`). `implant_build_status` compares
+  the retained report specs to the current implant specs; mismatches are out of date
+  in the UI and exports until rebuilt. The implant CSV includes a `status` column.
   `DriftlessMap.export_all_results(folder)` (Results > Export all results)
   writes a project copy (`save_project_called(path=, as_copy=True)` leaves
   the current project file and references alone), every built object, probe
@@ -172,7 +194,9 @@ or important workflows change.
   download, validation and processing code stays shared. `probes.py` manages
   named probes on top of the engine's name-prefix grouping of probe pieces
   (`"<probe> - piece"`, `"<probe> shank N - piece"`); `merge_probes(only=...)`
-  builds selected groups only.
+  builds selected groups only. `ProbeBook.rename` updates retained `pieces_names`
+  and `MappingLedger.rename_probe` rekeys owners without changing unit IDs or
+  revisions. Do not rename only the visible rows.
 - `driftlessmap/main_window.ui`: Qt menu/action definitions.
 - `driftlessmap/icons/app/`: canonical PNG plus native Windows ICO and macOS
   ICNS application artwork.
@@ -281,16 +305,21 @@ python -m unittest tests.test_persistence tests.test_provenance \
   tests.test_image_reader tests.test_probe_mapping
 ```
 
-Full suite in the known local GUI-capable environment:
+Use a dedicated environment with the declared dependencies (the historical
+`/Users/ali/miniconda/envs/HERBS` path may not exist):
 
 ```bash
-QT_QPA_PLATFORM=offscreen /Users/ali/miniconda/envs/HERBS/bin/python \
-  -m unittest discover -s tests -p 'test_*.py' -q
+python -m venv .venv
+.venv/bin/python -m pip install -e ".[test]"
+QT_API=pyqt6 QT_QPA_PLATFORM=offscreen .venv/bin/python tests/run_test_suite.py unittest
 ```
 
-The default local Python may lack `superqt`, `pytest`, or `tomli`; do not treat
-that environment-only absence as a product regression. The full HERBS Conda
-environment currently runs the complete suite. Offscreen OpenGL warnings are
+On Windows use `.venv\Scripts\python` and set the environment variables in
+PowerShell. Do not run against an unrelated HERBS environment with pyqtgraph 0.12
+or missing SimpleITK; the application requires the versions in `pyproject.toml`.
+`tests/benchmark_project_state.py` measures exact digest cost; remaining platform,
+migration, usability and performance gates are tracked in `release_validation.md`.
+Offscreen OpenGL warnings are
 expected in local headless tests. Linux CI must install `libgl1`, `libegl1`,
 the Qt XCB runtime libraries listed in the workflows, `xvfb`, and `xauth`, then
 run GUI tests under `xvfb-run` with the Qt `xcb` platform and software OpenGL;

@@ -5,6 +5,7 @@ from driftlessmap.registration_review import (
     NOT_REVIEWED,
     REVIEWED,
     RegistrationReview,
+    legacy,
     registration_fingerprint,
 )
 
@@ -19,6 +20,31 @@ def fingerprint(**changes):
 
 
 class ReviewTests(unittest.TestCase):
+    def test_implicit_topology_matches_the_built_mesh(self):
+        import numpy as np
+        from driftlessmap.triangulation import canonical_simplices
+
+        points = [[0., 0.], [10., 0.], [10., 10.], [0., 10.]]
+        implicit = fingerprint(atlas_points=points, atlas_frame=[])
+        explicit = fingerprint(atlas_points=points, atlas_frame=[],
+                               simplices=canonical_simplices(np.asarray(points)))
+        self.assertEqual(implicit, explicit)
+
+    def test_topology_changes_invalidate_review_but_triangle_order_does_not(self):
+        first = [[0, 1, 2], [0, 2, 3]]
+        other = [[0, 1, 3], [1, 2, 3]]
+        review = RegistrationReview(fingerprint(simplices=first))
+        self.assertEqual(review.state(fingerprint(simplices=other)), NOT_REVIEWED)
+        self.assertEqual(review.state(fingerprint(simplices=[[3, 2, 0], [2, 1, 0]])), REVIEWED)
+
+    def test_legacy_fingerprint_is_the_one_written_before_a26(self):
+        # sha256 of the pre-2.0.0a26 payload for these inputs, which had no
+        # version or simplices; mapping records saved then are migrated with it.
+        self.assertEqual(
+            fingerprint(simplices=legacy),
+            "8876fc0f97c33ff24d164bd9c72bc555503361110187100504d6254c04f5cd88")
+        self.assertNotEqual(fingerprint(simplices=legacy), fingerprint())
+
     def test_review_applies_only_to_what_was_reviewed(self):
         review = RegistrationReview(fingerprint(), "2026-09-29T10:00:00Z")
         self.assertEqual(review.state(fingerprint()), REVIEWED)

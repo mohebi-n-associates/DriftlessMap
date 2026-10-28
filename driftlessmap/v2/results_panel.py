@@ -125,7 +125,9 @@ class ResultsPanel(StepPanel):
             kind = ("warn" if v2_state.is_out_of_date(status)
                     else "good" if status == v2_state.CURRENT else None)
             text = "Mapping: " + v2_state.mapping_status_text(status)
-            if v2_state.is_out_of_date(status):
+            if status == v2_state.BUILD_CHANGED:
+                text += ". Build the implant again to use its current specifications."
+            elif v2_state.is_out_of_date(status):
                 text += ". Update the mapping in Annotate, then make parts (and build) again."
             set_status(self.origin, text, kind)
         state = self.engine.mapping_review_state

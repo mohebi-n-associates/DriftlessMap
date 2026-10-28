@@ -738,7 +738,7 @@ CSV_COLUMNS = (
     "est_ap_mm", "est_ml_mm", "est_dv_mm", "depth_below_surface_um",
     "ml_medial_edge_um", "ml_lateral_edge_um", "ml_centre_um", "face", "face_um",
     "ap_min_um", "ap_max_um", "face_regions",
-    "ap_tilt_deg", "ap_tilt", "ml_tilt_deg", "ml_tilt", "warnings",
+    "ap_tilt_deg", "ap_tilt", "ml_tilt_deg", "ml_tilt", "warnings", "status",
 )
 
 

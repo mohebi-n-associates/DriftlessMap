@@ -46,6 +46,61 @@ def isolated_gui_test(test):
 
 
 class ImplantEngineTests(unittest.TestCase):
+    @isolated_gui_test
+    def test_specs_invalidate_build_through_save_reopen_export_and_rebuild(self):
+        from driftlessmap.mapping_records import BUILD_CHANGED
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window = self.window_with_section(root)
+            fiber = window.add_implant("fiber", specs={"diameter_um": 100})
+            window.set_implant_outline(fiber.implant_id, SLOT)
+            self.assertTrue(window.map_implant(fiber.implant_id)[0])
+            self.assertTrue(window.build_implant(fiber.implant_id)[0])
+            window.set_implant_specs(fiber.implant_id, {"diameter_um": 400})
+            built = window.implant_objects(fiber.implant_id, built=True)[0]
+            self.assertEqual(window.object_mapping_status(built), BUILD_CHANGED)
+            self.assertIn(built, window.out_of_date_objects())
+            project = str(root / "changed.dmap")
+            self.assertTrue(window.save_project_called(path=project))
+            payload, error = load_driftlessmap_file(project, expected_kind="project")
+            self.assertIsNone(error)
+            restored = self.window_with_section(root)
+            prepared = restored.prepare_project_sources(payload, project)
+            self.assertTrue(restored.load_project(prepared))
+            built = restored.implant_objects(fiber.implant_id, built=True)[0]
+            self.assertEqual(restored.object_mapping_status(built), BUILD_CHANGED)
+            table = root / "implants.csv"
+            restored.export_implant_table(table)
+            with table.open() as stream:
+                row = next(csv.DictReader(stream))
+            self.assertEqual(row["status"], BUILD_CHANGED)
+            self.assertIn("100", row["specs"])
+            self.assertTrue(restored.build_implant(fiber.implant_id)[0])
+            built = restored.implant_objects(fiber.implant_id, built=True)[0]
+            self.assertIsNone(restored.implant_build_status(built))
+            self.assertEqual(restored.implant_report(fiber.implant_id)["specs"]["diameter_um"], 400)
+            self.assertTrue(restored.undo_mapping_step())
+            self.assertEqual(restored.implant_report(fiber.implant_id)["specs"]["diameter_um"], 100)
+            built = restored.implant_objects(fiber.implant_id, built=True)[0]
+            self.assertEqual(restored.object_mapping_status(built), BUILD_CHANGED)
+            self.assertTrue(restored.redo_mapping_step())
+            self.assertEqual(restored.implant_report(fiber.implant_id)["specs"]["diameter_um"], 400)
+
+    @isolated_gui_test
+    def test_unrecordable_mutation_clears_both_history_directions(self):
+        with tempfile.TemporaryDirectory() as folder:
+            window = self.window_with_section(Path(folder))
+            fiber = window.add_implant("fiber")
+            window.set_implant_outline(fiber.implant_id, SLOT)
+            self.assertTrue(window.map_implant(fiber.implant_id)[0])
+            self.assertTrue(window.undo_mapping_step())
+            self.assertIsNotNone(window.undo_history.redo_label())
+            window.undo_history.budget_bytes = 1
+            self.assertTrue(window.map_implant(fiber.implant_id)[0])
+            self.assertIsNone(window.undo_history.undo_label())
+            self.assertIsNone(window.undo_history.redo_label())
+
     @classmethod
     def setUpClass(cls):
         cls.application = (QApplication.instance() or QApplication([])) if CHILD else None

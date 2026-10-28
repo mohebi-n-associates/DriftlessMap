@@ -1,6 +1,29 @@
 # Update Log
 
 ### 28th October 2026
+##### DriftlessMap 2.0.0a26
+
+Shared project collection and transactional replacement in `project_session.py`;
+recovery borrows the previous atlas/raster arrays and restores mutable metadata,
+original image reader and history. `state_digest.py` hashes complete saved values
+with chunked array reads; V2 schedules status checks after input/commands, with
+unconditional checks before closing/replacing work and conservative error handling.
+Registration fingerprints version their content and include canonical triangle
+connectivity; on load, `_migrate_mapping_fingerprints` restamps the loaded
+section's records whose stored fingerprint equals the pre-a26 one
+(`registration_fingerprint(..., simplices=legacy)`, `MappingLedger.restamp`), so
+unchanged mappings stay current while reviews still lapse. Unusable probe planning
+again only warns on load instead of rolling the open back. Probe rename updates stored part names and ledger owners without
+changing unit IDs or revisions. Implant build status compares stored report specs
+with current specs and propagates to the UI, object files and implant CSV. Undo/redo
+share a bounded budget and unrecordable edits clear history. Content signatures
+record same-name rebuilds; exceptions roll back retained transactions. A failed
+widget recovery preserves a recovery archive and blocks partial-session saves.
+Regression coverage
+and a reproducible digest benchmark were added; see `release_validation.md` for
+remaining native-installation, user-evaluation and performance gates.
+
+### 28th October 2026
 ##### DriftlessMap 2.0.0a25
 
 Projects store `interface_state` (optional, plain JSON via `clean_interface_state`, no schema bump) from `interface_state_provider`; `on_project_loaded` hands it to V2 `resume` (step, view, implant selection, `ProbeBook.state`, Mark track, outline draft). Unmapped probes count in the unsaved-change digest. Point layers use `layer_points` / `plot_points`: empty layers saved as `[None, None]` made `load_project` fail part-way; they now load, and empty layers save as [].

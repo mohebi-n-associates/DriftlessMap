@@ -6,11 +6,12 @@ the project has unsaved changes. Navigation (views, zoom, selection, hovering)
 never changes the digest, so it never marks the project dirty.
 """
 
-import hashlib
-
 import numpy as np
 
+from ..state_digest import state_digest
+
 from ..mapping_records import (
+    BUILD_CHANGED,
     CURRENT,
     NOT_RECORDED,
     OTHER_SECTION,
@@ -29,32 +30,24 @@ def _describe_len(value):
 
 def scientific_digest(engine):
     """A digest of the state a save would record, excluding display-only views."""
-    parts = []
-    image = engine.image_view.current_img
-    parts.append(("image", None if image is None else (np.shape(image), str(image.dtype))))
-    parts.append(("atlas", engine.current_atlas_path, engine.current_atlas))
-    parts.append(("fingerprint", engine.current_registration_fingerprint()))
-    parts.append(("recipe", None if engine.registration_input is None
-                  else engine.registration_input.to_dict()))
-    parts.append(("review", engine.registration_review.to_dict(), engine.mapping_review_state))
-    parts.append(("h2a", engine.h2a_transferred, engine.a2h_transferred))
-    parts.append(("layers", tuple(engine.layer_ctrl.layer_link)))
-    parts.append(("objects", tuple(engine.object_ctrl.obj_name)))
-    for name, data in (("img", engine.working_img_data), ("atlas", engine.working_atlas_data)):
-        summary = []
-        for key in sorted(data):
-            value = data[key]
-            if isinstance(value, np.ndarray):
-                summary.append((key, value.shape, float(np.sum(value, dtype=np.float64))))
-            elif isinstance(value, (list, tuple)):
-                summary.append((key, _describe_len(value), repr(value)[:200]))
-            elif value is None or isinstance(value, (int, float, str, bool)):
-                summary.append((key, value))
-        parts.append((name, tuple(summary)))
-    view = engine.image_view
-    parts.append(("display", tuple(view.channel_visible), repr(view.channel_color)[:400],
-                  repr([np.asarray(t).sum() for t in view.curve_widget.table_output])))
-    return hashlib.sha256(repr(parts).encode("utf-8")).hexdigest()
+    payload = engine.project_payload()
+    for key in ("created_at", "saved_at", "software", "portable", "portable_sources",
+                "atlas_provenance", "histology_provenance", "num_windows"):
+        payload.pop(key, None)
+    session = dict(payload["session_state"])
+    session.pop("current_layout", None)
+    payload["session_state"] = session
+    for key, selection in (("object_data", "current_obj_index"),
+                           ("layer_data", "current_layer_index")):
+        if payload.get(key) is not None:
+            payload[key] = dict(payload[key])
+            payload[key].pop(selection, None)
+    # Views, selection and the active tool are navigation. Unmapped probes
+    # and an unfinished outline, however, are saved work.
+    interface = payload.pop("interface_state", {})
+    implants = interface.get("implants", {})
+    payload["drafts"] = {key: implants.get(key) for key in ("probes", "drawing")}
+    return state_digest(payload)
 
 
 def atlas_summary(engine):
@@ -163,6 +156,7 @@ def step_status(engine):
 
 
 STATUS_TEXT = {
+    BUILD_CHANGED: "out of date: build settings changed; build again",
     CURRENT: "current",
     REGISTRATION_CHANGED: "out of date: registration changed",
     REMAPPED: "out of date: marks mapped again since",

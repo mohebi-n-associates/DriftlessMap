@@ -77,6 +77,17 @@ class MappingLedgerTests(unittest.TestCase):
         self.assertEqual(record.status(self.section, SECOND), REGISTRATION_CHANGED)
         self.assertEqual(record.status(new_identifier(), FIRST), OTHER_SECTION)
 
+    def test_restamp_changes_only_the_section_and_fingerprint_given(self):
+        track = {"points": [[1.0, 2.0], [3.0, 4.0]]}
+        here = self.ledger.record(self.section, "probe", track, FIRST, "r", "t", probe="A")
+        other = self.ledger.record(new_identifier(), "probe", track, FIRST, "r", "t", probe="A")
+        moved = self.ledger.record(self.section, "cells", cells(), SECOND, "r", "t")
+        self.assertEqual(self.ledger.restamp(self.section, FIRST, "c" * 64), 1)
+        renewed = self.ledger.by_unit(here.unit_id)
+        self.assertEqual((renewed.registration, renewed.revision), ("c" * 64, here.revision))
+        self.assertEqual(self.ledger.by_unit(other.unit_id).registration, FIRST)
+        self.assertEqual(self.ledger.by_unit(moved.unit_id).registration, SECOND)
+
     def test_parts_are_out_of_date_when_their_unit_is_mapped_again(self):
         record = self.ledger.record(self.section, "cells", cells(), FIRST, "r", "t")
         entries = derivation([record])
@@ -131,6 +142,19 @@ class MappingLedgerTests(unittest.TestCase):
 
 
 class TransactionHistoryTests(unittest.TestCase):
+    def test_undo_and_redo_never_keep_an_oversized_inverse(self):
+        history = TransactionHistory(budget_bytes=1000)
+        history.commit(history.prepare("small", np.zeros(10, dtype=np.uint8)))
+        restored = history.undo(np.arange(10000, dtype=np.uint8))
+        self.assertEqual(restored.shape, (10,))
+        self.assertLessEqual(history._used(), history.budget_bytes)
+        self.assertIsNone(history.redo_label())
+        history.commit(history.prepare("small", np.zeros(10, dtype=np.uint8)))
+        history.undo(np.ones(10, dtype=np.uint8))
+        self.assertEqual(history.redo(np.arange(10000, dtype=np.uint8)).shape, (10,))
+        self.assertLessEqual(history._used(), history.budget_bytes)
+        self.assertIsNone(history.undo_label())
+
     def test_undo_and_redo_restore_whole_states(self):
         history = TransactionHistory()
         state = {"cells": [[1.0, 2.0]], "parts": ["cells - piece"]}

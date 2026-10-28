@@ -19,6 +19,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from .triangulation import TriangulationError, canonical_simplices
+
 REVIEWED = "reviewed"
 NOT_REVIEWED = "not reviewed"
 NOT_RECORDED = "not recorded"
@@ -29,10 +31,38 @@ def _points(points):
     return np.round(array, 3).tolist()
 
 
+legacy = object()   # ``simplices=legacy``: the fingerprint written before 2.0.0a26
+
+
 def registration_fingerprint(atlas_points, histology_points, atlas_frame, histology_frame,
-                             plane, page, tilt, image_shape):
+                             plane, page, tilt, image_shape, *, simplices=None):
     """A stable digest of the inputs a review applies to."""
-    payload = {
+    if simplices is legacy:
+        return _digest(_inputs(atlas_points, histology_points, atlas_frame, histology_frame,
+                               plane, page, tilt, image_shape))
+    if simplices is None:
+        # Identify the implicit topology too, so merely populating the engine's
+        # registration cache cannot change an otherwise identical review.
+        points = np.vstack([np.asarray(atlas_frame, dtype=float).reshape(-1, 2),
+                            np.asarray(atlas_points, dtype=float).reshape(-1, 2)])
+        if len(points) >= 3:
+            try:
+                simplices = canonical_simplices(points)
+            except (TriangulationError, ValueError):
+                pass  # no usable topology yet; retain the other input fields
+    payload = _inputs(atlas_points, histology_points, atlas_frame, histology_frame,
+                      plane, page, tilt, image_shape)
+    # Old fingerprints deliberately do not match: they did not identify
+    # the transform's connectivity and cannot establish a current review.
+    payload["version"] = 2
+    payload["simplices"] = None if simplices is None else sorted(
+        sorted(int(i) for i in triangle) for triangle in simplices)
+    return _digest(payload)
+
+
+def _inputs(atlas_points, histology_points, atlas_frame, histology_frame,
+            plane, page, tilt, image_shape):
+    return {
         "atlas": _points(atlas_points),
         "histology": _points(histology_points),
         "atlas_frame": _points(atlas_frame),
@@ -42,6 +72,9 @@ def registration_fingerprint(atlas_points, histology_points, atlas_frame, histol
         "tilt": [round(float(value), 4) for value in (tilt or ())],
         "image_shape": [int(value) for value in (image_shape or ())][:2],
     }
+
+
+def _digest(payload):
     text = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 

@@ -1,6 +1,6 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 2.0.0a25**, a development preview of
+This manual applies to **DriftlessMap 2.0.0a26**, a development preview of
 DriftlessMap 2.0 (the `main` branch, not a release). The current stable release is
 1.6.1; its desktop downloads are described in Section 2.2.
 
@@ -109,7 +109,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-DriftlessMap 2.0.0a25 requires:
+DriftlessMap 2.0.0a26 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -177,7 +177,7 @@ python -c "import driftlessmap; print(driftlessmap.__version__)"
 ```
 
 The final command prints the installed version: `1.6.1` for the stable
-release, or `2.0.0a25` for this development preview installed from the
+release, or `2.0.0a26` for this development preview installed from the
 `v2-redesign` branch.
 
 ### 2.5 Launching DriftlessMap
@@ -484,7 +484,14 @@ same step and view, the selected implant or probe, probes you added but have
 not mapped yet, track points marked but not yet mapped, **Mark track**
 switched on again if it was on, and an outline you were still drawing (keep
 clicking to finish it). Landmarks, marks, mapped sections, parts and built
-objects are all part of the project as always.
+objects are all part of the project as always. Save prompts include these edits,
+implant settings, probe planning and every annotation, even edits that leave an
+image's dimensions or total intensity unchanged. Navigation and selection alone
+do not mark the project dirty. If opening a different project fails, the previous
+project and its unsaved work and undo history are restored from memory. If a
+widget failure also prevents recovery, DriftlessMap preserves a recovery `.dmap`
+when possible, reports its location, and disables saving the partial session;
+open the recovery project before continuing.
 
 What each step does:
 
@@ -511,7 +518,11 @@ project or download the Allen mouse atlas.
 Display settings (colour, visibility, brightness, contrast, gamma, curves)
 change only how the image looks; the pixel values, registration input and
 coordinates stay the same. Mapping without a review is allowed and is recorded
-as not reviewed.
+as not reviewed. Review fingerprints also identify the triangle connectivity.
+Projects reviewed before 2.0.0a26 need a fresh review; their stored results are
+preserved, and marks mapped with the same landmarks, page, tilt and image stay
+current. If a project's probe settings cannot be restored, the project still
+opens without them and says so below the image.
 
 **Ctrl+K** (Cmd+K on macOS) opens a command search. It finds every 2.0
 command and every 1.x menu command by its old name, for example "merge" or
@@ -1032,7 +1043,7 @@ or moved on the atlas after transferring are no longer tied to the record, and
 pieces made from them have no recorded origin.
 
 **Out of date.** A mapping of the loaded section is *out of date* when its
-landmarks, frame points, atlas plane, page or tilt have changed since it was
+landmarks, frame points, triangle connectivity, atlas plane, page or tilt have changed since it was
 mapped; returning them to the mapped values makes it current again. Pieces and
 built objects are out of date when their mapping is, or when the same marks
 were mapped again after they were made. Display changes (brightness, colours,
@@ -1044,6 +1055,12 @@ recorded*. Out-of-date objects can still be exported; the exported file records
 `mapping_status`, and the status bar names them. In the 2.0 preview, Annotate
 lists the section's mapped marks with their status, Results shows the selected
 object's status, and each object's tooltip in the Objects list names it.
+Changing a fiber's or prism's specifications also makes its built result out of
+date: **Build** it again to use the new settings. Its previous report remains
+available, explicitly labelled as out of date. The implant CSV's `status` column
+identifies stale results; its dimensions and coordinates describe the stored build.
+Renaming a probe preserves its mapping identity and updates retained part names,
+so **Update mapping**, **Edit parts** and **Build** continue under the new name.
 
 **Update mapping and Edit marks (2.0 preview, Annotate step).** Select a mapping
 in *Mapped marks on this section*:
@@ -1068,7 +1085,10 @@ pieces, built objects and review state together. Use **Edit > Undo** *step*
 (Ctrl+Alt+Z) and **Edit > Redo** *step* (Ctrl+Alt+Shift+Z); the menu names the
 step, for example "Undo Map cells". The last 10 steps are kept, within 500 MB;
 masks are stored compressed. A step too large for that budget says so and is not
-undoable. Steps that change nothing are not recorded. Loading a section or
+undoable; a change that cannot be retained clears earlier undo and redo history.
+Undo and redo share the 500 MB budget. If an inverse state cannot fit, the requested
+step can still be restored, but further history is cleared. Steps that change
+nothing are not recorded. Loading a section or
 opening a project starts a new history, and the history is not saved. The
 existing Edit > Undo and Redo (Ctrl+Z) still undo individual drawing and erasing
 edits; a mapping step clears that shorter history, because its snapshots

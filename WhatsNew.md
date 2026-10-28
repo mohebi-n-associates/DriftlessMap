@@ -3,6 +3,30 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.0.0a26
+
+Development preview, 28 October 2026 (`v2-implants` branch; not a stable release)
+
+**Protect unsaved work.** Save prompts now check the complete saved work, including
+implant specifications and outlines, unfinished outlines, probe planning, object
+contents, every annotation and exact image samples. Idle status refreshes no longer
+scan large rasters. If a project cannot be opened completely, the previous document,
+unsaved edits and undo history are restored from memory, even when its source image
+is unavailable. Probe settings that cannot be restored no longer stop a project
+opening; the rest of the project opens and a message says so.
+
+**Keep scientific status accurate.** Registration review and mapping status now
+include triangle connectivity. Earlier review fingerprints require a fresh review;
+existing results remain available, and marks mapped in earlier previews stay current
+while their registration is unchanged. Changing an implant's specifications marks its
+built result out of date until rebuilt. The implant table includes a `status` column,
+and object exports retain the stale status.
+
+**Reliable rename and undo.** Renaming a probe updates its retained part names and
+mapping records, so rebuilding and updating the section keep the renamed probe.
+Undo and redo share their memory budget; an operation too large to retain establishes
+a history barrier instead of exposing snapshots from before that operation.
+
 ## DriftlessMap 2.0.0a25
 
 Development preview, 28 October 2026 (`v2-implants` branch; not a release)
