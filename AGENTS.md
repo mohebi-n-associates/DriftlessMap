@@ -9,7 +9,7 @@ or important workflows change.
 ## Project identity
 
 - Current stable release: DriftlessMap 1.6.1. `main` now carries the 2.0
-  development preview (merged from `v2-redesign`), versioned 2.0.0aN (currently 2.0.0a20); each
+  development preview (merged from `v2-redesign`), versioned 2.0.0aN (currently 2.0.0a21); each
   feature there increments N. Plain 2.0.0 is reserved for the release that
   passes the gates in `version2_redesign.md`. Never give V2 work 1.x numbers.
 - Desktop application for histology registration, atlas mapping, probe
@@ -63,9 +63,10 @@ or important workflows change.
   every few pages, with a preference for upright ones; depth is ranked in two
   passes (`DEPTH_PAGES` pages, then page by page around the best
   `DEPTH_NEIGHBOURHOODS`). While the coronal page slider is dragged,
-  `AtlasView` draws a sampled preview page (`PREVIEW_MAX_SIDE`) and the full
-  page on release (`PageController.sig_page_settled`); coronal pages are
-  strided in memory and slow to read at 10 um.
+  `AtlasView` draws a sampled preview page (`PREVIEW_MAX_SIDE`) at most every
+  `DRAG_UPDATE_DELAY_MS` (a throttle, not a debounce) and the full page on
+  release (`PageController.sig_page_settled`); coronal pages are strided in
+  memory, so each is copied out of the volume once before display.
   `section_suggestion_dialog.py` shows ranked candidates for confirmation and
   `DriftlessMap.apply_section_suggestion` sets the view, page, tilt and
   histology orientation. Tilted matches use `tilted_slice`, which must stay

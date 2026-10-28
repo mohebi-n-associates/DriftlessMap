@@ -1,6 +1,6 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 2.0.0a20**, a development preview of
+This manual applies to **DriftlessMap 2.0.0a21**, a development preview of
 DriftlessMap 2.0 (the `main` branch, not a release). The current stable release is
 1.6.1; its desktop downloads are described in Section 2.2.
 
@@ -109,7 +109,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-DriftlessMap 2.0.0a20 requires:
+DriftlessMap 2.0.0a21 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -177,7 +177,7 @@ python -c "import driftlessmap; print(driftlessmap.__version__)"
 ```
 
 The final command prints the installed version: `1.6.1` for the stable
-release, or `2.0.0a20` for this development preview installed from the
+release, or `2.0.0a21` for this development preview installed from the
 `v2-redesign` branch.
 
 ### 2.5 Launching DriftlessMap
@@ -1462,7 +1462,7 @@ region, stereotaxic estimate, depth, prism edges and face, tilt and
 warnings). Results > Export also saves fibers and prisms as `.dmapobj`
 files; importing one into another project adds it to that project's
 implants. Projects save the implants, their unmapped outlines, mapping
-records and built objects; projects from 2.0.0a20 and earlier open with no
+records and built objects; projects from 2.0.0a12 and earlier open with no
 implants.
 
 ## 13. Virus, tracer, lesion, and expression registration

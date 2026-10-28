@@ -3,6 +3,12 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.0.0a21
+
+Development preview, 27 October 2026 (`v2-implants` branch; not a release)
+
+Dragging the atlas page slider now follows the mouse: pages are drawn during a continuous drag instead of only when the mouse pauses, and each page is copied out of the atlas once, so a page of the 10 µm atlas draws in about 25 ms instead of over 250 ms.
+
 ## DriftlessMap 2.0.0a20
 
 Development preview, 27 October 2026 (`v2-implants` branch; not a release)
