@@ -1,6 +1,6 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 2.0.0rc13**, the release candidate of
+This manual applies to **DriftlessMap 2.0.0rc14**, the release candidate of
 DriftlessMap 2.0. The current stable release is 1.6.1; `pip install driftlessmap`
 keeps installing 1.6.1 until 2.0.0 is released, and Section 2 explains how to
 install the release candidate.
@@ -110,7 +110,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-DriftlessMap 2.0.0rc13 requires:
+DriftlessMap 2.0.0rc14 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -912,7 +912,17 @@ atlas and ranks candidate sections:
    and how clearly it was preferred (**clear**, **uncertain** or
    **ambiguous**), the orientation the section needs, and up to six candidate
    sections. Each shows your section on the left and the atlas on the right,
-   with its depth and cutting-angle tilt.
+   with its depth, cutting-angle tilt, score and **confidence** (high, medium
+   or low; hover for the reasons). The score only ranks the candidates
+   against each other. Confidence is the lowest of: how well the section's
+   internal anatomy agrees with the atlas (below 0.5 is medium, below 0.3
+   low), how far apart the depths that fit about as well lie (more than
+   0.5 mm is medium, more than 1 mm low) and, when the plane was detected,
+   how clearly it won. The outline alone is not used: wrong pages often fit
+   the outline well. On low confidence, check carefully or place the section
+   by hand. The thresholds were set on sections cut from the atlas, where
+   the answer is known; they are not yet checked on real sections with
+   known positions.
 4. Pick the candidate that looks best. Brain outlines are left-right
    symmetric, so the side cannot be detected; choose it from what you know
    about the tissue, such as the injected or implanted side. For coronal and

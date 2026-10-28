@@ -3,6 +3,18 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.0.0rc14
+
+Release-candidate fix, 28 October 2026.
+
+Each suggested atlas section now shows a confidence level (high, medium or low)
+next to its score, with the reasons when you hover over it. The score only ranks
+candidates against each other; confidence says whether the best one can be
+trusted, from how well the internal anatomy agrees with the atlas and how narrowly
+the depth is determined. A good outline fit alone no longer looks convincing,
+since wrong pages often fit the outline well. The thresholds come from sections
+cut from the atlas and still need checking on real sections with known positions.
+
 ## DriftlessMap 2.0.0rc13
 
 Release-candidate fix, 28 October 2026.

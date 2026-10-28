@@ -257,6 +257,52 @@ class OrientationChoiceTests(unittest.TestCase):
         self.assertEqual(chosen.orientation, flipped)
 
 
+class ConfidenceTests(unittest.TestCase):
+    def _report(self, span, planes=1, margin=0.2):
+        from driftlessmap.atlas_matching import Candidate, SuggestionReport
+
+        candidates = tuple(Candidate(plane, 0, Orientation(0, False), 0.9 - k * margin)
+                           for k, plane in enumerate(("coronal", "sagittal")[:planes]))
+        return SuggestionReport(candidates, (), None, span)
+
+    def _suggestion(self, anatomy):
+        from driftlessmap.atlas_matching import Suggestion
+
+        return Suggestion("coronal", Orientation(0, False), 10, (0.0, 0.0), 1.0, 0.95,
+                          anatomy)
+
+    def test_levels_follow_anatomy_depth_spread_and_plane(self):
+        from driftlessmap.atlas_matching import confidence
+
+        self.assertEqual(confidence(self._suggestion(0.9), self._report(20), 10.0),
+                         ("high", []))
+        level, reasons = confidence(self._suggestion(0.4), self._report(20), 10.0)
+        self.assertEqual(level, "medium")
+        self.assertIn("moderately", reasons[0])
+        # A good outline does not help when the anatomy disagrees.
+        self.assertEqual(confidence(self._suggestion(0.1), self._report(20), 10.0)[0], "low")
+        # Depths far apart fitting as well make it low, whatever the anatomy.
+        level, reasons = confidence(self._suggestion(0.9), self._report(200), 10.0)
+        self.assertEqual(level, "low")
+        self.assertIn("2.0 mm apart", reasons[0])
+        # A detected plane that barely won limits confidence; a chosen one does not.
+        level, reasons = confidence(self._suggestion(0.9), self._report(20, 2, 0.01), 10.0)
+        self.assertEqual(level, "low")
+        self.assertIn("ambiguous", reasons[0])
+
+    def test_reports_carry_what_confidence_needs(self):
+        from driftlessmap.atlas_matching import confidence
+
+        labels = synthetic_brain()
+        intensity = np.where(labels > 0, 120.0, 0.0)
+        section, _ = fake_section(labels, "coronal", 42, 0)
+        report = suggest_sections(section, labels, intensity, 25, (42, 25, 20),
+                                  angles=(0,), planes=("coronal",))
+        self.assertIsNotNone(report.depth_span)
+        level, _reasons = confidence(report.suggestions[0], report, 25.0)
+        self.assertIn(level, ("low", "medium", "high"))
+
+
 class PlaneChoiceTests(unittest.TestCase):
     def test_file_names_name_the_plane(self):
         from driftlessmap.atlas_matching import plane_from_name, planes_for

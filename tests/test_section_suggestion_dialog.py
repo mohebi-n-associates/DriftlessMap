@@ -13,10 +13,10 @@ from driftlessmap.section_suggestion_dialog import SectionSuggestionDialog
 
 def report(plane, orientation, index, midline=None):
     suggestion = SimpleNamespace(index=index, tilt_degrees=(0.0, 0.0), score=1.0,
-                                 orientation=orientation)
+                                 orientation=orientation, template_edges=0.6)
     candidate = SimpleNamespace(plane=plane, orientation=orientation, silhouette=0.9)
     return SimpleNamespace(plane_candidates=[candidate], plane_margin=0.1,
-                           suggestions=[suggestion], midline=midline)
+                           suggestions=[suggestion], midline=midline, depth_span=10)
 
 
 class HemisphereWordingTests(unittest.TestCase):
@@ -34,6 +34,16 @@ class HemisphereWordingTests(unittest.TestCase):
 
     def choices(self, dialog):
         return [dialog.hemisphere_group.button(i).text() for i in range(2)]
+
+    def test_candidates_show_confidence_and_why(self):
+        dialog = self.dialog("coronal", Orientation(0, False), 12)
+        item = dialog.list.item(0)
+        self.assertIn("confidence: high", item.text())
+        dialog.report.suggestions[0].template_edges = 0.1
+        self.assertIn("confidence: low", dialog._label(dialog.report.suggestions[0]))
+        note = dialog._confidence_note(dialog.report.suggestions[0])
+        self.assertIn("internal anatomy agrees weakly", note)
+        self.assertIn("not yet checked on real sections", note)
 
     def test_coronal_choices_name_the_animals_right_on_the_section(self):
         dialog = self.dialog("coronal", Orientation(0, False), 12)
