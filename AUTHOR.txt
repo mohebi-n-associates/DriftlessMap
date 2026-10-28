@@ -1,6 +1,7 @@
 DriftlessMap maintenance and development:
 - Mohebi & Associates: https://www.mohebi-associates.org/
-- Ali Mohebi: https://www.mohebial.com/
+- Ali Mohebi, PhD: https://www.mohebial.com/
+- Esther Lara Gonzalez, PhD
 
 Original HERBS authors:
 - Jingyi Guo Fuglstad

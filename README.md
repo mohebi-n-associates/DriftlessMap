@@ -23,7 +23,8 @@ the Git history, [license](LICENSE.txt), [project history](ORIGINS.md),
 
 Current development is led by
 [Mohebi & Associates](https://www.mohebi-associates.org/), with
-[Ali Mohebi](https://www.mohebial.com/) as project lead and maintainer.
+[Ali Mohebi, PhD](https://www.mohebial.com/) as project lead and maintainer
+and Esther Lara Gonzalez, PhD as a contributor.
 
 If DriftlessMap contributes to published research, please cite both the software
 version used and the original HERBS paper:
