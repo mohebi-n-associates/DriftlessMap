@@ -30,6 +30,11 @@ WORKING_SIZE = 384  # longest side used for registration
 # returned in the section's own pixels.
 ANALYSIS_MAX_SIDE = 2048
 BSPLINE_SMOOTHING = [6, 3, 1.5]  # Gaussian sigma per level, in section pixels
+# The B-spline is fitted to the section sampled at these relative pixel sizes;
+# control points keep only the displacement on which the fits agree to within
+# this fraction of the control-point spacing.
+BSPLINE_SAMPLINGS = (1.0, 0.9, 1.12)
+BSPLINE_AGREEMENT = 0.05
 
 
 @dataclass(frozen=True)
@@ -113,8 +118,7 @@ def _affine_on_silhouettes(fixed_mask, moving_mask):
     return registration.Execute(fixed_smooth, moving_smooth)
 
 
-def _bspline_on_intensities(fixed, moving, fixed_mask, affine, mesh_size):
-    bspline = sitk.BSplineTransformInitializer(fixed, [mesh_size, mesh_size])
+def _bspline_method(fixed_mask, affine, bspline):
     registration = sitk.ImageRegistrationMethod()
     # The affine stays fixed; only the B-spline is optimised (a composite
     # transform cannot be optimised directly).
@@ -131,9 +135,47 @@ def _bspline_on_intensities(fixed, moving, fixed_mask, affine, mesh_size):
     registration.SetSmoothingSigmasPerLevel(BSPLINE_SMOOTHING)
     registration.SetInitialTransform(bspline, inPlace=True)
     registration.SetInterpolator(sitk.sitkLinear)
-    before = registration.MetricEvaluate(fixed, moving)
-    registration.Execute(fixed, moving)
-    after = registration.MetricEvaluate(fixed, moving)
+    return registration
+
+
+def _resampled(image, factor):
+    """``image`` on a grid ``factor`` times coarser, over the same physical extent."""
+    spacing = image.GetSpacing()[0] * factor
+    size = [max(1, int(round(n / factor))) for n in image.GetSize()]
+    reference = sitk.Image(size, sitk.sitkFloat32)
+    reference.SetSpacing((spacing, spacing))
+    reference.SetOrigin((0.5 * spacing, 0.5 * spacing))
+    return sitk.Resample(image, reference, sitk.Transform(), sitk.sitkLinear, 0.0)
+
+
+def _bspline_on_intensities(fixed, moving, fixed_mask, affine, mesh_size):
+    """The B-spline refinement that the section supports reproducibly.
+
+    The intensity match of a real section can have several near-equal optima,
+    so the fit moved by up to 0.8 mm when the section was analysed at a
+    slightly different size. The B-spline is therefore fitted to the section
+    sampled on a few slightly different grids; each control point keeps the
+    average displacement of these fits, reduced to nothing where they
+    disagree by ``BSPLINE_AGREEMENT`` of the control-point spacing.
+    """
+    fits = []
+    for factor in BSPLINE_SAMPLINGS:
+        fit = sitk.BSplineTransformInitializer(fixed, [mesh_size, mesh_size])
+        sampled = moving if factor == 1.0 else _resampled(moving, factor)
+        _bspline_method(fixed_mask, affine, fit).Execute(fixed, sampled)
+        fits.append(fit)
+    # Parameters are all x displacements, then all y displacements.
+    shifts = np.array([fit.GetParameters() for fit in fits]).reshape(len(fits), 2, -1)
+    mean = shifts.mean(axis=0)
+    spread = np.linalg.norm(shifts - mean, axis=1).max(axis=0)
+    control_spacing = max(fixed.GetSize()) * fixed.GetSpacing()[0] / mesh_size
+    weight = np.clip(1.0 - spread / (BSPLINE_AGREEMENT * control_spacing), 0.0, 1.0)
+    bspline = fits[0]
+    # The method reads the transform's parameters when it is set up.
+    bspline.SetParameters((0.0,) * bspline.GetNumberOfParameters())
+    before = _bspline_method(fixed_mask, affine, bspline).MetricEvaluate(fixed, moving)
+    bspline.SetParameters(tuple(float(v) for v in (mean * weight).ravel()))
+    after = _bspline_method(fixed_mask, affine, bspline).MetricEvaluate(fixed, moving)
     composite = sitk.CompositeTransform(2)
     composite.AddTransform(affine)   # applied last
     composite.AddTransform(bspline)  # applied first

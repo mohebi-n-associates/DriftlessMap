@@ -1,6 +1,11 @@
 # Update Log
 
 ### 28th October 2026
+##### DriftlessMap 2.0.0rc13
+
+`auto_registration._bspline_on_intensities` fits the B-spline once per `BSPLINE_SAMPLINGS` (1.0, 0.9, 1.12: the moving image linearly resampled, `_resampled`) and combines the fits per control point: mean displacement × clip(1 − spread / (`BSPLINE_AGREEMENT` 0.05 × control spacing)), spread = largest distance of a fit from the mean. The keep test (MI improved, Dice drop ≤ 0.03) applies to the combined transform. A single fit's optimum moved with the analysis size: over `ANALYSIS_MAX_SIDE` 1700–2500 (10 sizes) a grid of atlas points on the user's sagittal section spread by up to 982 section pixels (median 339); now 7 (median 5). Coronal IM-1109 04: 4 → 4; 01: 5 → 56 at one size (2300), ≤ 18 elsewhere, as the keep decision now has little effect. Synthetic warp, 8 seeds: median error 2.42 px mean, 2.91 worst (was 2.74 / 2.82). Two fits left one coronal section unstable (up to 691 px); a 7 % tolerance gave up to 198 px. B-spline time roughly triples (sagittal action 3 s → 7.5 s).
+
+### 28th October 2026
 ##### DriftlessMap 2.0.0rc12
 
 `LayersControl.add_layer` gave every new layer `DEFAULT_BLEND_MODE` (Overlay) and emitted it; for `img-process` `layers_blend_mode_changed` applies the mode to the histology channel items, and Overlay over the black base layer renders black (inherited from HERBS). `CHANNEL_LAYERS` now starts `img-process` in Plus. Blend modes are not saved in projects, so no migration. Reproduced and verified on the user's 3-channel IM-1109 TIFF (view grab black before, section visible after) for crop and Process Image.
