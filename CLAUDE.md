@@ -10,7 +10,7 @@ or important workflows change.
 
 - Current stable release: DriftlessMap 1.6.1. `main` carries DriftlessMap 2.0,
   published as the release candidate 2.0.0rc1 (after the 2.0.0aN previews).
-  Fixes before the final release become 2.0.0rcN (currently 2.0.0rc10). Plain 2.0.0 is reserved for
+  Fixes before the final release become 2.0.0rcN (currently 2.0.0rc11). Plain 2.0.0 is reserved for
   the release that passes the gates in `release_validation.md`. Never give V2
   work 1.x numbers. A published GitHub release runs `release.yml` (PyPI, trusted
   publishing) and `desktop-builds.yml` (Windows ZIP and macOS DMG attached to
@@ -56,7 +56,9 @@ or important workflows change.
   plane); `DriftlessMap.select_image_planes` re-reads the section.
   Pyramidal single-plane TIFFs (`has_levels`) are read at a stored level
   chosen by the Scale slider, recorded through the saved `image_scale`. `czi_reader.py` handles optional CZI input.
-- `driftlessmap/image_view.py`: image scene/page/channel/LUT state.
+- `driftlessmap/image_view.py`: image scene/page/channel/LUT state. Channel
+  `ImageItem`s (`image_stacks.py`) use `autoDownsample` and additive blending
+  for all 16 channels.
 - `driftlessmap/atlas_matching.py`: GUI-free suggestion of the atlas plane,
   orientation and slice that match a histology section (silhouette search on
   slices exactly as `AtlasView` displays them). Coronal/horizontal matches are

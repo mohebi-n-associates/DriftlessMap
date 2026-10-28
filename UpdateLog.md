@@ -1,6 +1,11 @@
 # Update Log
 
 ### 28th October 2026
+##### DriftlessMap 2.0.0rc11
+
+Channel `ImageItem`s in `image_stacks.ImageStacks` use `setAutoDownsample(True)`: `makeARGB` LUT application on the full 24.8 Mpx raster dominated each display change (0.57 s → 0.055 s per brightness step, measured through `SectionPanel.brightness` on the user's IM-1109 TIFF). Channels 5–16 now also use `CompositionMode_Plus` (only 1–4 did).
+
+### 28th October 2026
 ##### DriftlessMap 2.0.0rc10
 
 New `file_dialogs` module wraps `QFileDialog.getOpenFileName(s)`, `getSaveFileName` and `getExistingDirectory` for all 32 call sites: a start directory that is empty, the home folder or missing is replaced by the last chosen folder (a suggested file name is kept), and every choice is remembered. `user_settings.update_settings` merges keys (`save_last_atlas_path` used to overwrite the file), with `load_last_folder`/`save_last_folder`; settings schema stays 1. Tests use `tests/settings_isolation.py` (temporary `DRIFTLESSMAP_CONFIG_DIR`).

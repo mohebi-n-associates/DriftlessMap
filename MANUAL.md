@@ -1,6 +1,6 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 2.0.0rc10**, the release candidate of
+This manual applies to **DriftlessMap 2.0.0rc11**, the release candidate of
 DriftlessMap 2.0. The current stable release is 1.6.1; `pip install driftlessmap`
 keeps installing 1.6.1 until 2.0.0 is released, and Section 2 explains how to
 install the release candidate.
@@ -110,7 +110,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-DriftlessMap 2.0.0rc10 requires:
+DriftlessMap 2.0.0rc11 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -528,7 +528,9 @@ project or download the Allen mouse atlas.
 
 Display settings (colour, visibility, brightness, contrast, gamma, curves)
 change only how the image looks; the pixel values, registration input and
-coordinates stay the same. Mapping without a review is allowed and is recorded
+coordinates stay the same. Channels are coloured at the resolution the screen
+shows, so display changes stay quick on whole-slide images; zooming in shows
+full resolution. Mapping without a review is allowed and is recorded
 as not reviewed. Review fingerprints also identify the triangle connectivity.
 Projects reviewed before 2.0.0a26 need a fresh review; their stored results are
 preserved, and marks mapped with the same landmarks, page, tilt and image stay

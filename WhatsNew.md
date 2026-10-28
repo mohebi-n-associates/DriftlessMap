@@ -3,6 +3,17 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.0.0rc11
+
+Release-candidate fix, 28 October 2026.
+
+Brightness, contrast, range and gamma respond smoothly on large images. Each
+slider step on a 5990 x 4147 section took over half a second because every pixel
+was recoloured; channels are now coloured at the resolution the screen shows
+(about ten times faster), and zooming in still shows full resolution. Images with
+more than four channels now show every channel added together; channels five and
+up were drawn over the others.
+
 ## DriftlessMap 2.0.0rc10
 
 Release-candidate fix, 28 October 2026.

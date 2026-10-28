@@ -588,6 +588,18 @@ class V2ShellTests(unittest.TestCase):
             self.assertIn("Exported", results.export_status.text())
 
     @isolated_gui_test
+    def test_channels_render_at_screen_size_and_add_up(self):
+        from PyQt6.QtGui import QPainter
+
+        with tempfile.TemporaryDirectory() as folder:
+            stacks = self.make_window(folder).engine.image_view.img_stacks
+            self.assertGreater(len(stacks.image_list), 4)
+            for channel in stacks.image_list:
+                self.assertTrue(channel.autoDownsample)
+                self.assertEqual(channel.paintMode,
+                                 QPainter.CompositionMode.CompositionMode_Plus)
+
+    @isolated_gui_test
     def test_checked_regions_show_in_3d(self):
         class Mesh:
             def __init__(self):

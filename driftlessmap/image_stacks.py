@@ -281,6 +281,14 @@ class ImageStacks(pg.GraphicsLayoutWidget):
         self.image_list = [img1, img2, img3, img4] + [
             pg.ImageItem() for _ in range(4, MAX_CHANNELS)
         ]
+        for channel in self.image_list:
+            # Channels add up, also beyond the fourth.
+            channel.setCompositionMode(QPainter.CompositionMode.CompositionMode_Plus)
+            # Colour only as many pixels as the screen shows: recolouring a
+            # whole-slide channel on every display change (each step of a
+            # brightness slider) took half a second. Pixel values are unchanged,
+            # and zooming in renders full resolution.
+            channel.setAutoDownsample(True)
         self.image_dict = {'img-overlay': overlay_img,
                            'overlay_contour': overlay_contour,
                            'img-virus': virus_img,
