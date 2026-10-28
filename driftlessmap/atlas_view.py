@@ -35,7 +35,10 @@ from .resources import resource_path
 
 
 class PageController(QWidget):
-    DRAG_UPDATE_DELAY_MS = 75
+    # While the slider is dragged, pages are drawn at most this often: the
+    # timer is started by the first move and not restarted by later ones, so
+    # the view follows a continuous drag instead of waiting for a pause.
+    DRAG_UPDATE_DELAY_MS = 40
 
     class SignalProxy(QObject):
         sigPageChanged = pyqtSignal(object)
@@ -116,7 +119,8 @@ class PageController(QWidget):
         self.page_label.setText(str(val))
         if self.page_slider.isSliderDown():
             self._pending_page = val
-            self._drag_update_timer.start()
+            if not self._drag_update_timer.isActive():
+                self._drag_update_timer.start()
             return
         self._drag_update_timer.stop()
         self._pending_page = None
@@ -832,14 +836,17 @@ class AtlasView(QObject):
         step = self._coronal_preview_step()
         self._coronal_preview = step > 1
         page = self.current_coronal_index
-        da_atlas_slice = self.atlas_data[::step, ::step, page]
-        da_atlas_label = self.atlas_label[::step, ::step, page]
+        # Copy the page out of the volume once: as a view, every later pass
+        # (levels, colour lookup, labels) reads scattered values again.
+        da_atlas_slice = np.ascontiguousarray(self.atlas_data[::step, ::step, page])
+        da_atlas_label = np.ascontiguousarray(self.atlas_label[::step, ::step, page])
         da_atlas_contour = None
         if self.cimg.boundary.isVisible():
             if self.atlas_boundary is None:
                 da_atlas_contour = make_contour_img(da_atlas_label)
             else:
-                da_atlas_contour = self.atlas_boundary['c_contour'][::step, ::step, page]
+                da_atlas_contour = np.ascontiguousarray(
+                    self.atlas_boundary['c_contour'][::step, ::step, page])
         display_label = self.label_tree.map_labels(da_atlas_label)
         self.cimg.set_data(
             da_atlas_slice,

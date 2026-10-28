@@ -6,6 +6,7 @@ import numpy as np
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PyQt6.QtCore import QPointF, Qt
 from PyQt6.QtGui import QKeyEvent
+from PyQt6.QtTest import QTest
 from PyQt6.QtWidgets import QApplication
 from pyqtgraph.GraphicsScene import GraphicsScene
 
@@ -68,6 +69,19 @@ class PageControllerTests(unittest.TestCase):
         controller._flush_pending_page()
 
         self.assertEqual(pages, [11])
+
+    def test_a_continuous_drag_keeps_drawing_pages(self):
+        controller = PageController()
+        pages = []
+        controller.sig_page_changed.connect(pages.append)
+        controller.set_max(40)
+        controller.page_slider.setSliderDown(True)
+        # Moves arrive faster than the update interval, without a pause.
+        for page in range(1, 21):
+            controller.page_slider.setValue(page)
+            QTest.qWait(controller.DRAG_UPDATE_DELAY_MS // 3)
+        self.assertGreaterEqual(len(pages), 2)
+        self.assertEqual(pages, sorted(pages))
 
     def test_releasing_the_slider_reports_the_settled_page(self):
         controller = PageController()
