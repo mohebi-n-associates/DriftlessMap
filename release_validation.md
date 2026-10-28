@@ -1,8 +1,10 @@
 # DriftlessMap 2.0 release validation
 
-Development preview: **2.0.0a27**, 28 October 2026. Stable release: **1.6.1**.
+Release candidate: **2.0.0rc1**, 28 October 2026 (PyPI pre-release and GitHub
+pre-release with Windows and macOS builds). Stable release: **1.6.1**.
 Passing automated tests does not satisfy the native-installation or user-evaluation
-gates. Keep the alpha version until every required gate has recorded evidence.
+gates. Keep release-candidate versions (2.0.0rcN) until every required gate has
+recorded evidence; then release 2.0.0.
 
 ## Correctness checks added in a26
 
@@ -42,7 +44,7 @@ Local validation uses Python 3.13.9, NumPy 2.3.5, pyqtgraph 0.14.0 and SimpleITK
 2.5.6 on macOS arm64. It is not evidence for the other CI Python versions or for
 a packaged installer.
 
-Recorded a27 result: **378 tests run, 376 passed, 2 skipped** (122 seconds).
+Recorded 2.0.0rc1 result: **378 tests run, 376 passed, 2 skipped** (122 seconds).
 Both skips require an externally configured real section/atlas fixture. Ruff,
 mypy (31 modules), Python compilation, Qt UI parsing, guide equality and
 `git diff --check` passed. Recovery archive creation and reopening, failed-load
