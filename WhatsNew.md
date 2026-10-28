@@ -3,6 +3,19 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.0.0rc13
+
+Release-candidate fix, 28 October 2026.
+
+Propose Landmarks gives nearly the same landmarks for the same section. The
+intensity refinement could settle on quite different fits for practically the
+same image, so landmarks on a whole-slide sagittal section moved by up to
+0.8 mm when the section was analysed at a slightly different size. The
+refinement is now fitted three times on slightly different samplings of the
+section and keeps only the movement the fits agree on; the same points now
+move by a few pixels. Accuracy on a known deformation is about the same
+(slightly better on average). Proposing landmarks takes a few seconds longer.
+
 ## DriftlessMap 2.0.0rc12
 
 Release-candidate fix, 28 October 2026.

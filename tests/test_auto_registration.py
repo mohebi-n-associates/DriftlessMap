@@ -5,6 +5,7 @@ from unittest import mock
 
 import cv2
 import numpy as np
+import SimpleITK as sitk
 
 from driftlessmap.atlas_matching import tissue_mask
 from driftlessmap.auto_registration import (
@@ -95,6 +96,46 @@ class ProposeLandmarkTests(unittest.TestCase):
                 proposal = propose_landmarks(intensity, labels, section, boundary_points=grid)
                 errors = np.linalg.norm(proposal.boundary_points - known_warp(grid), axis=1)
                 self.assertLess(np.median(errors), 3.5, errors)
+
+    def test_bspline_keeps_only_displacements_its_fits_agree_on(self):
+        # On real sections the B-spline optimum moved by up to 0.8 mm when the
+        # section was analysed at a slightly different size.
+        from driftlessmap import auto_registration
+
+        fixed = auto_registration._as_image(np.zeros((60, 60), np.float32), 1.0)
+        mask = sitk.Cast(fixed > -1, sitk.sitkUInt8)
+        size = sitk.BSplineTransformInitializer(fixed, [6, 6]).GetNumberOfParameters() // 2
+        tolerance = auto_registration.BSPLINE_AGREEMENT * 60 / 6
+        agreed = np.zeros((2, size))
+        agreed[:, 0] = (3.0, -2.0)      # the same in every fit
+        fits = []
+        for k in range(len(auto_registration.BSPLINE_SAMPLINGS)):
+            shifts = agreed.copy()
+            shifts[0, 1] = 4.0 * k      # a different optimum in every fit
+            shifts[1, 2] = 3.0 + 0.1 * tolerance * k  # nearly the same
+            fits.append(shifts)
+
+        class Method:
+            def __init__(self, transform):
+                self.transform = transform
+
+            def Execute(self, fixed, moving):
+                self.transform.SetParameters(tuple(fits.pop(0).ravel()))
+
+            def MetricEvaluate(self, fixed, moving):
+                return -float(np.abs(self.transform.GetParameters()).sum())
+
+        with mock.patch.object(auto_registration, "_bspline_method",
+                               lambda _mask, _affine, bspline: Method(bspline)):
+            composite, improved = auto_registration._bspline_on_intensities(
+                fixed, fixed, mask, sitk.AffineTransform(2), 6)
+        self.assertTrue(improved)
+        result = np.array(composite.GetNthTransform(1).GetParameters()).reshape(2, -1)
+        np.testing.assert_allclose(result[:, 0], (3.0, -2.0))
+        np.testing.assert_allclose(result[:, 1], 0.0)
+        self.assertGreater(result[1, 2], 2.0)
+        self.assertLess(result[1, 2], 3.0 + 0.1 * tolerance)
+        np.testing.assert_allclose(result[:, 3:], 0.0)
 
     def test_large_sections_are_analysed_on_a_copy_in_their_own_pixels(self):
         # Whole-slide sections (tens of megapixels) are analysed on a reduced

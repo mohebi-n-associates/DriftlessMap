@@ -130,8 +130,11 @@ The fit has two stages:
 2. **Deformable refinement.** A smooth B-spline warp is fitted on the image
    intensities using mutual information. Mutual information tolerates the
    different contrast of a stained section and the atlas template. The warp
-   is kept only if it improves the intensity match without making the outline
-   match noticeably worse; otherwise the outline fit is used.
+   is fitted three times, to the section sampled on slightly different
+   grids, and keeps only the movement on which the three fits agree, so a
+   slightly different image does not move the landmarks far. It is kept only
+   if it improves the intensity match without making the outline match
+   noticeably worse; otherwise the outline fit is used.
 
 DriftlessMap then suggests up to 10 landmarks of two kinds. Both are
 features you can see and check in both images:
