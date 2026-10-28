@@ -1,6 +1,11 @@
 # Update Log
 
 ### 28th October 2026
+##### DriftlessMap 2.0.0rc8
+
+`persistence._fsync_file` opened the temporary archive read-only before `os.fsync`; Windows' `_commit` rejects read-only handles with EBADF, so every `save_driftlessmap_file` (projects, layers, objects, Export all results) failed on Windows since atomic saves gained the flush. It now opens the file `r+b` and treats a failing flush as best effort (some network/removable drives cannot flush; `os.replace` stays atomic). `switch_3d_display_mode` referred to `actionMode_Dark` instead of `action3D_Mode_Dark` (AttributeError on every 3D mode switch).
+
+### 28th October 2026
 ##### DriftlessMap 2.0.0rc7
 
 Mark displays now follow their data: `_transform_accept` redraws each mapped kind with `_show_section_marks` (the 1.x transfer cleared `working_img_data` but left the plot items and layer thumbnails), `_make_pieces_of` calls `_show_atlas_marks` after the maker cleared the atlas marks, and `_show_section_marks` clears the item/layer (`_clear_section_item`) and the probe trajectory when a kind is empty. New `clear_live_marks(kind)`; `ProbeControls.delete_probe` uses it for the selected probe's unmapped marks.

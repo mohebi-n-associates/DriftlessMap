@@ -587,6 +587,17 @@ class V2ShellTests(unittest.TestCase):
             self.assertIn("Exported", results.export_status.text())
 
     @isolated_gui_test
+    def test_3d_display_mode_switches_both_ways(self):
+        with tempfile.TemporaryDirectory() as folder:
+            engine = self.make_window(folder).engine
+            engine.action3D_Mode_Dark.trigger()
+            self.assertEqual(engine.display_mode_3d, "light")
+            self.assertEqual(engine.action3D_Mode_Dark.text(), "3D Mode: Light")
+            engine.action3D_Mode_Dark.trigger()
+            self.assertEqual(engine.display_mode_3d, "dark")
+            self.assertEqual(engine.action3D_Mode_Dark.text(), "3D Mode: Dark")
+
+    @isolated_gui_test
     def test_a_deleted_probe_leaves_no_marks_on_screen(self):
         import cv2
         from unittest.mock import patch

@@ -3,6 +3,14 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.0.0rc8
+
+Release-candidate fix, 28 October 2026.
+
+Saving works on Windows again. Projects, layers and Export all results failed
+there with "Unable to save DriftlessMap file: [Errno 9] Bad file descriptor".
+Switching the 3D view between dark and light mode no longer raises an error.
+
 ## DriftlessMap 2.0.0rc7
 
 Release-candidate fix, 28 October 2026.

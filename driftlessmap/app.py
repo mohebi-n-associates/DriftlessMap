@@ -1012,7 +1012,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, QMainWindow, FORM_Ma
             self.atlas_view.ml_plate_mesh.setGLOptions("translucent")
             self.display_mode_3d = "light"
             self.obj_display_mode = "additive"
-            self.actionMode_Dark.setText("3D Mode: light")
+            self.action3D_Mode_Dark.setText("3D Mode: Light")
         else:
             self.view3d.setBackgroundColor(pg.mkColor(0, 0, 0))
             self.atlas_view.mesh.setGLOptions("additive")
@@ -1021,7 +1021,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, QMainWindow, FORM_Ma
             self.atlas_view.ml_plate_mesh.setGLOptions("additive")
             self.display_mode_3d = "dark"
             self.obj_display_mode = "opaque"
-            self.actionMode_Dark.setText("3D Mode: dark")
+            self.action3D_Mode_Dark.setText("3D Mode: Dark")
 
     def show_3d_planes(self):
         if self.is_planes_on:

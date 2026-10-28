@@ -301,6 +301,40 @@ class SafeArchiveTests(unittest.TestCase):
 
 
 class AtomicSaveTests(unittest.TestCase):
+    @unittest.skipUnless(os.name == "posix", "reads descriptor flags with fcntl")
+    def test_saves_flush_through_a_writable_handle(self):
+        # Windows refuses to flush a read-only handle ("[Errno 9] Bad file
+        # descriptor"), which made every save fail there.
+        import errno
+        import fcntl
+        from unittest import mock
+
+        real_fsync = os.fsync
+
+        def windows_fsync(descriptor):
+            if fcntl.fcntl(descriptor, fcntl.F_GETFL) & os.O_ACCMODE == os.O_RDONLY:
+                raise OSError(errno.EBADF, "Bad file descriptor")
+            return real_fsync(descriptor)
+
+        with tempfile.TemporaryDirectory() as folder, \
+                mock.patch.object(persistence.os, "fsync", windows_fsync):
+            path = Path(folder) / "project.dmap"
+            success, error = persistence.save_driftlessmap_file(
+                path, {"a": np.arange(3)}, "test")
+            self.assertTrue(success, error)
+            self.assertEqual(persistence.load_driftlessmap_file(path, "test")[0]["a"].tolist(),
+                             [0, 1, 2])
+
+    def test_a_drive_that_cannot_flush_still_saves(self):
+        from unittest import mock
+
+        with tempfile.TemporaryDirectory() as folder, \
+                mock.patch.object(persistence.os, "fsync", side_effect=OSError("no flush")):
+            path = Path(folder) / "project.dmap"
+            success, error = persistence.save_driftlessmap_file(path, {"a": 1}, "test")
+            self.assertTrue(success, error)
+            self.assertEqual([p.name for p in Path(folder).iterdir()], ["project.dmap"])
+
     @unittest.skipUnless(os.name == "posix", "POSIX permissions")
     def test_saved_files_use_umask_or_keep_existing_permissions(self):
         with tempfile.TemporaryDirectory() as folder:
