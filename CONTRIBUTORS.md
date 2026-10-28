@@ -5,7 +5,8 @@
 DriftlessMap is maintained and developed by:
 
 - [Mohebi & Associates](https://www.mohebi-associates.org/)
-- [Ali Mohebi](https://www.mohebial.com/) — project lead and maintainer
+- [Ali Mohebi, PhD](https://www.mohebial.com/) — project lead and maintainer
+- Esther Lara Gonzalez, PhD — contributor
 - Additional contributors recorded in the repository's Git history
 
 ## Original HERBS project
