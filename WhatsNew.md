@@ -3,6 +3,15 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.0.0rc9
+
+Release-candidate fix, 28 October 2026.
+
+Regions checked in the Regions list appear in the 3D view, for example prelimbic
+as its layers. The 2.0 interface has a Show checked regions in 3D option, on by
+default; the classic Show in 3D view button now also shows regions checked before
+it was pressed and hides them again when it is released.
+
 ## DriftlessMap 2.0.0rc8
 
 Release-candidate fix, 28 October 2026.

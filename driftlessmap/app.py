@@ -6304,11 +6304,30 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, QMainWindow, FORM_Ma
     #                       Atlas 3D control
     #
     # ------------------------------------------------------------------
-    def show_small_area_in_3d(self):
+    def show_small_area_in_3d(self, visible=None):
+        """Show (or hide) the checked regions' meshes in the 3D view."""
+        self.show_child_mesh = (not self.show_child_mesh if not isinstance(visible, bool)
+                                else visible)
+        self.sync_region_meshes()
+
+    def sync_region_meshes(self):
+        """Show exactly the checked regions' meshes while regions are shown in 3D.
+
+        Checking a region checks its subregions, so a region drawn in the
+        atlas as its layers (prelimbic as PL1-PL6b) shows as those meshes.
+        """
+        checked = self.atlas_view.label_tree.checked
+        wanted = set()
         if self.show_child_mesh:
-            self.show_child_mesh = False
-        else:
-            self.show_child_mesh = True
+            for label_id in checked:
+                try:
+                    wanted.add(str(int(label_id)))
+                except (TypeError, ValueError):
+                    continue
+        for key, mesh in self.small_mesh_list.items():
+            if mesh.visible() != (key in wanted):
+                mesh.setVisible(key in wanted)
+        self.previous_checked_label = list(checked)
 
     def composition_3d_changed(self):
         if self.atlas_view.atlas_data is None:
@@ -6329,47 +6348,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, QMainWindow, FORM_Ma
         self.atlas_view.simg.label_img.setLookupTable(lut=lut)
         self.atlas_view.himg.label_img.setLookupTable(lut=lut)
 
-        if len(self.small_mesh_list) == 0:
-            return
-        valid_id = list(self.small_mesh_list.keys())
-        current_checked_label = list(self.atlas_view.label_tree.checked)
-        n_current_label = len(current_checked_label)
-        n_previous_label = len(self.previous_checked_label)
-        if self.show_child_mesh:
-            if n_current_label > n_previous_label:
-                label_to_show = [
-                    id
-                    for id in current_checked_label
-                    if id not in self.previous_checked_label
-                ]
-                label_to_show = list(np.ravel(label_to_show).astype(str))
-                for id in label_to_show:
-                    if id in valid_id:
-                        self.small_mesh_list[id].setVisible(True)
-            else:
-                label_to_hide = [
-                    id
-                    for id in self.previous_checked_label
-                    if id not in current_checked_label
-                ]
-                label_to_hide = list(np.ravel(label_to_hide).astype(str))
-                for id in label_to_hide:
-                    if id in valid_id:
-                        self.small_mesh_list[id].setVisible(False)
-        self.previous_checked_label = current_checked_label
-
-        check_id = list(self.atlas_view.label_tree.checked)
-
-        if self.show_child_mesh:
-            if len(check_id) != 0:
-                for id in check_id:
-                    if id in valid_id:
-                        if not self.small_mesh_list[id].visible():
-                            self.small_mesh_list[id].setVisible(True)
-            else:
-                for id in valid_id:
-                    if self.small_mesh_list[id].visible():
-                        self.small_mesh_list[id].setVisible(False)
+        self.sync_region_meshes()
 
     def sig_label_color_changed(self, ev):
         lut = self.atlas_view.label_tree.lookup_table()
