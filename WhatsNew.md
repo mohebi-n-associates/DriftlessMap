@@ -3,6 +3,12 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.0.0a22
+
+Development preview, 27 October 2026 (`v2-implants` branch; not a release)
+
+No more "numba library could not be loaded" warnings in the terminal: pyqtgraph's optional numba acceleration is now only turned on when numba is installed (it is not a DriftlessMap requirement, and is often unavailable for the newest Python).
+
 ## DriftlessMap 2.0.0a21
 
 Development preview, 27 October 2026 (`v2-implants` branch; not a release)

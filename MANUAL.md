@@ -1,6 +1,6 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 2.0.0a21**, a development preview of
+This manual applies to **DriftlessMap 2.0.0a22**, a development preview of
 DriftlessMap 2.0 (the `main` branch, not a release). The current stable release is
 1.6.1; its desktop downloads are described in Section 2.2.
 
@@ -109,7 +109,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-DriftlessMap 2.0.0a21 requires:
+DriftlessMap 2.0.0a22 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -177,7 +177,7 @@ python -c "import driftlessmap; print(driftlessmap.__version__)"
 ```
 
 The final command prints the installed version: `1.6.1` for the stable
-release, or `2.0.0a21` for this development preview installed from the
+release, or `2.0.0a22` for this development preview installed from the
 `v2-redesign` branch.
 
 ### 2.5 Launching DriftlessMap

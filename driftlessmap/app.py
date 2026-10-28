@@ -2,6 +2,7 @@ import os
 import sys
 from os.path import dirname, realpath, join
 import copy
+import importlib.util
 import hashlib
 from contextlib import contextmanager
 from pathlib import Path
@@ -45,7 +46,9 @@ from PyQt6.uic import loadUiType
 import pyqtgraph as pg
 
 pg.setConfigOption("imageAxisOrder", "row-major")
-pg.setConfigOption("useNumba", True)
+# numba is optional; pyqtgraph warns on every image drawn when it is asked
+# to use numba that is not installed.
+pg.setConfigOption("useNumba", importlib.util.find_spec("numba") is not None)
 import pyqtgraph.opengl as gl
 
 from .utils import (
