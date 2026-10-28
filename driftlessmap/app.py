@@ -23,6 +23,7 @@ from PyQt6.QtWidgets import (
     QFrame,
     QGridLayout,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QMainWindow,
     QMessageBox,
@@ -163,7 +164,7 @@ from .probe_reconstruction import (
     source_vox_to_herbs_vox,
 )
 from .roi_analysis import build_drawing_roi_info
-from .atlas_matching import suggest_sections
+from .atlas_matching import plane_from_name, planes_for, suggest_sections
 from .auto_registration import propose_landmarks
 from .background import run_in_background
 from .section_suggestion_dialog import SectionSuggestionDialog
@@ -266,6 +267,8 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, QMainWindow, FORM_Ma
         self.current_atlas_path = None
 
         self.current_img_path = None
+        # The plane the user said the section is cut in (atlas_matching.PLANE_CHOICES).
+        self.section_plane = None
         self.current_img_name = None
 
         self.atlas_img_path = None
@@ -1992,8 +1995,30 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, QMainWindow, FORM_Ma
             return None
         return section
 
-    def suggest_atlas_section(self):
-        """Suggest and apply the atlas plane, slice and tilt for the section."""
+    def ask_section_plane(self):
+        """Ask which plane the section is cut in; return a plane choice or None.
+
+        The outline alone does not reliably tell the planes apart, so the
+        search is limited to the plane the user names. The question starts at
+        the last answer, or at the plane named in the image file name.
+        """
+        labels = {"coronal": "Coronal", "sagittal": "Sagittal",
+                  "horizontal": "Horizontal", "auto": "Not sure: detect the plane"}
+        current = self.section_plane or plane_from_name(self.current_img_path) or "coronal"
+        choices = list(labels)
+        label, accepted = QInputDialog.getItem(
+            self, "Section plane", "Which plane is this section cut in?",
+            [labels[choice] for choice in choices], choices.index(current), False)
+        if not accepted:
+            return None
+        return choices[[labels[choice] for choice in choices].index(label)]
+
+    def suggest_atlas_section(self, plane=None):
+        """Suggest and apply the atlas plane, slice and tilt for the section.
+
+        ``plane`` is a plane choice (``"coronal"``, ``"sagittal"``,
+        ``"horizontal"`` or ``"auto"``); without one the user is asked.
+        """
         if (
             self.current_atlas != "volume"
             or self.atlas_view.atlas_data is None
@@ -2010,6 +2035,12 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, QMainWindow, FORM_Ma
                 self.error_message_color,
             )
             return
+        if plane is None:
+            plane = self.ask_section_plane()
+            if plane is None:
+                return
+        planes = planes_for(plane)
+        self.section_plane = plane
         view = self.atlas_view
         section = self.registration_section()
         if section is None:
@@ -2029,6 +2060,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, QMainWindow, FORM_Ma
                 view.atlas_data,
                 midline,
                 pivot,
+                planes=planes,
             )
         except ValueError as exc:
             self.print_message(

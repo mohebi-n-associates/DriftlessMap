@@ -1,6 +1,6 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 2.0.0rc3**, the release candidate of
+This manual applies to **DriftlessMap 2.0.0rc4**, the release candidate of
 DriftlessMap 2.0. The current stable release is 1.6.1; `pip install driftlessmap`
 keeps installing 1.6.1 until 2.0.0 is released, and Section 2 explains how to
 install the release candidate.
@@ -110,7 +110,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-DriftlessMap 2.0.0rc3 requires:
+DriftlessMap 2.0.0rc4 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -884,8 +884,15 @@ atlas and ranks candidate sections:
    better (by more than 0.05); otherwise close orientations are told apart by
    internal anatomy. Of two mirror images the unflipped one is shown: the
    side is your choice below.
-2. Choose **Atlas > Suggest Atlas Section...**. The comparison runs in the
-   background and usually takes a few seconds. Fine atlases (for example
+2. Choose **Atlas > Suggest Atlas Section...** (in the 2.0 interface, choose
+   the **Section plane** in the Match step and press **Find atlas section**).
+   Say which plane the section is cut in: coronal, sagittal or horizontal.
+   The search then stays in that plane. The outline is compared without its
+   physical size, so a small slice of one plane can resemble a whole section
+   of another; choose **Not sure** only to compare all three planes. The
+   plane starts at your last answer, or at the plane named in the image file
+   name (`..._coronal_...`, `sagittal`/`sagital`, `horizontal`/`axial`).
+   The comparison runs in the background and usually takes a few seconds. Fine atlases (for example
    Allen 10 µm) are searched on a copy sampled to at most 560 voxels per side
    (30 µm for Allen 10 µm), since every comparison is made on a small
    normalised image anyway; each suggested depth is then refined page by

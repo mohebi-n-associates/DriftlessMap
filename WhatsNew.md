@@ -3,6 +3,17 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.0.0rc4
+
+Release-candidate fix, 28 October 2026.
+
+Finding the atlas section asks which plane the section is cut in (coronal,
+sagittal or horizontal) and searches only that plane. Comparing outlines alone had
+matched a frontal coronal section to the edge of a sagittal slice. In the 2.0
+interface the Section plane is chosen in the Match step and is read from the file
+name when it says coronal, sagittal or horizontal; Not sure still compares all
+three planes.
+
 ## DriftlessMap 2.0.0rc3
 
 Release-candidate fix, 28 October 2026.

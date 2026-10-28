@@ -13,6 +13,8 @@ reliable for choosing the plane and orientation. Silhouettes alone barely
 change with depth, so depth is refined from internal anatomy separately.
 """
 
+import os
+import re
 from dataclasses import dataclass, replace
 
 import cv2
@@ -20,6 +22,10 @@ import numpy as np
 
 
 PLANES = ("coronal", "sagittal", "horizontal")
+# The user's answer to "which plane is the section cut in?"; "auto" searches all.
+PLANE_CHOICES = PLANES + ("auto",)
+_PLANE_WORDS = {"coronal": "coronal", "sagittal": "sagittal", "sagital": "sagittal",
+                "horizontal": "horizontal", "axial": "horizontal"}
 CANVAS = 192
 FIT = 160
 MAX_SLICES_PER_PLANE = 240
@@ -198,6 +204,24 @@ def same_up_to_hemisphere(plane, first, second):
         return True
     axis = ML_AXIS[plane]
     return axis is not None and a.shape == b.shape and np.array_equal(a, np.flip(b, axis))
+
+
+def planes_for(choice):
+    """The planes searched for a plane choice (see :data:`PLANE_CHOICES`)."""
+    if choice in (None, "auto"):
+        return PLANES
+    if choice not in PLANES:
+        raise ValueError("Unknown section plane: {}".format(choice))
+    return (choice,)
+
+
+def plane_from_name(path):
+    """The plane named in a file name (``..._coronal_...``), or None."""
+    if not path:
+        return None
+    words = re.split(r"[^a-z]+", os.path.basename(str(path)).lower())
+    found = {_PLANE_WORDS[word] for word in words if word in _PLANE_WORDS}
+    return found.pop() if len(found) == 1 else None
 
 
 def plane_length(shape, plane):
@@ -746,15 +770,21 @@ def _refine_page(histology, label_volume, intensity_volume, plane, orientation,
 def suggest_sections(histology, label_volume, intensity_volume, midline, pivot,
                      max_suggestions=6, depth_candidates=4,
                      angles=(-6, -3, 0, 3, 6), progress=None,
-                     max_side=SEARCH_MAX_SIDE):
+                     max_side=SEARCH_MAX_SIDE, planes=PLANES):
     """Plane, orientation, depth and tilt suggestions for one section.
 
     ``midline`` is the sagittal page index of the midline (for searching one
     hemisphere); ``pivot`` is the current (coronal, sagittal, horizontal) page
     indices of the atlas view. Large atlases are searched on a sampled copy
     (see :data:`SEARCH_MAX_SIDE`); the suggested pages are full-resolution
-    pages.
+    pages. ``planes`` limits the search to the planes the section may be cut
+    in; the outline alone does not reliably tell them apart, because it is
+    compared without its physical size.
     """
+    planes = tuple(planes)
+    if not planes or any(plane not in PLANES for plane in planes):
+        raise ValueError("Unknown section plane: {}".format(", ".join(planes)))
+
     def stage(start, end):
         if progress is None:
             return None
@@ -766,7 +796,7 @@ def suggest_sections(histology, label_volume, intensity_volume, midline, pivot,
     coarse_midline = None if midline is None else midline / factor
     coarse_pivot = tuple(value / factor for value in pivot)
 
-    candidates = search_planes(histology, labels, progress=stage(0.0, 0.25))
+    candidates = search_planes(histology, labels, planes, progress=stage(0.0, 0.25))
     planes = best_by_plane(candidates)
     best = planes[0]
     length = plane_length(labels.shape, best.plane)

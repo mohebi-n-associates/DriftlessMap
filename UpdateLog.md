@@ -1,6 +1,11 @@
 # Update Log
 
 ### 28th October 2026
+##### DriftlessMap 2.0.0rc4
+
+`atlas_matching.suggest_sections(..., planes=)` restricts `search_planes`; `PLANE_CHOICES`, `planes_for(choice)` and `plane_from_name(path)` (one unambiguous plane word in the file name). `DriftlessMap.suggest_atlas_section(plane=None)` asks with `ask_section_plane` (QInputDialog, preselected from `section_plane` or the file name) when no plane is given and remembers `section_plane` for the session. V2 Match step: Section plane combo (`MatchPanel.chosen_plane`), and `match.find` passes it. On the user's IM-1109 coronal DAPI/DiI/DiO section the unconstrained search preferred a lateral sagittal page (outline 0.763 vs 0.769, scale-free); constrained to coronal it returns frontal coronal pages.
+
+### 28th October 2026
 ##### DriftlessMap 2.0.0rc3
 
 Lasso closing: the image lasso compared a squared distance with 5 % of the image size (a few image pixels on large images) and the slice lasso used a squared distance < 5; both now close within `LASSO_CLOSE_PIXELS` (12) screen pixels via `layer_geometry.lasso_tolerance(view_box)`/`lasso_closes`. `lasso_points_clicked` read the slot arguments as (points, ev) and tested only `ev[0]`; pyqtgraph lists points last first, so clicking the first point of a closed or overlapping lasso hit the duplicate last point and called `inactive_lasso`. It now closes only when any clicked point has index 0 (`lasso_point_closes`) and otherwise does nothing. `cut_image`/`crop_slice` close an open lasso of ≥3 points (`close_image_lasso`/`close_slice_window_lasso`) and report when there is none.

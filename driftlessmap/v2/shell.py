@@ -531,7 +531,9 @@ class V2Window(QMainWindow):
         add(Command("section.channels", "Choose registration channels",
                     lambda: self.go_to("section"), "Section",
                     ("registration channels", "dapi", "registration input")))
-        add(Command("match.find", "Find atlas section", engine.suggest_atlas_section, "Match",
+        add(Command("match.find", "Find atlas section",
+                    lambda: engine.suggest_atlas_section(
+                        plane=self.panels["match"].chosen_plane()), "Match",
                     ("suggest atlas section", "automatic matching"), available=needs_both))
         add(Command("register.suggest", "Suggest landmarks",
                     engine.propose_registration_landmarks, "Register",

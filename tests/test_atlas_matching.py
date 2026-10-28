@@ -257,6 +257,33 @@ class OrientationChoiceTests(unittest.TestCase):
         self.assertEqual(chosen.orientation, flipped)
 
 
+class PlaneChoiceTests(unittest.TestCase):
+    def test_file_names_name_the_plane(self):
+        from driftlessmap.atlas_matching import plane_from_name, planes_for
+
+        self.assertEqual(plane_from_name("/d/04-IM-1109_4x_coronal_DAPI.tif"), "coronal")
+        self.assertEqual(plane_from_name("brain sagital 3.tif"), "sagittal")
+        self.assertEqual(plane_from_name("slice_axial.png"), "horizontal")
+        self.assertIsNone(plane_from_name("IM_1112_left.tif"))
+        self.assertIsNone(plane_from_name("coronal_vs_sagittal.tif"))
+        self.assertIsNone(plane_from_name(None))
+        self.assertEqual(planes_for("auto"), ("coronal", "sagittal", "horizontal"))
+        self.assertEqual(planes_for("sagittal"), ("sagittal",))
+        with self.assertRaises(ValueError):
+            planes_for("oblique")
+
+    def test_the_search_stays_in_the_chosen_plane(self):
+        labels = synthetic_brain()
+        intensity = np.where(labels > 0, 120.0, 0.0)
+        section, _ = fake_section(labels, "coronal", 42, 0)
+        for plane in ("sagittal", "horizontal"):
+            with self.subTest(plane=plane):
+                report = suggest_sections(section, labels, intensity, 25, (42, 25, 20),
+                                          angles=(0,), planes=(plane,))
+                self.assertEqual({c.plane for c in report.plane_candidates}, {plane})
+                self.assertTrue(all(s.plane == plane for s in report.suggestions))
+
+
 class UprightPreferenceTests(unittest.TestCase):
     def test_mirror_images_resolve_to_the_unflipped_upright_form(self):
         self.assertEqual(preferred_form("coronal", Orientation(0, True)), Orientation(0, False))
