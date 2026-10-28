@@ -1,7 +1,10 @@
 """Small building blocks shared by the V2 step panels."""
 
-from PyQt6.QtCore import Qt
+import time
+
+from PyQt6.QtCore import QEventLoop, Qt
 from PyQt6.QtWidgets import (
+    QApplication,
     QFrame,
     QGridLayout,
     QHBoxLayout,
@@ -99,6 +102,71 @@ def set_status(label, text, kind=None):
         label.style().polish(label)
 
 
+# An action that holds the window longer than this counts as having blocked it.
+BLOCKING_SECONDS = 0.2
+
+
+class _Responder:
+    """Gives every button immediate feedback and drops repeated clicks.
+
+    A click shows the busy cursor and repaints before the action starts, so
+    the user sees it was taken even when the action needs a moment before its
+    progress window appears. Clicks and keys pressed while an action holds the
+    window are queued by the system and would repeat the action afterwards;
+    :meth:`stale` recognises them by their timestamps. Actions that open a
+    dialog or a progress window keep the window responsive and block nothing.
+    """
+
+    def __init__(self):
+        self.running = False
+        self.waiting = False
+        self.cursor = False
+        self.last_input_ms = 0      # timestamp of the latest user input seen
+        self.blocked_until_ms = 0   # input stamped up to here was queued
+
+    def seen(self, event):
+        """Record user input; return True for input queued while blocked."""
+        stamp = event.timestamp()
+        if stamp and stamp <= self.blocked_until_ms:
+            return True
+        self.last_input_ms = max(self.last_input_ms, stamp)
+        return False
+
+    def window_shown(self):
+        """A dialog or progress window opened: show the normal cursor in it."""
+        self.waiting = True
+        if self.cursor:
+            QApplication.restoreOverrideCursor()
+            self.cursor = False
+
+    def __call__(self, widget, handler):
+        if self.running:
+            if self.waiting:
+                handler()  # a button of a dialog the running action opened
+            # Otherwise a second click before the action showed its window.
+            return
+        self.running, self.waiting = True, False
+        clicked_ms = self.last_input_ms
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        self.cursor = True
+        widget.repaint()
+        QApplication.processEvents(QEventLoop.ProcessEventsFlag.ExcludeUserInputEvents)
+        started = time.monotonic()
+        try:
+            handler()
+        finally:
+            if self.cursor:
+                QApplication.restoreOverrideCursor()
+                self.cursor = False
+            self.running = False
+            held = time.monotonic() - started
+            if not self.waiting and held > BLOCKING_SECONDS and clicked_ms:
+                self.blocked_until_ms = clicked_ms + int(held * 1000) + 50
+
+
+respond = _Responder()
+
+
 def button(text, handler=None, primary=False, tooltip=None, checkable=False):
     widget = QPushButton(text)
     if primary:
@@ -107,7 +175,7 @@ def button(text, handler=None, primary=False, tooltip=None, checkable=False):
         widget.setToolTip(tooltip)
     widget.setCheckable(checkable)
     if handler is not None:
-        widget.clicked.connect(lambda *_args: handler())
+        widget.clicked.connect(lambda *_args: respond(widget, handler))
     return widget
 
 

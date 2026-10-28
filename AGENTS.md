@@ -10,7 +10,7 @@ or important workflows change.
 
 - Current stable release: DriftlessMap 1.6.1. `main` carries DriftlessMap 2.0,
   published as the release candidate 2.0.0rc1 (after the 2.0.0aN previews).
-  Fixes before the final release become 2.0.0rcN (currently 2.0.0rc4). Plain 2.0.0 is reserved for
+  Fixes before the final release become 2.0.0rcN (currently 2.0.0rc5). Plain 2.0.0 is reserved for
   the release that passes the gates in `release_validation.md`. Never give V2
   work 1.x numbers. A published GitHub release runs `release.yml` (PyPI, trusted
   publishing) and `desktop-builds.yml` (Windows ZIP and macOS DMG attached to
@@ -176,8 +176,11 @@ or important workflows change.
   and information dialogs.
 - `driftlessmap/layers_control.py`: layer metadata and UI state.
 - `driftlessmap/background.py`: `run_in_background` runs GUI-free work
-  (hashing, archive writes, reference verification, image warps) on a worker
-  thread behind a modal progress dialog. Never touch widgets from that work.
+  (hashing, archive writes, reference verification, image warps, registration
+  input preparation) on a worker thread behind a modal progress dialog shown
+  after 150 ms. Never touch widgets from that work. V2 buttons go through
+  `v2/widgets.respond` (busy cursor at once; the shell's event filter drops
+  input whose timestamp falls inside an action that held the window).
 - `driftlessmap/layer_geometry.py`: pure shift/rotate helpers shared by point
   and raster layers.
 - `driftlessmap/utils.py`: shared image, label and geometry helpers (formerly

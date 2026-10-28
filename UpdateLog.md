@@ -1,6 +1,11 @@
 # Update Log
 
 ### 28th October 2026
+##### DriftlessMap 2.0.0rc5
+
+`registration_section` runs `registration_input.prepare` (per-channel percentiles of the full raster, several seconds on an 11520×5990×3 section) through `run_in_background` instead of on the GUI thread before the progress dialog. `run_in_background` shows its dialog after 150 ms (was 400). V2 `widgets.button` handlers go through `widgets.respond`: wait cursor and repaint before the handler, re-entrant clicks ignored until a modal window opens (`window_shown`, called from the shell's Show hook); when a handler held the window > 0.2 s without a modal window, press/release/key events stamped within it are dropped by the shell event filter (`respond.seen`, `PRESS_EVENTS`).
+
+### 28th October 2026
 ##### DriftlessMap 2.0.0rc4
 
 `atlas_matching.suggest_sections(..., planes=)` restricts `search_planes`; `PLANE_CHOICES`, `planes_for(choice)` and `plane_from_name(path)` (one unambiguous plane word in the file name). `DriftlessMap.suggest_atlas_section(plane=None)` asks with `ask_section_plane` (QInputDialog, preselected from `section_plane` or the file name) when no plane is given and remembers `section_plane` for the session. V2 Match step: Section plane combo (`MatchPanel.chosen_plane`), and `match.find` passes it. On the user's IM-1109 coronal DAPI/DiI/DiO section the unconstrained search preferred a lateral sagittal page (outline 0.763 vs 0.769, scale-free); constrained to coronal it returns frontal coronal pages.

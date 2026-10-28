@@ -1988,7 +1988,11 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, QMainWindow, FORM_Ma
         if self.registration_input is None and not self.choose_registration_channels():
             return None
         try:
-            section, _ = registration_input.prepare(
+            # Normalising every channel of a large image takes seconds: do it
+            # behind a progress window, not before one appears.
+            section, _ = run_in_background(
+                self, "Preparing the section for registration...",
+                registration_input.prepare,
                 self.image_view.current_img, self.registration_input)
         except ValueError as exc:
             self.print_message(str(exc), self.error_message_color)

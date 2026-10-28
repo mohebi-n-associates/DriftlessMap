@@ -1,6 +1,6 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 2.0.0rc4**, the release candidate of
+This manual applies to **DriftlessMap 2.0.0rc5**, the release candidate of
 DriftlessMap 2.0. The current stable release is 1.6.1; `pip install driftlessmap`
 keeps installing 1.6.1 until 2.0.0 is released, and Section 2 explains how to
 install the release candidate.
@@ -110,7 +110,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-DriftlessMap 2.0.0rc4 requires:
+DriftlessMap 2.0.0rc5 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -450,6 +450,11 @@ The redesigned 2.0 interface opens by default, from
 `driftlessmap`, `driftlessmap-v2`, `python -m driftlessmap.v2` and the desktop
 application. It runs on the same engine as the classic interface, reads and
 writes the same project files, and keeps its preferences separate.
+
+A button shows the busy cursor as soon as it is clicked, and longer work opens
+a progress window within a fraction of a second, so there is no need to click
+again. Clicks and key presses made while the window is busy are ignored
+instead of repeating the action afterwards.
 
 To start the classic interface instead:
 

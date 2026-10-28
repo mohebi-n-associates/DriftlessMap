@@ -45,7 +45,7 @@ from .register_panel import RegisterPanel
 from .results_panel import ResultsPanel
 from .section_panel import SectionPanel
 from .theme import stylesheet
-from .widgets import Card, button, hint_label
+from .widgets import Card, button, hint_label, respond
 
 STEPS = (
     ("project", "Project", ProjectPanel),
@@ -68,6 +68,10 @@ PREVIEW_LABEL = "DriftlessMap 2.0 preview (development build of {})".format(__ve
 # Events after which the saved-state check runs at the next refresh.
 EDIT_EVENTS = frozenset({QEvent.Type.MouseButtonRelease, QEvent.Type.KeyRelease,
                          QEvent.Type.Wheel, QEvent.Type.Drop, QEvent.Type.TouchEnd})
+# User input whose timestamp tells whether it was queued while the window was busy.
+PRESS_EVENTS = frozenset({QEvent.Type.MouseButtonPress, QEvent.Type.MouseButtonRelease,
+                          QEvent.Type.MouseButtonDblClick, QEvent.Type.KeyPress,
+                          QEvent.Type.KeyRelease})
 
 
 class V2Window(QMainWindow):
@@ -797,10 +801,14 @@ class V2Window(QMainWindow):
         # request one check at the next refresh; close/open always check in
         # full, including edits performed by scripts or late worker results.
         kind = event.type()
+        if kind in PRESS_EVENTS and respond.seen(event):
+            return True  # pressed while an action held the window
         if kind in EDIT_EVENTS:
             self._dirty_check_pending = True
         elif kind == QEvent.Type.Show and watched.isWidgetType() and watched.isWindow():
             self._theme_window(watched)
+            if respond.running and watched.isModal():
+                respond.window_shown()
         return False
 
     def _theme_window(self, window):

@@ -347,6 +347,50 @@ class V2ShellTests(unittest.TestCase):
             self.assertTrue(icons)
 
     @isolated_gui_test
+    def test_buttons_respond_at_once_and_drop_clicks_queued_while_busy(self):
+        import time
+
+        from types import SimpleNamespace
+
+        from PyQt6.QtCore import Qt
+        from PyQt6.QtWidgets import QApplication
+        from driftlessmap.v2.widgets import button, respond
+
+        def press(stamp):
+            # Only the window-system timestamp of the input matters.
+            return SimpleNamespace(timestamp=lambda: stamp)
+
+        cursors, runs = [], []
+
+        def slow():
+            cursors.append(QApplication.overrideCursor().shape())
+            runs.append(1)
+            time.sleep(0.3)
+
+        widget = button("Slow", slow)
+        self.assertFalse(respond.seen(press(10_000)))  # the click that starts it
+        widget.click()
+        self.assertEqual(cursors, [Qt.CursorShape.WaitCursor])
+        self.assertIsNone(QApplication.overrideCursor())
+        # Presses made while it held the window are dropped; later ones are not.
+        self.assertTrue(respond.seen(press(10_200)))
+        self.assertFalse(respond.seen(press(11_000)))
+
+        # An action that waits in a dialog blocks nothing, and the dialog's own
+        # buttons still work.
+        inner = button("Inner", lambda: runs.append("inner"))
+
+        def asks():
+            respond.window_shown()  # what the shell does when a modal opens
+            inner.click()
+            time.sleep(0.3)
+
+        self.assertFalse(respond.seen(press(20_000)))
+        button("Asks", asks).click()
+        self.assertIn("inner", runs)
+        self.assertFalse(respond.seen(press(20_200)))
+
+    @isolated_gui_test
     def test_theme_is_set_on_the_window_and_follows_separate_windows(self):
         from PyQt6.QtWidgets import QApplication, QMessageBox
         from driftlessmap.v2.theme import stylesheet
