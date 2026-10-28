@@ -115,6 +115,8 @@ class ProbeControls(Card):
             if reply != QMessageBox.StandardButton.Yes:
                 return
         self.book.delete(probe)
+        # Marks being placed belong to the selected probe: they go with it.
+        self.engine.clear_live_marks("probe")
         self.probe = None
         self._select(None)
 

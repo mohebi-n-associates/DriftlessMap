@@ -587,6 +587,53 @@ class V2ShellTests(unittest.TestCase):
             self.assertIn("Exported", results.export_status.text())
 
     @isolated_gui_test
+    def test_a_deleted_probe_leaves_no_marks_on_screen(self):
+        import cv2
+        from unittest.mock import patch
+
+        from PyQt6.QtWidgets import QMessageBox
+
+        from tests.atlas_fixture import make_processed_atlas
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window = self.make_window(folder)
+            engine = window.engine
+            self.assertTrue(engine.load_volume_atlas(str(make_processed_atlas(root / "atlas"))))
+            cv2.imwrite(str(root / "s.png"), np.full((40, 30, 3), 120, dtype=np.uint8))
+            self.assertTrue(engine.load_single_image_file(str(root / "s.png"), ".png"))
+            window.go_to("annotate")
+            probes = window.panels["annotate"].implants.probe_card
+            section_item = engine.image_view.img_stacks.image_dict["img-probe"]
+            atlas_item = engine.atlas_view.working_atlas.image_dict["atlas-probe"]
+
+            def drawn(item):
+                return 0 if item.data is None else len(item.data)
+
+            probes.new_probe("NP A")
+            probes.toggle_marking()
+            for point in ((13.0, 5.0), (14.0, 25.0)):
+                engine.img_stacks_clicked(point)
+            self.assertEqual(drawn(section_item), 2)
+            probes.add_section()
+            # Mapped marks are shown by the kept-marks overlay only.
+            self.assertEqual(drawn(section_item), 0)
+            self.assertEqual(drawn(atlas_item), 0)
+            self.assertEqual(len(engine._kept_marks_item.data), 2)
+            for point in ((12.0, 6.0), (13.0, 20.0)):
+                engine.img_stacks_clicked(point)
+            self.assertEqual(drawn(section_item), 2)
+
+            with patch.object(QMessageBox, "question",
+                              return_value=QMessageBox.StandardButton.Yes):
+                probes.delete_probe()
+            self.assertEqual(engine.working_img_data["img-probe"], [])
+            self.assertEqual(drawn(section_item), 0)
+            self.assertEqual(drawn(atlas_item), 0)
+            self.assertEqual(len(engine._kept_marks_item.data), 0)
+            self.assertEqual(engine.object_ctrl.obj_name, [])
+
+    @isolated_gui_test
     def test_a_saved_project_reopens_where_the_user_left_off(self):
         import cv2
         from unittest.mock import patch

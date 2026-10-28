@@ -1,6 +1,11 @@
 # Update Log
 
 ### 28th October 2026
+##### DriftlessMap 2.0.0rc7
+
+Mark displays now follow their data: `_transform_accept` redraws each mapped kind with `_show_section_marks` (the 1.x transfer cleared `working_img_data` but left the plot items and layer thumbnails), `_make_pieces_of` calls `_show_atlas_marks` after the maker cleared the atlas marks, and `_show_section_marks` clears the item/layer (`_clear_section_item`) and the probe trajectory when a kind is empty. New `clear_live_marks(kind)`; `ProbeControls.delete_probe` uses it for the selected probe's unmapped marks.
+
+### 28th October 2026
 ##### DriftlessMap 2.0.0rc6
 
 `auto_registration.propose_landmarks` analyses sections larger than `ANALYSIS_MAX_SIDE` (2048) on an INTER_AREA copy (`_analysis_copy`); the moving images keep physical space in section pixels (spacing × factor), outline contours and mask lookups are scaled, and `_section_in_atlas` takes the factor. Affine results agree with full-resolution analysis within 8.5 section pixels on the user's sagittal section; small sections are unchanged. `registration_input.prepare` takes percentiles from an evenly spaced grid of about `PERCENTILE_SAMPLE` (4 M) pixels and averages channels in place. Whole action on an 11520×5990×3 section: 5.8 s → 2.2 s (macOS), peak memory several GB lower. Known: the B-spline stage on real sections is sensitive to small input changes (its keep/reject decision flips); not changed here.
