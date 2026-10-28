@@ -1,6 +1,6 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 2.0.0a26**, a development preview of
+This manual applies to **DriftlessMap 2.0.0a27**, a development preview of
 DriftlessMap 2.0 (the `main` branch, not a release). The current stable release is
 1.6.1; its desktop downloads are described in Section 2.2.
 
@@ -109,7 +109,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-DriftlessMap 2.0.0a26 requires:
+DriftlessMap 2.0.0a27 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -177,7 +177,7 @@ python -c "import driftlessmap; print(driftlessmap.__version__)"
 ```
 
 The final command prints the installed version: `1.6.1` for the stable
-release, or `2.0.0a26` for this development preview installed from the
+release, or `2.0.0a27` for this development preview installed from the
 `v2-redesign` branch.
 
 ### 2.5 Launching DriftlessMap
@@ -442,25 +442,23 @@ estimated Allen AP/ML coordinates, and surface depth can all appear there.
 
 ### 4.5 The 2.0 preview interface
 
-A development preview of the redesigned interface is available on the
-`v2-redesign` branch. It runs on the same engine, reads and writes the same
-project files, and keeps its preferences separate from the stable interface.
-Start it with:
+Since 2.0.0a27 the redesigned 2.0 interface opens by default, from
+`driftlessmap`, `driftlessmap-v2`, `python -m driftlessmap.v2` and the desktop
+application. It runs on the same engine as the classic interface, reads and
+writes the same project files, and keeps its preferences separate.
+
+To start the classic interface instead:
 
 ```bash
-driftlessmap-v2
-# or
-python -m driftlessmap.v2
-# or
-driftlessmap --v2
+driftlessmap --classic
 ```
 
-In the stable interface, **Help > Open the 2.0 Preview** opens the preview in
-a new window; in the preview, **Help > Open the classic interface** does the
-reverse. This also works in the desktop application, which starts the stable
-interface by default. To start the desktop application directly in the
-preview, pass `--v2` (for example in a Windows shortcut's target) or set the
-environment variable `DRIFTLESSMAP_INTERFACE=v2`. Open a copy of a project
+In the desktop application, pass `--classic` (for example in a Windows
+shortcut's target) or set the environment variable
+`DRIFTLESSMAP_INTERFACE=classic`. A command-line flag wins over the variable.
+In the 2.0 interface, **Help > Open the classic interface** opens the classic
+one in a new window; in the classic interface, **Help > Open the 2.0 Preview**
+does the reverse. Open a copy of a project
 when trying the preview: projects it saves use payload schema 3, which
 DriftlessMap 1.6 and earlier refuse.
 

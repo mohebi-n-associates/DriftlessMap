@@ -54,9 +54,10 @@ Done, with tests:
   T) is chosen in the Section step and saved in the project.
 - Adopted 1.x controls (tool options, atlas controller, region tree) follow
   the light and dark themes, with white icons recoloured to the theme text.
-- Desktop bundles contain both interfaces: the stable one starts by default;
-  `--v2`, `DRIFTLESSMAP_INTERFACE=v2` or Help > Open the 2.0 Preview starts
-  the preview, and the preview's Help menu opens the classic interface.
+- Desktop bundles contain both interfaces. Since 2.0.0a27 the 2.0 interface
+  starts by default; `--classic`, `DRIFTLESSMAP_INTERFACE=classic` or the 2.0
+  Help menu opens the classic interface, and the classic Help > Open the 2.0
+  Preview opens the 2.0 one.
 
 - Pyramidal single-plane TIFFs can be read at a stored lower level with the
   Scale slider; the level is saved through the existing image scale.
