@@ -1,9 +1,21 @@
 """Results step: inspect objects, 3D view, export and import."""
 
-from PyQt6.QtWidgets import QLabel
+import os
+import time
+
+from PyQt6.QtWidgets import QFileDialog, QLabel, QMessageBox
 
 from . import state as v2_state
-from .widgets import Card, StepPanel, button, grid_of, hint_label, set_status, status_label
+from .widgets import (
+    Card,
+    Disclosure,
+    StepPanel,
+    button,
+    grid_of,
+    hint_label,
+    set_status,
+    status_label,
+)
 
 
 class ResultsPanel(StepPanel):
@@ -37,9 +49,15 @@ class ResultsPanel(StepPanel):
 
         export = self.add(Card(
             "Export",
-            "Object files (.dmapobj) are for sharing; the project already contains "
-            "every object. Probe exports write the localisation CSVs."))
-        export.add(grid_of([
+            "Export all results writes everything available into one new folder: a copy "
+            "of the project, each built object (.dmapobj), each probe's localisation "
+            "CSVs, the implant table and the layers."))
+        self.export_all_button = self.gate(
+            button("Export all results…", self.export_all, primary=True),
+            self._needs_anything)
+        export.add_row(self.export_all_button, None)
+        self.export_status = export.add(status_label(""))
+        export.add(Disclosure("Individual files", grid_of([
             button("Selected object…", engine.actionSave_Current.trigger),
             button("All probes…", engine.actionSave_Probes.trigger),
             button("All cells…", engine.actionSave_Cells.trigger),
@@ -51,7 +69,7 @@ class ResultsPanel(StepPanel):
             button("Implant table…", lambda: shell.run("implant.export")),
             button("Current layer…", engine.actionCurrent_Layer.trigger),
             button("All layers…", engine.actionAll_Layer.trigger),
-        ], columns=2))
+        ], columns=2)))
 
         imports = self.add(Card("Import"))
         imports.add(grid_of([
@@ -59,6 +77,41 @@ class ResultsPanel(StepPanel):
             button("Layers…", engine.actionLoad_Layers.trigger),
             button("Cell points…", engine.actionExternal_Cells.trigger),
         ], columns=2))
+
+    def _needs_anything(self):
+        engine = self.engine
+        if (engine.atlas_view.atlas_data is None and engine.atlas_view.slice_image_data is None
+                and engine.image_view.current_img is None):
+            return "Load an atlas or a section first."
+        return None
+
+    def export_all(self):
+        engine = self.engine
+        parent = QFileDialog.getExistingDirectory(
+            self, "Choose where to put the results folder",
+            os.path.dirname(engine.current_project_path or engine.current_img_path or "")
+            or os.path.expanduser("~"))
+        if not parent:
+            return
+        stem = (os.path.splitext(os.path.basename(engine.current_project_path))[0]
+                if engine.current_project_path else "DriftlessMap")
+        folder = os.path.join(parent, "{} results {}".format(
+            stem, time.strftime("%Y-%m-%d %H%M")))
+        number = 2
+        while os.path.exists(folder):
+            folder = "{} ({})".format(folder.rsplit(" (", 1)[0], number)
+            number += 1
+        try:
+            paths, notes = engine.export_all_results(folder)
+        except OSError as exc:
+            set_status(self.export_status, "Could not export: {}".format(exc), "bad")
+            return
+        text = "Exported {} file{} to {}.".format(len(paths), "" if len(paths) == 1 else "s",
+                                                 folder)
+        set_status(self.export_status, " ".join([text] + notes), "warn" if notes else "good")
+        self.shell.message(text, "warn" if notes else "good")
+        if notes:
+            QMessageBox.information(self, "Export all results", "\n\n".join([text] + notes))
 
     def refresh(self):
         o = self.engine.object_ctrl

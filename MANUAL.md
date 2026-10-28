@@ -1,6 +1,6 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 2.0.0a22**, a development preview of
+This manual applies to **DriftlessMap 2.0.0a23**, a development preview of
 DriftlessMap 2.0 (the `main` branch, not a release). The current stable release is
 1.6.1; its desktop downloads are described in Section 2.2.
 
@@ -109,7 +109,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-DriftlessMap 2.0.0a22 requires:
+DriftlessMap 2.0.0a23 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -177,7 +177,7 @@ python -c "import driftlessmap; print(driftlessmap.__version__)"
 ```
 
 The final command prints the installed version: `1.6.1` for the stable
-release, or `2.0.0a22` for this development preview installed from the
+release, or `2.0.0a23` for this development preview installed from the
 `v2-redesign` branch.
 
 ### 2.5 Launching DriftlessMap
@@ -486,8 +486,8 @@ What each step does:
 | Section | Per-channel name, colour, visibility and display range; brightness, contrast, gamma and Auto (ImageJ-style, saturating 0.35% of samples); **Register** ticks that choose the registration channels, with a preview of the registration input; rotation, flips, crop and clean-up |
 | Match | Find atlas section with the chosen channels; the plane, depth and tilt controls of the 1.x Atlasing Controller |
 | Register | Suggest landmarks; add, move and delete pairs; a list of pairs marked Outline, Internal, Edited or Manual; mesh check; **Mark review complete**; warp preview in either direction |
-| Annotate | **Implants:** optical fibers and microprisms: outline each section, **Map this section**, **Build**; reports the fiber tip or the prism bottom and ML edges (Section 12.7). **Probes:** a list of named, coloured probes. For each section that shows a track: **Mark track**, click along it, **Add this section to** the probe (this maps the marks with the current registration). **Build** one probe from all its sections; **Rebuild** after adding more. Cells, colour detection, drawing, erasing, lasso and measuring; **Map to atlas**; make parts and build other 3D objects |
-| Results | Region tables, show on plane, compare, 3D options, export and import |
+| Annotate | **Implants:** one list of optical fibers, microprisms and probes, added with **Add implant…**. A fiber or prism: outline each section, **Map this section**, **Build**; reports the fiber tip or the prism bottom and ML edges (Section 12.7). A probe: for each section that shows its track, **Mark track**, click along it, **Map this section** (this maps the marks with the current registration and files them under the probe); **Build** one probe from all its sections, **Rebuild** after adding more; **Probe settings** holds multi-probe layouts and saved probe settings. Cells, colour detection, drawing, erasing, lasso and measuring; **Map to atlas**; make parts and build other 3D objects |
+| Results | Region tables, show on plane, compare, 3D options, export and import. **Export all results…** writes everything available into one new folder (below); the single-kind exports stay under **Individual files** |
 
 Probes are grouped by name, so the sections of one probe combine and different
 probes stay separate without renaming parts. Probe names cannot contain "-".
@@ -1041,7 +1041,7 @@ in *Mapped marks on this section*:
 - **Edit marks** puts the kept marks back on the section as editable marks
   (refused while the section has unmapped marks of the same kind). Mapping
   them again replaces the mapping. For a probe, the probe is selected so that
-  Add this section files the edited track under it.
+  Map this section files the edited track under it.
 
 Both need the section the marks were mapped from to be loaded.
 
@@ -1385,8 +1385,10 @@ and save a new `.dmapobj` before exporting CSV.
 The **Implants** card at the top of the 2.0 preview's Annotate step locates
 optical fibers and microprisms. You outline what the implant left in each
 section that shows it; DriftlessMap maps the outlines to the atlas and fits
-the device's known shape to them. Neuropixels probes are listed in the same
-card but keep their own workflow in the Probes card below it (Section 12).
+the device's known shape to them. Probes are added and listed in the same
+card; selecting one shows the probe controls in place of the outline
+controls, and probes keep their own workflow (Section 12): points along the
+track instead of an outline.
 
 **1. Add the implant.** Click **Add implant…**, choose the type and enter its
 specifications:
@@ -1459,11 +1461,31 @@ The report warns when:
 cylinder or block with the mapped outlines. **Export table…** writes one CSV
 row per built implant (type, specifications, tip or bottom coordinates and
 region, stereotaxic estimate, depth, prism edges and face, tilt and
-warnings). Results > Export also saves fibers and prisms as `.dmapobj`
+warnings); each built probe adds a summary row (tip, region, depth below the
+surface from its entry point, tilt), while its per-site results stay in the
+probe's own CSVs. Results > Export also saves fibers and prisms as `.dmapobj`
 files; importing one into another project adds it to that project's
 implants. Projects save the implants, their unmapped outlines, mapping
 records and built objects; projects from 2.0.0a12 and earlier open with no
 implants.
+
+### 12.8 Export all results (2.0 preview)
+
+**Results > Export all results…** asks for a location and creates one new
+folder there, named after the project and the date and time, containing:
+
+| Item | Contents |
+| --- | --- |
+| `<project>.dmap` | A copy of the project. The project you are working on keeps its own file |
+| `objects/` | Every built object as `.dmapobj` (fibers, prisms, probes, cells, expression, contours, drawings) |
+| `probes/` | Each built probe's localisation CSVs (contacts, labeled track, trajectory, regions) |
+| `implants.csv` | The implant table: one row per built fiber, prism and probe |
+| `layers/` | Every layer as `.dmaplayer` (image layers add a `.jpg` preview) |
+
+Items that do not exist are skipped. Unbuilt parts are only in the project
+copy; older probes without reconstruction data must be built again first.
+Out-of-date objects are exported with that status recorded, as by the
+individual exports, which remain available under **Individual files**.
 
 ## 13. Virus, tracer, lesion, and expression registration
 

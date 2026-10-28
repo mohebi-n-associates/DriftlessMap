@@ -742,6 +742,45 @@ CSV_COLUMNS = (
 )
 
 
+def probe_csv_row(name, reconstruction, frame, sections=""):
+    """One implant-table row summarising a built probe (tip, entry, depth, tilt).
+
+    ``reconstruction`` is the merged probe's self-contained reconstruction;
+    its tip and surface entry are reported with the same coordinates, region
+    and Bregma estimate as fiber tips. Per-site results stay in the probe's
+    own export.
+    """
+    coords = reconstruction["coordinates"]
+    voxel_um = float(reconstruction["atlas"]["voxel_size_um"])
+    tip = np.asarray(coords["tip"]["bregma_um"], dtype=float) / voxel_um
+    entry = np.asarray(coords["insertion"]["bregma_um"], dtype=float) / voxel_um
+    point = frame.coordinates(tip)
+    estimate = point.get("estimated_bregma_mm") or {}
+    angles = _tilts(entry, tip)
+    settings = reconstruction.get("probe", {}).get("settings") or {}
+    row = {
+        "name": name,
+        "type": "Probe",
+        "specs": settings.get("probe_type_name", ""),
+        "sections": sections,
+        "point": "tip",
+        "ml_um": round(point["ml_um"], 1),
+        "ap_um": round(point["ap_um"], 1),
+        "dv_um": round(point["dv_um"], 1),
+        "region": point.get("region", ""),
+        "region_acronym": point.get("region_acronym", ""),
+        "est_ap_mm": estimate.get("ap", ""),
+        "est_ml_mm": estimate.get("ml", ""),
+        "est_dv_mm": estimate.get("dv", ""),
+        "depth_below_surface_um": round(float(np.linalg.norm(tip - entry)) * voxel_um, 1),
+        "ap_tilt_deg": round(angles["ap_angle_deg"], 2),
+        "ap_tilt": angles["ap_tilt"],
+        "ml_tilt_deg": round(angles["ml_angle_deg"], 2),
+        "ml_tilt": angles["ml_tilt"],
+    }
+    return {column: row.get(column, "") for column in CSV_COLUMNS}
+
+
 def csv_row(name, report):
     """One CSV row (a dict over :data:`CSV_COLUMNS`) per built implant."""
     point = report["tip"] if report["kind"] == FIBER else report["bottom"]

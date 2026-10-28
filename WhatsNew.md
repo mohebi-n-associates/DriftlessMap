@@ -3,6 +3,12 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.0.0a23
+
+Development preview, 27 October 2026 (`v2-implants` branch; not a release)
+
+**One Implants list, one export.** Probes are now added and listed in the Implants card with fibers and microprisms; selecting a probe shows its controls (Mark track, Map this section, Build, Probe settings) in the same card, and the separate Probes card is gone. The implant table adds a summary row for each built probe (tip, region, depth, tilt). **Results > Export all results…** writes everything available into one new folder: a copy of the project, every built object, each probe's localisation CSVs, the implant table and the layers; the single exports remain under Individual files. The Add implant dialog no longer clips its text.
+
 ## DriftlessMap 2.0.0a22
 
 Development preview, 27 October 2026 (`v2-implants` branch; not a release)

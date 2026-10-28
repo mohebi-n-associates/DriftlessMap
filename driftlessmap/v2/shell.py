@@ -559,9 +559,9 @@ class V2Window(QMainWindow):
         add(Command("probe.mark", "Mark probe track", lambda: (self.go_to("annotate"),
                                                                probes.toggle_marking()),
                     "Probes", ("probe marker", "probe tool")))
-        add(Command("probe.add_section", "Add this section to the probe",
+        add(Command("probe.add_section", "Map this section to the probe",
                     lambda: (self.go_to("annotate"), probes.add_section()), "Probes",
-                    ("make probe piece", "add piece", "transfer probe")))
+                    ("add this section", "make probe piece", "add piece", "transfer probe")))
         add(Command("annotate.build_probe", "Build 3D probe",
                     lambda: (self.go_to("annotate"), probes.build_probe()), "Probes",
                     ("merge probe", "merge")))
@@ -580,6 +580,10 @@ class V2Window(QMainWindow):
                     ("fiber tip", "prism bottom", "fit implant")))
         add(Command("implant.export", "Export implant table…", implants.export_table,
                     "Implants", ("implant csv", "fiber csv", "prism csv")))
+        add(Command("results.export_all", "Export all results…",
+                    lambda: (self.go_to("results"), self.panels["results"].export_all()),
+                    "Results", ("export everything", "export project", "save results"),
+                    available=self.panels["results"]._needs_anything))
         add(Command("annotate.unmerge", "Edit parts (unmerge)", engine.object_ctrl.unmerge_btn.click,
                     "Annotate", ("unmerge", "split object")))
         add(Command("tool.measure", "Measure", lambda: self.toggle_tool("ruler"), "Tools",

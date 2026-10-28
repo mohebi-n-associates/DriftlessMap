@@ -151,6 +151,7 @@ from .version import APPLICATION_DISPLAY_NAME, APPLICATION_WINDOW_TITLE, __versi
 from .cell_detection import select_detection_channel
 from .coordinate_validation import coordinates_in_bounds
 from .layer_validation import image_layer_matches
+from .probe_csv import write_probe_csv_files
 from .probe_reconstruction import (
     allen_ccf_to_estimated_bregma_mm,
     format_estimated_bregma_report,
@@ -7749,25 +7750,10 @@ class DriftlessMap(ImplantEngineMixin, QMainWindow, FORM_Main):
                     self.error_message_color,
                 )
                 return
-            file_stems = self._object_file_names(
-                [self.object_ctrl.obj_name[da_ind] for da_ind in valid_index]
-            )
-            for da_ind, file_stem in zip(valid_index, file_stems):
-                data = {
-                    "type": self.object_ctrl.obj_type[da_ind],
-                    "data": self.object_ctrl.obj_data[da_ind],
-                    "name": self.object_ctrl.obj_name[da_ind],
-                    "provenance": provenance,
-                    # Out-of-date results stay exportable, with this note.
-                    "mapping_status": self.object_mapping_status(da_ind),
-                }
-                s_path = os.path.join(save_path, file_stem)
-                success, error = save_driftlessmap_file(
-                    "{}.dmapobj".format(s_path), data, "object"
-                )
-                if not success:
-                    self.print_message(error, self.error_message_color)
-                    return
+            _paths, error = self._write_object_files(valid_index, save_path, provenance)
+            if error is not None:
+                self.print_message(error, self.error_message_color)
+                return
             self.print_message(
                 "Exported {} objects to {}.".format(len(valid_index), save_path),
                 self.normal_color,
@@ -7775,6 +7761,108 @@ class DriftlessMap(ImplantEngineMixin, QMainWindow, FORM_Main):
             self._note_out_of_date_export(valid_index)
         else:
             return
+
+    def _write_object_files(self, indexes, folder, provenance):
+        """Write objects as ``.dmapobj`` files; returns ``(paths, error)``."""
+        paths = []
+        file_stems = self._object_file_names(
+            [self.object_ctrl.obj_name[index] for index in indexes]
+        )
+        for index, file_stem in zip(indexes, file_stems):
+            data = {
+                "type": self.object_ctrl.obj_type[index],
+                "data": self.object_ctrl.obj_data[index],
+                "name": self.object_ctrl.obj_name[index],
+                "provenance": provenance,
+                # Out-of-date results stay exportable, with this note.
+                "mapping_status": self.object_mapping_status(index),
+            }
+            path = os.path.join(folder, "{}.dmapobj".format(file_stem))
+            success, error = save_driftlessmap_file(path, data, "object")
+            if not success:
+                return paths, error
+            paths.append(path)
+        return paths, None
+
+    def export_all_results(self, folder):
+        """Export every available result into ``folder`` (created if needed).
+
+        Writes a copy of the project, each built object as ``.dmapobj``
+        (``objects/``), the localisation CSVs of each probe (``probes/``),
+        the implant table and every layer (``layers/``). The project being
+        worked on keeps its own file. Returns ``(paths, notes)``: the files
+        written and what was left out and why. Raises OSError when the
+        folder cannot be created.
+        """
+        os.makedirs(folder, exist_ok=True)
+        paths, notes = [], []
+        o = self.object_ctrl
+        stem = (os.path.splitext(os.path.basename(self.current_project_path))[0]
+                if getattr(self, "current_project_path", None) else "project")
+        project = os.path.join(folder, "{}.dmap".format(stem))
+        if self.save_project_called(path=project, as_copy=True):
+            paths.append(project)
+        else:
+            notes.append("The project copy was not saved; see the message below the image.")
+
+        built = [i for i, kind in enumerate(o.obj_type) if kind.startswith("merged")]
+        old_probes = [i for i in built if o.obj_type[i] == "merged probe"
+                      and "reconstruction" not in o.obj_data[i]]
+        if old_probes:
+            notes.append("Not exported, build again first (older probes without "
+                         "reconstruction data): {}.".format(
+                             ", ".join(o.obj_name[i] for i in old_probes)))
+        built = [i for i in built if i not in old_probes]
+        unbuilt = sum(1 for kind in o.obj_type if not kind.startswith("merged"))
+        if unbuilt:
+            notes.append("{} unbuilt part{} are in the project only.".format(
+                unbuilt, " is" if unbuilt == 1 else "s"))
+        if built:
+            try:
+                provenance = self.get_object_export_provenance()
+            except (OSError, ValueError) as exc:
+                provenance = None
+                notes.append("Objects not exported: the atlas could not be "
+                             "fingerprinted ({}).".format(exc))
+            if provenance is not None:
+                objects = os.path.join(folder, "objects")
+                os.makedirs(objects, exist_ok=True)
+                written, error = self._write_object_files(built, objects, provenance)
+                paths.extend(written)
+                if error is not None:
+                    notes.append(error)
+                self._note_out_of_date_export(built)
+
+        probes = [i for i in built if o.obj_type[i] == "merged probe"]
+        if probes:
+            probe_folder = os.path.join(folder, "probes")
+            os.makedirs(probe_folder, exist_ok=True)
+            for index, file_stem in zip(probes, self._object_file_names(
+                    [o.obj_name[i] for i in probes])):
+                try:
+                    written = write_probe_csv_files(
+                        os.path.join(probe_folder, "{}.csv".format(file_stem)),
+                        o.obj_name[index], o.obj_data[index])
+                except (KeyError, OSError, TypeError, ValueError) as exc:
+                    notes.append("Probe CSVs of {} not written: {}".format(
+                        o.obj_name[index], exc))
+                    continue
+                paths.extend(str(path) for path in written.values())
+
+        if any(self.implant_report(i.implant_id) for i in self.implants.implants()) or probes:
+            table = os.path.join(folder, "implants.csv")
+            self.export_implant_table(table)
+            paths.append(table)
+
+        if self.layer_ctrl.layer_link:
+            layers = os.path.join(folder, "layers")
+            os.makedirs(layers, exist_ok=True)
+            before = set(os.listdir(layers))
+            if not self.save_all_layer(path=os.path.join(layers, "layer")):
+                notes.append("Some layers were not saved; see the message below the image.")
+            paths.extend(os.path.join(layers, name)
+                         for name in sorted(set(os.listdir(layers)) - before))
+        return paths, notes
 
     def _note_out_of_date_export(self, indexes):
         stale = self.out_of_date_objects(indexes)
@@ -7979,17 +8067,22 @@ class DriftlessMap(ImplantEngineMixin, QMainWindow, FORM_Main):
         else:
             self.print_message("", self.normal_color)
 
-    def save_all_layer(self):
+    def save_all_layer(self, path=None):
+        # Qt passes the action's checked state when this is a slot.
+        path = path if isinstance(path, str) else None
         if not self.layer_ctrl.layer_link:
             self.print_message("No layer is created.", self.error_message_color)
-            return
+            return False
         self.print_message("Save all layers...", self.normal_color)
-        path = QFileDialog.getSaveFileName(
-            self,
-            "Save all layer",
-            self.current_img_path,
-            "DriftlessMap Layer (*.dmaplayer)",
-        )
+        if path is not None:
+            path = (path, "")
+        else:
+            path = QFileDialog.getSaveFileName(
+                self,
+                "Save all layer",
+                self.current_img_path,
+                "DriftlessMap Layer (*.dmaplayer)",
+            )
         if path[0] != "":
             for da_link in self.layer_ctrl.layer_link:
                 da_ind = np.where(np.ravel(self.layer_ctrl.layer_link) == da_link)[0][0]
@@ -8004,10 +8097,11 @@ class DriftlessMap(ImplantEngineMixin, QMainWindow, FORM_Main):
                         da_link, da_color, tb_nail, path[0]
                     )
                 if not saved:
-                    return
+                    return False
             self.print_message("All layers are saved.", self.normal_color)
-        else:
-            self.print_message("", self.normal_color)
+            return True
+        self.print_message("", self.normal_color)
+        return False
 
     def get_hist_single_layer_vis_data(self, layer_link):
         if layer_link == "img-process":
@@ -8620,7 +8714,14 @@ class DriftlessMap(ImplantEngineMixin, QMainWindow, FORM_Main):
     # -------------------------------------------------------------
     #                    save project
     # -------------------------------------------------------------
-    def save_project_called(self, portable=False):
+    def save_project_called(self, portable=False, path=None, as_copy=False):
+        """Save the project; returns True when written.
+
+        With ``path`` no file dialog is shown. ``as_copy`` writes an extra
+        copy (Export all results): the project keeps its own file and
+        input references.
+        """
+        path = path if isinstance(path, str) else None
         self.print_message("Saving Project ...", self.normal_color)
         if (
             self.atlas_view.atlas_data is None
@@ -8629,12 +8730,15 @@ class DriftlessMap(ImplantEngineMixin, QMainWindow, FORM_Main):
         ):
             self.print_message("No project can be saved.", self.reminder_color)
             return False
-        file_name = QFileDialog.getSaveFileName(
-            self,
-            "Save Project",
-            self.save_path,
-            "DriftlessMap Project (*.dmap)",
-        )
+        if path is not None:
+            file_name = (path, "")
+        else:
+            file_name = QFileDialog.getSaveFileName(
+                self,
+                "Save Project",
+                self.save_path,
+                "DriftlessMap Project (*.dmap)",
+            )
         if file_name[0] != "":
             project_path = file_name[0]
             # Hash large inputs off the GUI thread; the provenance helpers
@@ -8822,6 +8926,9 @@ class DriftlessMap(ImplantEngineMixin, QMainWindow, FORM_Main):
             if not success:
                 self.print_message(error, self.error_message_color)
                 return False
+            if as_copy:
+                self.print_message("Project copy saved.", self.normal_color)
+                return True
             self.current_project_path = project_path
             self.atlas_provenance = atlas_provenance
             self.histology_provenance = histology_provenance
