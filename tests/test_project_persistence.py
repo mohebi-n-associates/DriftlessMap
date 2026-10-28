@@ -54,6 +54,134 @@ def isolated_gui_test(test):
 
 
 class ProjectPersistenceIntegrationTests(unittest.TestCase):
+    @isolated_gui_test
+    def test_failed_recovery_preserves_an_archive_and_blocks_partial_saves(self):
+        from driftlessmap.project_session import snapshot_metadata
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window = self._window_with_one_object(root)
+            pixels = window.image_view.current_img.copy()
+            incoming = snapshot_metadata(window.project_payload())
+            recovery = root / "recovery"
+            recovery.mkdir()
+            with patch.object(window, "_restore_project_payload", side_effect=ValueError("widget failure")), \
+                    patch("driftlessmap.project_session.tempfile.mkdtemp", return_value=str(recovery)):
+                self.assertFalse(window.load_project(incoming))
+            path = window._project_recovery_path
+            payload, error = load_driftlessmap_file(path, "project")
+            self.assertIsNone(error)
+            np.testing.assert_array_equal(payload["img_ctrl_data"]["current_img"], pixels)
+            self.assertEqual(payload["object_data"]["obj_name"], ["line drawing - piece"])
+            forbidden = root / "partial.dmap"
+            self.assertFalse(window.save_project_called(path=str(forbidden)))
+            self.assertFalse(forbidden.exists())
+            payload["_histology_load_mode"] = "embedded"
+            self.assertTrue(window.load_project(payload, project_path=path))
+            self.assertFalse(hasattr(window, "_project_recovery"))
+            self.assertTrue(window.save_project_called(path=str(root / "recovered.dmap")))
+
+    @isolated_gui_test
+    def test_failed_project_restore_rolls_back_unsaved_work_without_sources(self):
+        import copy
+        from tests.atlas_fixture import make_processed_atlas
+        from driftlessmap.v2.state import scientific_digest
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window = self._window_with_one_object(root)
+            self.assertTrue(window.load_volume_atlas(str(make_processed_atlas(root / "atlas"))))
+            window.current_project_path = str(root / "original.dmap")
+            implant = window.add_implant("fiber")
+            window.set_implant_outline(implant.implant_id, [[1, 1], [4, 1], [4, 4]])
+            window.undo_history.commit(window.undo_history.prepare("previous edit", {"a": 1}))
+            before = scientific_digest(window)
+            pixels = window.image_view.current_img.copy()
+            reader = window.image_view.image_file
+            (root / "histology.png").unlink()
+            for failure in ("settings", "objects", "image"):
+                incoming = copy.deepcopy(window.project_payload())
+                incoming["_histology_load_mode"] = "embedded"
+                incoming["img_ctrl_data"]["current_img"] = np.zeros_like(pixels)
+                if failure == "settings":
+                    del incoming["setting_data"]["atlas_rect"]
+                elif failure == "objects":
+                    incoming["object_data"]["obj_data"] = []
+                else:
+                    incoming["img_ctrl_data"]["current_img"] = np.zeros((0, 0))
+                with self.subTest(failure), patch.object(
+                        window, "load_volume_atlas", wraps=window.load_volume_atlas) as loader:
+                    self.assertFalse(window.load_project(incoming, project_path=str(root / "bad.dmap")))
+                    self.assertEqual(loader.call_count, 0 if failure == "image" else 1)
+                    self.assertFalse(hasattr(window, "_project_recovery"), window.statusbar.currentMessage())
+                    self.assertEqual(window.current_project_path, str(root / "original.dmap"))
+                    self.assertEqual(window.undo_history.undo_label(), "previous edit")
+                    self.assertIs(window.image_view.image_file, reader)
+                    np.testing.assert_array_equal(window.image_view.current_img, pixels)
+                    self.assertEqual(scientific_digest(window), before)
+
+    @isolated_gui_test
+    def test_unusable_probe_settings_do_not_stop_a_project_opening(self):
+        import copy
+        with tempfile.TemporaryDirectory() as folder:
+            donor = self._window_with_one_object(Path(folder))
+            payload = copy.deepcopy(donor.project_payload())
+            payload["_histology_load_mode"] = "embedded"
+            for planning in ({"probe_settings": {}},
+                             {"probe_settings": {"probe_type": "nonsense"}}):
+                with self.subTest(planning):
+                    payload["probe_planning"] = planning
+                    window = self.create_window()
+                    with patch.object(window, "print_message") as message:
+                        self.assertTrue(window.load_project(payload))
+                    self.assertEqual(window.object_ctrl.obj_name, ["line drawing - piece"])
+                    self.assertTrue(any("probe settings were not restored" in str(call)
+                                        for call in message.call_args_list))
+
+    @isolated_gui_test
+    def test_marks_mapped_before_a26_stay_current_when_nothing_changed(self):
+        import copy
+        from driftlessmap.mapping_records import CURRENT, REGISTRATION_CHANGED
+        with tempfile.TemporaryDirectory() as folder:
+            window = self._window_with_one_object(Path(folder))
+            window.atlas_tri_inside_data[:] = [[1.0, 1.0], [5.0, 1.0], [3.0, 5.0]]
+            window.histo_tri_inside_data[:] = [[1.0, 1.0], [6.0, 1.0], [3.0, 5.0]]
+            old = window.current_registration_fingerprint(legacy=True)
+            track = {"points": [[1.0, 2.0], [3.0, 4.0]]}
+            window.mapping_ledger.record(window.section_id, "probe", track, old,
+                                         "not reviewed", "t", probe="A")
+            payload = copy.deepcopy(window.project_payload())
+            payload["_histology_load_mode"] = "embedded"
+            restored = self.create_window()
+            self.assertTrue(restored.load_project(payload))
+            fingerprint = restored.current_registration_fingerprint()
+            record, = restored.mapping_ledger.records()
+            self.assertEqual(record.status(restored.section_id, fingerprint), CURRENT)
+            # A changed registration is still out of date after the migration.
+            payload["mapping_records"][0]["registration"] = "d" * 64
+            restored = self.create_window()
+            self.assertTrue(restored.load_project(payload))
+            record, = restored.mapping_ledger.records()
+            self.assertEqual(record.status(restored.section_id,
+                                           restored.current_registration_fingerprint()),
+                             REGISTRATION_CHANGED)
+
+    @isolated_gui_test
+    def test_failed_load_into_an_empty_session_stays_empty(self):
+        import copy
+        with tempfile.TemporaryDirectory() as folder:
+            donor = self._window_with_one_object(Path(folder))
+            payload = copy.deepcopy(donor.project_payload())
+            payload["_histology_load_mode"] = "embedded"
+            del payload["setting_data"]["atlas_rect"]
+            window = self.create_window()
+            self.assertFalse(window.load_project(payload, project_path=str(Path(folder) / "bad.dmap")))
+            self.assertIsNone(window.image_view.image_file)
+            self.assertIsNone(window.image_view.current_img)
+            self.assertEqual(window.object_ctrl.obj_name, [])
+            self.assertIsNone(window.current_project_path)
+            self.assertFalse(hasattr(window, "_project_recovery"), window.statusbar.currentMessage())
+
     @classmethod
     def setUpClass(cls):
         cls.application = (

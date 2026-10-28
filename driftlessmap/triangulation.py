@@ -76,7 +76,7 @@ def _validate_duplicates(points, name):
         )
 
 
-def _canonical_simplices(points):
+def canonical_simplices(points):
     try:
         simplices = Delaunay(points).simplices
     except QhullError as exc:
@@ -282,7 +282,7 @@ def build_piecewise_affine_registration(
     _validate_duplicates(histology_points, "Histology")
 
     if simplices is None:
-        simplices = _canonical_simplices(atlas_points)
+        simplices = canonical_simplices(atlas_points)
     else:
         simplices = _validate_simplices(simplices, len(atlas_points))
     quality = _mesh_quality(atlas_points, histology_points, simplices)

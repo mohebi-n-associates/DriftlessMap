@@ -110,6 +110,19 @@ class TransactionHistory:
         while self._undo and (len(self._undo) > self.max_steps or self._used() > self.budget_bytes):
             self._undo.pop(0)
 
+    def _remember_inverse(self, stack, label, state):
+        transaction = self.prepare(label, state)
+        if transaction is None:
+            # A state we cannot retain is a history barrier in both directions.
+            self.clear()
+            return
+        stack.append(transaction)
+        while self._used() > self.budget_bytes or len(self._undo) + len(self._redo) > self.max_steps:
+            # Keep the next step in the direction just taken, dropping the
+            # farthest entries first. Both stacks share the same budget.
+            other = self._undo if stack is self._redo else self._redo
+            (other if other else stack).pop(0)
+
     def _used(self):
         return sum(t.size for t in self._undo) + sum(t.size for t in self._redo)
 
@@ -124,15 +137,12 @@ class TransactionHistory:
         if not self._undo:
             return None
         transaction = self._undo.pop()
-        packed, size = pack(current_state)
-        self._redo.append(Transaction(transaction.label, packed, size))
+        self._remember_inverse(self._redo, transaction.label, current_state)
         return unpack(transaction.state)
 
     def redo(self, current_state):
         if not self._redo:
             return None
         transaction = self._redo.pop()
-        packed, size = pack(current_state)
-        self._undo.append(Transaction(transaction.label, packed, size))
-        self._trim()
+        self._remember_inverse(self._undo, transaction.label, current_state)
         return unpack(transaction.state)

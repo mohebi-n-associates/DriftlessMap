@@ -1,6 +1,6 @@
 # DriftlessMap 2.0: Interface Redesign
 
-Status: revised proposal for discussion. This document describes intended
+Status: design and release gates; see [release validation](release_validation.md) for current evidence. This document describes intended
 behavior and release gates; it does not describe implemented features.
 
 The goal is to make scientific work easier to understand, perform and check.
@@ -12,9 +12,9 @@ open a native 16-bit TIFF, choose what to display, adjust its appearance and
 register using an explicitly selected channel such as DAPI, without an
 intermediate flattened export from ImageJ.
 
-Development takes place on a separate `v2-redesign` branch. The stable branch
-continues serving 1.x until V2 satisfies the release gates. This document records
-the branch strategy; it does not itself create or switch Git branches.
+The original `v2-redesign` integration is now on `main`; current previews remain
+versioned `2.0.0aN`. The published stable release is 1.6.1. The historical branch
+strategy below does not imply that the 2.0 release gates have passed.
 
 The first implementation target is one complete workflow: **open → match →
 register → annotate → inspect → export → save/reopen**. Expand only after

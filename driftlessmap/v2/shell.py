@@ -10,7 +10,7 @@ scientific state.
 
 import os
 
-from PyQt6.QtCore import QSettings, Qt, QTimer, QUrl
+from PyQt6.QtCore import QEvent, QSettings, Qt, QTimer, QUrl
 from PyQt6.QtGui import QAction, QDesktopServices, QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
     QAbstractSpinBox,
@@ -101,6 +101,9 @@ class V2Window(QMainWindow):
         self._timer = QTimer(self)
         self._timer.timeout.connect(self.refresh)
         self._timer.start(600)
+        QApplication.instance().installEventFilter(self)
+        self._dirty_check_pending = True
+        self._dirty_status = False
         self.mark_saved()
         self.refresh()
 
@@ -349,6 +352,7 @@ class V2Window(QMainWindow):
         original = engine.print_message
 
         def relay(msg, col):
+            self._dirty_check_pending = True
             original(msg, col)
             kind = None
             if col == engine.error_message_color:
@@ -467,6 +471,7 @@ class V2Window(QMainWindow):
     # ------------------------------------------------------------ commands
     def run(self, command_id):
         reason = self.registry.run(command_id)
+        self._dirty_check_pending = True
         if reason:
             self.message(reason, "warn")
         self.refresh()
@@ -777,23 +782,35 @@ class V2Window(QMainWindow):
             self.message("Project saved.", "good")
 
     def _digest(self):
-        # Probes added but not yet mapped exist only in this window; they are
-        # work to save too.
-        empty = tuple(self.panels["annotate"].implants.probe_card.book.state()["empty"]) \
-            if hasattr(self, "panels") else ()
-        return state.scientific_digest(self.engine), empty
+        return state.scientific_digest(self.engine)
+
+    def eventFilter(self, watched, event):
+        # Do not rescan microscopy rasters on idle timer ticks. User edits
+        # request one check at the next refresh; close/open always check in
+        # full, including edits performed by scripts or late worker results.
+        if event.type() in (QEvent.Type.MouseButtonRelease, QEvent.Type.KeyRelease,
+                            QEvent.Type.Wheel, QEvent.Type.Drop, QEvent.Type.TouchEnd):
+            self._dirty_check_pending = True
+        return super().eventFilter(watched, event)
 
     def mark_saved(self):
         try:
             self._saved_digest = self._digest()
+            self._dirty_status = False
+            self._dirty_check_pending = False
         except Exception:
             self._saved_digest = None
+            self._dirty_status = True
+            self._dirty_check_pending = False
 
     def is_dirty(self):
+        if getattr(self.engine, "_project_recovery", None) is not None:
+            return True
         try:
             return self._digest() != self._saved_digest
         except Exception:
-            return False
+            # A failed check cannot establish that work is saved.
+            return True
 
     def confirm_discard(self, action):
         if not self.is_dirty():
@@ -816,6 +833,7 @@ class V2Window(QMainWindow):
             event.ignore()
             return
         self._timer.stop()
+        QApplication.instance().removeEventFilter(self)
         event.accept()
 
     # ------------------------------------------------------------- helpers
@@ -878,6 +896,8 @@ class V2Window(QMainWindow):
     # ------------------------------------------------------------- refresh
     def refresh(self):
         engine = self.engine
+        if getattr(engine, "_project_loading", False):
+            return
         try:
             statuses = state.step_status(engine)
         except Exception:
@@ -901,7 +921,10 @@ class V2Window(QMainWindow):
         atlas, _ = state.atlas_summary(engine)
         section, _ = state.section_summary(engine)
         self.context_label.setText("{} · {}".format(atlas, section))
-        dirty = self.is_dirty()
+        if self._dirty_check_pending:
+            self._dirty_status = self.is_dirty()
+            self._dirty_check_pending = False
+        dirty = self._dirty_status
         self.save_label.setText("Unsaved changes" if dirty else "All changes saved"
                                 if engine.current_project_path else "Not saved yet")
         self.save_label.setObjectName("StatusWarn" if dirty else "Muted")

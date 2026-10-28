@@ -7,6 +7,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PyQt6.QtWidgets import QApplication
 
 from driftlessmap.v2.probes import ProbeBook, group_of, probe_of
+from driftlessmap.mapping_records import MappingLedger, new_identifier
 
 
 class _Label:
@@ -53,7 +54,7 @@ class FakeObjects:
 
     def unmerge_objects(self):
         index = self.current_obj_index
-        pieces = self.obj_data[index]
+        pieces = self.obj_data[index]["pieces_names"]
         self.delete_objects([index])
         for name in pieces:
             self.add(name, "probe piece")
@@ -120,10 +121,31 @@ class FakeEngine:
                      if o.obj_type[i] == "probe piece" and group_of(n) == group]
             names = [o.obj_name[i] for i in parts]
             o.delete_objects(parts)
-            o.add(group, "merged probe", names)
+            o.add(group, "merged probe", {"pieces_names": names})
 
 
 class ProbeBookTests(unittest.TestCase):
+    def test_renaming_a_build_preserves_mapping_units_and_rebuilds(self):
+        engine = FakeEngine()
+        engine.mapping_ledger = MappingLedger()
+        section = new_identifier()
+        book = ProbeBook(engine)
+        probe = book.new()
+        record = engine.mapping_ledger.record(section, "probe", {"points": [[0, 0], [1, 1]]},
+                                              "a" * 64, "reviewed", "now", probe=probe)
+        self.mark(engine)
+        book.add_section(probe)
+        self.assertTrue(book.build(probe)[0])
+        book.rename(probe, "Renamed")
+        self.assertTrue(book.build("Renamed")[0])
+        renamed = engine.mapping_ledger.get(section, "probe", "Renamed")
+        self.assertEqual(renamed.unit_id, record.unit_id)
+        self.assertEqual(renamed.revision, record.revision)
+        self.assertIsNone(engine.mapping_ledger.get(section, "probe", probe))
+        restored, errors = MappingLedger.from_list(engine.mapping_ledger.to_list())
+        self.assertEqual(errors, [])
+        self.assertEqual(restored.get(section, "probe", "Renamed").unit_id, record.unit_id)
+
     @classmethod
     def setUpClass(cls):
         cls.app = QApplication.instance() or QApplication([])
@@ -174,7 +196,7 @@ class ProbeBookTests(unittest.TestCase):
         self.assertIn("new section", book.summary("Probe 1"))
         book.build("Probe 1")
         rebuilt = engine.object_ctrl.obj_data[book.built("Probe 1")[0]]
-        self.assertEqual(len(rebuilt), 2)
+        self.assertEqual(len(rebuilt["pieces_names"]), 2)
         self.assertEqual(len(book.built("Probe 1")), 1)
 
     def test_multi_shank_parts_and_rename(self):

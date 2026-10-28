@@ -438,6 +438,9 @@ class ImplantCard(Card):
 
     def summary(self, implant):
         engine = self.engine
+        if any(engine.implant_build_status(i) for i in
+               engine.implant_objects(implant.implant_id, built=True)):
+            return "settings changed · rebuild required"
         parts = len(engine.implant_objects(implant.implant_id, built=False))
         built = bool(engine.implant_objects(implant.implant_id, built=True))
         sections = "{} section{}".format(parts, "" if parts == 1 else "s") if parts else ""
@@ -484,7 +487,11 @@ class ImplantCard(Card):
         report = engine.implant_report(implant.implant_id)
         self.results.setVisible(report is not None)
         self.report.setVisible(report is not None)
-        self.report.setText("\n".join(model.report_lines(report)) if report else "")
+        lines = model.report_lines(report) if report else []
+        if report and any(engine.implant_build_status(i) for i in
+                          engine.implant_objects(implant.implant_id, built=True)):
+            lines.insert(0, "OUT OF DATE — build again to use the current specifications.")
+        self.report.setText("\n".join(lines))
 
     def refresh(self, select=None):
         engine = self.engine

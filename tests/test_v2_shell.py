@@ -63,6 +63,73 @@ class NativeDialogTests(unittest.TestCase):
 
 
 class V2ShellTests(unittest.TestCase):
+    @isolated_gui_test
+    def test_loaded_document_navigation_does_not_mark_work_dirty(self):
+        import cv2
+        from tests.atlas_fixture import make_processed_atlas
+
+        with tempfile.TemporaryDirectory() as folder:
+            window = self.make_window(folder)
+            root = Path(folder)
+            engine = window.engine
+            self.assertTrue(engine.load_volume_atlas(str(make_processed_atlas(root / "atlas"))))
+            source = root / "section.png"
+            cv2.imwrite(str(source), np.zeros((32, 24, 3), dtype=np.uint8))
+            self.assertTrue(engine.load_single_image_file(str(source), ".png"))
+            window.mark_saved()
+            for step in ("project", "section", "match", "register", "annotate", "results"):
+                window.go_to(step)
+                self.assertFalse(window.is_dirty(), step)
+            for view in ("compare", "atlas", "section", "3d", "multi", "compare"):
+                window.set_view(view)
+                self.assertFalse(window.is_dirty(), view)
+
+    @isolated_gui_test
+    def test_saved_work_edits_are_dirty_and_idle_refresh_does_not_rescan(self):
+        import cv2
+        from unittest.mock import patch
+        from PyQt6.QtWidgets import QMessageBox
+
+        with tempfile.TemporaryDirectory() as folder:
+            window = self.make_window(folder)
+            engine = window.engine
+            source = str(Path(folder) / "section.png")
+            cv2.imwrite(source, np.zeros((32, 24, 3), dtype=np.uint8))
+            self.assertTrue(engine.load_single_image_file(source, ".png"))
+            window.mark_saved()
+            fiber = engine.add_implant("fiber")
+            self.assertTrue(window.is_dirty())
+            window.mark_saved()
+            engine.set_implant_outline(fiber.implant_id, [[1, 1], [5, 1], [5, 5]])
+            self.assertTrue(window.is_dirty())
+            window.mark_saved()
+            engine.set_implant_specs(fiber.implant_id, {"diameter_um": 400})
+            self.assertTrue(window.is_dirty())
+            engine.working_img_data["img-cells"] = [[float(i), float(i)] for i in range(100)]
+            window.mark_saved()
+            engine.working_img_data["img-cells"][-1] = [5., 6.]
+            self.assertTrue(window.is_dirty())
+            engine.image_view.current_img[0, 0, 0] = 100
+            window.mark_saved()
+            engine.image_view.current_img[0, 0, 0] = 0
+            engine.image_view.current_img[0, 1, 0] = 100
+            self.assertTrue(window.is_dirty())
+            window.mark_saved()
+            engine.site_face = (engine.site_face + 1) % 4
+            self.assertTrue(window.is_dirty())
+            window.mark_saved()
+            with patch.object(window, "_digest", side_effect=ValueError("bad state")):
+                self.assertTrue(window.is_dirty())
+                with patch("driftlessmap.v2.shell.QMessageBox.question",
+                           return_value=QMessageBox.StandardButton.Cancel) as question:
+                    self.assertFalse(window.confirm_discard("close"))
+                    question.assert_called_once()
+            window.mark_saved()
+            with patch.object(window, "_digest", wraps=window._digest) as digest:
+                window.refresh()
+                window.refresh()
+                digest.assert_not_called()
+
     @classmethod
     def setUpClass(cls):
         cls.application = (QApplication.instance() or QApplication([])) if V2_TEST_CHILD else None

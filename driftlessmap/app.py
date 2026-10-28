@@ -100,7 +100,9 @@ from .triangulation import (
 )
 
 from .interfaces import start_interface
-from .transactions import TransactionHistory
+from .transactions import TransactionHistory, unpack
+from .project_session import ProjectSessionMixin
+from .state_digest import state_digest
 from .implant_engine import ImplantEngineMixin
 from .mapping_records import (
     IMPLANT_KINDS,
@@ -170,6 +172,7 @@ from . import registration_input
 from .registration_review import (
     REVIEWED,
     RegistrationReview,
+    legacy as LEGACY_FINGERPRINT,
     registration_fingerprint,
 )
 from .landmarks import LANDMARK_FIELDS, LandmarkModel, triangulation_payload_error
@@ -195,7 +198,7 @@ script_dir = dirname(realpath(__file__))
 FORM_Main, _ = loadUiType((join(dirname(__file__), "main_window.ui")))
 
 
-class DriftlessMap(ImplantEngineMixin, QMainWindow, FORM_Main):
+class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, QMainWindow, FORM_Main):
     def __init__(self, parent=FORM_Main):
         super(DriftlessMap, self).__init__()
         QMainWindow.__init__(self)
@@ -1848,8 +1851,12 @@ class DriftlessMap(ImplantEngineMixin, QMainWindow, FORM_Main):
         names += ["Channel {}".format(i + 1) for i in range(len(names), count)]
         return names[:count], bool(getattr(image_file, "is_rgb", False))
 
-    def current_registration_fingerprint(self):
-        """Fingerprint of the registration inputs a review applies to."""
+    def current_registration_fingerprint(self, *, legacy=False):
+        """Fingerprint of the registration inputs a review applies to.
+
+        ``legacy=True`` gives the format written before 2.0.0a26, for migrating
+        mapping records only.
+        """
         view = self.atlas_view
         plane = self.atlas_display
         pages = {"coronal": view.current_coronal_index,
@@ -1862,7 +1869,20 @@ class DriftlessMap(ImplantEngineMixin, QMainWindow, FORM_Main):
             self.atlas_tri_onside_data, self.histo_tri_onside_data,
             plane, pages.get(plane), tilts.get(plane, ()),
             np.shape(image) if image is not None else (),
+            simplices=LEGACY_FINGERPRINT if legacy else self.tri_simplices,
         )
+
+    def _migrate_mapping_fingerprints(self):
+        """Keep marks mapped before 2.0.0a26 current when their registration is unchanged.
+
+        Reviews still lapse (the old fingerprint did not cover connectivity), but
+        a mapping's atlas marks were computed from the saved landmarks, so the
+        same landmarks, page, tilt and image mean the same mapping.
+        """
+        old = self.current_registration_fingerprint(legacy=True)
+        new = self.current_registration_fingerprint()
+        if old != new:
+            self.mapping_ledger.restamp(self.section_id, old, new)
 
     def registration_review_state(self):
         """"reviewed", "not reviewed" or "not recorded" for the registration."""
@@ -4347,35 +4367,31 @@ class DriftlessMap(ImplantEngineMixin, QMainWindow, FORM_Main):
                        "cell_layer_index", "cell_count", "atlas-drawing", "atlas-contour",
                        "atlas-virus")
 
-    def _transaction_state(self):
-        """Everything Map, Update, Make parts and Build can change."""
-        objects = self.object_ctrl.get_obj_data()
-        return {
-            "live": self._live_marks(),
-            "atlas": {key: copy.deepcopy(self.working_atlas_data[key])
-                      for key in self.ATLAS_MARK_KEYS},
+    def _transaction_state(self, *, copy_state=True):
+        """Everything Map, Update, Make parts and Build can change.
+
+        The history packer copies immediately, so it can borrow arrays without
+        allocating a second full mask before compression. Other callers get an
+        independent snapshot by default.
+        """
+        state = {
+            "live": {key: self.working_img_data[key] for key in self.LIVE_MARK_KEYS},
+            "atlas": {key: self.working_atlas_data[key] for key in self.ATLAS_MARK_KEYS},
             "records": self.mapping_ledger.to_list(),
-            "atlas_mark_origin": copy.deepcopy(self.atlas_mark_origin),
+            "atlas_mark_origin": self.atlas_mark_origin,
             "editing_units": sorted(self.editing_units),
-            "objects": {key: copy.deepcopy(value) for key, value in objects.items()},
+            "objects": self.object_ctrl.get_obj_data(),
             "registration_review": self.registration_review.to_dict(),
             "mapping_review_state": self.mapping_review_state,
             "implants": self._implant_state(),
         }
+        return copy.deepcopy(state) if copy_state else state
 
     def _transaction_signature(self):
-        """A cheap summary that changes whenever an undoable action changed something."""
-        o = self.object_ctrl
-        return repr((
-            [(r.unit_id, r.revision) for r in self.mapping_ledger.records()],
-            list(o.obj_name), list(o.obj_type), copy.deepcopy(o.obj_derivation),
-            [self._atlas_marks_digest(kind) for kind in MAPPED_KINDS],
-            [len(self.working_img_data[key] or []) if key != "img-virus"
-             else self.working_img_data[key] is None
-             for key in ("img-probe", "img-cells", "img-drawing", "img-contour", "img-virus")],
-            self.mapping_review_state,
-            self._implant_signature(),
-        ))
+        """Identify changed content, including rebuilding an object under the same name."""
+        state = self._transaction_state(copy_state=False)
+        state["objects"].pop("current_obj_index", None)
+        return state_digest(state)
 
     @contextmanager
     def undoable(self, label):
@@ -4388,17 +4404,27 @@ class DriftlessMap(ImplantEngineMixin, QMainWindow, FORM_Main):
                 self._transaction_depth -= 1
             return
         before = self._transaction_signature()
-        transaction = self.undo_history.prepare(label, self._transaction_state())
+        transaction = self.undo_history.prepare(label, self._transaction_state(copy_state=False))
         if transaction is None:
             self.print_message("{} is too large to undo (over the undo memory budget); it "
                                "will not be undoable.".format(label), self.reminder_color)
         self._transaction_depth = 1
         try:
             yield
+        except Exception:
+            if transaction is not None:
+                self._restore_transaction_state(unpack(transaction.state))
+            else:
+                self.undo_history.clear()
+            self.sync_mapping_undo_actions()
+            raise
         finally:
             self._transaction_depth = 0
-        if transaction is not None and self._transaction_signature() != before:
-            self.undo_history.commit(transaction)
+        if self._transaction_signature() != before:
+            if transaction is None:
+                self.undo_history.clear()
+            else:
+                self.undo_history.commit(transaction)
             # The per-tool edit history refers to state this action replaced.
             self.action_list = []
             self.action_id = 0
@@ -4424,7 +4450,7 @@ class DriftlessMap(ImplantEngineMixin, QMainWindow, FORM_Main):
             self.print_message("Nothing to {}.".format(verb.lower()[:-1] if verb == "Undid"
                                                          else "redo"), self.reminder_color)
             return False
-        state = step(self._transaction_state())
+        state = step(self._transaction_state(copy_state=False))
         self._restore_transaction_state(state)
         self.action_list = []
         self.action_id = 0
@@ -4601,8 +4627,9 @@ class DriftlessMap(ImplantEngineMixin, QMainWindow, FORM_Main):
 
     def object_mapping_status(self, index):
         """Whether object ``index`` is current, out of date or of unknown origin."""
-        return derivation_status(self.object_ctrl.obj_derivation[index], self.mapping_ledger,
-                                 self.section_id, self.current_registration_fingerprint())
+        return self.implant_build_status(index) or derivation_status(
+            self.object_ctrl.obj_derivation[index], self.mapping_ledger,
+            self.section_id, self.current_registration_fingerprint())
 
     def out_of_date_objects(self, indexes=None):
         o = self.object_ctrl
@@ -4617,8 +4644,9 @@ class DriftlessMap(ImplantEngineMixin, QMainWindow, FORM_Main):
         """
         fingerprint = self.current_registration_fingerprint()
         records = [(r, r.status(self.section_id, fingerprint)) for r in self.kept_marks()]
-        objects = [derivation_status(entries, self.mapping_ledger, self.section_id, fingerprint)
-                   for entries in self.object_ctrl.obj_derivation]
+        objects = [self.implant_build_status(i) or derivation_status(
+            entries, self.mapping_ledger, self.section_id, fingerprint)
+            for i, entries in enumerate(self.object_ctrl.obj_derivation)]
         return records, objects
 
     def kept_marks(self):
@@ -7816,6 +7844,11 @@ class DriftlessMap(ImplantEngineMixin, QMainWindow, FORM_Main):
             notes.append("The project copy was not saved; see the message below the image.")
 
         built = [i for i, kind in enumerate(o.obj_type) if kind.startswith("merged")]
+        stale = self.out_of_date_objects(built)
+        if stale:
+            notes.append("Exported results include out-of-date objects: {}. Rebuild or "
+                         "update their mappings before using them as current results.".format(
+                             ", ".join(o.obj_name[i] for i in stale)))
         old_probes = [i for i in built if o.obj_type[i] == "merged probe"
                       and "reconstruction" not in o.obj_data[i]]
         if old_probes:
@@ -7878,8 +7911,8 @@ class DriftlessMap(ImplantEngineMixin, QMainWindow, FORM_Main):
         stale = self.out_of_date_objects(indexes)
         if stale:
             self.print_message(
-                "Exported, but out of date: {}. The registration or the mapped marks "
-                "changed after they were made; the files record this.".format(
+                "Exported, but out of date: {}. The registration, mapped marks or build "
+                "settings changed after they were made; the files record this.".format(
                     ", ".join(self.object_ctrl.obj_name[i] for i in stale)),
                 self.reminder_color)
 
@@ -8739,6 +8772,12 @@ class DriftlessMap(ImplantEngineMixin, QMainWindow, FORM_Main):
         input references.
         """
         path = path if isinstance(path, str) else None
+        if getattr(self, "_project_recovery", None) is not None:
+            self.print_message("Saving is disabled after an incomplete recovery. Reopen the "
+                               "preserved project before saving: {}".format(
+                                   getattr(self, "_project_recovery_path", "retained in memory")),
+                               self.error_message_color)
+            return False
         self.print_message("Saving Project ...", self.normal_color)
         if (
             self.atlas_view.atlas_data is None
@@ -8790,61 +8829,6 @@ class DriftlessMap(ImplantEngineMixin, QMainWindow, FORM_Main):
                     "changed file.",
                     self.reminder_color,
                 )
-            if self.current_atlas == "slice":
-                atlas_ctrl_data = self.atlas_view.save_slice_data_and_info()
-            else:
-                atlas_rotation = self.atlas_view.get_atlas_angles()
-                atlas_ctrl_data = {
-                    "atlas_display": self.atlas_display,
-                    "coronal_index": self.atlas_view.current_coronal_index,
-                    "sagittal_index": self.atlas_view.current_sagital_index,
-                    "horizontal_index": self.atlas_view.current_horizontal_index,
-                    "slice_rotation": atlas_rotation,
-                }
-
-            if self.image_view.current_img is not None:
-                img_ctrl_data = self.image_view.get_img_ctrl_data()
-            else:
-                img_ctrl_data = None
-
-            setting_data = self.get_setting_data()
-
-            tool_data = self.tool_box.get_tool_data()
-
-            if self.layer_ctrl.layer_link:
-                layer_data = self.layer_ctrl.get_layer_data()
-                all_2d_data = []
-                cells_symbol_atlas = None
-                cells_symbol_img = None
-                for single_layer_link in self.layer_ctrl.layer_link:
-                    if "atlas" in single_layer_link:
-                        data_2d = self.get_atlas_single_layer_vis_data(
-                            single_layer_link
-                        )
-                        if "cells" in single_layer_link:
-                            cells_symbol_atlas = data_2d["symbol"]
-                    else:
-                        data_2d = self.get_hist_single_layer_vis_data(single_layer_link)
-                        if "cells" in single_layer_link:
-                            cells_symbol_img = data_2d["symbol"]
-                    all_2d_data.append(data_2d["data"])
-                layer_data["2d_data"] = all_2d_data
-                layer_data["cells_symbol_atlas"] = cells_symbol_atlas
-                layer_data["cells_symbol_img"] = cells_symbol_img
-            else:
-                layer_data = None
-
-            if self.object_ctrl.obj_name:
-                object_data = self.object_ctrl.get_obj_data()
-                # object_data["object_3d_list"] = [
-                #     [] for _ in range(len(self.object_3d_list))
-                # ]
-            else:
-                object_data = None
-
-            probe_planning = self.get_probe_planning_data()
-            probe_settings = probe_planning["probe_settings"]
-
             saved_at = utc_now_iso()
             if self.project_created_at is None:
                 self.project_created_at = saved_at
@@ -8875,63 +8859,14 @@ class DriftlessMap(ImplantEngineMixin, QMainWindow, FORM_Main):
                         )
                         return False
 
-            project_data = {
-                "project_schema_version": PROJECT_SCHEMA_VERSION,
-                "software": {"name": "DriftlessMap", "version": __version__},
-                "created_at": self.project_created_at,
-                "saved_at": saved_at,
-                "portable": bool(portable_sources),
-                "portable_sources": portable_sources,
-                "atlas_provenance": atlas_provenance,
-                "histology_provenance": histology_provenance,
-                "session_state": {
-                    "current_layout": self.current_layout,
-                    "layer_shift_val": self.layer_shift_val,
-                    "layer_rotate_val": self.layer_rotate_val,
-                    "display_mode_3d": self.display_mode_3d,
-                    "display_mode_2d": self.display_mode_2d,
-                    "planes_visible": self.is_planes_on,
-                    "axes_visible": self.is_axis_on,
-                    "grids_visible": self.is_grids_on,
-                    "object_display_mode": self.obj_display_mode,
-                },
-                "atlas_path": self.current_atlas_path,
-                "img_path": (
-                    histology_provenance.get("reference", {}).get("absolute_path")
-                    if self.current_img_path == self._temporary_histology_source
-                    and histology_provenance is not None
-                    and histology_provenance.get("reference") is not None
-                    else self.current_img_path
-                ),
-                "current_atlas": self.current_atlas,
-                "num_windows": self.num_windows,
-                "probe_settings": probe_settings,
-                "probe_planning": probe_planning,
-                "registration_input": (
-                    self.registration_input.to_dict()
-                    if self.registration_input is not None else None
-                ),
-                "registration_review": self.registration_review.to_dict(),
-                "mapping_review_state": self.mapping_review_state,
-                "section_id": self.section_id,
-                "mapping_records": self.mapping_ledger.to_list(),
-                "atlas_mark_origin": self.atlas_mark_origin,
-                "implants": self.implants.to_list(),
-                "implant_outlines": self.implant_outlines,
-                "interface_state": self._interface_state_for_save(),
-                "np_onside": self.np_onside,
-                "processing_slice": self.atlas_view.processing_slice,
-                "processing_img": self.image_view.processing_img,
-                "overlay_img": self.overlay_img,
-                "atlas_control": atlas_ctrl_data,
-                "img_ctrl_data": img_ctrl_data,
-                "setting_data": setting_data,
-                "tool_data": tool_data,
-                "layer_data": layer_data,
-                "working_img_data": self.working_img_data,
-                "working_atlas_data": self.working_atlas_data,
-                "object_data": object_data,
-            }
+            project_data = self.project_payload()
+            project_data.update(saved_at=saved_at, created_at=self.project_created_at,
+                                atlas_provenance=atlas_provenance,
+                                histology_provenance=histology_provenance,
+                                portable_sources=portable_sources, portable=bool(portable_sources))
+            if (self.current_img_path == self._temporary_histology_source
+                    and histology_provenance and histology_provenance.get("reference")):
+                project_data["img_path"] = histology_provenance["reference"]["absolute_path"]
 
             success, error = run_in_background(
                 self,
@@ -9125,7 +9060,7 @@ class DriftlessMap(ImplantEngineMixin, QMainWindow, FORM_Main):
     _with_defaults = staticmethod(with_defaults)
     _object_file_names = staticmethod(object_file_names)
 
-    def load_project(self, p_dict):
+    def _restore_project_payload(self, p_dict, runtime=None):
         self.current_atlas_path = p_dict["atlas_path"]
         self.current_img_path = p_dict["img_path"]
         self.current_atlas = p_dict["current_atlas"]
@@ -9172,15 +9107,13 @@ class DriftlessMap(ImplantEngineMixin, QMainWindow, FORM_Main):
         if self.current_atlas_path is not None:
             atlas_ctrl_data = p_dict["atlas_control"]
             if self.current_atlas == "volume":
-                if not self.load_volume_atlas(self.current_atlas_path):
-                    self.print_message(
-                        "The project's volume atlas could not be loaded, so "
-                        "the project was not opened. {}".format(
-                            self.statusbar.currentMessage().strip()
-                        ),
-                        self.error_message_color,
-                    )
-                    return
+                if runtime is not None and runtime["volume"] is not None:
+                    volume = runtime["volume"]
+                    self.set_volume_atlas_to_view(*volume[:5])
+                    self.set_volume_atlas_3d(list(volume[6]), volume[5], volume[6])
+                elif not self.load_volume_atlas(self.current_atlas_path):
+                    raise ValueError("The project's volume atlas could not be loaded. "
+                                     + self.statusbar.currentMessage().strip())
 
                 self.atlas_display = atlas_ctrl_data["atlas_display"]
 
@@ -9207,6 +9140,9 @@ class DriftlessMap(ImplantEngineMixin, QMainWindow, FORM_Main):
                 self.actionBregma_Picker.setEnabled(True)
                 self.actionCreate_Slice_Layer.setEnabled(True)
                 self.show_only_slice_window()
+        else:
+            # A section-only document must not inherit an earlier atlas.
+            self._clear_project_atlas()
 
         # load image data
         if p_dict.get("img_ctrl_data") is not None:
@@ -9219,7 +9155,12 @@ class DriftlessMap(ImplantEngineMixin, QMainWindow, FORM_Main):
             )
             self.image_view.scale_slider.blockSignals(False)
 
-            if p_dict.get("_histology_load_mode") == "embedded":
+            if runtime is not None and runtime["image_reader"] is not None:
+                self.image_view.set_data(runtime["image_reader"])
+                self.image_view.volume_img = runtime["volume_img"]
+                self.image_view.load_img_ctrl_data(img_ctrl_data)
+                self.reset_corners_hist()
+            elif p_dict.get("_histology_load_mode") == "embedded":
                 self._load_embedded_histology(img_ctrl_data)
                 # The raster did not come from any file on disk. Unlink the
                 # path so later saves keep the project's original reference
@@ -9241,7 +9182,7 @@ class DriftlessMap(ImplantEngineMixin, QMainWindow, FORM_Main):
                     planes=plane_selection(img_ctrl_data.get("plane_selection")),
                     scale=img_ctrl_data.get("image_scale"),
                 ):
-                    return
+                    raise ValueError("The project's histology could not be loaded.")
                 self.image_view.load_img_ctrl_data(img_ctrl_data)
                 self._loaded_histology_signature = path_stat_signature(
                     self.current_img_path
@@ -9262,6 +9203,15 @@ class DriftlessMap(ImplantEngineMixin, QMainWindow, FORM_Main):
                     self.show_slice_and_histology()
             else:
                 self.show_only_image_window()
+        else:
+            self.image_view.clear_image_stacks()
+            for item in self.image_view.img_stacks.image_list:
+                item.clear()
+            self.image_view.current_img = None
+            self.image_view.processing_img = None
+            self.image_view.volume_img = None
+            self.image_view.image_file = None
+            self.layerpanel.setEnabled(False)
 
         self.registration_input = self._saved_registration_input(p_dict)
         self.registration_review = self._saved_registration_review(p_dict)
@@ -9296,6 +9246,8 @@ class DriftlessMap(ImplantEngineMixin, QMainWindow, FORM_Main):
         try:
             self.set_probe_planning_data(probe_planning)
         except (KeyError, TypeError, ValueError) as exc:
+            # Planning settings are not mapped work; older projects can carry
+            # values this version does not accept. Open the rest.
             self.print_message(
                 "The project's probe settings were not restored: {}".format(exc),
                 self.error_message_color,
@@ -9398,15 +9350,8 @@ class DriftlessMap(ImplantEngineMixin, QMainWindow, FORM_Main):
             self.show_grids()
         self.obj_display_mode = desired_object_mode
 
+        self._migrate_mapping_fingerprints()
         self.interface_state = clean_interface_state(p_dict.get("interface_state"))
-        self.print_message("Project loaded successfully.", self.normal_color)
-        if callable(self.on_project_loaded):
-            try:
-                self.on_project_loaded(self.interface_state)
-            except Exception as exc:   # the work is restored; only the view is not
-                self.print_message("The project is loaded, but where you left off "
-                                   "could not be restored: {}".format(exc),
-                                   self.reminder_color)
 
     def get_setting_data(self):
         data = {
@@ -9551,38 +9496,23 @@ class DriftlessMap(ImplantEngineMixin, QMainWindow, FORM_Main):
                 )
                 return
 
-            prepared = self.prepare_project_sources(p_dict, project_path[0])
-            if prepared is None:
-                return
-            p_dict = prepared
-            self.current_project_path = project_path[0]
-
-            # Only now that a complete project is ready to replace the
-            # session are the current objects removed.
-            self.object_ctrl.clear_all()
-            if self.object_3d_list:
-                for _ in range(len(self.object_3d_list)):
-                    if not isinstance(self.object_3d_list[-1], list):
-                        self.view3d.removeItem(self.object_3d_list[-1])
-                        self.object_3d_list[-1].deleteLater()
-                    self.object_3d_list.pop()
-
-            if self.atlas_view.atlas_data is not None:
-                self.delete_all_atlas_layer()
-
-            # if self.image_view.image_file is not None:
-            #     self.delete_all
-            self.layer_ctrl.clear_all()
-
+            previous_source = self._temporary_histology_source
+            opened = False
             try:
-                self.load_project(p_dict)
-            except (KeyError, TypeError, ValueError, IndexError) as exc:
-                self.print_message(
-                    "The project could not be opened completely ({}). The "
-                    "session may be partly restored; do not save over the "
-                    "original project.".format(exc),
-                    self.error_message_color,
-                )
+                prepared = self.prepare_project_sources(p_dict, project_path[0])
+                if prepared is None:
+                    return
+                opened = self.load_project(prepared, project_path=project_path[0])
+                if not opened:
+                    return
+            except (KeyError, TypeError, ValueError, IndexError, OSError) as exc:
+                self.print_message("The project inputs could not be prepared ({}). "
+                                   "The current project was not replaced.".format(exc),
+                                   self.error_message_color)
+                return
+            finally:
+                if not opened:
+                    self._temporary_histology_source = previous_source
 
         else:
             self.print_message("", self.normal_color)

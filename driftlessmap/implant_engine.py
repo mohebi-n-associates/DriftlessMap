@@ -38,7 +38,7 @@ from .implants import (
     resample_closed,
     validated_outline,
 )
-from .mapping_records import IMPLANT_KINDS, derivation
+from .mapping_records import BUILD_CHANGED, IMPLANT_KINDS, derivation
 from .provenance import utc_now_iso
 from .triangulation import transform_points_piecewise
 
@@ -96,6 +96,17 @@ class ImplantEngineMixin:
     def implant_report(self, implant_id):
         built = self.implant_objects(implant_id, built=True)
         return self.object_ctrl.obj_data[built[-1]].get("report") if built else None
+
+    def implant_build_status(self, index):
+        """Compare the retained build recipe with the current implant specs."""
+        o = self.object_ctrl
+        if o.obj_type[index] not in ("merged fiber", "merged prism"):
+            return None
+        data = o.obj_data[index]
+        implant = self.implants.get(data.get("implant_id"))
+        if implant is not None and data.get("report", {}).get("specs") != implant.specs:
+            return BUILD_CHANGED
+        return None
 
     def implant_outline(self, implant_id):
         return self.implant_outlines.get(implant_id, {"points": [], "point": None})
@@ -413,7 +424,10 @@ class ImplantEngineMixin:
         for implant in self.implants.implants():
             report = self.implant_report(implant.implant_id)
             if report is not None:
-                rows.append(implant_model.csv_row(implant.name, report))
+                row = implant_model.csv_row(implant.name, report)
+                index = self.implant_objects(implant.implant_id, built=True)[-1]
+                row["status"] = self.object_mapping_status(index)
+                rows.append(row)
         rows.extend(self._probe_table_rows())
         with open(path, "w", newline="", encoding="utf-8") as handle:
             writer = csv.DictWriter(handle, fieldnames=implant_model.CSV_COLUMNS)
@@ -423,7 +437,7 @@ class ImplantEngineMixin:
 
     def _probe_table_rows(self):
         o = self.object_ctrl
-        built = [(o.obj_name[i], o.obj_data[i]) for i in range(len(o.obj_type))
+        built = [(i, o.obj_name[i], o.obj_data[i]) for i in range(len(o.obj_type))
                  if o.obj_type[i] == "merged probe" and isinstance(o.obj_data[i], dict)
                  and "reconstruction" in o.obj_data[i]]
         if not built:
@@ -432,14 +446,16 @@ class ImplantEngineMixin:
         if error is not None:
             return []
         rows = []
-        for name, data in built:
+        for index, name, data in built:
             # "Probe 1 shank 2" was mapped as "Probe 1".
             probe = re.sub(r" shank \d+$", "", name)
             sections = sum(1 for record in self.mapping_ledger.records()
                            if record.kind == "probe" and record.probe == probe)
             try:
-                rows.append(implant_model.probe_csv_row(name, data["reconstruction"], frame,
-                                                        sections or ""))
+                row = implant_model.probe_csv_row(name, data["reconstruction"], frame,
+                                                   sections or "")
+                row["status"] = self.object_mapping_status(index)
+                rows.append(row)
             except (KeyError, TypeError, ValueError):
                 continue        # an older probe without usable reconstruction metadata
         return rows

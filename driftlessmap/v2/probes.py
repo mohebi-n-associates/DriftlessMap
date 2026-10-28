@@ -133,12 +133,25 @@ class ProbeBook:
         new = self.check_name(new)
         if new != old and new in self.names():
             raise ValueError("There is already a probe called {}.".format(new))
-        for index, name, _kind in self._objects():
+        ledger = getattr(self.engine, "mapping_ledger", None)
+        if ledger is not None:
+            ledger.rename_probe(old, new)
+
+        def renamed(name):
+            group = group_of(name)
+            return new + name[len(old):] if probe_of(group) == old else name
+
+        for index, name, kind in self._objects():
+            if kind not in ("probe piece", "merged probe"):
+                continue
             group = group_of(name)
             if probe_of(group) != old:
                 continue
             rest = name[len(group):]
             self._set_name(index, new + group[len(old):] + rest)
+            data = self.engine.object_ctrl.obj_data[index]
+            if isinstance(data, dict) and "pieces_names" in data:
+                data["pieces_names"] = [renamed(n) for n in data["pieces_names"]]
         if old in self._empty:
             self._empty[self._empty.index(old)] = new
         if old in self._colours:
@@ -152,6 +165,13 @@ class ProbeBook:
         if probe in self._empty:
             self._empty.remove(probe)
         self._colours.pop(probe, None)
+        ledger = getattr(self.engine, "mapping_ledger", None)
+        if ledger is not None:
+            for record in ledger.records():
+                if record.kind == "probe" and record.probe == probe:
+                    ledger.forget(record.unit_id)
+                    self.engine.editing_units.discard(record.unit_id)
+            self.engine.refresh_kept_marks()
 
     # ------------------------------------------------------------ marks
     def marks(self):
