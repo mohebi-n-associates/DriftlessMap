@@ -4288,6 +4288,11 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, QMainWindow, FORM_Ma
             self.working_img_data["img-virus"] = None
             self.print_message("Virus transferred.", self.normal_color)
 
+        # The section's marks now live in the mapping records (shown as the
+        # kept-marks overlay); remove their live drawing.
+        for kind, source in sources.items():
+            if source is not None:
+                self._show_section_marks(kind)
         self._record_mappings(sources, fingerprint, probe)
         self.print_message("All objects transferred.", self.normal_color)
 
@@ -4374,6 +4379,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, QMainWindow, FORM_Ma
         if kind == "expression":
             mask = data["img-virus"]
             if mask is None:
+                self._clear_section_item("img-virus")
                 return
             items["img-virus"].setImage(mask)
             res = cv2.resize(color_vis_img(mask, self.virus_lut[1]), thumb,
@@ -4396,6 +4402,11 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, QMainWindow, FORM_Ma
         else:
             items[key].setData(points)
         if not len(points):
+            # Emptied marks (mapped, or deleted with their probe) leave no
+            # trace on the section.
+            self._clear_section_item(key)
+            if kind == "probe":
+                items["img-trajectory"].clear()
             return
         colour, style = {"cells": (self.cell_color, "p"), "probe": (self.probe_color, "p"),
                          "drawing": (self.pencil_color, "l"),
@@ -4403,6 +4414,20 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, QMainWindow, FORM_Ma
         res = cv2.resize(create_vis_img(size, points, colour, style), thumb,
                          interpolation=cv2.INTER_AREA)
         self.layer_ctrl.master_layers(res, layer_type=key, color=colour)
+
+    def _clear_section_item(self, key):
+        if key in self.layer_ctrl.layer_link:
+            self.remove_single_link_related(key)
+        else:
+            self.image_view.img_stacks.image_dict[key].clear()
+
+    def clear_live_marks(self, kind):
+        """Discard the unmapped marks of ``kind`` on the section and the atlas."""
+        section_key, atlas_key = MAPPED_KINDS[kind]
+        self.working_img_data[section_key] = None if kind == "expression" else []
+        self.working_atlas_data[atlas_key] = []
+        self._show_section_marks(kind)
+        self._show_atlas_marks(kind)
 
     def _loaded_record(self, unit_id, action):
         record = self.mapping_ledger.by_unit(unit_id)
@@ -4663,6 +4688,8 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, QMainWindow, FORM_Ma
         o = self.object_ctrl
         before = len(o.obj_name)
         maker()
+        # The marks became parts: show what is left of them on the atlas.
+        self._show_atlas_marks(kind)
         created = list(range(before, len(o.obj_name)))
         if record is None or not created:
             return created

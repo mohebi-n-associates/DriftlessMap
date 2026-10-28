@@ -3,6 +3,16 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.0.0rc7
+
+Release-candidate fix, 28 October 2026.
+
+Deleting a probe removes its marks from the screen. Marks that had been mapped
+stayed drawn on the section and the atlas although they were gone from the
+project, which made further editing confusing. Mapped marks now leave the live
+drawing (the kept-marks overlay shows them), parts take their atlas marks off the
+atlas, and deleting a probe also discards the marks still being placed for it.
+
 ## DriftlessMap 2.0.0rc6
 
 Release-candidate fix, 28 October 2026.
