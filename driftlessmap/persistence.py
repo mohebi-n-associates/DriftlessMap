@@ -527,9 +527,18 @@ def _target_mode(destination):
 
 
 def _fsync_file(path):
-    """Flush file contents to disk so ``os.replace`` never exposes a stub."""
-    with open(path, "rb") as stream:
-        os.fsync(stream.fileno())
+    """Flush file contents to disk so ``os.replace`` never exposes a stub.
+
+    The file is opened for writing: on Windows ``os.fsync`` of a read-only
+    handle fails with "[Errno 9] Bad file descriptor", which made every save
+    fail there. Flushing is best effort: some network and removable drives
+    cannot flush, and the rename is atomic either way.
+    """
+    with open(path, "r+b") as stream:
+        try:
+            os.fsync(stream.fileno())
+        except OSError:
+            pass
 
 
 def _fsync_directory(path):

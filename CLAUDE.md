@@ -10,7 +10,7 @@ or important workflows change.
 
 - Current stable release: DriftlessMap 1.6.1. `main` carries DriftlessMap 2.0,
   published as the release candidate 2.0.0rc1 (after the 2.0.0aN previews).
-  Fixes before the final release become 2.0.0rcN (currently 2.0.0rc7). Plain 2.0.0 is reserved for
+  Fixes before the final release become 2.0.0rcN (currently 2.0.0rc8). Plain 2.0.0 is reserved for
   the release that passes the gates in `release_validation.md`. Never give V2
   work 1.x numbers. A published GitHub release runs `release.yml` (PyPI, trusted
   publishing) and `desktop-builds.yml` (Windows ZIP and macOS DMG attached to
@@ -278,7 +278,9 @@ or important workflows change.
   reload; normal histology saves retain the embedded raster without linking the
   changed source; portable histology saves require reload.
 - Repeated references to the same NumPy array are stored once per archive.
-- Saves must stay atomic: write a temporary archive, then `os.replace`.
+- Saves must stay atomic: write a temporary archive, then `os.replace`. Flush it
+  through a writable handle (Windows rejects `os.fsync` on read-only handles);
+  flushing is best effort.
 
 ### Objects and probes
 
