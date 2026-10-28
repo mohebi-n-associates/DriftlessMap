@@ -38,6 +38,7 @@ from PyQt6.QtGui import (
     QPainter,
     QShortcut,
 )
+from . import file_dialogs
 from .utils import read_qss_file
 from .layers_control import LayersControl
 from .object_control import ObjectControl
@@ -1082,7 +1083,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, QMainWindow, FORM_Ma
                 self.print_message(msg, self.error_message_color)
 
     def save_probe_setting_called(self):
-        path = QFileDialog.getSaveFileName(
+        path = file_dialogs.get_save_file_name(
             self,
             "Save Probe Setting",
             self.save_path,
@@ -1101,7 +1102,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, QMainWindow, FORM_Ma
         self.print_message("Probe setting saved successfully.", self.normal_color)
 
     def load_probe_setting_called(self):
-        path = QFileDialog.getOpenFileName(
+        path = file_dialogs.get_open_file_name(
             self,
             "Load Probe Setting",
             self.home_path,
@@ -1748,7 +1749,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, QMainWindow, FORM_Ma
         file_options = QFileDialog.Option(0)
         file_dialog = QFileDialog()
         file_dialog.setFileMode(QFileDialog.FileMode.ExistingFiles)
-        image_file_path = file_dialog.getOpenFileName(
+        image_file_path = file_dialogs.get_open_file_name(
             self, file_title, file_path, file_filter, options=file_options
         )
 
@@ -1852,7 +1853,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, QMainWindow, FORM_Ma
                 "No Slice information is given.", self.error_message_color
             )
             return
-        path = QFileDialog.getSaveFileName(
+        path = file_dialogs.get_save_file_name(
             self,
             "Save Processed Slice",
             self.home_path,
@@ -2277,7 +2278,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, QMainWindow, FORM_Ma
             self._build_triangulation_registration(
                 strict=False, show_error=False
             )
-        path = QFileDialog.getSaveFileName(
+        path = file_dialogs.get_save_file_name(
             self,
             "Save Triangulation Points Data",
             self.home_path,
@@ -2309,7 +2310,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, QMainWindow, FORM_Ma
         )
         dlg = QFileDialog()
         dlg.setFileMode(QFileDialog.FileMode.ExistingFiles)
-        pnt_path = dlg.getOpenFileName(
+        pnt_path = file_dialogs.get_open_file_name(
             self, "Load Triangulation Points", self.home_path, filter
         )
         # print(pnt_path)
@@ -7226,7 +7227,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, QMainWindow, FORM_Ma
         file_options = QFileDialog.Option(0)
         file_dialog = QFileDialog()
         file_dialog.setFileMode(QFileDialog.FileMode.ExistingFiles)
-        image_file_path = file_dialog.getOpenFileName(
+        image_file_path = file_dialogs.get_open_file_name(
             self, file_title, file_path, file_filter, options=file_options
         )
 
@@ -7711,7 +7712,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, QMainWindow, FORM_Ma
             file_path = self.current_atlas_path
         file_options = QFileDialog.Option(0)
         atlas_folder = str(
-            QFileDialog.getExistingDirectory(
+            file_dialogs.get_existing_directory(
                 self, dialog_title, file_path, options=file_options
             )
         )
@@ -7743,7 +7744,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, QMainWindow, FORM_Ma
 
         if atlas_folder is None:
             atlas_folder = str(
-                QFileDialog.getExistingDirectory(
+                file_dialogs.get_existing_directory(
                     self, "Select Atlas Folder", self.home_path
                 )
             )
@@ -7810,7 +7811,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, QMainWindow, FORM_Ma
             "Saving {} objects ...".format(object_type), self.normal_color
         )
         save_path = str(
-            QFileDialog.getExistingDirectory(
+            file_dialogs.get_existing_directory(
                 self, "Select Folder to Export Objects", self.current_img_path
             )
         )
@@ -7967,7 +7968,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, QMainWindow, FORM_Ma
                 self.error_message_color,
             )
             return
-        file_name = QFileDialog.getSaveFileName(
+        file_name = file_dialogs.get_save_file_name(
             self,
             "Save Current Object File",
             self.current_img_path,
@@ -8044,7 +8045,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, QMainWindow, FORM_Ma
         file_options = QFileDialog.Option(0)
         dlg = QFileDialog()
         dlg.setFileMode(QFileDialog.FileMode.ExistingFiles)
-        object_file_path = dlg.getOpenFileNames(
+        object_file_path = file_dialogs.get_open_file_names(
             self,
             "Load Object Files",
             self.home_path,
@@ -8124,7 +8125,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, QMainWindow, FORM_Ma
             self.print_message(msg, self.error_message_color)
             return
         self.print_message("Save current layer...", self.normal_color)
-        path = QFileDialog.getSaveFileName(
+        path = file_dialogs.get_save_file_name(
             self,
             "Save current layer",
             self.current_img_path,
@@ -8156,7 +8157,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, QMainWindow, FORM_Ma
         if path is not None:
             path = (path, "")
         else:
-            path = QFileDialog.getSaveFileName(
+            path = file_dialogs.get_save_file_name(
                 self,
                 "Save all layer",
                 self.current_img_path,
@@ -8616,7 +8617,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, QMainWindow, FORM_Ma
         file_options = QFileDialog.Option(0)
         dlg = QFileDialog()
         dlg.setFileMode(QFileDialog.FileMode.ExistingFiles)
-        layer_files_path = dlg.getOpenFileNames(
+        layer_files_path = file_dialogs.get_open_file_names(
             self,
             "Load Layer Files",
             self.home_path,
@@ -8825,7 +8826,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, QMainWindow, FORM_Ma
         if path is not None:
             file_name = (path, "")
         else:
-            file_name = QFileDialog.getSaveFileName(
+            file_name = file_dialogs.get_save_file_name(
                 self,
                 "Save Project",
                 self.save_path,
@@ -8943,9 +8944,9 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, QMainWindow, FORM_Ma
             "Select the original input to continue.".format(title),
         )
         if reference.get("kind") == "directory":
-            candidate = QFileDialog.getExistingDirectory(self, title, self.home_path)
+            candidate = file_dialogs.get_existing_directory(self, title, self.home_path)
         else:
-            candidate = QFileDialog.getOpenFileName(self, title, self.home_path)[0]
+            candidate = file_dialogs.get_open_file_name(self, title, self.home_path)[0]
         if not candidate:
             return None
         matches, reason = verify_reference(candidate, reference)
@@ -9011,7 +9012,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, QMainWindow, FORM_Ma
                 if legacy_path and os.path.isdir(legacy_path):
                     resolved_atlas = legacy_path
                 else:
-                    resolved_atlas = QFileDialog.getExistingDirectory(
+                    resolved_atlas = file_dialogs.get_existing_directory(
                         self, "Locate Volume Atlas Folder", self.home_path
                     )
             if not resolved_atlas:
@@ -9505,7 +9506,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, QMainWindow, FORM_Ma
         file_options = QFileDialog.Option(0)
         dlg = QFileDialog()
         dlg.setFileMode(QFileDialog.FileMode.ExistingFiles)
-        project_path = dlg.getOpenFileName(
+        project_path = file_dialogs.get_open_file_name(
             self,
             "Load Project",
             self.home_path,
@@ -9588,7 +9589,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, QMainWindow, FORM_Ma
         file_options = QFileDialog.Option(0)
         dlg = QFileDialog()
         dlg.setFileMode(QFileDialog.FileMode.ExistingFiles)
-        data_file_path = dlg.getOpenFileName(
+        data_file_path = file_dialogs.get_open_file_name(
             self,
             "Load Point Data",
             self.home_path,

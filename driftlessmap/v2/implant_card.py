@@ -13,7 +13,6 @@ from PyQt6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QDoubleSpinBox,
-    QFileDialog,
     QFormLayout,
     QInputDialog,
     QLabel,
@@ -24,6 +23,7 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
 )
 
+from .. import file_dialogs
 from .. import implants as model
 from .outline_editor import OutlineEditor
 from .probe_card import ProbeControls
@@ -371,7 +371,7 @@ class ImplantCard(Card):
         if not any(self.engine.implant_report(i.implant_id) for i in self.engine.implants.implants()):
             self._say(False, "Build an implant first.")
             return
-        path, _filter = QFileDialog.getSaveFileName(self, "Export implant table",
+        path, _filter = file_dialogs.get_save_file_name(self, "Export implant table",
                                                     "implants.csv", "CSV (*.csv)")
         if not path:
             return

@@ -9,7 +9,6 @@ from PyQt6.QtWidgets import (
     QComboBox,
     QDialog,
     QDialogButtonBox,
-    QFileDialog,
     QFormLayout,
     QFrame,
     QGridLayout,
@@ -36,6 +35,7 @@ from PyQt6.QtCore import (
     pyqtSignal,
     pyqtSlot,
 )
+from . import file_dialogs
 from .wtiles import QDoubleButton
 from .probe_csv import write_probe_csv_files
 from .roi_analysis import write_roi_csv
@@ -462,7 +462,7 @@ class DrawingInfoWindow(QDialog):
             character if character.isalnum() or character in "-_" else "_"
             for character in self.object_name
         )
-        file_path, _ = QFileDialog.getSaveFileName(
+        file_path, _ = file_dialogs.get_save_file_name(
             self,
             "Export drawing ROI coordinates",
             "{}_coordinates.csv".format(safe_name or "drawing_roi"),
@@ -971,7 +971,7 @@ class ProbeInfoWindow(QDialog):
             character if character.isalnum() or character in "-_" else "_"
             for character in self.object_name
         )
-        file_path, _ = QFileDialog.getSaveFileName(
+        file_path, _ = file_dialogs.get_save_file_name(
             self,
             "Choose a base name for the probe localization CSV files",
             "{}_probe_export.csv".format(safe_name or "probe"),

@@ -14,7 +14,6 @@ from os.path import dirname, join
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import (
     QButtonGroup,
-    QFileDialog,
     QFrame,
     QGridLayout,
     QHBoxLayout,
@@ -25,6 +24,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from .. import file_dialogs
 from ..allen_downloader import AllenDownloader
 from ..download_utils import read_download_manifest, thread_is_running
 from .widgets import Card, hint_label
@@ -210,7 +210,7 @@ class AllenDownloadDialog(AllenDownloader):
 
     # ------------------------------------------------------------ folder
     def choose_folder(self):
-        folder = QFileDialog.getExistingDirectory(self, "Folder for the Allen atlas",
+        folder = file_dialogs.get_existing_directory(self, "Folder for the Allen atlas",
                                                   self.saving_folder or "")
         if folder:
             self.saving_folder = folder

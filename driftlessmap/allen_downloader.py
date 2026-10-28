@@ -4,7 +4,6 @@ from os.path import dirname, join
 from PyQt6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
-    QFileDialog,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -27,6 +26,7 @@ import pyqtgraph.opengl as gl
 import nrrd
 import shutil
 import numpy as np
+from . import file_dialogs
 from .persistence import write_cache_pickle
 import pandas as pd
 
@@ -705,7 +705,7 @@ class AllenDownloader(QDialog):
 
     # Download button event
     def download_start(self):
-        self.saving_folder = str(QFileDialog.getExistingDirectory(self, "Select Folder to Save Atlas"))
+        self.saving_folder = str(file_dialogs.get_existing_directory(self, "Select Folder to Save Atlas"))
 
         if self.saving_folder != '':
             self.download_btn.setVisible(False)
@@ -732,7 +732,7 @@ class AllenDownloader(QDialog):
         if self.saving_folder is not None:
             saving_folder = self.saving_folder
         else:
-            saving_folder = str(QFileDialog.getExistingDirectory(self, "Select Atlas Folder"))
+            saving_folder = str(file_dialogs.get_existing_directory(self, "Select Atlas Folder"))
 
         if saving_folder != '':
             exist_files = os.listdir(saving_folder)
@@ -838,7 +838,7 @@ class AllenDownloader(QDialog):
         if self.saving_folder is not None:
             saving_folder = self.saving_folder
         else:
-            saving_folder = str(QFileDialog.getExistingDirectory(self, "Select Atlas Folder"))
+            saving_folder = str(file_dialogs.get_existing_directory(self, "Select Atlas Folder"))
 
         if saving_folder != '':
             # check files
