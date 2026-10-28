@@ -16,6 +16,7 @@ from PyQt6.QtWidgets import (
     QAbstractSpinBox,
     QApplication,
     QButtonGroup,
+    QCheckBox,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -266,6 +267,12 @@ class V2Window(QMainWindow):
         regions_layout.setContentsMargins(0, 6, 0, 0)
         self.regions_empty = hint_label("Load an atlas to browse its regions.")
         regions_layout.addWidget(self.regions_empty, 0, Qt.AlignmentFlag.AlignTop)
+        # Checked regions are highlighted in the atlas and drawn in the 3D view.
+        self.regions_in_3d = QCheckBox("Show checked regions in 3D")
+        self.regions_in_3d.setChecked(True)
+        self.regions_in_3d.toggled.connect(engine.show_small_area_in_3d)
+        engine.show_small_area_in_3d(True)
+        regions_layout.addWidget(self.regions_in_3d)
         regions_layout.addWidget(engine.atlas_view.label_tree)
         self.inspector_tabs.addTab(regions, "Regions")
         inspector_layout.addWidget(self.inspector_tabs)
@@ -354,6 +361,7 @@ class V2Window(QMainWindow):
         engine.layer_ctrl.setVisible(not no_layers)
         self.regions_empty.setVisible(view.atlas_data is None)
         view.label_tree.setVisible(view.atlas_data is not None)
+        self.regions_in_3d.setVisible(view.atlas_data is not None)
 
     # ------------------------------------------------------------ messages
     def _wrap_engine_messages(self):

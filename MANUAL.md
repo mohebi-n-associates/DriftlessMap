@@ -1,6 +1,6 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 2.0.0rc8**, the release candidate of
+This manual applies to **DriftlessMap 2.0.0rc9**, the release candidate of
 DriftlessMap 2.0. The current stable release is 1.6.1; `pip install driftlessmap`
 keeps installing 1.6.1 until 2.0.0 is released, and Section 2 explains how to
 install the release candidate.
@@ -110,7 +110,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-DriftlessMap 2.0.0rc8 requires:
+DriftlessMap 2.0.0rc9 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -371,7 +371,9 @@ anatomically wrong in 3D.
 - Check a structure to display it and its descendants.
 - Change a structure color.
 - Reset label colors.
-- Show selected structures in 3D.
+- Show selected structures in 3D (**Show in 3D view**). Checking a structure
+  checks its subregions, so a structure the atlas draws as its layers
+  (prelimbic as PL1-PL6b) appears as those meshes.
 - Choose `opaque`, `translucent`, or `additive` 3D composition.
 
 #### Ctrl+3 - Image View Controller
@@ -480,7 +482,9 @@ The window has four areas:
 - **The canvas** in the middle, with Compare, Atlas, Section, 3D and
   Multi-plane views. When a tool is active, its options appear in the row
   above the image.
-- **Objects, Layers and Regions** on the right.
+- **Objects, Layers and Regions** on the right. Checked regions are
+  highlighted in the atlas and, with **Show checked regions in 3D** (on by
+  default), drawn in the 3D view.
 - **The status line** at the bottom: the last message, the atlas and section,
   and whether there are unsaved changes. Changing views, zooming or selecting
   never counts as a change; adding a probe, even before marking it, does.

@@ -1,6 +1,11 @@
 # Update Log
 
 ### 28th October 2026
+##### DriftlessMap 2.0.0rc9
+
+`sig_label_changed`'s mesh logic is replaced by `sync_region_meshes`: mesh keys are strings and the tree's checked ids ints, so the second pass never matched; regions checked before enabling were not shown and disabling hid nothing. `show_small_area_in_3d(visible)` takes the button state and syncs. V2 had no control for `show_child_mesh` (default False), so checked regions never appeared in 3D; the Regions tab has a "Show checked regions in 3D" check box, on by default.
+
+### 28th October 2026
 ##### DriftlessMap 2.0.0rc8
 
 `persistence._fsync_file` opened the temporary archive read-only before `os.fsync`; Windows' `_commit` rejects read-only handles with EBADF, so every `save_driftlessmap_file` (projects, layers, objects, Export all results) failed on Windows since atomic saves gained the flush. It now opens the file `r+b` and treats a failing flush as best effort (some network/removable drives cannot flush; `os.replace` stays atomic). `switch_3d_display_mode` referred to `actionMode_Dark` instead of `action3D_Mode_Dark` (AttributeError on every 3D mode switch).

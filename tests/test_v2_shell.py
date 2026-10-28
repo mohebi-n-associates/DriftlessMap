@@ -587,6 +587,37 @@ class V2ShellTests(unittest.TestCase):
             self.assertIn("Exported", results.export_status.text())
 
     @isolated_gui_test
+    def test_checked_regions_show_in_3d(self):
+        class Mesh:
+            def __init__(self):
+                self.shown = False
+
+            def visible(self):
+                return self.shown
+
+            def setVisible(self, shown):
+                self.shown = shown
+
+        with tempfile.TemporaryDirectory() as folder:
+            window = self.make_window(folder)
+            engine = window.engine
+            self.assertTrue(window.regions_in_3d.isChecked())
+            self.assertTrue(engine.show_child_mesh)
+            # Region ids are ints in the tree and strings as mesh keys.
+            engine.small_mesh_list = {"84": Mesh(), "132": Mesh(), "500": Mesh()}
+            engine.atlas_view.label_tree.checked = {972, 84, 132}
+            engine.sync_region_meshes()
+            shown = {key for key, mesh in engine.small_mesh_list.items() if mesh.visible()}
+            self.assertEqual(shown, {"84", "132"})
+            window.regions_in_3d.setChecked(False)
+            self.assertFalse(any(m.visible() for m in engine.small_mesh_list.values()))
+            window.regions_in_3d.setChecked(True)
+            engine.atlas_view.label_tree.checked = {84}
+            engine.sync_region_meshes()
+            shown = {key for key, mesh in engine.small_mesh_list.items() if mesh.visible()}
+            self.assertEqual(shown, {"84"})
+
+    @isolated_gui_test
     def test_3d_display_mode_switches_both_ways(self):
         with tempfile.TemporaryDirectory() as folder:
             engine = self.make_window(folder).engine
