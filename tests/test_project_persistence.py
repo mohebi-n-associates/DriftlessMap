@@ -1472,6 +1472,52 @@ class ProjectPersistenceIntegrationTests(unittest.TestCase):
                 self.assertEqual(build.call_count, 2)
 
     @isolated_gui_test
+    def test_lasso_closes_near_its_first_point_and_crops(self):
+        from types import SimpleNamespace
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window = self._window_with_volume_atlas(root)
+            source = root / "histology.png"
+            cv2.imwrite(str(source), np.full((300, 400, 3), 80, dtype=np.uint8))
+            self.assertTrue(window.load_single_image_file(str(source), ".png"))
+            # Fit the image in the view, as the shown window does.
+            window.image_view.img_stacks.vb.setRange(xRange=(0, 400), yRange=(0, 300), padding=0)
+            window.tool_box.checkable_btn_dict["lasso_btn"].setChecked(True)
+            for point in ((100.0, 50.0), (300.0, 60.0), (280.0, 200.0)):
+                window.img_stacks_clicked(point)
+            # Clicking a drawn point other than the first keeps the lasso.
+            window.lasso_points_clicked(None, [SimpleNamespace(index=lambda: 2)])
+            self.assertEqual(len(window.working_img_data["lasso_path"]), 3)
+            self.assertFalse(window.img_lasso_is_closure)
+            # The first point closes it even when the overlapping last one is
+            # listed first, as pyqtgraph does.
+            window.lasso_points_clicked(
+                None, [SimpleNamespace(index=lambda: 3), SimpleNamespace(index=lambda: 0)])
+            self.assertTrue(window.img_lasso_is_closure)
+            self.assertEqual(window.working_img_data["lasso_path"][-1], [100.0, 50.0])
+
+            # A click a few image pixels from the first point closes a lasso.
+            window.inactive_lasso()
+            for point in ((100.0, 50.0), (300.0, 60.0), (280.0, 200.0), (104.0, 53.0)):
+                window.img_stacks_clicked(point)
+            self.assertTrue(window.img_lasso_is_closure)
+            self.assertEqual(len(window.working_img_data["lasso_path"]), 4)
+
+            # Crop closes an open lasso itself and crops to its bounds.
+            window.inactive_lasso()
+            for point in ((100.0, 50.0), (300.0, 60.0), (280.0, 200.0)):
+                window.img_stacks_clicked(point)
+            window.cut_image()
+            self.assertEqual(window.image_view.processing_img.shape[:2], (151, 201))
+            self.assertEqual(window.working_img_data["lasso_path"], [])
+
+            # Without a lasso, crop explains what to do and changes nothing.
+            with patch.object(window, "print_message") as message:
+                window.cut_image()
+            self.assertIn("Draw a lasso", message.call_args[0][0])
+
+    @isolated_gui_test
     def test_click_dispatch_reaches_each_tool(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

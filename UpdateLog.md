@@ -1,6 +1,11 @@
 # Update Log
 
 ### 28th October 2026
+##### DriftlessMap 2.0.0rc3
+
+Lasso closing: the image lasso compared a squared distance with 5 % of the image size (a few image pixels on large images) and the slice lasso used a squared distance < 5; both now close within `LASSO_CLOSE_PIXELS` (12) screen pixels via `layer_geometry.lasso_tolerance(view_box)`/`lasso_closes`. `lasso_points_clicked` read the slot arguments as (points, ev) and tested only `ev[0]`; pyqtgraph lists points last first, so clicking the first point of a closed or overlapping lasso hit the duplicate last point and called `inactive_lasso`. It now closes only when any clicked point has index 0 (`lasso_point_closes`) and otherwise does nothing. `cut_image`/`crop_slice` close an open lasso of ≥3 points (`close_image_lasso`/`close_slice_window_lasso`) and report when there is none.
+
+### 28th October 2026
 ##### DriftlessMap 2.0.0rc2
 
 V2 theme stylesheet is set on `V2Window` instead of `QApplication` (an application stylesheet repolished all ~2,000 widgets, including ~940 hidden menu, colour-dialog and view-menu widgets); top-level windows outside the V2 window get it on `Show` via `_theme_window` (marked `v2_theme`) and follow `apply_theme`. The application event filter compares against a precomputed `EDIT_EVENTS` set and no longer calls the base filter. Toggle time 0.50 s → 0.10 s offscreen on macOS.
