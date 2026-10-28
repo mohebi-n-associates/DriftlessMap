@@ -655,6 +655,7 @@ class Suggestion:
     tilt_degrees: tuple
     score: float
     silhouette: float
+    template_edges: float = 0.0   # internal-anatomy agreement with the template
 
 
 @dataclass(frozen=True)
@@ -662,6 +663,9 @@ class SuggestionReport:
     plane_candidates: tuple   # best Candidate per plane, best first
     suggestions: tuple        # Suggestion objects, best first
     midline: object           # sagittal midline index, or None
+    # Pages (full resolution) spanned by the depths that fit about as well as
+    # the best one (see DEPTH_TIE); None for reports made before it existed.
+    depth_span: object = None
 
     @property
     def plane_margin(self):
@@ -669,6 +673,51 @@ class SuggestionReport:
         if len(self.plane_candidates) < 2:
             return 1.0
         return self.plane_candidates[0].silhouette - self.plane_candidates[1].silhouette
+
+
+# Depths whose combined score is within this many z units of the best one fit
+# about as well; how far apart they lie tells how well depth is determined.
+DEPTH_TIE = 1.0
+# Confidence thresholds. Measured on sections cut from the Allen 10 um atlas
+# (flattened by 15 %, with noise), where the right page is known: internal
+# anatomy agreed 0.60-0.95, near-equal depths spanned at most 360 um and the
+# depth was found within 60 um. Two real fluorescence sections, whose
+# suggestions were far off, agreed only 0.09-0.15 with near-equal depths over
+# 2-8.5 mm. The outline fit did not separate the two (above 0.9 for both).
+# Not yet checked on real sections with known positions.
+CONFIDENT_ANATOMY, FAIR_ANATOMY = 0.5, 0.3
+CONFIDENT_SPAN_UM, FAIR_SPAN_UM = 500.0, 1000.0
+CONFIDENCE_LEVELS = ("low", "medium", "high")
+
+
+def confidence(suggestion, report, voxel_um):
+    """How far a suggestion can be trusted: ``(level, reasons)``.
+
+    ``level`` is "high", "medium" or "low", the lowest of: internal anatomy
+    agreement, how narrowly depth is determined, and (when the plane was
+    detected) how clearly the plane was preferred. ``reasons`` explain each
+    limit in words.
+    """
+    levels, reasons = [], []
+    anatomy = suggestion.template_edges
+    level = 2 if anatomy >= CONFIDENT_ANATOMY else 1 if anatomy >= FAIR_ANATOMY else 0
+    levels.append(level)
+    if level < 2:
+        reasons.append("internal anatomy agrees {} ({:.2f})".format(
+            "only moderately" if level else "weakly", anatomy))
+    if report.depth_span is not None:
+        span = report.depth_span * voxel_um
+        level = 2 if span <= CONFIDENT_SPAN_UM else 1 if span <= FAIR_SPAN_UM else 0
+        levels.append(level)
+        if level < 2:
+            reasons.append("depths {:.1f} mm apart fit about as well".format(span / 1000))
+    if len(report.plane_candidates) > 1:
+        margin = report.plane_margin
+        level = 2 if margin >= 0.08 else 1 if margin >= 0.03 else 0
+        levels.append(level)
+        if level < 2:
+            reasons.append("the plane is {}".format("uncertain" if level else "ambiguous"))
+    return CONFIDENCE_LEVELS[min(levels)], reasons
 
 
 def preferred_form(plane, orientation):
@@ -835,6 +884,10 @@ def suggest_sections(histology, label_volume, intensity_volume, midline, pivot,
     )
     if not depths:
         raise ValueError("No atlas slice could be compared with the section.")
+    # This pass covers every few pages of the plane: the depths that fit about
+    # as well as the best one show how well depth is determined.
+    near = [match.index for match in depths if match.score >= depths[0].score - DEPTH_TIE]
+    depth_span = (max(near) - min(near)) * factor
     if stride > 1:
         around = sorted({page for match in depths[:DEPTH_NEIGHBOURHOODS]
                          for page in range(match.index - stride + 1, match.index + stride)
@@ -862,7 +915,8 @@ def suggest_sections(histology, label_volume, intensity_volume, midline, pivot,
         page = _refine_page(histology, label_volume, intensity_volume, best.plane,
                             best.orientation, match.index, match.tilt_degrees, pivot, factor)
         suggestions.append(Suggestion(best.plane, best.orientation, page,
-                                      match.tilt_degrees, match.score, match.silhouette))
+                                      match.tilt_degrees, match.score, match.silhouette,
+                                      match.template_edges))
         if progress is not None:
             progress(0.8 + 0.2 * count / len(picked))
     # The report's plane candidate carries the orientation actually chosen,
@@ -870,4 +924,4 @@ def suggest_sections(histology, label_volume, intensity_volume, midline, pivot,
     planes = [best] + [candidate for candidate in planes if candidate.plane != best.plane]
     planes = tuple(replace(candidate, index=candidate.index * factor) for candidate in planes)
     return SuggestionReport(planes, tuple(suggestions),
-                            midline if best.plane == "sagittal" else None)
+                            midline if best.plane == "sagittal" else None, depth_span)

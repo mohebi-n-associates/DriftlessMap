@@ -20,6 +20,7 @@ from PyQt6.QtWidgets import (
 from .atlas_matching import (
     animal_right_edge,
     atlas_slice,
+    confidence,
     histology_gray,
     tissue_mask,
     mirror_hemisphere,
@@ -78,17 +79,23 @@ class SectionSuggestionDialog(QDialog):
             "{} {:.2f}".format(candidate.plane, candidate.silhouette)
             for candidate in report.plane_candidates
         )
-        confidence = (
-            "clear" if report.plane_margin >= 0.08
-            else "uncertain; check the plane" if report.plane_margin >= 0.03
-            else "ambiguous; the plane may be wrong"
-        )
+        if len(report.plane_candidates) == 1:
+            plane_note = "the plane you chose"
+        else:
+            plane_note = (
+                "clear" if report.plane_margin >= 0.08
+                else "uncertain; check the plane" if report.plane_margin >= 0.03
+                else "ambiguous; the plane may be wrong"
+            )
         header = QLabel(
             "<b>{}</b> section ({}). Outline match by plane: {}.<br>"
             "Section orientation: {}. Candidates are ranked by outline and "
             "internal anatomy; compare the thumbnails (left: your section, "
-            "right: atlas) and choose the best.".format(
-                self.plane.capitalize(), confidence, summary, best.orientation.describe()
+            "right: atlas) and choose the best. Confidence combines how well the "
+            "internal anatomy agrees and how narrowly the depth is determined; "
+            "low means check carefully or place the section by hand. Hover over "
+            "a candidate for the reasons.".format(
+                self.plane.capitalize(), plane_note, summary, best.orientation.describe()
             )
         )
         header.setWordWrap(True)
@@ -127,6 +134,7 @@ class SectionSuggestionDialog(QDialog):
         for suggestion in report.suggestions:
             atlas = self._atlas_image(suggestion.index, suggestion.tilt_degrees)
             item = QListWidgetItem(QIcon(_pixmap(_pair(section, atlas))), self._label(suggestion))
+            item.setToolTip(self._confidence_note(suggestion))
             item.setData(Qt.ItemDataRole.UserRole, suggestion)
             self.list.addItem(item)
         self.list.currentItemChanged.connect(lambda *_args: self._name_sides())
@@ -186,9 +194,19 @@ class SectionSuggestionDialog(QDialog):
             )
         else:
             where = "slice {}".format(suggestion.index)
-        return "{}\ntilt ({:+.0f}°, {:+.0f}°)   score {:.2f}".format(
-            where, suggestion.tilt_degrees[0], suggestion.tilt_degrees[1], suggestion.score
+        level, _reasons = confidence(suggestion, self.report, self.voxel_um)
+        return "{}\ntilt ({:+.0f}°, {:+.0f}°)   score {:.2f}   confidence: {}".format(
+            where, suggestion.tilt_degrees[0], suggestion.tilt_degrees[1], suggestion.score,
+            level
         )
+
+    def _confidence_note(self, suggestion):
+        level, reasons = confidence(suggestion, self.report, self.voxel_um)
+        why = "; ".join(reasons) if reasons else "anatomy agrees and depth is well determined"
+        return ("Confidence {}: {}. The score ranks candidates against each other "
+                "only. Confidence thresholds come from sections cut from the atlas and "
+                "are not yet checked on real sections with known positions.".format(
+                    level, why))
 
     def choice(self):
         """Return (plane, index, orientation, tilt, rotate_histology) or None."""

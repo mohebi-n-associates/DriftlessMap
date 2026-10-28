@@ -1,6 +1,11 @@
 # Update Log
 
 ### 28th October 2026
+##### DriftlessMap 2.0.0rc14
+
+`atlas_matching.confidence(suggestion, report, voxel_um)` returns (level, reasons): the minimum of template-edge agreement (`CONFIDENT_ANATOMY` 0.5, `FAIR_ANATOMY` 0.3), the span of depths within `DEPTH_TIE` (1.0 z) of the best in the every-few-pages pass (`SuggestionReport.depth_span`, ≤ 500 µm high, ≤ 1000 µm medium) and the plane margin when the plane was detected. `Suggestion.template_edges` and `SuggestionReport.depth_span` are new (defaulted). Thresholds measured on Allen 10 µm coronal pages 450–1100 cut from the atlas (flattened 15 %, noise): agreement 0.60–0.95, span ≤ 360 µm, depth error ≤ 60 µm; the user's two fluorescence sections: 0.09–0.19, rated low. The dialog no longer calls a plane the user chose "clear".
+
+### 28th October 2026
 ##### DriftlessMap 2.0.0rc13
 
 `auto_registration._bspline_on_intensities` fits the B-spline once per `BSPLINE_SAMPLINGS` (1.0, 0.9, 1.12: the moving image linearly resampled, `_resampled`) and combines the fits per control point: mean displacement × clip(1 − spread / (`BSPLINE_AGREEMENT` 0.05 × control spacing)), spread = largest distance of a fit from the mean. The keep test (MI improved, Dice drop ≤ 0.03) applies to the combined transform. A single fit's optimum moved with the analysis size: over `ANALYSIS_MAX_SIDE` 1700–2500 (10 sizes) a grid of atlas points on the user's sagittal section spread by up to 982 section pixels (median 339); now 7 (median 5). Coronal IM-1109 04: 4 → 4; 01: 5 → 56 at one size (2300), ≤ 18 elsewhere, as the keep decision now has little effect. Synthetic warp, 8 seeds: median error 2.42 px mean, 2.91 worst (was 2.74 / 2.82). Two fits left one coronal section unstable (up to 691 px); a 7 % tolerance gave up to 198 px. B-spline time roughly triples (sagittal action 3 s → 7.5 s).
