@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th October 2026
+##### DriftlessMap 2.0.0a22
+
+pyqtgraph `useNumba` is set only when numba is importable, removing a UserWarning on every image drawn without numba (e.g. Python 3.14).
+
+### 27th October 2026
 ##### DriftlessMap 2.0.0a21
 
 Atlas page slider: throttled drag updates (40 ms) instead of a debounce that withheld every page during a continuous drag; coronal pages are copied contiguously before display (10 µm: preview 108 → 4 ms, full page 260 → 25 ms).
