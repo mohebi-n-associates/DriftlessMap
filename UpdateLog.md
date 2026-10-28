@@ -1,5 +1,10 @@
 # Update Log
 
+### 28th October 2026
+##### DriftlessMap 2.0.0a24
+
+Region boundaries drawn as an RGBA overlay in `BOUNDARY_COLOUR` (`slice_stacks.boundary_rgba`) instead of an additive white image, which vanished over brightfield overlays; V2 View > Show region boundaries (`view.boundaries`, B) drives `show_boundary_btn`.
+
 ### 27th October 2026
 ##### DriftlessMap 2.0.0a23
 

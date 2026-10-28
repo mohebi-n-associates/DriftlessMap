@@ -268,6 +268,10 @@ class V2ShellTests(unittest.TestCase):
             self.assertNotIn("rgb(50, 50, 50)", engine.toolbar.styleSheet())
             self.assertNotIn("color: white", engine.atlas_view.label_tree.styleSheet())
             self.assertEqual(engine.atlas_view.show_boundary_btn.styleSheet(), "")
+            # Region boundaries need an atlas; the View menu tick stays truthful.
+            window.boundaries_item.trigger()
+            self.assertFalse(engine.atlas_view.show_boundary_btn.isChecked())
+            self.assertFalse(window.boundaries_item.isChecked())
             # Switching back and forth recolours from the original icons.
             window.apply_theme("dark")
             window.apply_theme("light")

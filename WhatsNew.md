@@ -3,6 +3,12 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.0.0a24
+
+Development preview, 28 October 2026 (`v2-implants` branch; not a release)
+
+**Region boundaries on the atlas.** **View > Show region boundaries** (shortcut B) outlines the atlas regions, without names, on the atlas view. The outlines are now drawn as light-blue lines instead of being added to the image as white, so they stay visible over a bright brightfield section warped onto the atlas (Section on atlas), and the 1.x **Show Boundary** button gets the same lines.
+
 ## DriftlessMap 2.0.0a23
 
 Development preview, 27 October 2026 (`v2-implants` branch; not a release)
