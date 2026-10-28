@@ -25,6 +25,7 @@ import SimpleITK as sitk
 from .atlas_matching import histology_gray, tissue_mask
 
 WORKING_SIZE = 384  # longest side used for registration
+BSPLINE_SMOOTHING = [6, 3, 1.5]  # Gaussian sigma per level, in section pixels
 
 
 @dataclass(frozen=True)
@@ -116,11 +117,14 @@ def _bspline_on_intensities(fixed, moving, fixed_mask, affine, mesh_size):
     registration.SetMovingInitialTransform(affine)
     registration.SetMetricAsMattesMutualInformation(numberOfHistogramBins=32)
     registration.SetMetricFixedMask(fixed_mask)
-    registration.SetMetricSamplingStrategy(registration.RANDOM)
-    registration.SetMetricSamplingPercentage(0.3, seed=7)
+    # Every pixel, not a random sample: with random sampling the result
+    # depended on the seed (and so on the platform) by up to 2 section pixels.
+    registration.SetMetricSamplingStrategy(registration.NONE)
     registration.SetOptimizerAsLBFGSB(gradientConvergenceTolerance=1e-5, numberOfIterations=150)
     registration.SetShrinkFactorsPerLevel([4, 2, 1])
-    registration.SetSmoothingSigmasPerLevel([2, 1, 0])
+    # Smoothing at every level, including full size, keeps the optimiser out of
+    # the local minima that noise and stain texture create.
+    registration.SetSmoothingSigmasPerLevel(BSPLINE_SMOOTHING)
     registration.SetInitialTransform(bspline, inPlace=True)
     registration.SetInterpolator(sitk.sitkLinear)
     before = registration.MetricEvaluate(fixed, moving)

@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 import unittest
+from unittest import mock
 
 import cv2
 import numpy as np
@@ -77,6 +78,23 @@ class ProposeLandmarkTests(unittest.TestCase):
             landmark_errors = np.linalg.norm(proposal.histology_points[internal] - truth, axis=1)
             self.assertLess(np.median(landmark_errors), 6.0, landmark_errors)
         self.assertGreater(proposal.overlap_final, 0.9)
+
+    def test_accuracy_does_not_depend_on_the_noise_drawn(self):
+        # The B-spline once varied by up to 2 section pixels with its sampling
+        # seed, which made results differ between Linux and macOS.
+        intensity, labels = synthetic_slice()
+        ys, xs = np.mgrid[10:160:12, 10:240:12]
+        grid = np.column_stack([xs.ravel(), ys.ravel()]).astype(float) + 0.5
+        inner = cv2.erode((labels > 0).astype(np.uint8), np.ones((9, 9), np.uint8)) > 0
+        grid = grid[inner[grid[:, 1].astype(int), grid[:, 0].astype(int)]]
+        default_rng = np.random.default_rng
+        for seed in (2, 5):
+            with self.subTest(seed=seed), mock.patch.object(
+                    np.random, "default_rng", lambda _seed=None, s=seed: default_rng(s)):
+                section = warped_section(intensity, labels)
+                proposal = propose_landmarks(intensity, labels, section, boundary_points=grid)
+                errors = np.linalg.norm(proposal.boundary_points - known_warp(grid), axis=1)
+                self.assertLess(np.median(errors), 3.5, errors)
 
     def test_outline_points_lie_on_both_outlines(self):
         intensity, labels = synthetic_slice()

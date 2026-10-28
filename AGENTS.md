@@ -102,7 +102,9 @@ or important workflows change.
   planning warns and the project still opens. Pre-schema-3 work is
   "not recorded", never "reviewed". Saved as `registration_review`.
 - `driftlessmap/auto_registration.py`: SimpleITK registration (moment-based
-  affine on silhouettes, then a B-spline on intensities with Mattes MI) that
+  affine on silhouettes, then a B-spline on intensities with Mattes MI over
+  every masked pixel, smoothed at each level by `BSPLINE_SMOOTHING`; random
+  sampling made results seed- and platform-dependent) that
   proposes atlas-to-histology landmark pairs in DriftlessMap pixel-edge
   coordinates. The B-spline is kept only if it improves the intensity match
   without degrading the outline. Up to 10 landmarks are suggested:
