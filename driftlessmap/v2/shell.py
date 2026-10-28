@@ -605,6 +605,9 @@ class V2Window(QMainWindow):
                     "Ctrl+K"))
         add(Command("view.theme", "Switch light / dark theme", self.toggle_theme, "View",
                     ("dark mode", "light mode")))
+        add(Command("view.boundaries", "Show / hide region boundaries", self.toggle_boundaries,
+                    "View", ("outlines", "borders", "structures", "contours on atlas"), "B",
+                    available=self.needs_volume))
         add(Command("help.manual", "Open the user manual", self.open_manual, "Help", ("docs",)))
         add(Command("help.shortcuts", "Keyboard shortcuts", self.show_shortcuts, "Help", ()))
         add(Command("help.about", "About DriftlessMap", engine.actionAbout_HERBS.trigger, "Help"))
@@ -682,6 +685,14 @@ class V2Window(QMainWindow):
         for key, _title, _tip in VIEWS:
             item(view_menu, "view." + key)
         view_menu.addSeparator()
+        self.boundaries_item = item(view_menu, "view.boundaries", "Show region boundaries")
+        self.boundaries_item.setCheckable(True)
+        boundary_button = self.engine.atlas_view.show_boundary_btn
+        boundary_button.toggled.connect(self.boundaries_item.setChecked)
+        self.boundaries_item.setChecked(boundary_button.isChecked())
+        # Without an atlas the command does nothing; keep the tick truthful.
+        self.boundaries_item.triggered.connect(
+            lambda: self.boundaries_item.setChecked(boundary_button.isChecked()))
         item(view_menu, "view.theme")
         toggle_task = view_menu.addAction("Show task column")
         toggle_task.setCheckable(True)
@@ -829,6 +840,12 @@ class V2Window(QMainWindow):
 
     def toggle_theme(self):
         self.apply_theme("light" if self.theme == "dark" else "dark")
+
+    def toggle_boundaries(self, visible=None):
+        """Show or hide the region boundaries on the atlas (the 1.x Show Boundary)."""
+        button = self.engine.atlas_view.show_boundary_btn
+        button.setChecked(not button.isChecked() if visible is None else bool(visible))
+        self.engine.vis_atlas_boundary()
 
     # ------------------------------------------------------------- refresh
     def refresh(self):

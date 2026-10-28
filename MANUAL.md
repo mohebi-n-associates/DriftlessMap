@@ -1,6 +1,6 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 2.0.0a23**, a development preview of
+This manual applies to **DriftlessMap 2.0.0a24**, a development preview of
 DriftlessMap 2.0 (the `main` branch, not a release). The current stable release is
 1.6.1; its desktop downloads are described in Section 2.2.
 
@@ -109,7 +109,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-DriftlessMap 2.0.0a23 requires:
+DriftlessMap 2.0.0a24 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -177,7 +177,7 @@ python -c "import driftlessmap; print(driftlessmap.__version__)"
 ```
 
 The final command prints the installed version: `1.6.1` for the stable
-release, or `2.0.0a23` for this development preview installed from the
+release, or `2.0.0a24` for this development preview installed from the
 `v2-redesign` branch.
 
 ### 2.5 Launching DriftlessMap
@@ -508,8 +508,15 @@ as not reviewed.
 **Ctrl+K** (Cmd+K on macOS) opens a command search. It finds every 2.0
 command and every 1.x menu command by its old name, for example "merge" or
 "triangulation". Single-key shortcuts (P add or move landmark points,
-M measure, V no tool, Delete remove the selected landmark pair) do not fire
-while you type in a field; Escape stops the current tool.
+M measure, V no tool, B region boundaries, Delete remove the selected landmark
+pair) do not fire while you type in a field; Escape stops the current tool.
+
+**View > Show region boundaries** (B) outlines the atlas regions on the atlas
+view, without names. The lines are drawn in a light blue that stays visible on
+the dark atlas template and on a bright brightfield section previewed with
+Section on atlas, which makes it easy to judge how well the warped section
+follows the anatomy. It is the same switch as **Show Boundary** in the 1.x
+atlas controls.
 
 Known limits of the preview:
 
@@ -584,7 +591,8 @@ After loading:
 3. When a slice window has keyboard focus, the Left and Right arrow keys move
    by one page.
 4. Adjust atlas intensity with the vertical LUT control beside the image.
-5. Toggle **Show Boundary** for label outlines.
+5. Toggle **Show Boundary** for region outlines (drawn in light blue, so they
+   stay visible over a warped brightfield section).
 6. Select structures in the Segmentation View Controller.
 7. Use **Navigation** in the four-window layout to link the orthogonal
    crosshairs.

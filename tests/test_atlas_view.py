@@ -5,7 +5,7 @@ import numpy as np
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PyQt6.QtCore import QPointF, Qt
-from PyQt6.QtGui import QKeyEvent
+from PyQt6.QtGui import QKeyEvent, QPainter
 from PyQt6.QtTest import QTest
 from PyQt6.QtWidgets import QApplication
 from pyqtgraph.GraphicsScene import GraphicsScene
@@ -241,17 +241,23 @@ class AtlasViewPerformanceTests(unittest.TestCase):
         view.set_boundary_visible(True)
 
         self.assertEqual(
-            view.cimg.boundary.image.shape, view.cimg.label_data.shape
+            view.cimg.boundary.image.shape[:2], view.cimg.label_data.shape
         )
 
-    def test_boundaries_are_drawn_at_full_brightness(self):
+    def test_boundaries_are_coloured_lines_that_show_on_bright_sections(self):
+        from driftlessmap.slice_stacks import BOUNDARY_COLOUR
+
         stack = SliceStacks()
         contour = np.zeros((20, 20), dtype=np.uint8)
         contour[5:15, 10] = 1
         stack.set_boundary_data(contour)
         stack.boundary.render()
-        self.assertEqual(stack.boundary.qimage.pixelColor(10, 10).getRgb()[:3],
-                         (255, 255, 255))
+        line = stack.boundary.qimage.pixelColor(10, 10)
+        self.assertEqual(line.getRgb(), BOUNDARY_COLOUR)
+        # Off the lines the overlay is fully transparent.
+        self.assertEqual(stack.boundary.qimage.pixelColor(2, 2).alpha(), 0)
+        # Not additive: over a white brightfield section the line keeps its colour.
+        self.assertNotEqual(stack.boundary.paintMode, QPainter.CompositionMode.CompositionMode_Plus)
 
     def test_image_edge_hover_coordinates_are_rejected(self):
         image = np.zeros((3, 4), dtype=np.uint8)

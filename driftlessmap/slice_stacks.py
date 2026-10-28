@@ -64,6 +64,17 @@ class ClickableSlice(pg.ImageItem):
         # self.mouseClicked.emit([event, id])
 
 
+BOUNDARY_COLOUR = (64, 210, 255, 230)
+
+
+def boundary_rgba(contour, colour=BOUNDARY_COLOUR):
+    """RGBA image with ``colour`` where ``contour`` is set and clear elsewhere."""
+    contour = np.asarray(contour)
+    rgba = np.zeros(contour.shape[:2] + (4,), np.uint8)
+    rgba[contour > 0] = colour
+    return rgba
+
+
 class SliceStacks(pg.GraphicsLayoutWidget):
     class SignalProxy(QObject):
         mouseHovered = pyqtSignal(object)  # id
@@ -91,9 +102,12 @@ class SliceStacks(pg.GraphicsLayoutWidget):
         self.label_img = pg.ImageItem()
         self.label_data = None
         self.label_img.setCompositionMode(QPainter.CompositionMode.CompositionMode_Multiply)
+        # Region boundaries are drawn as opaque coloured lines over everything
+        # below them, so they stay visible on a dark template and on a bright
+        # brightfield section warped onto the atlas alike.
         self.boundary = pg.ImageItem()
-        self.boundary.setCompositionMode(QPainter.CompositionMode.CompositionMode_Plus)
         self.boundary.setVisible(False)
+        self.boundary_colour = BOUNDARY_COLOUR
 
         self.display_objects = []
 
@@ -206,9 +220,9 @@ class SliceStacks(pg.GraphicsLayoutWidget):
             item.setTransform(QTransform.fromScale(*scale))
 
     def set_boundary_data(self, contour):
-        # Contours are 0/1; without explicit levels a uint8 image is drawn
-        # on a 0-255 scale and the boundary is invisible.
-        self.boundary.setImage(contour, autoLevels=False, levels=(0, 1))
+        """Draw a 0/1 ``contour`` image as boundary lines."""
+        self.boundary.setImage(boundary_rgba(contour, self.boundary_colour),
+                               autoLevels=False, levels=(0, 255))
 
     def add_display_obj_to_view(self, obj_data, obj_color, obj_type):
         if obj_type == 'probe':
