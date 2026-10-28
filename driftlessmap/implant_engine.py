@@ -19,6 +19,7 @@ names.
 
 import copy
 import csv
+import re
 
 import numpy as np
 import pyqtgraph as pg
@@ -403,17 +404,45 @@ class ImplantEngineMixin:
         return implant
 
     def export_implant_table(self, path):
-        """Write one CSV row per built implant; returns the number of rows."""
+        """Write one CSV row per built implant and probe; returns the number of rows.
+
+        Probes get a summary row (tip, entry depth, tilt); their per-site
+        results stay in the probe exports.
+        """
         rows = []
         for implant in self.implants.implants():
             report = self.implant_report(implant.implant_id)
             if report is not None:
                 rows.append(implant_model.csv_row(implant.name, report))
+        rows.extend(self._probe_table_rows())
         with open(path, "w", newline="", encoding="utf-8") as handle:
             writer = csv.DictWriter(handle, fieldnames=implant_model.CSV_COLUMNS)
             writer.writeheader()
             writer.writerows(rows)
         return len(rows)
+
+    def _probe_table_rows(self):
+        o = self.object_ctrl
+        built = [(o.obj_name[i], o.obj_data[i]) for i in range(len(o.obj_type))
+                 if o.obj_type[i] == "merged probe" and isinstance(o.obj_data[i], dict)
+                 and "reconstruction" in o.obj_data[i]]
+        if not built:
+            return []
+        frame, error = self._implant_frame()
+        if error is not None:
+            return []
+        rows = []
+        for name, data in built:
+            # "Probe 1 shank 2" was mapped as "Probe 1".
+            probe = re.sub(r" shank \d+$", "", name)
+            sections = sum(1 for record in self.mapping_ledger.records()
+                           if record.kind == "probe" and record.probe == probe)
+            try:
+                rows.append(implant_model.probe_csv_row(name, data["reconstruction"], frame,
+                                                        sections or ""))
+            except (KeyError, TypeError, ValueError):
+                continue        # an older probe without usable reconstruction metadata
+        return rows
 
     # ----------------------------------------------------- undo and projects
     def _implant_state(self):

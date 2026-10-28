@@ -215,6 +215,29 @@ class ImplantEngineTests(unittest.TestCase):
             self.assertEqual([i.name for i in adopted], ["Prism A"])
             self.assertIsNotNone(other.implant_report(adopted[0].implant_id))
 
+            # Export all results: a project copy, objects and the implant table in one
+            # folder, without changing the project being worked on.
+            window.current_project_path = str(project)
+            out = root / "results"
+            paths, notes = window.export_all_results(str(out))
+            names = sorted(str(Path(p).relative_to(out)) for p in paths)
+            layers = [n for n in names if n.startswith("layers")]
+            # Each layer as .dmaplayer (image layers add a .jpg preview).
+            self.assertEqual(len([n for n in layers if n.endswith(".dmaplayer")]),
+                             len(window.layer_ctrl.layer_link))
+            self.assertEqual([n for n in names if n not in layers],
+                             ["implants.csv", "implants.dmap",
+                              str(Path("objects") / "Prism A.dmapobj")])
+            self.assertEqual(notes, [])
+            self.assertEqual(window.current_project_path, str(project))
+            copy, error = load_driftlessmap_file(out / "implants.dmap", "project")
+            self.assertIsNone(error)
+            self.assertEqual([i["name"] for i in copy["implants"]], ["Prism A", "Fiber left"])
+            exported_object, error = load_driftlessmap_file(
+                out / "objects" / "Prism A.dmapobj", "object")
+            self.assertIsNone(error)
+            self.assertEqual(exported_object["type"], "merged prism")
+
             # Deleting an implant removes its objects and records; undo restores them.
             self.assertTrue(window.delete_implant(prism.implant_id))
             self.assertEqual(o.obj_type, [])

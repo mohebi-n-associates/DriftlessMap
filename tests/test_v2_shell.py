@@ -351,7 +351,12 @@ class V2ShellTests(unittest.TestCase):
             window.go_to("annotate")
             panel = window.panels["annotate"]
             card = panel.implants
-            self.assertIn("No fiber or prism yet", card.active.text())
+            from unittest.mock import patch
+
+            from PyQt6.QtWidgets import QInputDialog, QLabel
+
+            from driftlessmap.v2.widgets import Card
+            self.assertIn("Nothing yet", card.active.text())
             self.assertIn("Add implant (fiber, microprism, probe)…",
                           [c.name for c in window.registry.search("optical fiber")])
 
@@ -360,7 +365,7 @@ class V2ShellTests(unittest.TestCase):
             card.probe_card.new_probe()
             card.refresh(select=fiber.implant_id)
             self.assertEqual(card.list.count(), 3)
-            self.assertIn("Neuropixels", card.list.item(2).text())
+            self.assertIn("probe · no sections yet", card.list.item(2).text())
             self.assertEqual(card.implant(), fiber)
             self.assertFalse(card.map_button.isEnabled())
 
@@ -401,10 +406,49 @@ class V2ShellTests(unittest.TestCase):
             self.assertTrue(card.report.text().startswith("Tip (marked tip)"))
             self.assertIn("built", card.list.item(0).text())
 
-            # Selecting the probe row hands over to the Probes card.
+            self.assertTrue(card.probe_card.isHidden())
+
+            # Selecting the probe row shows the probe controls in the same card.
             card.list.setCurrentRow(2)
             self.assertTrue(card.map_button.isHidden())
+            self.assertFalse(card.probe_card.isHidden())
             self.assertEqual(card.probe_card.current(), "Probe 1")
+            self.assertEqual(card.active.text(), "Probe 1 · Probe")
+            self.assertIs(panel.probes, card.probe_card)
+
+            # Rename and delete act on the selected probe; no separate Probes card.
+            with patch.object(QInputDialog, "getText", return_value=("Probe L", True)):
+                card.rename()
+            self.assertEqual(card.current(), "probe:Probe L")
+            self.assertEqual(card.probe_card.current(), "Probe L")
+            card.delete()
+            self.assertEqual(card.list.count(), 2)
+            self.assertIsNone(card.probe_card.current())
+            self.assertTrue(card.probe_card.isHidden())
+            self.assertFalse(any(isinstance(w, Card) and w.findChild(QLabel, "CardTitle")
+                                 and w.findChild(QLabel, "CardTitle").text() == "Probes"
+                                 for w in panel.findChildren(Card)))
+
+            # Mark track with a fiber selected starts a new probe and shows it.
+            card.list.setCurrentRow(0)
+            window.run("probe.mark")
+            self.assertEqual(card.probe_card.current(), "Probe 1")
+            self.assertEqual(card.current(), "probe:Probe 1")
+            self.assertTrue(card.probe_card.mark.isChecked())
+            window.clear_tools()
+
+            # Export all results writes one new folder with everything available.
+            from PyQt6.QtWidgets import QFileDialog
+            results = window.panels["results"]
+            with patch.object(QFileDialog, "getExistingDirectory", return_value=folder):
+                results.export_all()
+            exported = [p for p in Path(folder).iterdir() if " results " in p.name]
+            self.assertEqual(len(exported), 1)
+            self.assertTrue((exported[0] / "DriftlessMap.dmap").exists() or
+                            (exported[0] / "project.dmap").exists())
+            self.assertTrue((exported[0] / "objects" / "Fiber 1.dmapobj").exists())
+            self.assertTrue((exported[0] / "implants.csv").exists())
+            self.assertIn("Exported", results.export_status.text())
 
     @isolated_gui_test
     def test_allen_download_dialog_reuses_verified_files(self):

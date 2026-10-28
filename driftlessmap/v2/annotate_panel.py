@@ -5,7 +5,6 @@ from PyQt6.QtWidgets import QListWidget, QListWidgetItem
 
 from . import state
 from .implant_card import ImplantCard
-from .probe_card import ProbeCard
 from .widgets import Card, StepPanel, button, grid_of, hint_label, set_status, status_label
 
 KIND_NAMES = {"cells": "Cells", "probe": "Probe", "drawing": "Drawing",
@@ -41,16 +40,16 @@ TOOLS = (
 
 class AnnotatePanel(StepPanel):
     title = "Annotate"
-    hint = ("Mark probe tracks, cells, expression, contours and drawings on the section "
+    hint = ("Mark implants (fibers, microprisms, probes), cells, expression, contours and "
+            "drawings on the section "
             "or directly on the atlas. Tool settings appear under Tool options above the "
             "image.")
 
     def build(self):
         engine, shell = self.engine, self.shell
         self.tool_buttons = {}
-        self.probes = ProbeCard(shell)
-        self.implants = self.add(ImplantCard(shell, self.probes))
-        self.add(self.probes)
+        self.implants = self.add(ImplantCard(shell))
+        self.probes = self.implants.probe_card
         self.gate(self.probes.mark, shell.needs_either)
         tools = self.add(Card("Other annotations",
                               "Cells, expression, contours and drawings. Map them to the "
@@ -131,7 +130,7 @@ class AnnotatePanel(StepPanel):
         record = self.engine.mapping_ledger.by_unit(unit_id)
         if self.engine.edit_mapped_marks(unit_id):
             if record is not None and record.kind == "probe" and record.probe:
-                self.probes.refresh(select=record.probe)
+                self.implants.refresh(select="probe:" + record.probe)
             if record is not None and record.kind in IMPLANT_KINDS:
                 self.implants.refresh(select=record.probe)
             self.shell.message("Edit the marks on the section, then map them again to "
@@ -159,7 +158,6 @@ class AnnotatePanel(StepPanel):
 
     def refresh(self):
         engine = self.engine
-        self.probes.refresh()
         self.implants.refresh()
         self.refresh_mapped()
         for key, widget in self.tool_buttons.items():

@@ -1,6 +1,11 @@
 # Update Log
 
 ### 27th October 2026
+##### DriftlessMap 2.0.0a23
+
+V2: probes merged into the Implants card (`ProbeControls`); probe summary rows in the implant table (`probe_csv_row`); `export_all_results` with Results > Export all results (project copy via `save_project_called(path=, as_copy=True)`, objects, probe CSVs, implant table, layers); Add implant dialog widths.
+
+### 27th October 2026
 ##### DriftlessMap 2.0.0a22
 
 pyqtgraph `useNumba` is set only when numba is importable, removing a UserWarning on every image drawn without numba (e.g. Python 3.14).

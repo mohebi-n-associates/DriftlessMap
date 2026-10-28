@@ -8,6 +8,7 @@ from driftlessmap.implants import (
     AtlasFrame,
     ImplantBook,
     csv_row,
+    probe_csv_row,
     fill_outline,
     fit_fiber,
     fit_prism,
@@ -19,6 +20,7 @@ from driftlessmap.implants import (
     validated_specs,
 )
 from driftlessmap.mapping_records import MappingLedger, new_identifier
+from driftlessmap.probe_reconstruction import build_probe_reconstruction
 
 SHAPE = (240, 240, 240)
 BREGMA = np.array([120.0, 120.0, 160.0])  # brain surface at relative DV 0
@@ -193,6 +195,31 @@ class FiberFitTests(unittest.TestCase):
             fit_fiber([], {}, frame())
         with self.assertRaises(ValueError):
             fit_fiber([{"outline": [[0, 0, 0], [1, 1, 1]]}], {}, frame())
+
+
+class ProbeRowTests(unittest.TestCase):
+    def test_a_built_probe_gets_a_tip_summary_row(self):
+        tip, entry = np.array([0.0, 0.0, -80.0]), np.array([0.0, 0.0, 0.0])
+        index = lambda point: (point + BREGMA).astype(int)
+        recon = build_probe_reconstruction(
+            insertion_bregma_vox=entry, terminus_bregma_vox=tip,
+            insertion_vox_index=index(entry), terminus_vox_index=index(tip),
+            contact_bregma_vox=[np.array([[0.0, 0.0, -70.0]])],
+            contact_vox_index=[index(np.array([[0.0, 0.0, -70.0]]))],
+            contact_structure_ids=[np.array([2])],
+            contact_local_from_tip_base_um=[np.array([[100.0, 0.0, 0.0]])],
+            probe_length_um=800, probe_settings={"probe_type_name": "NP1.0"},
+            site_face="Front", voxel_size_um=10, bregma_herbs_vox=BREGMA,
+            herbs_atlas_shape=SHAPE,
+            label_info={"index": np.array([1, 2]), "label": np.array(["Cortex", "Deep"]),
+                        "abbrev": np.array(["CTX", "DP"]), "parent": np.array([0, 0]),
+                        "color": np.array([[1, 2, 3], [4, 5, 6]])})
+        row = probe_csv_row("Probe 1", recon, frame(), 2)
+        self.assertEqual((row["type"], row["specs"], row["point"]), ("Probe", "NP1.0", "tip"))
+        self.assertEqual((row["dv_um"], row["region_acronym"], row["sections"]), (800.0, "DP", 2))
+        self.assertEqual(row["depth_below_surface_um"], 800.0)
+        self.assertEqual(row["ap_tilt_deg"], 0.0)
+        self.assertEqual(row["face"], "")
 
 
 class PrismFitTests(unittest.TestCase):

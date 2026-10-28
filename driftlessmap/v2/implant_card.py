@@ -1,8 +1,9 @@
 """The Implants card of the V2 Annotate step: fibers, microprisms and probes.
 
-Fibers and prisms are outlined on each section, mapped and built here.
-Neuropixels probes are listed too, but are marked and built in the Probes
-card (their own, unchanged workflow); choosing one selects it there.
+All three are listed, added, renamed and deleted here. Fibers and prisms are
+outlined on each section, mapped and built with the controls below the list;
+a selected probe shows the probe controls instead (``probe_card``), which
+keep the probe's own workflow: points along the track, mapped and built.
 """
 
 from PyQt6.QtCore import Qt
@@ -25,6 +26,7 @@ from PyQt6.QtWidgets import (
 
 from .. import implants as model
 from .outline_editor import OutlineEditor
+from .probe_card import ProbeControls
 from .widgets import Card, button, grid_of, hint_label, set_status, status_label
 
 NEUROPIXELS = "neuropixels"
@@ -51,7 +53,7 @@ class ImplantDialog(QDialog):
         for kind in model.TYPES:
             self.kind.addItem(model.TYPE_NAMES[kind], kind)
         if implant is None:
-            self.kind.addItem("Neuropixels probe", NEUROPIXELS)
+            self.kind.addItem("Probe (Neuropixels, silicon, tetrode)", NEUROPIXELS)
         self.name = QLineEdit()
         self.diameter = QComboBox()
         self.diameter.setEditable(True)
@@ -68,6 +70,11 @@ class ImplantDialog(QDialog):
             spin.setSuffix(" µm")
         self.face = QComboBox()
         self.face.addItems(model.PRISM_FACES)
+        for widget in (self.kind, self.name):
+            widget.setMinimumWidth(260)
+        for widget in (self.diameter, self.na):
+            widget.setMinimumWidth(110)
+        self.kind.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
         form.addRow("Type", self.kind)
         form.addRow("Name", self.name)
         self.rows = {
@@ -80,6 +87,7 @@ class ImplantDialog(QDialog):
                 form.addRow(label, widget)
         self.form = form
         self.note = hint_label("")
+        self.note.setMinimumWidth(380)
         layout.addWidget(self.note)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok
                                    | QDialogButtonBox.StandardButton.Cancel)
@@ -123,7 +131,8 @@ class ImplantDialog(QDialog):
         self.note.setText({
             "fiber": "NA is stored for a later light-cone estimate; the tip does not use it.",
             "prism": "For a medial or lateral face, the depth is the prism's ML size.",
-            NEUROPIXELS: "Probes are marked and built in the Probes card.",
+            NEUROPIXELS: "The probe type, site face and shank layout are set in Tool "
+                         "options while Mark track is on.",
         }[kind])
 
     def values(self):
@@ -146,18 +155,19 @@ class ImplantDialog(QDialog):
 class ImplantCard(Card):
     """List implants; outline, map and build fibers and prisms."""
 
-    def __init__(self, shell, probe_card):
+    def __init__(self, shell):
         super().__init__("Implants")
         self.shell = shell
         self.engine = shell.engine
-        self.probe_card = probe_card
+        self.probe_card = ProbeControls(shell, self._select_probe)
         self.editor = OutlineEditor(self.engine)
         self.editor.changed.connect(self._editor_message)
         self._listing = None
 
         self.add(hint_label(
-            "Optical fibers and microprisms: outline what the implant left on each section "
-            "that shows it, map the section, then build the implant from all its sections."))
+            "Optical fibers, microprisms and probes: on each section that shows one, outline "
+            "what it left (a probe: click along its track), map the section, then build it "
+            "from all its sections."))
         self.list = QListWidget()
         self.list.setMaximumHeight(118)
         self.list.currentRowChanged.connect(lambda _row: self._selection_changed())
@@ -195,8 +205,7 @@ class ImplantCard(Card):
             button("Export table…", self.export_table),
         ], columns=3)
         self.add(self.results)
-        self.probe_note = self.add(hint_label(
-            "Neuropixels probes are marked, added and built in the Probes card below."))
+        self.add(self.probe_card)
 
     # ------------------------------------------------------------ helpers
     def current(self):
@@ -233,11 +242,9 @@ class ImplantCard(Card):
             try:
                 kind, name, specs = dialog.values()
                 if kind == NEUROPIXELS:
-                    probe = self.probe_card.book.new()
-                    if name.strip() and name.strip() != probe:
-                        probe = self.probe_card.book.rename(probe, name)
-                    self.probe_card.refresh(select=probe)
-                    self.refresh(select=PROBE_ROW + probe)
+                    if name.strip() in {i.name for i in self.engine.implants.implants()}:
+                        raise ValueError("There is already an implant called {}.".format(name))
+                    self.probe_card.new_probe(name)
                     return
                 if name.strip() in self.probe_card.book.names():
                     raise ValueError("There is already a probe called {}.".format(name))
@@ -251,6 +258,10 @@ class ImplantCard(Card):
             return
 
     def edit_settings(self):
+        if (self.current() or "").startswith(PROBE_ROW):
+            self.shell.message("A probe's type, site face and shank layout are in Tool options "
+                               "while Mark track is on; Probe settings has the rest.")
+            return
         implant = self.implant()
         if implant is None:
             return
@@ -273,7 +284,6 @@ class ImplantCard(Card):
             return
         if current.startswith(PROBE_ROW):
             self.probe_card.rename_probe()
-            self.refresh()
             return
         implant = self.implant()
         name, ok = QInputDialog.getText(self, "Rename implant", "New name:", text=implant.name)
@@ -291,7 +301,6 @@ class ImplantCard(Card):
             return
         if current.startswith(PROBE_ROW):
             self.probe_card.delete_probe()
-            self.refresh()
             return
         implant = self.implant()
         count = len(self.engine.implant_objects(implant.implant_id))
@@ -375,10 +384,16 @@ class ImplantCard(Card):
                                                               path))
 
     # ------------------------------------------------------------ refresh
+    def _select_probe(self, probe):
+        """Select ``probe`` in the list (None: keep or pick another row)."""
+        self.refresh(select=PROBE_ROW + probe if probe else None)
+
+    def _shown_probe(self):
+        current = self.current() or ""
+        return current[len(PROBE_ROW):] if current.startswith(PROBE_ROW) else None
+
     def _selection_changed(self):
-        current = self.current()
-        if current is not None and current.startswith(PROBE_ROW):
-            self.probe_card.refresh(select=current[len(PROBE_ROW):])
+        self.probe_card.show_probe(self._shown_probe())
         self.editor.select(self.implant().implant_id if self.implant() else None)
         self._sync_actions()
 
@@ -394,16 +409,20 @@ class ImplantCard(Card):
     def _sync_actions(self):
         engine = self.engine
         implant = self.implant()
-        is_probe = (self.current() or "").startswith(PROBE_ROW)
-        self.probe_note.setVisible(is_probe or implant is None)
+        probe = self._shown_probe()
+        self.probe_card.setVisible(probe is not None)
         for widget in (self.specs, self.controls, self.outline_state, self.map_button,
-                       self.build_button):
+                       self.build_button, self.status):
             widget.setVisible(implant is not None)
         if implant is None:
-            self.active.setText(self.current()[len(PROBE_ROW):] + " (Neuropixels)" if is_probe
-                                else "No fiber or prism yet: Add implant creates one.")
+            self.active.setText("{} · Probe".format(probe) if probe
+                                else "Nothing yet: Add implant creates a fiber, microprism "
+                                     "or probe.")
             self.results.setVisible(False)
             self.report.setText("")
+            self.report.setVisible(False)
+            if probe is not None:
+                self.probe_card.sync()
             return
         self.active.setText("{} · {}".format(implant.name, implant.type_name))
         self.specs.setText(model.describe_specs(implant.kind, implant.specs))
@@ -425,6 +444,7 @@ class ImplantCard(Card):
         self.build_button.setText("3  Build {}".format(implant.name))
         report = engine.implant_report(implant.implant_id)
         self.results.setVisible(report is not None)
+        self.report.setVisible(report is not None)
         self.report.setText("\n".join(model.report_lines(report)) if report else "")
 
     def refresh(self, select=None):
@@ -435,7 +455,7 @@ class ImplantCard(Card):
                 for implant in engine.implants.implants()]
         book = self.probe_card.book
         rows += [(PROBE_ROW + name, book.colour(name),
-                  "{}   ·   Neuropixels · {}".format(name, book.summary(name)))
+                  "{}   ·   probe · {}".format(name, book.summary(name)))
                  for name in book.names()]
         keep = select or self.current()
         if rows != self._listing:
@@ -452,6 +472,8 @@ class ImplantCard(Card):
             self.list.setCurrentRow(keys.index(keep))
         elif self.current() is None and keys:
             self.list.setCurrentRow(0)
+        if self.probe_card.probe != self._shown_probe():
+            self.probe_card.show_probe(self._shown_probe())
         selected = self.implant()
         if (selected.implant_id if selected else None) != self.editor.implant_id:
             self.editor.select(selected.implant_id if selected else None)

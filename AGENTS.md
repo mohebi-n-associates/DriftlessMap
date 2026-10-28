@@ -9,7 +9,7 @@ or important workflows change.
 ## Project identity
 
 - Current stable release: DriftlessMap 1.6.1. `main` now carries the 2.0
-  development preview (merged from `v2-redesign`), versioned 2.0.0aN (currently 2.0.0a22); each
+  development preview (merged from `v2-redesign`), versioned 2.0.0aN (currently 2.0.0a23); each
   feature there increments N. Plain 2.0.0 is reserved for the release that
   passes the gates in `version2_redesign.md`. Never give V2 work 1.x numbers.
 - Desktop application for histology registration, atlas mapping, probe
@@ -122,7 +122,13 @@ or important workflows change.
   `merged prism`. Implants and live outlines are saved in the project and in
   undo transactions. V2: `v2/implant_card.py` and `v2/outline_editor.py`
   (draw, Propose by flood fill inside the brain envelope, tip/bottom point).
-  Neuropixels stay on the named-probe path.
+  Probes are listed in the same Implants card but stay on the named-probe
+  path: selecting one shows `v2/probe_card.ProbeControls`. The implant table
+  adds a summary row per built probe (`probe_csv_row`).
+  `DriftlessMap.export_all_results(folder)` (Results > Export all results)
+  writes a project copy (`save_project_called(path=, as_copy=True)` leaves
+  the current project file and references alone), every built object, probe
+  localisation CSVs, the implant table and layers into one folder.
 - `driftlessmap/landmarks.py`: `LandmarkModel` owns paired landmark lists,
   topology, the cached registration and label items (the `DriftlessMap`
   attributes of the same names delegate to it), plus `.dmaptri` validation.
