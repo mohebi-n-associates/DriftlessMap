@@ -3,6 +3,15 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.0.0a27
+
+Development preview, 28 October 2026 (`v2-implants` branch; not a stable release)
+
+**The 2.0 interface opens by default.** Starting DriftlessMap, from the command
+line or the desktop application, now opens the redesigned interface. To use the
+classic interface, start with `--classic`, set `DRIFTLESSMAP_INTERFACE=classic`, or
+choose Help > Open the classic interface.
+
 ## DriftlessMap 2.0.0a26
 
 Development preview, 28 October 2026 (`v2-implants` branch; not a stable release)

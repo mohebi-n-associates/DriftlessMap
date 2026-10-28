@@ -79,7 +79,8 @@ class RuntimePathTests(unittest.TestCase):
 
         fake_gui.main = fake_main
         original_directory = os.getcwd()
-        with mock.patch.dict(sys.modules, {"driftlessmap.app": fake_gui}):
+        with mock.patch.dict(sys.modules, {"driftlessmap.app": fake_gui}), \
+                mock.patch.object(sys, "argv", ["driftlessmap", "--classic"]):
             result = run()
 
         self.assertEqual(result, 17)

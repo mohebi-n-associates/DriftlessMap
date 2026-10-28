@@ -9,7 +9,7 @@ or important workflows change.
 ## Project identity
 
 - Current stable release: DriftlessMap 1.6.1. `main` now carries the 2.0
-  development preview (merged from `v2-redesign`), versioned 2.0.0aN (currently 2.0.0a26); each
+  development preview (merged from `v2-redesign`), versioned 2.0.0aN (currently 2.0.0a27); each
   feature there increments N. Plain 2.0.0 is reserved for the release that
   passes the gates in `version2_redesign.md`. Never give V2 work 1.x numbers.
 - Desktop application for histology registration, atlas mapping, probe
@@ -174,10 +174,12 @@ or important workflows change.
   and raster layers.
 - `driftlessmap/utils.py`: shared image, label and geometry helpers (formerly
   `uuuuuu.py`).
-- `driftlessmap/v2/`: the 2.0 preview interface (`driftlessmap-v2`,
-  `python -m driftlessmap.v2`, or `--v2` / `DRIFTLESSMAP_INTERFACE=v2` with
-  the normal entry point and desktop bundle; see `interfaces.py`, which also
-  starts one interface from the other in a separate process).
+- `driftlessmap/v2/`: the 2.0 interface, the default on launch since
+  2.0.0a27 (`driftlessmap`, `driftlessmap-v2`, `python -m driftlessmap.v2`
+  and the desktop bundle). `--classic` or `DRIFTLESSMAP_INTERFACE=classic`
+  starts the 1.x interface; a flag wins over the environment. See
+  `interfaces.py`, which also starts one interface from the other in a
+  separate process (the classic restart passes `--classic`).
   `shell.V2Window` hosts a hidden `DriftlessMap` as its engine: it moves the engine's view splitter,
   toolbar (tool options only), object/layer panels and label tree into its
   own layout and calls engine methods and QActions for every operation. The
