@@ -3,6 +3,17 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.0.0rc6
+
+Release-candidate fix, 28 October 2026.
+
+Suggest Landmarks is fast on whole-slide sections. A 11520 x 5990 three-channel
+sagittal section took several gigabytes of memory and could run for a minute or
+fail on smaller computers; it now takes about two seconds, because large sections
+are analysed on a copy of at most 2048 pixels per side (finer than a 10 um atlas
+for a whole brain) while landmarks are still placed at full resolution. Preparing
+registration channels is faster for large images too.
+
 ## DriftlessMap 2.0.0rc5
 
 Release-candidate fix, 28 October 2026.

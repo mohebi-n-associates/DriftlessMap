@@ -25,6 +25,10 @@ import SimpleITK as sitk
 from .atlas_matching import histology_gray, tissue_mask
 
 WORKING_SIZE = 384  # longest side used for registration
+# Larger sections are analysed on a copy of at most this many pixels per side
+# (finer than the atlas for whole-brain sections); landmarks are still
+# returned in the section's own pixels.
+ANALYSIS_MAX_SIDE = 2048
 BSPLINE_SMOOTHING = [6, 3, 1.5]  # Gaussian sigma per level, in section pixels
 
 
@@ -246,13 +250,33 @@ def _peaks(score, count, radius, taken=()):
     return np.asarray(points, dtype=float).reshape(-1, 2)
 
 
-def _section_in_atlas(section_gray, atlas_shape, transform):
-    """The section resampled onto the atlas slice's pixels."""
+def _section_in_atlas(section_gray, atlas_shape, transform, factor=1.0):
+    """The section resampled onto the atlas slice's pixels.
+
+    ``factor`` is the size of one ``section_gray`` pixel in section pixels.
+    """
     reference = sitk.GetImageFromArray(np.zeros(atlas_shape, np.float32))
     reference.SetOrigin((0.5, 0.5))
-    moving = sitk.GetImageFromArray(np.ascontiguousarray(section_gray, dtype=np.float32))
-    moving.SetOrigin((0.5, 0.5))
+    moving = _as_image(section_gray, factor)
     return sitk.GetArrayFromImage(sitk.Resample(moving, reference, transform, sitk.sitkLinear, 0.0))
+
+
+def _analysis_copy(section, max_side=ANALYSIS_MAX_SIDE):
+    """The section, reduced to at most ``max_side`` pixels per side.
+
+    Returns the copy and the size of one of its pixels in section pixels.
+    Whole-resolution microscopy (tens of megapixels) made every step slow and
+    memory-hungry although registration runs on a far smaller copy.
+    """
+    section = np.asarray(section)
+    height, width = section.shape[:2]
+    factor = max(height, width) / float(max_side)
+    if factor <= 1.0:
+        return section, 1.0
+    size = (max(1, int(round(width / factor))), max(1, int(round(height / factor))))
+    reduced = cv2.resize(section.astype(np.float32) if section.dtype == np.float64 else section,
+                         size, interpolation=cv2.INTER_AREA)
+    return reduced, width / size[0]
 
 
 def _snap_to_outline(points, contour, limit):
@@ -284,6 +308,8 @@ def propose_landmarks(atlas_intensity, atlas_labels, section, count=10,
     atlas_mask = np.asarray(atlas_labels) > 0
     if atlas_mask.sum() < 100:
         raise ValueError("The atlas slice contains too little brain.")
+    height, width = np.asarray(section).shape[:2]
+    section, factor = _analysis_copy(section)
     section_mask = tissue_mask(section)
     section_gray = histology_gray(section, section_mask).astype(np.float32)
     atlas_image = cv2.normalize(np.asarray(atlas_intensity, dtype=np.float32),
@@ -295,8 +321,8 @@ def propose_landmarks(atlas_intensity, atlas_labels, section, count=10,
     moving_mask_array, _ = _downsample(section_mask, cv2.INTER_NEAREST)
     fixed = _as_image(fixed_array, fixed_scale)
     fixed_mask = _as_image(fixed_mask_array, fixed_scale)
-    moving = _as_image(moving_array, moving_scale)
-    moving_mask = _as_image(moving_mask_array, moving_scale)
+    moving = _as_image(moving_array, moving_scale * factor)
+    moving_mask = _as_image(moving_mask_array, moving_scale * factor)
 
     affine = _affine_on_silhouettes(fixed_mask, moving_mask)
     overlap_affine = _dice(fixed_mask, moving_mask, affine)
@@ -319,22 +345,24 @@ def propose_landmarks(atlas_intensity, atlas_labels, section, count=10,
         return np.array([transform.TransformPoint((float(x), float(y)))
                          for x, y in points]).reshape(-1, 2)
 
-    height, width = section_mask.shape
     spacing = _spacing(atlas_mask, count)
 
     outline_atlas = _outline_points(atlas_mask, atlas_image, min(OUTLINE_LANDMARKS, count))
-    outline_section = _snap_to_outline(to_section(outline_atlas), _outer_contour(section_mask),
+    # Outline pixels of the analysed copy, in section pixels.
+    contour = (_outer_contour(section_mask) + 0.5) * factor - 0.5
+    outline_section = _snap_to_outline(to_section(outline_atlas), contour,
                                        limit=0.05 * np.hypot(height, width))
 
     inner = cv2.erode(atlas_mask.astype(np.uint8), np.ones((3, 3), np.uint8), iterations=4) > 0
-    score = _shared_edge_score(atlas_image, _section_in_atlas(section_gray / 255.0,
-                                                              atlas_mask.shape, transform), inner)
+    in_atlas = _section_in_atlas(section_gray / 255.0, atlas_mask.shape, transform, factor)
+    score = _shared_edge_score(atlas_image, in_atlas, inner)
     radius = 0.45 * spacing  # keeps internal points about a tenth of the section apart
     internal_atlas = _peaks(score, count - len(outline_atlas), radius, taken=outline_atlas)
     internal_section = to_section(internal_atlas)
     if len(internal_section):
-        rows = np.clip(internal_section[:, 1].astype(int), 0, height - 1)
-        cols = np.clip(internal_section[:, 0].astype(int), 0, width - 1)
+        mask_height, mask_width = section_mask.shape
+        rows = np.clip((internal_section[:, 1] / factor).astype(int), 0, mask_height - 1)
+        cols = np.clip((internal_section[:, 0] / factor).astype(int), 0, mask_width - 1)
         inside = ((internal_section[:, 0] >= 0) & (internal_section[:, 0] < width)
                   & (internal_section[:, 1] >= 0) & (internal_section[:, 1] < height))
         keep = inside & section_mask[rows, cols]

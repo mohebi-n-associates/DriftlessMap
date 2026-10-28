@@ -136,10 +136,10 @@ def prepare(image, recipe):
     if recipe.mode == "legacy":
         return image, {"recipe": recipe.to_dict(), "bounds": None}
     low_p, high_p = recipe.percentiles
-    stack, bounds = [], []
+    plane, bounds = None, []
     for channel in recipe.channels:
-        values = planes[..., channel].astype(np.float32)
-        low, high = np.percentile(values, [low_p, high_p])
+        values = planes[..., channel]
+        low, high = np.percentile(_percentile_sample(values), [low_p, high_p])
         if not np.isfinite(low) or not np.isfinite(high) or high <= low:
             name = (recipe.channel_names[recipe.channels.index(channel)]
                     if recipe.channel_names else "channel {}".format(channel + 1))
@@ -147,7 +147,25 @@ def prepare(image, recipe):
                 "The registration channel {} is empty or constant, so it cannot "
                 "be used for registration.".format(name)
             )
-        stack.append(np.clip((values - low) / (high - low), 0.0, 1.0))
+        scaled = values.astype(np.float32)
+        scaled -= np.float32(low)
+        scaled *= np.float32(1.0 / (high - low))
+        np.clip(scaled, 0.0, 1.0, out=scaled)
+        if plane is None:
+            plane = scaled
+        else:
+            plane += scaled
         bounds.append((float(low), float(high)))
-    plane = np.mean(stack, axis=0).astype(np.float32)
+    plane /= np.float32(len(recipe.channels))
     return plane, {"recipe": recipe.to_dict(), "bounds": bounds}
+
+
+# Percentiles of larger channels are taken from an evenly spaced grid of
+# about this many pixels: the bounds barely move, and whole-slide images no
+# longer take seconds per channel.
+PERCENTILE_SAMPLE = 4_000_000
+
+
+def _percentile_sample(values):
+    step = int(np.ceil(np.sqrt(values.size / PERCENTILE_SAMPLE)))
+    return values[::step, ::step] if step > 1 else values
