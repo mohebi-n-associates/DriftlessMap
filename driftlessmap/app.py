@@ -176,10 +176,13 @@ from .landmarks import LANDMARK_FIELDS, LandmarkModel, triangulation_payload_err
 from .project_io import (
     CELL_COUNT_SLOTS,
     PROJECT_SCHEMA_VERSION,
+    clean_interface_state,
     default_working_atlas_data,
     default_working_img_data,
+    layer_points,
     object_file_names,
     padded_cell_count,
+    plot_points,
     prefingerprint_inputs,
     with_defaults,
 )
@@ -209,6 +212,13 @@ class DriftlessMap(ImplantEngineMixin, QMainWindow, FORM_Main):
         self.save_path = self.home_path
         self.current_project_path = None
         self.project_created_at = None
+        # Where the user left off in the interface, saved with the project
+        # (``project_io.clean_interface_state``). An interface may set
+        # ``interface_state_provider`` (returns that state before each save)
+        # and ``on_project_loaded`` (called after a project is restored).
+        self.interface_state = {}
+        self.interface_state_provider = None
+        self.on_project_loaded = None
         # Channels used by Suggest Atlas Section and Propose Landmarks; None
         # until chosen (multichannel images) or defaulted (RGB, one channel).
         self.registration_input = None
@@ -8110,10 +8120,9 @@ class DriftlessMap(ImplantEngineMixin, QMainWindow, FORM_Main):
             if self.working_img_type[layer_link] == "pixel":
                 image_vis_data = self.image_view.img_stacks.image_dict[layer_link].image
             else:
-                image_vis_data = self.image_view.img_stacks.image_dict[
-                    layer_link
-                ].getData()
-                image_vis_data = list(np.asarray(image_vis_data).T)
+                image_vis_data = plot_points(
+                    self.image_view.img_stacks.image_dict[layer_link].getData()
+                )
 
             if layer_link == "img-virus":
                 temp = np.where(image_vis_data != 0)
@@ -8189,10 +8198,9 @@ class DriftlessMap(ImplantEngineMixin, QMainWindow, FORM_Main):
                     layer_link
                 ].image
             else:
-                image_vis_data = self.atlas_view.working_atlas.image_dict[
-                    layer_link
-                ].getData()
-                image_vis_data = list(np.asarray(image_vis_data).T)
+                image_vis_data = plot_points(
+                    self.atlas_view.working_atlas.image_dict[layer_link].getData()
+                )
             if layer_link == "atlas-cells":
                 temp_data = self.atlas_view.working_atlas.image_dict[layer_link].data
                 symbol_list = []
@@ -8368,18 +8376,19 @@ class DriftlessMap(ImplantEngineMixin, QMainWindow, FORM_Main):
         if layer_link == "img-process":
             self.image_view.set_data_and_size(vis_data_2d)
         elif layer_link == "img-cells":
+            points = layer_points(vis_data_2d)
             self.image_view.img_stacks.image_dict[layer_link].setData(
-                pos=np.asarray(vis_data_2d), symbol=symbol
+                pos=points, **self._cell_symbols(symbol, points)
             )
         elif layer_link == "img-probe":
             self.image_view.img_stacks.image_dict[layer_link].setData(
-                pos=np.asarray(vis_data_2d)
+                pos=layer_points(vis_data_2d)
             )
         elif layer_link in ["img-overlay", "img-mask", "img-virus"]:
             self.image_view.img_stacks.image_dict[layer_link].setImage(vis_data_2d)
         elif layer_link in ["img-drawing", "img-contour"]:
             self.image_view.img_stacks.image_dict[layer_link].setData(
-                np.asarray(vis_data_2d)
+                layer_points(vis_data_2d)
             )
         else:
             return
@@ -8509,21 +8518,29 @@ class DriftlessMap(ImplantEngineMixin, QMainWindow, FORM_Main):
         if layer_link == "atlas-slice":
             self.atlas_view.set_slice_data(vis_data_2d)
         elif layer_link == "atlas-cells":
+            points = layer_points(vis_data_2d)
             self.atlas_view.working_atlas.image_dict[layer_link].setData(
-                pos=np.asarray(vis_data_2d), symbol=symbol
+                pos=points, **self._cell_symbols(symbol, points)
             )
         elif layer_link in ["atlas-overlay", "atlas-mask"]:
             self.atlas_view.working_atlas.image_dict[layer_link].setImage(vis_data_2d)
         elif layer_link in ["atlas-drawing", "atlas-contour"]:
             self.atlas_view.working_atlas.image_dict[layer_link].setData(
-                np.asarray(vis_data_2d)
+                layer_points(vis_data_2d)
             )
         elif layer_link in ["atlas-virus", "atlas-probe"]:
             self.atlas_view.working_atlas.image_dict[layer_link].setData(
-                pos=np.asarray(vis_data_2d)
+                pos=layer_points(vis_data_2d)
             )
         else:
             return
+
+    @staticmethod
+    def _cell_symbols(symbol, points):
+        """Per-cell symbols when they match the points; otherwise the default."""
+        if symbol is not None and len(symbol) == len(points) and len(points):
+            return {"symbol": symbol}
+        return {}
 
     def load_layers_called(self):
         self.print_message("Loading layers ...", self.normal_color)
@@ -8901,6 +8918,7 @@ class DriftlessMap(ImplantEngineMixin, QMainWindow, FORM_Main):
                 "atlas_mark_origin": self.atlas_mark_origin,
                 "implants": self.implants.to_list(),
                 "implant_outlines": self.implant_outlines,
+                "interface_state": self._interface_state_for_save(),
                 "np_onside": self.np_onside,
                 "processing_slice": self.atlas_view.processing_slice,
                 "processing_img": self.image_view.processing_img,
@@ -8936,6 +8954,15 @@ class DriftlessMap(ImplantEngineMixin, QMainWindow, FORM_Main):
             return True
         self.print_message("", self.normal_color)
         return False
+
+    def _interface_state_for_save(self):
+        """Where the user left off; never lets the interface stop a save."""
+        if callable(self.interface_state_provider):
+            try:
+                self.interface_state = self.interface_state_provider() or {}
+            except Exception:
+                pass
+        return clean_interface_state(self.interface_state)
 
     def _ask_for_verified_input(self, reference, title):
         QMessageBox.warning(
@@ -9371,7 +9398,15 @@ class DriftlessMap(ImplantEngineMixin, QMainWindow, FORM_Main):
             self.show_grids()
         self.obj_display_mode = desired_object_mode
 
+        self.interface_state = clean_interface_state(p_dict.get("interface_state"))
         self.print_message("Project loaded successfully.", self.normal_color)
+        if callable(self.on_project_loaded):
+            try:
+                self.on_project_loaded(self.interface_state)
+            except Exception as exc:   # the work is restored; only the view is not
+                self.print_message("The project is loaded, but where you left off "
+                                   "could not be restored: {}".format(exc),
+                                   self.reminder_color)
 
     def get_setting_data(self):
         data = {

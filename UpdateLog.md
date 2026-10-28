@@ -1,6 +1,11 @@
 # Update Log
 
 ### 28th October 2026
+##### DriftlessMap 2.0.0a25
+
+Projects store `interface_state` (optional, plain JSON via `clean_interface_state`, no schema bump) from `interface_state_provider`; `on_project_loaded` hands it to V2 `resume` (step, view, implant selection, `ProbeBook.state`, Mark track, outline draft). Unmapped probes count in the unsaved-change digest. Point layers use `layer_points` / `plot_points`: empty layers saved as `[None, None]` made `load_project` fail part-way; they now load, and empty layers save as [].
+
+### 28th October 2026
 ##### DriftlessMap 2.0.0a24
 
 Region boundaries drawn as an RGBA overlay in `BOUNDARY_COLOUR` (`slice_stacks.boundary_rgba`) instead of an additive white image, which vanished over brightfield overlays; V2 View > Show region boundaries (`view.boundaries`, B) drives `show_boundary_btn`.

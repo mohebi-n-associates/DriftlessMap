@@ -455,6 +455,84 @@ class V2ShellTests(unittest.TestCase):
             self.assertIn("Exported", results.export_status.text())
 
     @isolated_gui_test
+    def test_a_saved_project_reopens_where_the_user_left_off(self):
+        import cv2
+        from unittest.mock import patch
+
+        from PyQt6.QtWidgets import QFileDialog
+
+        from tests.atlas_fixture import make_processed_atlas
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window = self.make_window(folder)
+            engine = window.engine
+            self.assertTrue(engine.load_volume_atlas(str(make_processed_atlas(root / "atlas"))))
+            image = np.full((40, 30, 3), 120, dtype=np.uint8)
+            cv2.imwrite(str(root / "s.png"), image)
+            self.assertTrue(engine.load_single_image_file(str(root / "s.png"), ".png"))
+            window.go_to("annotate")
+            card = window.panels["annotate"].implants
+            probes = card.probe_card
+
+            # Probe A: one section mapped, then half of the next track marked.
+            probes.new_probe("Probe A")
+            probes.toggle_marking()
+            for point in ((13.0, 5.0), (14.0, 25.0)):
+                engine.img_stacks_clicked(point)
+            probes.add_section()
+            for point in ((13.0, 6.0), (13.5, 15.0)):
+                engine.img_stacks_clicked(point)
+            # Probe B added but nothing marked yet: unsaved work too.
+            window.mark_saved()
+            probes.new_probe("Probe B")
+            self.assertTrue(window.is_dirty())
+            # A fiber outline still being drawn.
+            fiber = engine.add_implant("fiber")
+            card.refresh(select=fiber.implant_id)
+            card.draw.setChecked(True)
+            card._mode("draw")
+            for point in ((12.0, 4.0), (16.0, 4.0)):
+                card.editor._clicked(point)
+            window.set_view("section")
+
+            path = root / "half.dmap"
+            with patch.object(QFileDialog, "getSaveFileName", return_value=(str(path), "")):
+                window.run("project.save")
+            self.assertFalse(window.is_dirty())
+
+            reopened = self.make_window(folder)
+            with patch.object(QFileDialog, "getOpenFileName", return_value=(str(path), "")):
+                reopened.run("project.open")
+            engine = reopened.engine
+            card = reopened.panels["annotate"].implants
+            self.assertIs(reopened.stack.currentWidget(), reopened.panels["annotate"])
+            self.assertTrue(reopened.view_buttons["section"].isChecked())
+            self.assertEqual(engine.working_img_data["img-probe"], [[13.0, 6.0], [13.5, 15.0]])
+            self.assertEqual(card.probe_card.book.names(), ["Probe A", "Probe B"])
+            self.assertEqual(card.probe_card.book.summary("Probe A"), "1 section · not built")
+            self.assertEqual(card.current(), fiber.implant_id)
+            self.assertEqual(card.editor.mode, "draw")
+            self.assertEqual(card.editor.vertices, [[12.0, 4.0], [16.0, 4.0]])
+            self.assertFalse(reopened.is_dirty())
+            for point in ((16.0, 28.0), (12.0, 28.0), (12.0, 4.0)):
+                card.editor._clicked(point)
+            self.assertEqual(len(engine.implant_outline(fiber.implant_id)["points"]), 4)
+
+            # Probe A selected with Mark track on comes back the same way.
+            card.refresh(select="probe:Probe A")
+            card.probe_card.toggle_marking()
+            with patch.object(QFileDialog, "getSaveFileName", return_value=(str(path), "")):
+                reopened.run("project.save")
+            again = self.make_window(folder)
+            with patch.object(QFileDialog, "getOpenFileName", return_value=(str(path), "")):
+                again.run("project.open")
+            again_card = again.panels["annotate"].implants
+            self.assertEqual(again_card.current(), "probe:Probe A")
+            self.assertTrue(again.engine.tool_box.checkable_btn_dict["probe_btn"].isChecked())
+            self.assertTrue(again_card.probe_card.mark.isChecked())
+
+    @isolated_gui_test
     def test_allen_download_dialog_reuses_verified_files(self):
         import json
         from unittest.mock import patch

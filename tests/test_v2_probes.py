@@ -208,3 +208,27 @@ class ProbeBookTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ProbeBookStateTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
+    def test_unmapped_probes_and_colours_are_restored(self):
+        book = ProbeBook(FakeEngine())
+        book.new()
+        book.rename(book.new(), "Probe L")
+        state = book.state()
+        restored = ProbeBook(FakeEngine())
+        restored.restore(state)
+        self.assertEqual(restored.names(), ["Probe 1", "Probe L"])
+        self.assertEqual(restored.colour("Probe L"), book.colour("Probe L"))
+
+    def test_invalid_saved_probes_are_skipped(self):
+        book = ProbeBook(FakeEngine())
+        book.restore({"empty": ["bad-name", "", "Probe 2", "Probe 2"],
+                      "colours": {"Probe 2": [1, 2], "Probe 3": [300, 0, 0], "Probe 4": "red"}})
+        self.assertEqual(book.names(), ["Probe 2"])
+        book.restore(None)
+        self.assertEqual(book.names(), ["Probe 2"])

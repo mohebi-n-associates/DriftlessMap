@@ -886,6 +886,42 @@ class ProjectPersistenceIntegrationTests(unittest.TestCase):
         return window
 
     @isolated_gui_test
+    def test_a_pencil_click_without_a_stroke_saves_and_reopens(self):
+        from driftlessmap.persistence import save_driftlessmap_file
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window = self._window_with_volume_atlas(root)
+            source = root / "histology.png"
+            cv2.imwrite(str(source), np.full((30, 40, 3), 80, dtype=np.uint8))
+            self.assertTrue(window.load_single_image_file(str(source), ".png"))
+            window.tool_box.checkable_btn_dict["pencil_btn"].setChecked(True)
+            window.img_stacks_clicked((5.0, 6.0))
+            self.assertIn("img-drawing", window.layer_ctrl.layer_link)
+            # The layer exists but its line holds no points yet.
+            window.image_view.img_stacks.image_dict["img-drawing"].clear()
+            project = root / "pencil.dmap"
+            with patch.object(QFileDialog, "getSaveFileName",
+                              return_value=(str(project), "")):
+                self.assertTrue(window.save_project_called())
+            payload, error = load_driftlessmap_file(project, "project")
+            self.assertIsNone(error)
+            index = payload["layer_data"]["layer_link"].index("img-drawing")
+            self.assertEqual(list(payload["layer_data"]["2d_data"][index]), [])
+
+            # Projects saved before the fix stored [None, None]; they open too.
+            payload["layer_data"]["2d_data"][index] = [None, None]
+            old = root / "old.dmap"
+            save_driftlessmap_file(old, payload, "project")
+            restored = self.create_window()
+            prepared = restored.prepare_project_sources(
+                load_driftlessmap_file(old, "project")[0], str(old))
+            restored.current_project_path = str(old)
+            restored.load_project(prepared)
+            self.assertIn("img-drawing", restored.layer_ctrl.layer_link)
+            self.assertEqual(restored.interface_state, {})
+
+    @isolated_gui_test
     def test_loaded_landmarks_survive_the_view_switch(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

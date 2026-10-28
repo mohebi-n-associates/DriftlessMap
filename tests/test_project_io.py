@@ -1,10 +1,16 @@
 import unittest
 
+import numpy as np
+
 from driftlessmap.project_io import (
     CELL_COUNT_SLOTS,
+    INTERFACE_STATE_LIMIT,
+    clean_interface_state,
     default_working_atlas_data,
     default_working_img_data,
+    layer_points,
     object_file_names,
+    plot_points,
     with_defaults,
 )
 
@@ -33,3 +39,28 @@ class ProjectIoTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LeftOffStateTests(unittest.TestCase):
+    def test_interface_state_is_kept_as_plain_json(self):
+        state = {"step": "annotate", "implants": {"drawing": {
+            "vertices": np.array([[1.0, 2.0], [3.0, 4.0]]), "count": np.int64(2)}}}
+        cleaned = clean_interface_state(state)
+        self.assertEqual(cleaned["implants"]["drawing"]["vertices"], [[1.0, 2.0], [3.0, 4.0]])
+        self.assertIsInstance(cleaned["implants"]["drawing"]["count"], int)
+
+    def test_unusable_interface_state_is_dropped_not_fatal(self):
+        self.assertEqual(clean_interface_state(None), {})          # projects before 2.0.0a25
+        self.assertEqual(clean_interface_state([1, 2]), {})
+        self.assertEqual(clean_interface_state({"x": object()}), {})
+        self.assertEqual(clean_interface_state({"x": float("nan")}), {})
+        self.assertEqual(clean_interface_state({"x": "a" * INTERFACE_STATE_LIMIT}), {})
+
+    def test_empty_point_layers_read_as_empty(self):
+        # A pencil click without a stroke used to be saved as [None, None].
+        self.assertEqual(layer_points([None, None]).shape, (0, 2))
+        self.assertEqual(layer_points([]).shape, (0, 2))
+        self.assertEqual(layer_points([[1, 2], [3, 4]]).tolist(), [[1.0, 2.0], [3.0, 4.0]])
+        self.assertEqual(plot_points((None, None)), [])
+        self.assertEqual([list(p) for p in plot_points(([1, 3], [2, 4]))],
+                         [[1.0, 2.0], [3.0, 4.0]])

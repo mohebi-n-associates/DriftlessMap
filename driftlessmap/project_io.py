@@ -1,7 +1,10 @@
 """GUI-free helpers for assembling and restoring DriftlessMap projects."""
 
+import json
 import os
 import re
+
+import numpy as np
 
 from .provenance import describe_atlas_path, describe_path
 
@@ -94,6 +97,62 @@ def with_defaults(defaults, saved):
                 merged[key] = saved[key]
     merged["cell_count"] = padded_cell_count(merged.get("cell_count"))
     return merged
+
+
+def layer_points(data):
+    """Point-layer display data as an (n, 2) float array.
+
+    A layer can be saved while its tool has placed nothing yet (for example a
+    pencil click without a stroke), which older versions stored as
+    ``[None, None]``; such data is read as an empty layer.
+    """
+    try:
+        points = np.asarray(data, dtype=float)
+    except (TypeError, ValueError):
+        return np.zeros((0, 2))
+    if points.ndim != 2 or points.shape[1] != 2:
+        return np.zeros((0, 2))
+    return points
+
+
+def plot_points(xy):
+    """``PlotDataItem.getData()`` / ``ScatterPlotItem.getData()`` as a list of [x, y]."""
+    x, y = xy if xy is not None else (None, None)
+    if x is None or y is None:
+        return []
+    return list(layer_points(np.asarray([x, y], dtype=float).T))
+
+
+# Where the user left off in the interface (step, view, selection, a drawing
+# in progress). Plain JSON values only, bounded so a damaged file cannot
+# carry anything large; anything else is dropped and the project still opens.
+INTERFACE_STATE_LIMIT = 200_000
+
+
+def clean_interface_state(state):
+    """``state`` as plain JSON values, or {} when it is absent or unusable."""
+    def plain(value):
+        if isinstance(value, np.ndarray):
+            return plain(value.tolist())
+        if isinstance(value, np.generic):
+            return value.item()
+        if isinstance(value, dict):
+            return {str(k): plain(v) for k, v in value.items()}
+        if isinstance(value, (list, tuple)):
+            return [plain(v) for v in value]
+        if value is None or isinstance(value, (bool, int, float, str)):
+            return value
+        raise TypeError(type(value).__name__)
+
+    if not isinstance(state, dict):
+        return {}
+    try:
+        state = plain(state)
+        if len(json.dumps(state, allow_nan=False)) > INTERFACE_STATE_LIMIT:
+            return {}
+    except (TypeError, ValueError):
+        return {}
+    return state
 
 
 def padded_cell_count(cell_count):

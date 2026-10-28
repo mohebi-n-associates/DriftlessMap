@@ -94,6 +94,9 @@ class V2Window(QMainWindow):
         self._build_shortcuts()
         self.apply_theme(self.theme)
         self.go_to("project")
+        # Projects remember where the user left off and reopen there.
+        engine.interface_state_provider = self.leave_state
+        engine.on_project_loaded = self.resume
 
         self._timer = QTimer(self)
         self._timer.timeout.connect(self.refresh)
@@ -743,27 +746,52 @@ class V2Window(QMainWindow):
     def open_project(self):
         if not self.confirm_discard("open another project"):
             return
-        before = self.engine.current_project_path
         self.engine.load_project_called()
-        if self.engine.current_project_path and self.engine.current_project_path != before:
-            self.mark_saved()
-        self.go_to("project")
-        self.set_view("compare")
+
+    # ------------------------------------------------- where the user left off
+    def leave_state(self):
+        """Where the user is working, saved with the project (see :meth:`resume`)."""
+        step = next((key for key, panel in self.panels.items()
+                     if panel is self.stack.currentWidget()), "project")
+        view = next((key for key, b in self.view_buttons.items() if b.isChecked()), "compare")
+        return {"interface": "v2", "step": step, "view": view,
+                "implants": self.panels["annotate"].implants.leave_state()}
+
+    def resume(self, state):
+        """After a project is opened, return to the step, view and work in progress."""
+        state = state if isinstance(state, dict) else {}
+        self.clear_tools()
+        step = state.get("step") if state.get("step") in self.panels else "project"
+        view = state.get("view") if state.get("view") in self.view_buttons else "compare"
+        self.set_view(view)
+        self.go_to(step)
+        self.panels["annotate"].implants.resume(state.get("implants"))
+        self.mark_saved()
+        self.refresh()
+        if state:
+            self.message("Opened where you left off.", "good")
 
     def save_project(self, portable=False):
         if self.engine.save_project_called(portable=portable):
             self.mark_saved()
             self.message("Project saved.", "good")
 
+    def _digest(self):
+        # Probes added but not yet mapped exist only in this window; they are
+        # work to save too.
+        empty = tuple(self.panels["annotate"].implants.probe_card.book.state()["empty"]) \
+            if hasattr(self, "panels") else ()
+        return state.scientific_digest(self.engine), empty
+
     def mark_saved(self):
         try:
-            self._saved_digest = state.scientific_digest(self.engine)
+            self._saved_digest = self._digest()
         except Exception:
             self._saved_digest = None
 
     def is_dirty(self):
         try:
-            return state.scientific_digest(self.engine) != self._saved_digest
+            return self._digest() != self._saved_digest
         except Exception:
             return False
 

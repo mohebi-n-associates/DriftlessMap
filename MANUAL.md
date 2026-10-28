@@ -1,6 +1,6 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 2.0.0a24**, a development preview of
+This manual applies to **DriftlessMap 2.0.0a25**, a development preview of
 DriftlessMap 2.0 (the `main` branch, not a release). The current stable release is
 1.6.1; its desktop downloads are described in Section 2.2.
 
@@ -109,7 +109,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-DriftlessMap 2.0.0a24 requires:
+DriftlessMap 2.0.0a25 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -177,7 +177,7 @@ python -c "import driftlessmap; print(driftlessmap.__version__)"
 ```
 
 The final command prints the installed version: `1.6.1` for the stable
-release, or `2.0.0a24` for this development preview installed from the
+release, or `2.0.0a25` for this development preview installed from the
 `v2-redesign` branch.
 
 ### 2.5 Launching DriftlessMap
@@ -476,7 +476,15 @@ The window has four areas:
 - **Objects, Layers and Regions** on the right.
 - **The status line** at the bottom: the last message, the atlas and section,
   and whether there are unsaved changes. Changing views, zooming or selecting
-  never counts as a change.
+  never counts as a change; adding a probe, even before marking it, does.
+
+**Stopping half-way.** Save the project whenever you need to stop, even in the
+middle of a step. Opening it again returns you to where you left off: the
+same step and view, the selected implant or probe, probes you added but have
+not mapped yet, track points marked but not yet mapped, **Mark track**
+switched on again if it was on, and an outline you were still drawing (keep
+clicking to finish it). Landmarks, marks, mapped sections, parts and built
+objects are all part of the project as always.
 
 What each step does:
 
@@ -1732,6 +1740,9 @@ Use **File > Save Project** frequently. A project records:
 - Probe design, face, multi-probe plan, and merge-sites choice.
 - Object pieces and merged objects.
 - Current layout and related state.
+- In the 2.0 preview, where you left off: step, view, selection, probes not
+  yet mapped, Mark track and an outline still being drawn. Projects without
+  it open as before.
 
 **Save Project** creates a linked project. The processed volume atlas is not
 embedded because it is large, but its scientifically relevant cache files are
