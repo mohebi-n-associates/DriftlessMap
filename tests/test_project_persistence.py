@@ -1569,10 +1569,19 @@ class ProjectPersistenceIntegrationTests(unittest.TestCase):
                 chosen.append(original_choice(dialog))
                 return chosen[-1]
 
+            # Without a plane, the user is asked; cancelling runs nothing.
+            from PyQt6.QtWidgets import QInputDialog
+            with patch.object(QInputDialog, "getItem", return_value=("", False)) as ask, \
+                    patch("driftlessmap.app.run_in_background") as search:
+                window.suggest_atlas_section()
+            ask.assert_called_once()
+            search.assert_not_called()
+
             with patch.object(SectionSuggestionDialog, "exec", return_value=1), patch.object(
                 SectionSuggestionDialog, "choice", record
             ):
-                window.suggest_atlas_section()
+                window.suggest_atlas_section(plane="sagittal")
+            self.assertEqual(window.section_plane, "sagittal")
 
             plane, index, _orientation, tilt, _rotate = chosen[0]
             self.assertEqual(plane, "sagittal")

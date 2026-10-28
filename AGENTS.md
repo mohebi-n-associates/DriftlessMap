@@ -10,7 +10,7 @@ or important workflows change.
 
 - Current stable release: DriftlessMap 1.6.1. `main` carries DriftlessMap 2.0,
   published as the release candidate 2.0.0rc1 (after the 2.0.0aN previews).
-  Fixes before the final release become 2.0.0rcN (currently 2.0.0rc3). Plain 2.0.0 is reserved for
+  Fixes before the final release become 2.0.0rcN (currently 2.0.0rc4). Plain 2.0.0 is reserved for
   the release that passes the gates in `release_validation.md`. Never give V2
   work 1.x numbers. A published GitHub release runs `release.yml` (PyPI, trusted
   publishing) and `desktop-builds.yml` (Windows ZIP and macOS DMG attached to
@@ -62,7 +62,10 @@ or important workflows change.
   slices exactly as `AtlasView` displays them). Coronal/horizontal matches are
   ambiguous up to a left-right mirror; the user chooses the side, which the
   dialog names anatomically (`animal_right_edge`, `sagittal_side`; positive
-  ML is the animal's right). `suggest_sections` searches a copy sampled by
+  ML is the animal's right). The user names the section plane
+  (`planes=`, `planes_for`, `plane_from_name`; `DriftlessMap.ask_section_plane`,
+  V2 Match step Section plane): outlines are compared without physical size, so
+  planes are confused. `suggest_sections` searches a copy sampled by
   `search_factor` (at most `SEARCH_MAX_SIDE` voxels per side) and refines
   each suggested page at full resolution (`_refine_page`); suggested and
   candidate indexes are always full-resolution pages. `tissue_mask` and
