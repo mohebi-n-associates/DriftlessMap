@@ -96,6 +96,28 @@ class ProposeLandmarkTests(unittest.TestCase):
                 errors = np.linalg.norm(proposal.boundary_points - known_warp(grid), axis=1)
                 self.assertLess(np.median(errors), 3.5, errors)
 
+    def test_large_sections_are_analysed_on_a_copy_in_their_own_pixels(self):
+        # Whole-slide sections (tens of megapixels) are analysed on a reduced
+        # copy; landmarks still come back in the section's pixels.
+        from driftlessmap import auto_registration
+
+        intensity, labels = synthetic_slice()
+        section = warped_section(intensity, labels)
+        large = cv2.resize(section, None, fx=10, fy=10, interpolation=cv2.INTER_LINEAR)
+        self.assertGreater(max(large.shape[:2]), auto_registration.ANALYSIS_MAX_SIDE)
+        small = propose_landmarks(intensity, labels, section, deformable=False)
+        big = propose_landmarks(intensity, labels, large, deformable=False)
+        # Outline points come from the atlas alone; where they land on the
+        # section scales with it (one small-section pixel is 10 here).
+        outline = [kind == "outline" for kind in small.kinds]
+        np.testing.assert_allclose(big.atlas_points[outline], small.atlas_points[outline])
+        expected = (small.histology_points[outline] + 0.5) * 10 - 0.5
+        errors = np.linalg.norm(big.histology_points[outline] - expected, axis=1)
+        self.assertLess(np.median(errors), 10, errors)
+        copy, factor = auto_registration._analysis_copy(large)
+        self.assertEqual(max(copy.shape[:2]), auto_registration.ANALYSIS_MAX_SIDE)
+        self.assertAlmostEqual(factor, large.shape[1] / copy.shape[1])
+
     def test_outline_points_lie_on_both_outlines(self):
         intensity, labels = synthetic_slice()
         section = warped_section(intensity, labels)

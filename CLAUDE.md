@@ -10,7 +10,7 @@ or important workflows change.
 
 - Current stable release: DriftlessMap 1.6.1. `main` carries DriftlessMap 2.0,
   published as the release candidate 2.0.0rc1 (after the 2.0.0aN previews).
-  Fixes before the final release become 2.0.0rcN (currently 2.0.0rc5). Plain 2.0.0 is reserved for
+  Fixes before the final release become 2.0.0rcN (currently 2.0.0rc6). Plain 2.0.0 is reserved for
   the release that passes the gates in `release_validation.md`. Never give V2
   work 1.x numbers. A published GitHub release runs `release.yml` (PyPI, trusted
   publishing) and `desktop-builds.yml` (Windows ZIP and macOS DMG attached to
@@ -91,7 +91,8 @@ or important workflows change.
   identical to `AtlasView.rotate_*_current_slice`.
 - `driftlessmap/registration_input.py`: GUI-free registration-input recipe
   (Legacy = unchanged raw image, 1.6 behaviour; or explicit channels, each
-  percentile-normalised and averaged into one analysis plane). Display
+  percentile-normalised (percentiles from a grid sample of
+  `PERCENTILE_SAMPLE` pixels) and averaged into one analysis plane). Display
   settings never enter it. `DriftlessMap.registration_section()` applies it
   for Suggest Atlas Section and Propose Landmarks; a new multichannel image
   has no recipe until the user chooses (`registration_channels_dialog.py`).
@@ -107,7 +108,9 @@ or important workflows change.
 - `driftlessmap/auto_registration.py`: SimpleITK registration (moment-based
   affine on silhouettes, then a B-spline on intensities with Mattes MI over
   every masked pixel, smoothed at each level by `BSPLINE_SMOOTHING`; random
-  sampling made results seed- and platform-dependent) that
+  sampling made results seed- and platform-dependent; sections are analysed on
+  a copy of at most `ANALYSIS_MAX_SIDE` pixels, `_analysis_copy`, with
+  physical space kept in section pixels) that
   proposes atlas-to-histology landmark pairs in DriftlessMap pixel-edge
   coordinates. The B-spline is kept only if it improves the intensity match
   without degrading the outline. Up to 10 landmarks are suggested:

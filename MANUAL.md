@@ -1,6 +1,6 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 2.0.0rc5**, the release candidate of
+This manual applies to **DriftlessMap 2.0.0rc6**, the release candidate of
 DriftlessMap 2.0. The current stable release is 1.6.1; `pip install driftlessmap`
 keeps installing 1.6.1 until 2.0.0 is released, and Section 2 explains how to
 install the release candidate.
@@ -110,7 +110,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-DriftlessMap 2.0.0rc5 requires:
+DriftlessMap 2.0.0rc6 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -939,7 +939,10 @@ section and fills the Triangulation tool with paired landmarks:
    up to 5 at the sharpest tips and notches of the outline, snapped onto the
    section outline, and the rest on strong internal edges that both images
    show, such as the corpus callosum. It moves the boundary anchors with the
-   same fit. The landmarks are suggestions to confirm and edit.
+   same fit. The landmarks are suggestions to confirm and edit. Sections
+   larger than 2048 pixels per side are analysed on a reduced copy (finer
+   than the atlas for whole-brain sections), so whole-slide images take
+   seconds; the landmarks are placed in the section's full resolution.
 4. The status bar reports how many pairs are on the outline and how many are
    on internal edges, and the outline overlap. The
    Triangulation tool opens so you can check the mesh. Drag any landmark that

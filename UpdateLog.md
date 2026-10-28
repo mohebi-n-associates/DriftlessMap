@@ -1,6 +1,11 @@
 # Update Log
 
 ### 28th October 2026
+##### DriftlessMap 2.0.0rc6
+
+`auto_registration.propose_landmarks` analyses sections larger than `ANALYSIS_MAX_SIDE` (2048) on an INTER_AREA copy (`_analysis_copy`); the moving images keep physical space in section pixels (spacing × factor), outline contours and mask lookups are scaled, and `_section_in_atlas` takes the factor. Affine results agree with full-resolution analysis within 8.5 section pixels on the user's sagittal section; small sections are unchanged. `registration_input.prepare` takes percentiles from an evenly spaced grid of about `PERCENTILE_SAMPLE` (4 M) pixels and averages channels in place. Whole action on an 11520×5990×3 section: 5.8 s → 2.2 s (macOS), peak memory several GB lower. Known: the B-spline stage on real sections is sensitive to small input changes (its keep/reject decision flips); not changed here.
+
+### 28th October 2026
 ##### DriftlessMap 2.0.0rc5
 
 `registration_section` runs `registration_input.prepare` (per-channel percentiles of the full raster, several seconds on an 11520×5990×3 section) through `run_in_background` instead of on the GUI thread before the progress dialog. `run_in_background` shows its dialog after 150 ms (was 400). V2 `widgets.button` handlers go through `widgets.respond`: wait cursor and repaint before the handler, re-entrant clicks ignored until a modal window opens (`window_shown`, called from the shell's Show hook); when a handler held the window > 0.2 s without a modal window, press/release/key events stamped within it are dropped by the shell event filter (`respond.seen`, `PRESS_EVENTS`).

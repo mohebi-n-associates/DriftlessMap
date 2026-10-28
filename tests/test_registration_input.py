@@ -1,4 +1,5 @@
 import unittest
+import unittest.mock
 
 import numpy as np
 
@@ -57,6 +58,22 @@ class RecipeTests(unittest.TestCase):
 
 
 class PrepareTests(unittest.TestCase):
+    def test_large_channels_take_percentiles_from_a_sample(self):
+        from driftlessmap import registration_input
+
+        rng = np.random.default_rng(1)
+        image = rng.gamma(2.0, 400.0, size=(1500, 1400, 2)).astype(np.uint16)
+        recipe = RegistrationInput.from_channels((0, 1))
+        exact, exact_record = prepare(image, recipe)
+        with unittest.mock.patch.object(registration_input, "PERCENTILE_SAMPLE", 100_000):
+            sampled, sampled_record = prepare(image, recipe)
+        for (low, high), (s_low, s_high) in zip(exact_record["bounds"],
+                                                sampled_record["bounds"]):
+            self.assertAlmostEqual(s_low, low, delta=0.02 * (high - low))
+            self.assertAlmostEqual(s_high, high, delta=0.02 * (high - low))
+        self.assertEqual(sampled.dtype, np.float32)
+        self.assertLess(np.abs(sampled - exact).max(), 0.05)
+
     def test_legacy_passes_the_image_through_unchanged(self):
         image = three_channel_section()
         prepared, record = prepare(image, RegistrationInput.legacy())
