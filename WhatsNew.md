@@ -16,7 +16,8 @@ human review of each registration and what every result was mapped with, and
 offers undo for mapping and building. Optical fibers and microprisms are
 reconstructed with probes in one Implants list, and Results > Export all results
 writes everything into one folder. Projects reopen where you left off, and projects
-from 1.6.1 open unchanged.
+from 1.6.1 open unchanged. Propose Landmarks is more accurate and gives the same
+result on every computer.
 
 Install with `pip install --pre driftlessmap`, or download the Windows ZIP or
 macOS DMG from the 2.0.0rc1 pre-release on GitHub. The classic interface remains
