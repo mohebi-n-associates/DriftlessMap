@@ -6,13 +6,11 @@ on:
       - "**.md"
       - "image/**"
       - "Tutorial/**"
-      - "CookBook.pdf"
   pull_request:
     paths-ignore:
       - "**.md"
       - "image/**"
       - "Tutorial/**"
-      - "CookBook.pdf"
   workflow_call:
 
 permissions:

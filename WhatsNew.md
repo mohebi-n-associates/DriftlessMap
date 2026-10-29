@@ -28,6 +28,10 @@ cannot open: keep a copy of important 1.x projects. The installers and real-data
 migration have not yet been validated on clean machines (see
 `release_validation.md`); please report problems on GitHub.
 
+DriftlessMap grew out of HERBS, now a legacy project. Its developers are
+acknowledged in the [HERBS legacy note](ORIGINS.md), which also lists what is
+kept for HERBS data; the HERBS CookBook is no longer included.
+
 ## DriftlessMap 2.0.0rc16
 
 Release-candidate fix, 29 October 2026.

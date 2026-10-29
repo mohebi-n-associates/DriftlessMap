@@ -112,15 +112,10 @@ class PackagingMetadataTests(unittest.TestCase):
         self.assertNotIn("herbs", metadata["scripts"])
         self.assertFalse((REPOSITORY_ROOT / "herbs").exists())
         author_names = {author["name"] for author in metadata["authors"]}
-        self.assertTrue(
-            {
-                "Jingyi Guo Fuglstad",
-                "Pearl Saldanha",
-                "Jacopo Paglia",
-                "Jonathan R. Whitlock",
-                "Mohebi & Associates",
-                "Ali Mohebi",
-            }.issubset(author_names)
+        # DriftlessMap's authors; the HERBS developers are acknowledged in
+        # ORIGINS.md, CONTRIBUTORS.md and THANKS.txt, not listed as authors.
+        self.assertEqual(
+            author_names, {"Mohebi & Associates", "Ali Mohebi", "Esther Lara Gonzalez"}
         )
         self.assertEqual(
             metadata["urls"]["Maintaining Organization"],
@@ -147,6 +142,8 @@ class PackagingMetadataTests(unittest.TestCase):
         self.assertIn("not affiliated with or endorsed", origins)
         self.assertIn("https://www.mohebi-associates.org/", origins)
         self.assertIn("https://www.mohebial.com/", origins)
+        contributors = (REPOSITORY_ROOT / "CONTRIBUTORS.md").read_text(encoding="utf-8")
+        self.assertIn("Jingyi Guo Fuglstad", contributors.split("## Acknowledgements")[1])
 
     def test_release_history_is_kept_in_one_cumulative_file(self):
         history_path = REPOSITORY_ROOT / "WhatsNew.md"

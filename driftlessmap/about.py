@@ -11,11 +11,12 @@ class AboutDriftlessMapWindow(QMessageBox):
         self.setText(
             "DriftlessMap {}\n\n".format(__version__)
             + "Interactive histology registration and brain-atlas mapping.\n\n"
-            + "DriftlessMap is independently maintained and began as a fork "
-            + "of HERBS, created by Jingyi Guo Fuglstad, Pearl Saldanha, "
-            + "Jacopo Paglia, Jonathan R. Whitlock, and contributors.\n\n"
-            + "Original HERBS project:\n"
-            + "https://github.com/Whitlock-Group/HERBS\n\n"
+            + "Developed by Mohebi & Associates, Ali Mohebi and "
+            + "Esther Lara Gonzalez.\n\n"
+            + "Acknowledgements: DriftlessMap grew out of HERBS, now a legacy "
+            + "project, created by Jingyi Guo Fuglstad, Pearl Saldanha, "
+            + "Jacopo Paglia and Jonathan R. Whitlock "
+            + "(https://github.com/Whitlock-Group/HERBS).\n\n"
             + "DriftlessMap issues and discussions:\n"
             + "https://github.com/mohebi-n-associates/DriftlessMap\n\n"
             + "Licensed under the MIT License. DriftlessMap is not affiliated "

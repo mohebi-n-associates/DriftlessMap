@@ -21,8 +21,12 @@ or important workflows change.
 - Supported Python: 3.10-3.14. CZI support currently requires 3.10-3.13.
 - OpenCV uses the headless wheel because PyQt6 owns the GUI and Qt plugin
   runtime; do not reintroduce the GUI OpenCV wheel.
-- DriftlessMap is an independently maintained continuation of HERBS. Preserve
-  legacy HERBS file compatibility and coordinate field names where documented.
+- DriftlessMap grew out of HERBS, now a legacy project. `ORIGINS.md` (the
+  HERBS legacy note) is the one place describing the connection; HERBS
+  developers are credited as acknowledgements, not authors (package metadata,
+  `CITATION.cff`, `AUTHOR.txt`, `CONTRIBUTORS.md`, About dialog). Keep the
+  HERBS copyright notice in `LICENSE.txt` (MIT condition), and preserve legacy
+  HERBS file compatibility and coordinate field names where documented.
 
 ## Fast architecture map
 

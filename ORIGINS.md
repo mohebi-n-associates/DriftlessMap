@@ -1,66 +1,78 @@
-# Project origins and attribution
+# DriftlessMap and its HERBS legacy
 
-## Relationship to HERBS
-
-DriftlessMap is an independent open-source continuation of HERBS (Histological
-E-data Registration in rodent Brain Spaces). It retains substantial portions of
-the original HERBS code and therefore remains a derivative work under the MIT
-License.
+DriftlessMap grew out of HERBS (Histological E-data Registration in rodent
+Brain Spaces). HERBS is now a legacy project: DriftlessMap 2.0 has its own
+interface, registration assistants, file formats, persistence, probe and
+implant reconstruction, and test suite. This note is the one place that
+records the connection, credits the HERBS developers, and lists what is kept
+for compatibility with HERBS data.
 
 - Original project: <https://github.com/Whitlock-Group/HERBS>
 - Original license: MIT
 - Recorded upstream base commit: `7a181097a57d9f34b189f233a484a0f0c228c5da`
-- Independent project: <https://github.com/mohebi-n-associates/DriftlessMap>
+- DriftlessMap: <https://github.com/mohebi-n-associates/DriftlessMap>
 
 DriftlessMap is not affiliated with or endorsed by the original HERBS
 developers or the Whitlock Group.
 
-## Original authors and publication
+## Acknowledgement of the HERBS developers
 
-The original HERBS research software and publication were created by:
-
-- Jingyi Guo Fuglstad
-- Pearl Saldanha
-- Jacopo Paglia
-- Jonathan R. Whitlock
-- Additional HERBS code, testing, documentation, and research contributors
-  recorded in the repository history and `THANKS.txt`
-
-Original publication:
+HERBS was created by Jingyi Guo Fuglstad, Pearl Saldanha, Jacopo Paglia and
+Jonathan R. Whitlock, with further code, testing, documentation and research
+contributions recorded in the inherited Git history and in `THANKS.txt`.
+DriftlessMap gratefully acknowledges their work. HERBS was described in:
 
 Fuglstad JG, Saldanha P, Paglia J, Whitlock JR. Histological E-data
 Registration in rodent Brain Spaces. *eLife*. 2023;12:e83496.
-<https://doi.org/10.7554/eLife.83496>
+<https://doi.org/10.7554/eLife.83496> (RRID:SCR_022776)
 
-The original software is also identified as RRID:SCR_022776.
+DriftlessMap is developed by [Mohebi & Associates](https://www.mohebi-associates.org/),
+[Ali Mohebi](https://www.mohebial.com/) and Esther Lara Gonzalez; see
+`CONTRIBUTORS.md`. The Git history is preserved, so individual contributions
+from both projects remain auditable.
 
-## Independent development
+## Licensing
 
-Independent work after the upstream base includes platform modernization,
-current Python and Qt support, safer persistence, validation and security
-hardening, automated regression tests, atlas-coordinate corrections, probe
-reconstruction and CSV export, ROI analysis, and expanded documentation.
-The Git history is intentionally preserved so individual contributions remain
-auditable.
-
-DriftlessMap development is led by
-[Mohebi & Associates](https://www.mohebi-associates.org/) and
-[Ali Mohebi](https://www.mohebial.com/). See `CONTRIBUTORS.md` for the current
-and original contributor groups.
-
-## Licensing and notices
-
-The complete project remains licensed under the MIT License:
+DriftlessMap is licensed under the MIT License. Because it derives from HERBS
+code, the license's conditions require keeping the original notice:
 
 - The original `Copyright (c) 2022 HERBS Developers` notice is preserved
   verbatim in `LICENSE.txt`.
 - `Copyright (c) 2026 Ali Mohebi and DriftlessMap contributors` covers
   subsequent modifications.
-- Neither the new project name nor this attribution statement changes the
-  license governing the original HERBS code.
+- Neither the project name nor this note changes the license governing the
+  original HERBS code.
 
 When redistributing DriftlessMap or a substantial portion of its source, retain
-`LICENSE.txt`. Preserving this file is a condition of the MIT License.
+`LICENSE.txt`.
+
+## Compatibility with HERBS data
+
+DriftlessMap keeps reading HERBS work so existing research data is not stranded:
+
+- Legacy `.herbs`, `.herbslayer`, `.herbsobj`, `.herbsslice` and `.herbstri`
+  files open through a restricted reader. New files use `.dmap`, `.dmaplayer`,
+  `.dmapobj`, `.dmapslice` and `.dmaptri`; HERBS cannot open them.
+- `HERBS_CONFIG_DIR` and an existing HERBS settings file are still honoured;
+  new configurations use `DRIFTLESSMAP_CONFIG_DIR`.
+- Some persisted coordinate field names (for example `herbs_vox`) keep the
+  HERBS name because renaming them would break existing datasets and analysis
+  scripts.
+- DriftlessMap installs only the `driftlessmap` package and command, never a
+  `herbs` package or command, so both can live in one environment.
+
+These names are kept for data compatibility only and do not indicate
+affiliation with or endorsement by the HERBS developers.
+
+## Legacy HERBS material
+
+The [HERBS-era tutorials](Tutorial/README.md#herbs-tutorials) describe the
+classic interface, which DriftlessMap still opens with `driftlessmap --classic`.
+The HERBS CookBook was removed in 2.0.0; it remains in this repository's Git
+history. The HERBS main window, the starting point of
+DriftlessMap's classic interface:
+
+![Historical HERBS main window](driftlessmap/herbs.png)
 
 ## Adapted third-party code
 
@@ -68,11 +80,3 @@ When redistributing DriftlessMap or a substantial portion of its source, retain
   pyqtgraph (<https://github.com/pyqtgraph/pyqtgraph>), MIT License,
   Copyright (c) 2012 University of North Carolina at Chapel Hill, Luke
   Campagnola.
-
-## Compatibility names
-
-Names such as `.herbs*` legacy file extensions, `HERBS_CONFIG_DIR`, and
-persisted `herbs_vox` coordinate fields are retained only where needed for data
-compatibility. DriftlessMap does not install a top-level `herbs` Python package
-or a `herbs` command. These compatibility names do not indicate affiliation
-with or endorsement by the original HERBS developers.

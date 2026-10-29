@@ -10,15 +10,9 @@ dimensions. It supports pre-surgical probe planning, post-surgical probe
 reconstruction, virus or tracer expression, cell locations, tissue contours,
 and user-drawn lines or areas of interest.
 
-The original [HERBS Cookbook](CookBook.pdf) remains useful as an illustrated
-introduction. This manual follows its task-oriented approach but describes the
-current Python 3.10-3.14, PyQt6, safe-file, mesh-validation, coordinate-reporting,
-and CSV-export behavior.
-
-The following historical interface image predates the DriftlessMap rebrand;
-the workflows shown remain recognizable.
-
-![Historical HERBS main window](driftlessmap/herbs.png)
+DriftlessMap grew out of HERBS, now a legacy project; the
+[HERBS legacy note](ORIGINS.md) records the connection and what is kept for
+compatibility with HERBS data.
 
 ## Contents
 
