@@ -51,45 +51,35 @@ See [CITATION.cff](CITATION.cff) for machine-readable citation metadata.
 - Safe, versioned project and object archives that reopen where you left off.
 - Support for custom compatible atlases.
 
-## DriftlessMap 2.0 release candidate
+## DriftlessMap 2.0
 
-**2.0.0rc1** is the release candidate of DriftlessMap 2.0. It opens the
+**2.0.0** is the current release. It opens the
 redesigned step-by-step interface by default (Project, Section, Match, Register,
 Annotate, Results); the classic interface is still available with
 `driftlessmap --classic` or from Help > Open the classic interface. See
 [What’s New](WhatsNew.md) for the full list of changes.
 
-The stable release is still **1.6.1**: `pip install driftlessmap` installs 1.6.1
-until 2.0.0 is released. To try the release candidate:
-
-```bash
-python -m pip install --pre driftlessmap
-```
-
-or download the 2.0.0rc1 desktop builds from its
-[GitHub pre-release](https://github.com/mohebi-n-associates/DriftlessMap/releases/tag/v2.0.0rc1).
 Projects saved by 2.0 cannot be opened by 1.6.1 or earlier; 2.0 opens 1.x and
-HERBS projects. Keep a copy of important projects while evaluating it.
+HERBS projects. Keep a copy of important projects before opening them in 2.0.
+DriftlessMap 1.6.1 remains available from its
+[release page](https://github.com/mohebi-n-associates/DriftlessMap/releases/tag/v1.6.1)
+and with `pip install "driftlessmap==1.6.1"`.
 
 ## Installation
 
 DriftlessMap is available as a desktop application for end users and as a
-Python package for developers. The stable release is 1.6.1; the 2.0 release
-candidate is 2.0.0rc1.
+Python package for developers. The current release is 2.0.0.
 
 ### Mode 1: desktop application for end users
 
 No Python or Conda installation is required. Download the asset for your
 computer from [GitHub Releases](https://github.com/mohebi-n-associates/DriftlessMap/releases).
-For the 2.0 release candidate, use `DriftlessMap-2.0.0rc1-Windows-x64.zip` or
-`DriftlessMap-2.0.0rc1-macOS-arm64.dmg` from the
-[2.0.0rc1 pre-release](https://github.com/mohebi-n-associates/DriftlessMap/releases/tag/v2.0.0rc1).
-For the stable 1.6.1 release:
+From the [2.0.0 release](https://github.com/mohebi-n-associates/DriftlessMap/releases/tag/v2.0.0):
 
-- **Windows 64-bit:** download `DriftlessMap-1.6.1-Windows-x64.zip`, extract
+- **Windows 64-bit:** download `DriftlessMap-2.0.0-Windows-x64.zip`, extract
   the complete folder, and double-click `DriftlessMap.exe`. Do not move the
   executable out of its extracted folder.
-- **macOS (Apple Silicon):** download `DriftlessMap-1.6.1-macOS-arm64.dmg`,
+- **macOS (Apple Silicon):** download `DriftlessMap-2.0.0-macOS-arm64.dmg`,
   open it, and drag `DriftlessMap.app` to Applications. The application bundle
   includes the DriftlessMap icon and all Python dependencies. Intel Macs are
   not covered by the desktop build; use the Conda/pip installation below.
@@ -113,12 +103,9 @@ malware:
    required only for the first launch.
 
 Only use **Open Anyway** for a copy downloaded from the
-[official DriftlessMap 1.6.1 release](https://github.com/mohebi-n-associates/DriftlessMap/releases/tag/v1.6.1).
-The official macOS DMG has this SHA-256 digest:
-
-```text
-aa8ed43826e63cd1e111e3ee53310bb1ac569fd1409862070b847afaeefe7e94
-```
+[official DriftlessMap releases](https://github.com/mohebi-n-associates/DriftlessMap/releases).
+Each release page lists the SHA-256 digest of its downloads; compare it with
+`shasum -a 256` on the downloaded file.
 
 ### Mode 2: Conda and pip for developers
 
@@ -138,15 +125,10 @@ Launch the editable installation with `driftlessmap` or
 `python -m driftlessmap`; both open the 2.0 interface, and `--classic` opens the
 classic one. Library users can call `driftlessmap.run()`.
 
-To use a PyPI package instead of an editable checkout, install the stable
-release or, with `--pre`, the 2.0 release candidate:
+To use a PyPI package instead of an editable checkout:
 
 ```bash
 python -m pip install driftlessmap
-```
-
-```bash
-python -m pip install --pre driftlessmap
 ```
 
 #### Check your version and upgrade

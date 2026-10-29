@@ -1,9 +1,7 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 2.0.0rc16**, the release candidate of
-DriftlessMap 2.0. The current stable release is 1.6.1; `pip install driftlessmap`
-keeps installing 1.6.1 until 2.0.0 is released, and Section 2 explains how to
-install the release candidate.
+This manual applies to **DriftlessMap 2.0.0**. Section 2 explains how to
+install it; `pip install driftlessmap` installs 2.0.0.
 
 DriftlessMap - Histological E-data Registration in Brain Space - is a desktop
 application for aligning rodent histology with a reference atlas, reconstructing
@@ -110,7 +108,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-DriftlessMap 2.0.0rc16 requires:
+DriftlessMap 2.0.0 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -129,9 +127,8 @@ page. The macOS DMG (`-macOS-arm64.dmg`) is built for Apple Silicon; on an Intel
 Mac, use the developer installation below.
 The desktop builds include Python and all runtime dependencies. Windows users
 extract the entire ZIP and run `DriftlessMap.exe`; macOS users open the DMG and
-drag `DriftlessMap.app` to Applications. The 2.0.0rc1 downloads are listed
-under that version on the Releases page (marked as a pre-release), named
-`DriftlessMap-2.0.0rc1-Windows-x64.zip` and `DriftlessMap-2.0.0rc1-macOS-arm64.dmg`.
+drag `DriftlessMap.app` to Applications. The 2.0.0 downloads are named
+`DriftlessMap-2.0.0-Windows-x64.zip` and `DriftlessMap-2.0.0-macOS-arm64.dmg`.
 Release builds are unsigned unless the release notes say otherwise, so the first
 launch may require Windows SmartScreen confirmation or Control-clicking the
 macOS app and choosing **Open**.
@@ -145,17 +142,16 @@ conflict with unrelated software:
 conda create --name DriftlessMap python=3.14 -y
 conda activate DriftlessMap
 python -m pip install --upgrade pip
-python -m pip install --pre driftlessmap
+python -m pip install driftlessmap
 ```
 
-`--pre` installs the 2.0 release candidate; without it pip installs the stable
-1.6.1. Use the following environment instead when opening CZI files is required:
+Use the following environment instead when opening CZI files is required:
 
 ```bash
 conda create --name DriftlessMap-CZI python=3.13 -y
 conda activate DriftlessMap-CZI
 python -m pip install --upgrade pip
-python -m pip install --pre "driftlessmap[czi]"
+python -m pip install "driftlessmap[czi]"
 ```
 
 For source development, clone the repository and use an editable installation:
@@ -181,8 +177,7 @@ python -m pip --version
 python -c "import driftlessmap; print(driftlessmap.__version__)"
 ```
 
-The final command prints the installed version: `1.6.1` for the stable
-release, or `2.0.0rc1` for the 2.0 release candidate.
+The final command prints the installed version, `2.0.0`.
 
 ### 2.5 Launching DriftlessMap
 
@@ -509,8 +504,8 @@ What each step does:
 | Step | Main actions |
 | --- | --- |
 | Project | Load atlas, load or replace the section, open, save, save a portable copy, atlas download and slice-atlas tools |
-| Section | Per-channel name, colour, visibility and display range; brightness, contrast, gamma and Auto (ImageJ-style, saturating 0.35% of samples); **Register** ticks that choose the registration channels, with a preview of the registration input; rotation, flips, crop and clean-up |
-| Match | Find atlas section with the chosen channels; the plane, depth and tilt controls of the 1.x Atlasing Controller |
+| Section | Per-channel name, colour, visibility and display range; brightness, contrast, gamma and Auto (ImageJ-style, saturating 0.35% of samples); **Register** ticks that choose the registration channels, with a preview of the registration input; the **pixel size** (from the file, or entered with **Pixel size...**), used by the scale bar, the ruler and Find atlas section; rotation, flips, crop and clean-up |
+| Match | Find atlas section in the chosen **Section plane** with the chosen channels, at the section's real size; the plane, depth and tilt controls of the 1.x Atlasing Controller |
 | Register | Suggest landmarks; add, move and delete pairs; a list of pairs marked Outline, Internal, Edited or Manual; mesh check; **Mark review complete**; warp preview in either direction |
 | Annotate | **Implants:** one list of optical fibers, microprisms and probes, added with **Add implant…**. A fiber or prism: outline each section, **Map this section**, **Build**; reports the fiber tip or the prism bottom and ML edges (Section 12.7). A probe: for each section that shows its track, **Mark track**, click along it, **Map this section** (this maps the marks with the current registration and files them under the probe); **Build** one probe from all its sections, **Rebuild** after adding more; **Delete…** removes a probe with its parts, built object, mapping records and any marks still being placed for it; **Probe settings** holds multi-probe layouts and saved probe settings. Cells, colour detection, drawing, erasing, lasso and measuring; **Map to atlas**; make parts and build other 3D objects |
 | Results | Region tables, show on plane, compare, 3D options, export and import. **Export all results…** writes everything available into one new folder (below); the single-kind exports stay under **Individual files** |
@@ -943,13 +938,14 @@ atlas and ranks candidate sections:
    and how clearly it was preferred (**clear**, **uncertain** or
    **ambiguous**), the orientation the section needs, and up to six candidate
    sections. Each shows your section on the left and the atlas on the right,
-   with its depth, cutting-angle tilt, score and **confidence** (high, medium
-   or low; hover for the reasons). The score only ranks the candidates
+   with its depth, cutting-angle tilt, score, **confidence** (high, medium
+   or low; hover for the reasons) and, when the pixel size is known, the
+   tissue size relative to the atlas ("tissue at 78 % of atlas size"). The score only ranks the candidates
    against each other. Confidence is the lowest of: how well the section's
    internal anatomy agrees with the atlas (below 0.5 is medium, below 0.3
    low), how far apart the depths that fit about as well lie (more than
-   0.5 mm is medium, more than 1 mm low) and, when the plane was detected,
-   how clearly it won. The outline alone is not used: wrong pages often fit
+   0.5 mm is medium, more than 1 mm low), at most medium when the pixel size
+   was unknown, and, when the plane was detected, how clearly it won. The outline alone is not used: wrong pages often fit
    the outline well. On low confidence, check carefully or place the section
    by hand. The thresholds were set on sections cut from the atlas, where
    the answer is known; they are not yet checked on real sections with

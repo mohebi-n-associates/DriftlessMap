@@ -1,6 +1,11 @@
 # Update Log
 
 ### 29th October 2026
+##### DriftlessMap 2.0.0
+
+Stable release of 2.0.0rc16 with no code changes: version 2.0.0 in `version.py`, `CITATION.cff` (dated 2026-10-29) and tests; README, MANUAL, guides and `release_validation.md` describe 2.0.0 as current and install without `--pre`. The automatic-matching tutorial describes the 2.0 steps (section plane, registration channels, pixel size, real-size placement, confidence, side choice); its screenshots are still from 1.6. The manual's step table and suggestion-dialog description mention pixel size and tissue size. Released at the owner's request with all `release_validation.md` gates pending; the waiver is recorded there.
+
+### 29th October 2026
 ##### DriftlessMap 2.0.0rc16
 
 `atlas_matching.PhysicalSection` (section resampled to the search voxel size, or sized to each slice's width without a pixel size) and `place`: coarse grid of `FIT_SCALES` × `FIT_STRETCHES` at half resolution (outline distance capped at `COARSE_REACH_UM` 450 µm), then coordinate refinement within `FIT_LIMITS` (scale 0.9–1.5, stretch 0.8–1.3, ±10°); translation by `cv2.matchTemplate` of the capped distance to the atlas outline (`OUTLINE_REACH_UM` 180 µm) per outline pixel plus `OUTSIDE_WEIGHT` 3 × tissue share outside the brain. Outline agreement = 1 − cost. `NormalisedSection` wraps the old comparison; `rank_depths`/`refine_tilt`/`_refine_page` take `section=` (pass 2 and page refinement refined; tilts keep the depth's fit and re-place only). `suggest_sections(voxel_um=, pixel_um=)`; `Suggestion.fit_scale`, `SuggestionReport.size_known` (False caps confidence at medium). App asks for a missing pixel size (`ImageView.pixel_size_declined`). Whole pipeline on Allen 10 µm coronal pages 500/800/1100 cut from the atlas, DAPI-like random-region stain, tissue at 100 % and 80 %, 0 or 35 % ventral removed: known size ≤ 110 µm, unknown size ≤ 40 µm, old ≤ 5240 µm (35 % cut: 140–5240). Time 14–27 s (old 5–7 s). Confidence was mostly low/medium on these re-stained sections because template agreement is low by construction. User's IM-1109 sections need ~1.3× enlargement (about 24 % shrinkage) to fit; 01 fits no page closely (outline cost ≈ 0.73).

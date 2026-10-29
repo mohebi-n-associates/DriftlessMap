@@ -3,7 +3,7 @@
 ## DriftlessMap tutorials
 
 - [Automatic section matching and landmark proposal](Registration_Related/automatic_section_and_landmarks.md)
-  (DriftlessMap 1.6 and later).
+  (DriftlessMap 2.0; screenshots from 1.6).
 
 ## HERBS tutorials
 

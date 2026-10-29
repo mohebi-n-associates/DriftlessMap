@@ -13,7 +13,7 @@ register using an explicitly selected channel such as DAPI, without an
 intermediate flattened export from ImageJ.
 
 The original `v2-redesign` integration is now on `main`; the previews were
-versioned `2.0.0aN` and the release candidate is `2.0.0rc1`. The published stable release is 1.6.1. The historical branch
+versioned `2.0.0aN`, the release candidates `2.0.0rcN`, and 2.0.0 was released on 29 October 2026. The historical branch
 strategy below does not imply that the 2.0 release gates have passed.
 
 The first implementation target is one complete workflow: **open → match →
