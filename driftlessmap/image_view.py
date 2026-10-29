@@ -141,6 +141,8 @@ class ImageView(QObject):
         # Pixel size (um at full resolution) the user entered; None uses the
         # file's own.
         self.pixel_size_override = None
+        # The user said they do not know this image's pixel size.
+        self.pixel_size_declined = False
         self._fine_rotation_base = None
         self._fine_rotation_angle = 0
         self.img_size = None
@@ -280,6 +282,7 @@ class ImageView(QObject):
 
         self.current_scale = self.image_file.scale['scene 0']
         self.pixel_size_override = None
+        self.pixel_size_declined = False
 
         if self.image_file.n_scenes != 1:
             self.scene_slider.setMaximum(self.image_file.n_scenes - 1)

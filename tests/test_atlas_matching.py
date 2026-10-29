@@ -8,6 +8,8 @@ import numpy as np
 from driftlessmap.atlas_matching import (
     ORIENTATIONS,
     Orientation,
+    PhysicalSection,
+    confidence,
     animal_right_edge,
     atlas_slice,
     Candidate,
@@ -176,6 +178,70 @@ class DepthRankingTests(unittest.TestCase):
         self.assertEqual(mirrored_index(130, 114), 98)
         self.assertEqual(list(hemisphere_indexes("coronal", 5, 2)), [0, 1, 2, 3, 4])
         self.assertEqual(list(hemisphere_indexes("sagittal", 5, 2)), [2, 3, 4])
+
+
+def sagittal_section(labels, intensity, index, scale=4.0, cut=0.0):
+    """A sagittal section at ``scale`` pixels per voxel, its ventral ``cut``
+    share removed."""
+    slice_ = atlas_slice(intensity, "sagittal", index).astype(np.float32)
+    section = cv2.resize(slice_, None, fx=scale, fy=scale, interpolation=cv2.INTER_LINEAR)
+    if cut:
+        rows = np.nonzero(section.max(axis=1) > 0)[0]
+        section[int(rows.max() - cut * (rows.max() - rows.min())):] = 0
+    return np.dstack([np.clip(section, 0, 255).astype(np.uint8)] * 3)
+
+
+class PhysicalSizeTests(unittest.TestCase):
+    VOXEL_UM = 50.0
+
+    def rank(self, section, pixel_um, labels, intensity):
+        midline = labels.shape[1] // 2
+        fitted = PhysicalSection(section, ORIENTATIONS[0], self.VOXEL_UM, pixel_um)
+        return rank_depths(section, labels, intensity, "sagittal", ORIENTATIONS[0],
+                           indexes=hemisphere_indexes("sagittal", labels.shape[1], midline),
+                           section=fitted, refine=True)
+
+    def test_partial_sections_keep_their_depth(self):
+        labels, intensity = brain_with_depth_cues()
+        midline = labels.shape[1] // 2
+        for index in (midline + 3, midline + 9, midline + 15):
+            with self.subTest(index=index):
+                section = sagittal_section(labels, intensity, index, cut=0.35)
+                ranked = self.rank(section, self.VOXEL_UM / 4, labels, intensity)
+                self.assertLessEqual(abs(ranked[0].index - index), 1, ranked[:3])
+                # The cut edge (about a third of the outline) lies inside the
+                # brain and is charged a capped distance; the rest fits.
+                self.assertGreater(ranked[0].silhouette, 0.6)
+
+    def test_shrunken_tissue_is_enlarged_to_atlas_size(self):
+        labels, intensity = brain_with_depth_cues()
+        index = labels.shape[1] // 2 + 9
+        # Tissue at 80 % of its size, imaged at 4 pixels per atlas voxel.
+        section = sagittal_section(labels, intensity, index, scale=4 * 0.8)
+        ranked = self.rank(section, self.VOXEL_UM / 4, labels, intensity)
+        self.assertLessEqual(abs(ranked[0].index - index), 1)
+        self.assertAlmostEqual(ranked[0].placement.scale, 1.25, delta=0.06)
+
+    def test_unknown_size_is_reported_and_lowers_confidence(self):
+        labels, intensity = brain_with_depth_cues()
+        midline = labels.shape[1] // 2
+        section = sagittal_section(labels, intensity, midline + 9)
+        known = suggest_sections(section, labels, intensity, midline, (40, midline, 20),
+                                 planes=("sagittal",), voxel_um=self.VOXEL_UM,
+                                 pixel_um=self.VOXEL_UM / 4, angles=(0,))
+        self.assertTrue(known.size_known)
+        self.assertAlmostEqual(known.suggestions[0].fit_scale, 1.0, delta=0.06)
+        self.assertLessEqual(abs(known.suggestions[0].index - (midline + 9)), 1)
+        unknown = suggest_sections(section, labels, intensity, midline, (40, midline, 20),
+                                   planes=("sagittal",), voxel_um=self.VOXEL_UM, angles=(0,))
+        self.assertIs(unknown.size_known, False)
+        self.assertIsNone(unknown.suggestions[0].fit_scale)
+        level, reasons = confidence(unknown.suggestions[0], unknown, self.VOXEL_UM)
+        self.assertNotEqual(level, "high")
+        self.assertTrue(any("pixel size is unknown" in reason for reason in reasons))
+        old = suggest_sections(section, labels, intensity, midline, (40, midline, 20),
+                               planes=("sagittal",), angles=(0,))
+        self.assertIsNone(old.size_known)
 
 
 class TiltTests(unittest.TestCase):

@@ -3,6 +3,22 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.0.0rc16
+
+Release-candidate fix, 29 October 2026.
+
+Find atlas section copes with sections missing part of the brain. Until now the
+section's outline was scaled to fill each atlas slice, so a section that had lost
+its ventral part was stretched over the whole slice and the suggested depth could
+be millimetres off. The section is now placed inside each slice at its real size,
+allowing for tissue shrinkage (up to about a third) and flattening; a cut or torn
+edge costs little. On sections cut from the atlas with 35 % of the ventral part
+removed, the depth was found within 110 µm (previously off by up to 5.2 mm). If
+the image records no pixel size you are asked for it; with I don't know the
+section is sized to each slice instead and confidence is at most medium. The
+dialog shows the tissue size relative to the atlas. A search now takes about 15-25
+seconds. Not yet checked on real sections with known positions.
+
 ## DriftlessMap 2.0.0rc15
 
 Release-candidate fix, 29 October 2026.

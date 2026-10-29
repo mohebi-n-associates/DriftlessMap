@@ -1,6 +1,6 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 2.0.0rc15**, the release candidate of
+This manual applies to **DriftlessMap 2.0.0rc16**, the release candidate of
 DriftlessMap 2.0. The current stable release is 1.6.1; `pip install driftlessmap`
 keeps installing 1.6.1 until 2.0.0 is released, and Section 2 explains how to
 install the release candidate.
@@ -110,7 +110,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-DriftlessMap 2.0.0rc15 requires:
+DriftlessMap 2.0.0rc16 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -917,11 +917,28 @@ atlas and ranks candidate sections:
    of another; choose **Not sure** only to compare all three planes. The
    plane starts at your last answer, or at the plane named in the image file
    name (`..._coronal_...`, `sagittal`/`sagital`, `horizontal`/`axial`).
-   The comparison runs in the background and usually takes a few seconds. Fine atlases (for example
-   Allen 10 µm) are searched on a copy sampled to at most 560 voxels per side
-   (30 µm for Allen 10 µm), since every comparison is made on a small
-   normalised image anyway; each suggested depth is then refined page by
-   page at full resolution.
+   If the image has no recorded pixel size (see 7.1), you are asked for it
+   first; **I don't know** carries on with a guessed size (see below).
+   The comparison runs in the background and takes about 15-30 seconds.
+   Fine atlases (for example Allen 10 µm) are searched on a copy sampled to
+   at most 560 voxels per side (30 µm for Allen 10 µm); each suggested depth
+   is then refined page by page at full resolution.
+
+   **Real size and partial sections.** Depth and tilt are found by placing
+   the section, at its real size, *inside* each atlas slice. Fixed tissue
+   shrinks and flattens, so the section may be enlarged by 0.9-1.5x and
+   stretched in height by 0.8-1.3x; the dialog shows the result as "tissue at
+   N % of atlas size". The fit charges each point of the section's outline
+   its distance to the atlas outline, capped at 180 µm, so a cut or torn edge
+   inside the brain costs little, and penalises tissue lying outside the
+   brain. A section missing part of the brain (often the ventral part) is
+   therefore placed where it belongs instead of being stretched over the
+   whole slice. On sections cut from the Allen 10 µm atlas with 35 % of the
+   ventral part removed, depth was found within 110 µm (also with the
+   tissue shrunk to 78 %); comparing outlines scaled to fill the slice had
+   missed by up to 5.2 mm. Without a pixel size the section is sized to each
+   slice's width and allowed to be narrower; such suggestions are at most
+   **medium** confidence.
 3. The dialog reports the most likely plane (coronal, sagittal or horizontal)
    and how clearly it was preferred (**clear**, **uncertain** or
    **ambiguous**), the orientation the section needs, and up to six candidate
@@ -952,10 +969,11 @@ atlas and ranks candidate sections:
    sets the tilt. For coronal and horizontal sections the sagittal pivot is
    moved to the midline.
 
-The plane is found from the outline, the depth mainly from internal anatomy,
-and the tilt from a small search of about ±6°. Damaged or partial sections,
-sections with more than one piece of tissue, and strongly uneven staining make
-suggestions less reliable.
+The plane is found from the outline, the depth from the placed outline and
+internal anatomy, and the tilt from a small search of about ±6°. Sections with
+more than one piece of tissue, strong non-uniform distortion and strongly
+uneven staining make suggestions less reliable; partial sections are handled
+when the pixel size is known.
 
 **Atlas > Propose Landmarks** then fits the displayed atlas slice to the
 section and fills the Triangulation tool with paired landmarks:

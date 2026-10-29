@@ -94,8 +94,13 @@ class SectionSuggestionDialog(QDialog):
             "right: atlas) and choose the best. Confidence combines how well the "
             "internal anatomy agrees and how narrowly the depth is determined; "
             "low means check carefully or place the section by hand. Hover over "
-            "a candidate for the reasons.".format(
-                self.plane.capitalize(), plane_note, summary, best.orientation.describe()
+            "a candidate for the reasons.{}".format(
+                self.plane.capitalize(), plane_note, summary, best.orientation.describe(),
+                {True: " The section was compared at its real size, allowing for "
+                       "tissue shrinkage; missing parts are tolerated.",
+                 False: " The pixel size is unknown, so the section's size was guessed "
+                        "(Section step: Pixel size).",
+                 None: ""}[getattr(report, "size_known", None)],
             )
         )
         header.setWordWrap(True)
@@ -195,10 +200,14 @@ class SectionSuggestionDialog(QDialog):
         else:
             where = "slice {}".format(suggestion.index)
         level, _reasons = confidence(suggestion, self.report, self.voxel_um)
-        return "{}\ntilt ({:+.0f}°, {:+.0f}°)   score {:.2f}   confidence: {}".format(
+        text = "{}\ntilt ({:+.0f}°, {:+.0f}°)   score {:.2f}   confidence: {}".format(
             where, suggestion.tilt_degrees[0], suggestion.tilt_degrees[1], suggestion.score,
             level
         )
+        scale = getattr(suggestion, "fit_scale", None)
+        if scale:
+            text += "\ntissue at {:.0f} % of atlas size".format(100.0 / scale)
+        return text
 
     def _confidence_note(self, suggestion):
         level, reasons = confidence(suggestion, self.report, self.voxel_um)
