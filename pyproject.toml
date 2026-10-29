@@ -11,10 +11,6 @@ requires-python = ">=3.10"
 license = "MIT"
 license-files = ["LICENSE.txt"]
 authors = [
-    { name = "Jingyi Guo Fuglstad", email = "jingyi.g.fuglstad@gmail.com" },
-    { name = "Pearl Saldanha" },
-    { name = "Jacopo Paglia" },
-    { name = "Jonathan R. Whitlock" },
     { name = "Mohebi & Associates" },
     { name = "Ali Mohebi" },
     { name = "Esther Lara Gonzalez" },

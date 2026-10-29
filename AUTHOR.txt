@@ -1,19 +1,9 @@
-DriftlessMap maintenance and development:
+DriftlessMap authors:
 - Mohebi & Associates: https://www.mohebi-associates.org/
 - Ali Mohebi, PhD: https://www.mohebial.com/
 - Esther Lara Gonzalez, PhD
 
-Original HERBS authors:
-- Jingyi Guo Fuglstad
-- Pearl Saldanha
-- Jacopo Paglia
-- Jonathan R. Whitlock
-
-Original HERBS design, development, and CookBook: Jingyi Guo Fuglstad
-
-DriftlessMap is an independent continuation of HERBS. See ORIGINS.md for the
-complete project lineage, original publication, and contributor credits.
-
-
-Institutions
-------------
+Acknowledgements:
+DriftlessMap grew out of HERBS, now a legacy project, created by Jingyi Guo
+Fuglstad, Pearl Saldanha, Jacopo Paglia and Jonathan R. Whitlock. See
+ORIGINS.md (the HERBS legacy note) and THANKS.txt.

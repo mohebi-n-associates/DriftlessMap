@@ -1,6 +1,6 @@
-DriftlessMap gratefully acknowledges everyone who created, tested, documented,
-and supported the original HERBS project. The original acknowledgements are
-preserved below.
+DriftlessMap grew out of HERBS, now a legacy project (see ORIGINS.md), and
+gratefully acknowledges everyone who created, tested, documented, and
+supported it. The original HERBS acknowledgements are preserved below.
 
 Dr. Menno P. Witter for providing anatomical support.
 

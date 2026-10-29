@@ -7,33 +7,26 @@ images to reference brain atlases, reconstructing probes and other anatomical
 objects, and visualizing data in 2D and 3D. The name refers to Wisconsin's
 Driftless Area and to the project's focus on dependable spatial mapping.
 
-## Origin and independence
+## Authors
 
-DriftlessMap began as a fork of
-[HERBS](https://github.com/Whitlock-Group/HERBS) — Histological E-data
-Registration in rodent Brain Spaces — originally created by Jingyi Guo
-Fuglstad, Pearl Saldanha, Jacopo Paglia, Jonathan R. Whitlock, and HERBS
-contributors.
-
-DriftlessMap is independently maintained. It is not affiliated with or endorsed
-by the original HERBS developers. Their foundational work remains credited in
-the Git history, [license](LICENSE.txt), [project history](ORIGINS.md),
-[contributors](CONTRIBUTORS.md), [authors](AUTHOR.txt), and
-[acknowledgements](THANKS.txt).
-
-Current development is led by
+DriftlessMap is developed by
 [Mohebi & Associates](https://www.mohebi-associates.org/), with
 [Ali Mohebi, PhD](https://www.mohebial.com/) as project lead and maintainer
-and Esther Lara Gonzalez, PhD as a contributor.
+and Esther Lara Gonzalez, PhD as a contributor. See
+[contributors](CONTRIBUTORS.md).
 
-If DriftlessMap contributes to published research, please cite both the software
-version used and the original HERBS paper:
+If DriftlessMap contributes to published research, please cite the software
+version you used; see [CITATION.cff](CITATION.cff).
 
-> Fuglstad, J. G., Saldanha, P., Paglia, J., & Whitlock, J. R. (2023).
-> Histological E-data Registration in rodent Brain Spaces. *eLife*, 12,
-> e83496. https://doi.org/10.7554/eLife.83496
+## Acknowledgements
 
-See [CITATION.cff](CITATION.cff) for machine-readable citation metadata.
+DriftlessMap grew out of [HERBS](https://github.com/Whitlock-Group/HERBS), now
+a legacy project, created by Jingyi Guo Fuglstad, Pearl Saldanha, Jacopo
+Paglia and Jonathan R. Whitlock. DriftlessMap is independently developed and
+not affiliated with or endorsed by the HERBS developers. The
+[HERBS legacy note](ORIGINS.md) records the connection, the HERBS publication,
+licensing, and what is kept for compatibility with HERBS data; earlier
+acknowledgements are in [THANKS.txt](THANKS.txt).
 
 ## Features
 
@@ -173,34 +166,16 @@ macOS. Outputs are written to `dist/` as a Windows ZIP and a macOS DMG.
 
 ## Compatibility with HERBS
 
-The rebrand is designed not to strand existing research data:
-
-- DriftlessMap reads legacy `.herbs`, `.herbslayer`, `.herbsobj`,
-  `.herbsslice`, and `.herbstri` files.
-- New files use `.dmap`, `.dmaplayer`, `.dmapobj`, `.dmapslice`, and
-  `.dmaptri`.
-- DriftlessMap installs only the `driftlessmap` Python package and command. It
-  does not overwrite the original HERBS package, so both distributions can be
-  installed in the same environment. New code should use `import driftlessmap`.
-- Existing `HERBS_CONFIG_DIR` overrides remain supported. New configurations
-  should use `DRIFTLESSMAP_CONFIG_DIR`.
-- Some persisted coordinate field names retain `herbs` because changing them
-  would break existing datasets and downstream analysis scripts.
-
-The original HERBS application may not be able to open files newly written by
-DriftlessMap. Keep backups before converting important projects.
+DriftlessMap opens legacy HERBS files (`.herbs`, `.herbslayer`, `.herbsobj`,
+`.herbsslice`, `.herbstri`) and can be installed alongside HERBS; new files use
+the `.dmap*` extensions, which HERBS cannot open. Details are in the
+[HERBS legacy note](ORIGINS.md#compatibility-with-herbs-data).
 
 ## Documentation
 
 Read the [DriftlessMap User Manual](MANUAL.md) for installation, atlas,
 registration, reconstruction, persistence, export, and troubleshooting
-guidance. The original [HERBS Cookbook](CookBook.pdf) and [tutorials](Tutorial)
-remain useful for workflows whose interface has not changed.
-
-The screenshot below is retained from HERBS for historical workflow reference;
-its title bar predates the DriftlessMap rebrand.
-
-<img src="./driftlessmap/herbs.png" width="800px" alt="Historical HERBS interface used as the basis for DriftlessMap">
+guidance, and the [tutorials](Tutorial) for worked examples.
 
 Do not store downloaded atlases inside the source or installed package
 directory. Keep each atlas in its own external folder.

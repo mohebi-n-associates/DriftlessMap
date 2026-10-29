@@ -7,9 +7,10 @@
 
 ## HERBS tutorials
 
-These tutorials and screenshots were created for the original HERBS interface
-and are preserved both for attribution and because most workflows remain
-applicable to DriftlessMap.
+These legacy tutorials and screenshots were made for HERBS, from which
+DriftlessMap grew. They describe the classic interface, which DriftlessMap
+still opens with `driftlessmap --classic`; the 2.0 interface is described in
+the [User Manual](../MANUAL.md).
 
 In current installations:
 
@@ -19,6 +20,5 @@ In current installations:
   [DriftlessMap User Manual](../MANUAL.md).
 - Existing HERBS files and scripts remain supported for compatibility.
 
-The historical HERBS name appearing in these documents and screenshots refers
-to the upstream project from which DriftlessMap was forked. See
-[project origins](../ORIGINS.md).
+The HERBS name in these documents and screenshots refers to that legacy
+project; see the [HERBS legacy note](../ORIGINS.md).

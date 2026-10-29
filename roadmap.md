@@ -80,7 +80,8 @@ kept as the original review record; line numbers refer to 1.4.0.
 These items need a maintainer decision or resources that are not in the
 repository.
 
-- **Large binaries** (`CookBook.pdf`, tutorial video, demo images). Moving
+- **Large binaries** (tutorial video, demo images; `CookBook.pdf` was deleted
+  in 2.0.0 but stays in history). Moving
   them to Git LFS or release assets rewrites history and needs a force-push.
   `CONTRIBUTING.md` now asks contributors not to add more.
 - **Code signing and notarization.** The workflow steps are in place and run
@@ -632,7 +633,8 @@ Also set `testpaths` for pytest.
 
 ### 3.6 Repository hygiene
 
-- **Move large binaries out of git.** `CookBook.pdf` (45 MB),
+- **Move large binaries out of git.** `CookBook.pdf` (45 MB, deleted in
+  2.0.0, still in history),
   `Tutorial/Videos/pre_np1.mov` (14.5 MB), the demo PNGs (9.5 MB) and
   `image/` (14 MB) should move to Git LFS or release assets. The pack is
   78 MB.
