@@ -10,7 +10,7 @@ or important workflows change.
 
 - Current stable release: DriftlessMap 1.6.1. `main` carries DriftlessMap 2.0,
   published as the release candidate 2.0.0rc1 (after the 2.0.0aN previews).
-  Fixes before the final release become 2.0.0rcN (currently 2.0.0rc15). Plain 2.0.0 is reserved for
+  Fixes before the final release become 2.0.0rcN (currently 2.0.0rc16). Plain 2.0.0 is reserved for
   the release that passes the gates in `release_validation.md`. Never give V2
   work 1.x numbers. A published GitHub release runs `release.yml` (PyPI, trusted
   publishing) and `desktop-builds.yml` (Windows ZIP and macOS DMG attached to
@@ -95,6 +95,17 @@ or important workflows change.
   `DRAG_UPDATE_DELAY_MS` (a throttle, not a debounce) and the full page on
   release (`PageController.sig_page_settled`); coronal pages are strided in
   memory, so each is copied out of the volume once before display.
+  With `voxel_um` (the app passes the atlas voxel size and
+  `ImageView.pixel_size_um()`), depth, tilt and page refinement place the
+  section inside each slice (`PhysicalSection.place`: physical size up to
+  `FIT_LIMITS` shrinkage/flattening, capped outline distance
+  `OUTLINE_REACH_UM`, `OUTSIDE_WEIGHT`; coarse grid then coordinate
+  refinement), which copes with partial sections; without a pixel size it is
+  sized to each slice's width (`UNKNOWN_*`, `report.size_known` False caps
+  confidence at medium). Without `voxel_um` the old `NormalisedSection`
+  (outlines scaled to fill one box) is used. `Suggestion.fit_scale` is atlas /
+  section size. The app asks for a missing pixel size first
+  (`ImageView.pixel_size_declined` after "I don't know").
   `confidence(suggestion, report, voxel_um)` rates each candidate high/medium/low
   from template-edge agreement (`CONFIDENT_ANATOMY`/`FAIR_ANATOMY`), the span of
   near-equal depths (`report.depth_span`, `DEPTH_TIE`) and the plane margin;

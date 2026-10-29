@@ -322,6 +322,8 @@ class DepthMatch:
     template_edges: float
     label_edges: float
     score: float
+    fit: object = None         # PhysicalSection fit parameters, or None
+    placement: object = None   # Placement on the slice, or None
 
 
 def histology_gray(image, mask=None):
@@ -394,33 +396,36 @@ def _zscores(values):
 
 
 def rank_depths(histology, label_volume, intensity_volume, plane, orientation,
-                indexes=None, progress=None):
+                indexes=None, progress=None, section=None, refine=False):
     """Rank slices of ``plane`` by silhouette and internal anatomy.
 
-    After an affine fit of the silhouettes, the section's internal edges are
-    correlated with the atlas template's edges and with the atlas region
-    boundaries. The three measures are combined as z-scores across the
-    compared slices. Returns :class:`DepthMatch` objects, best first.
+    After fitting the section to each slice (``section``: a
+    :class:`PhysicalSection`, refined when ``refine``; by default a
+    :class:`NormalisedSection`, an affine fit of silhouettes scaled to fill
+    one box), the section's internal edges are correlated with the atlas
+    template's edges and with the atlas region boundaries. The three measures
+    are combined as z-scores across the compared slices. Returns
+    :class:`DepthMatch` objects, best first.
     """
-    h_mask, h_gray = _prepared_section(histology, orientation)
+    if section is None:
+        section = NormalisedSection(histology, orientation)
     length = plane_length(label_volume.shape, plane)
     if indexes is None:
         step = max(1, int(np.ceil(length / MAX_SLICES_PER_PLANE)))
         indexes = range(0, length, step)
     indexes = list(indexes)
-    rows = []
+    rows, fits = [], []
     for count, index in enumerate(indexes, start=1):
-        measures = _measure(
-            h_mask, h_gray, atlas_slice(label_volume, plane, index),
-            atlas_slice(intensity_volume, plane, index),
-        )
-        if measures is not None:
-            rows.append((index,) + measures)
+        result = section.measure(atlas_slice(label_volume, plane, index),
+                                 atlas_slice(intensity_volume, plane, index), refine=refine)
+        if result is not None:
+            rows.append((index,) + tuple(result[0]))
+            fits.append(result[1:])
         if progress is not None:
             progress(count / len(indexes))
     scores = _combined_scores(rows)
-    matches = [DepthMatch(row[0], row[1], row[2], row[3], score)
-               for row, score in zip(rows, scores)]
+    matches = [DepthMatch(row[0], row[1], row[2], row[3], score, fit[0], fit[1])
+               for row, fit, score in zip(rows, fits, scores)]
     matches.sort(key=lambda match: match.score, reverse=True)
     return matches
 
@@ -453,6 +458,233 @@ def _measure(h_mask, h_gray, labels, intensity):
         _ncc(section_edges, template_edges, inner),
         _ncc(section_edges, _label_boundaries(a_labels), inner),
     )
+
+
+# ------------------------------------------------------------------
+# Placing the section on a slice at its physical size
+#
+# Comparing outlines scaled to fill the same box (``normalise``) fails on
+# sections missing a part (often the ventral brain): the remaining piece is
+# stretched over the whole slice and every internal structure lands in the
+# wrong place. With the pixel size known, the section keeps its size up to
+# tissue shrinkage and flattening (``FIT_SCALES``, ``FIT_STRETCHES``) and is
+# placed *inside* the slice: each outline point is charged its distance to
+# the atlas outline, capped at ``OUTLINE_REACH_UM`` so a cut edge inside the
+# brain costs a bounded amount, plus ``OUTSIDE_WEIGHT`` times the share of
+# tissue outside the brain. On sections cut from the Allen 10 um atlas with
+# 35 % of the ventral part removed this found depth within 170 um (outline
+# scaled to fill: 0.9-5.3 mm). Real fixed sections shrank by up to about 25 %
+# (two coronal sections of one brain, 1.63 um pixels).
+FIT_SCALES = (0.95, 1.07, 1.2, 1.35)      # section to atlas size (shrinkage)
+FIT_STRETCHES = (1.0, 1.1, 1.2)           # height to width (flattening)
+FIT_LIMITS = ((0.9, 1.5), (0.8, 1.3), (-10.0, 10.0))  # scale, stretch, degrees
+# Without a pixel size the section is first sized to the slice's width; it
+# may be narrower (a partial section) but hardly wider.
+UNKNOWN_SCALES = (0.7, 0.85, 1.0)
+UNKNOWN_LIMITS = ((0.55, 1.15), (0.8, 1.3), (-10.0, 10.0))
+OUTLINE_REACH_UM = 180.0
+COARSE_REACH_UM = 450.0                   # for the coarse grid, before refining
+OUTSIDE_WEIGHT = 3.0
+UNKNOWN_SIZE_SIDE = 160                   # working size of a section of unknown size
+
+
+@dataclass(frozen=True)
+class Placement:
+    """Where the section sits on a slice: top-left corner in slice pixels,
+    then ``scale`` (atlas size / section size), ``stretch`` (extra height
+    factor) and ``angle`` (degrees) applied to the section."""
+
+    cost: float
+    top: int
+    left: int
+    scale: float
+    stretch: float
+    angle: float
+
+
+def _outline(mask):
+    return mask & ~(cv2.erode(mask.astype(np.uint8), np.ones((3, 3), np.uint8)) > 0)
+
+
+def _transformed(mask, gray, scale, stretch, angle):
+    height, width = mask.shape
+    matrix = cv2.getRotationMatrix2D((width / 2.0, height / 2.0), angle, 1.0)
+    matrix[:, :2] = matrix[:, :2] @ np.diag([scale, scale * stretch])
+    corners = np.array([[0, 0], [width, 0], [0, height], [width, height]], float)
+    placed = corners @ matrix[:, :2].T
+    matrix[:, 2] = 1 - placed.min(axis=0)
+    size = tuple(int(v) + 3 for v in np.ceil(placed.max(axis=0) - placed.min(axis=0)))
+    moved = cv2.warpAffine(mask.astype(np.float32), matrix, size) > 0.5
+    return moved, cv2.warpAffine(gray, matrix, size)
+
+
+class _AtlasOutline:
+    """Per-slice maps for :meth:`PhysicalSection.place`, padded by ``pad``."""
+
+    def __init__(self, atlas_mask, pad):
+        self.pad = pad
+        padded = np.pad(atlas_mask, pad)
+        self.distance = cv2.distanceTransform(
+            (~_outline(padded)).astype(np.uint8), cv2.DIST_L2, 3)
+        self.outside = (~padded).astype(np.float32)
+        self._capped = {}
+
+    def capped(self, reach):
+        if reach not in self._capped:
+            self._capped[reach] = np.minimum(self.distance, reach) / reach
+        return self._capped[reach]
+
+
+class PhysicalSection:
+    """A section prepared for placing on atlas slices of ``voxel_um``.
+
+    With ``pixel_um`` (the section's pixel size) the section is resampled to
+    the atlas voxel size; otherwise it is sized to each slice's width before
+    fitting, and only shape and anatomy decide.
+    """
+
+    def __init__(self, histology, orientation, voxel_um, pixel_um=None):
+        mask = tissue_mask(histology)
+        gray = histology_gray(histology, mask).astype(np.float32)
+        mask, gray = orientation.apply(mask), orientation.apply(gray)
+        self.voxel_um = float(voxel_um)
+        self.pixel_um = None if pixel_um is None else float(pixel_um)
+        if self.pixel_um is not None:
+            factor = self.pixel_um / self.voxel_um
+        else:
+            factor = UNKNOWN_SIZE_SIDE / float(max(mask.shape))
+        size = (max(1, int(round(mask.shape[1] * factor))),
+                max(1, int(round(mask.shape[0] * factor))))
+        small = cv2.resize(mask.astype(np.uint8), size, interpolation=cv2.INTER_AREA) > 0
+        gray = cv2.resize(np.ascontiguousarray(gray), size, interpolation=cv2.INTER_AREA)
+        ys, xs = np.nonzero(small)
+        if not len(ys):
+            raise ValueError("No tissue was found in the section.")
+        y0, y1, x0, x1 = ys.min(), ys.max() + 1, xs.min(), xs.max() + 1
+        self.mask = small[y0:y1, x0:x1]
+        self.gray = np.ascontiguousarray(gray[y0:y1, x0:x1])
+
+    @property
+    def size_known(self):
+        return self.pixel_um is not None
+
+    def _base(self, atlas_mask):
+        if self.size_known:
+            return 1.0
+        xs = np.nonzero(atlas_mask.any(axis=0))[0]
+        return (xs[-1] - xs[0] + 1) / float(self.mask.shape[1])
+
+    def place(self, atlas_mask, refine=True, start=None):
+        """Best :class:`Placement` on a slice mask, with the moved section.
+
+        The coarse grid is searched unless ``start`` (scale, stretch, angle)
+        is given; ``refine`` then adjusts each parameter in shrinking steps.
+        """
+        base = self._base(atlas_mask)
+        limits = FIT_LIMITS if self.size_known else UNKNOWN_LIMITS
+        pad = int(0.3 * max(self.mask.shape) * base * limits[0][1])
+        atlas = _AtlasOutline(atlas_mask, pad)
+        reach = OUTLINE_REACH_UM / self.voxel_um
+        coarse = COARSE_REACH_UM / self.voxel_um
+
+        def evaluate(params, cap, atlas=atlas, source=(self.mask, self.gray), shrink=1):
+            scale, stretch, angle = params
+            mask, gray = _transformed(source[0], source[1], scale * base, stretch, angle)
+            outline = _outline(mask).astype(np.float32)
+            tissue = mask.astype(np.float32)
+            if (mask.shape[0] > atlas.outside.shape[0]
+                    or mask.shape[1] > atlas.outside.shape[1]):
+                return None
+            cost = (cv2.matchTemplate(atlas.capped(cap / shrink), outline, cv2.TM_CCORR)
+                    / max(1.0, outline.sum()))
+            cost += OUTSIDE_WEIGHT * (cv2.matchTemplate(atlas.outside, tissue, cv2.TM_CCORR)
+                                      / max(1.0, tissue.sum()))
+            top, left = np.unravel_index(int(np.argmin(cost)), cost.shape)
+            return float(cost[top, left]), top - pad, left - pad, mask, gray
+
+        if start is None:
+            # The grid is searched at half resolution (a quarter of the work).
+            half = (cv2.resize(self.mask.astype(np.uint8), None, fx=0.5, fy=0.5,
+                               interpolation=cv2.INTER_AREA) > 0,
+                    cv2.resize(self.gray, None, fx=0.5, fy=0.5, interpolation=cv2.INTER_AREA))
+            small = atlas_mask[::2, ::2]
+            half_atlas = _AtlasOutline(small, pad // 2)
+            scales = FIT_SCALES if self.size_known else UNKNOWN_SCALES
+            tried = [(evaluate((scale, stretch, 0.0), coarse, half_atlas, half, 2),
+                      (scale, stretch, 0.0))
+                     for scale in scales for stretch in FIT_STRETCHES]
+            tried = [item for item in tried if item[0] is not None]
+            if not tried:
+                return None
+            params = list(min(tried, key=lambda item: item[0][0])[1])
+            steps, rounds = [0.04, 0.04, 3.0], 3
+        else:
+            params = list(start)
+            steps, rounds = [0.02, 0.02, 1.5], 2
+        result = evaluate(params, reach)
+        if result is None:
+            return None
+        if refine:
+            for _ in range(rounds):
+                for axis in range(3):
+                    for sign in (1, -1):
+                        while True:
+                            trial = list(params)
+                            trial[axis] += sign * steps[axis]
+                            low, high = limits[axis]
+                            if not low <= trial[axis] <= high:
+                                break
+                            candidate = evaluate(trial, reach)
+                            if candidate is None or candidate[0] >= result[0] - 1e-4:
+                                break
+                            params, result = trial, candidate
+                steps = [step / 2 for step in steps]
+        cost, top, left, mask, gray = result
+        return Placement(cost, int(top), int(left), params[0] * base, params[1],
+                         params[2]), mask, gray, params
+
+    def measure(self, labels, intensity, refine=False, start=None):
+        """(outline agreement, template-edge and label-edge agreement), the
+        raw fit parameters, and the :class:`Placement`; None without overlap."""
+        labels = np.asarray(labels)
+        atlas_mask = labels > 0
+        if atlas_mask.sum() < 50:
+            return None
+        placed = self.place(atlas_mask, refine=refine, start=start)
+        if placed is None:
+            return None
+        placement, mask, gray, params = placed
+        height, width = atlas_mask.shape
+        top, left = placement.top, placement.left
+        y0, x0 = max(0, top), max(0, left)
+        y1, x1 = min(height, top + mask.shape[0]), min(width, left + mask.shape[1])
+        if y1 <= y0 or x1 <= x0:
+            return None
+        section_mask = np.zeros(atlas_mask.shape, bool)
+        section_gray = np.zeros(atlas_mask.shape, np.float32)
+        section_mask[y0:y1, x0:x1] = mask[y0 - top:y1 - top, x0 - left:x1 - left]
+        section_gray[y0:y1, x0:x1] = gray[y0 - top:y1 - top, x0 - left:x1 - left]
+        both = section_mask & atlas_mask
+        section_edges, inner = _edges(section_gray, both)
+        template_edges, _ = _edges(np.asarray(intensity, dtype=np.float32), both)
+        measures = (max(0.0, 1.0 - placement.cost),
+                    _ncc(section_edges, template_edges, inner),
+                    _ncc(section_edges, _label_boundaries(labels), inner))
+        return measures, tuple(params), placement
+
+
+class NormalisedSection:
+    """A section compared with slices after scaling both to fill one box
+    (used when no voxel size is given)."""
+
+    size_known = False
+
+    def __init__(self, histology, orientation):
+        self.mask, self.gray = _prepared_section(histology, orientation)
+
+    def measure(self, labels, intensity, refine=False, start=None):
+        measures = _measure(self.mask, self.gray, labels, intensity)
+        return None if measures is None else (measures, None, None)
 
 
 def _combined_scores(rows):
@@ -546,18 +778,25 @@ class TiltMatch:
     template_edges: float
     label_edges: float
     score: float
+    fit: object = None
+    placement: object = None
 
 
 def refine_tilt(histology, label_volume, intensity_volume, plane, orientation,
-                indexes, pivot, angles=(-6, -3, 0, 3, 6), progress=None):
+                indexes, pivot, angles=(-6, -3, 0, 3, 6), progress=None,
+                section=None, starts=None):
     """Score each depth in ``indexes`` at every (h, v) tilt in ``angles``.
 
+    ``section`` is as for :func:`rank_depths`; a :class:`PhysicalSection` is
+    refined from the fit in ``starts`` (index to fit parameters) when given.
     Returns :class:`TiltMatch` objects, best first. Scores are comparable only
     within one call.
     """
-    h_mask, h_gray = _prepared_section(histology, orientation)
+    if section is None:
+        section = NormalisedSection(histology, orientation)
+    starts = starts or {}
     grid = [(index, (h, v)) for index in indexes for h in angles for v in angles]
-    rows, keys = [], []
+    rows, keys, fits = [], [], []
     for count, (index, tilt) in enumerate(grid, start=1):
         if tilt == (0, 0):
             labels = atlas_slice(label_volume, plane, index)
@@ -565,15 +804,20 @@ def refine_tilt(histology, label_volume, intensity_volume, plane, orientation,
         else:
             labels = tilted_slice(label_volume, plane, index, tilt, pivot, order=0)
             intensity = tilted_slice(intensity_volume, plane, index, tilt, pivot, order=1)
-        measures = _measure(h_mask, h_gray, labels, intensity)
-        if measures is not None:
-            rows.append((index,) + measures)
+        # The depth's fitted size and stretch carry over; only the position
+        # is searched again (refining every tilt took most of the time).
+        start = starts.get(index)
+        result = section.measure(labels, intensity, refine=start is None, start=start)
+        if result is not None:
+            rows.append((index,) + tuple(result[0]))
             keys.append(tilt)
+            fits.append(result[1:])
         if progress is not None:
             progress(count / len(grid))
     scores = _combined_scores(rows)
-    matches = [TiltMatch(row[0], tuple(float(a) for a in tilt), row[1], row[2], row[3], score)
-               for row, tilt, score in zip(rows, keys, scores)]
+    matches = [TiltMatch(row[0], tuple(float(a) for a in tilt), row[1], row[2], row[3], score,
+                         fit[0], fit[1])
+               for row, tilt, fit, score in zip(rows, keys, fits, scores)]
     matches.sort(key=lambda match: match.score, reverse=True)
     return matches
 
@@ -656,6 +900,9 @@ class Suggestion:
     score: float
     silhouette: float
     template_edges: float = 0.0   # internal-anatomy agreement with the template
+    # Atlas size / section size of the fit (tissue shrinkage) when the
+    # section was placed at its physical size; None otherwise.
+    fit_scale: object = None
 
 
 @dataclass(frozen=True)
@@ -666,6 +913,9 @@ class SuggestionReport:
     # Pages (full resolution) spanned by the depths that fit about as well as
     # the best one (see DEPTH_TIE); None for reports made before it existed.
     depth_span: object = None
+    # True when the section was placed at its physical size, False when its
+    # pixel size was unknown, None for the scale-free comparison.
+    size_known: object = None
 
     @property
     def plane_margin(self):
@@ -694,8 +944,9 @@ def confidence(suggestion, report, voxel_um):
     """How far a suggestion can be trusted: ``(level, reasons)``.
 
     ``level`` is "high", "medium" or "low", the lowest of: internal anatomy
-    agreement, how narrowly depth is determined, and (when the plane was
-    detected) how clearly the plane was preferred. ``reasons`` explain each
+    agreement, how narrowly depth is determined, "medium" when the section's
+    pixel size was unknown, and (when the plane was detected) how clearly the
+    plane was preferred. ``reasons`` explain each
     limit in words.
     """
     levels, reasons = [], []
@@ -711,6 +962,9 @@ def confidence(suggestion, report, voxel_um):
         levels.append(level)
         if level < 2:
             reasons.append("depths {:.1f} mm apart fit about as well".format(span / 1000))
+    if getattr(report, "size_known", None) is False:
+        levels.append(1)
+        reasons.append("the pixel size is unknown, so the section's size was guessed")
     if len(report.plane_candidates) > 1:
         margin = report.plane_margin
         level = 2 if margin >= 0.08 else 1 if margin >= 0.03 else 0
@@ -783,7 +1037,7 @@ def search_factor(shape, max_side=SEARCH_MAX_SIDE):
 
 
 def _refine_page(histology, label_volume, intensity_volume, plane, orientation,
-                 index, tilt, pivot, factor):
+                 index, tilt, pivot, factor, section=None, start=None):
     """The full-resolution page near coarse page ``index * factor`` that matches best.
 
     The pages between coarse samples are read from the full-resolution
@@ -791,7 +1045,8 @@ def _refine_page(histology, label_volume, intensity_volume, plane, orientation,
     """
     if factor == 1:
         return index * factor
-    h_mask, h_gray = _prepared_section(histology, orientation)
+    if section is None:
+        section = NormalisedSection(histology, orientation)
     length = plane_length(label_volume.shape, plane)
     centre = index * factor
     best = None
@@ -806,11 +1061,11 @@ def _refine_page(histology, label_volume, intensity_volume, plane, orientation,
                                      step=factor)
         if tuple(tilt) == (0, 0):
             labels, intensity = labels[::factor, ::factor], intensity[::factor, ::factor]
-        measures = _measure(h_mask, h_gray, labels, intensity)
-        if measures is None:
+        result = section.measure(labels, intensity, refine=True, start=start)
+        if result is None:
             continue
         # Neighbouring pages differ little: a plain sum ranks them.
-        total = float(sum(measures))
+        total = float(sum(result[0]))
         if best is None or total > best[0]:
             best = (total, page)
     return best[1] if best is not None else centre
@@ -819,7 +1074,8 @@ def _refine_page(histology, label_volume, intensity_volume, plane, orientation,
 def suggest_sections(histology, label_volume, intensity_volume, midline, pivot,
                      max_suggestions=6, depth_candidates=4,
                      angles=(-6, -3, 0, 3, 6), progress=None,
-                     max_side=SEARCH_MAX_SIDE, planes=PLANES):
+                     max_side=SEARCH_MAX_SIDE, planes=PLANES, voxel_um=None,
+                     pixel_um=None):
     """Plane, orientation, depth and tilt suggestions for one section.
 
     ``midline`` is the sagittal page index of the midline (for searching one
@@ -829,6 +1085,12 @@ def suggest_sections(histology, label_volume, intensity_volume, midline, pivot,
     pages. ``planes`` limits the search to the planes the section may be cut
     in; the outline alone does not reliably tell them apart, because it is
     compared without its physical size.
+
+    With ``voxel_um`` (the atlas voxel size) depth and tilt are found by
+    placing the section inside each slice (:class:`PhysicalSection`), which
+    copes with partial sections; ``pixel_um`` (the section's pixel size)
+    keeps it at its physical size, up to tissue shrinkage. Without
+    ``voxel_um`` both are scaled to fill one box, as before 2.0.0rc16.
     """
     planes = tuple(planes)
     if not planes or any(plane not in PLANES for plane in planes):
@@ -844,6 +1106,11 @@ def suggest_sections(histology, label_volume, intensity_volume, midline, pivot,
     intensity = np.ascontiguousarray(intensity_volume[::factor, ::factor, ::factor])
     coarse_midline = None if midline is None else midline / factor
     coarse_pivot = tuple(value / factor for value in pivot)
+
+    def section_for(orientation):
+        if voxel_um is None:
+            return NormalisedSection(histology, orientation)
+        return PhysicalSection(histology, orientation, voxel_um * factor, pixel_um)
 
     candidates = search_planes(histology, labels, planes, progress=stage(0.0, 0.25))
     planes = best_by_plane(candidates)
@@ -866,7 +1133,7 @@ def suggest_sections(histology, label_volume, intensity_volume, midline, pivot,
             share = 0.15 / len(contenders)
             depths = rank_depths(
                 histology, labels, intensity, best.plane, contender.orientation,
-                indexes=sample,
+                indexes=sample, section=section_for(contender.orientation),
                 progress=stage(0.25 + number * share, 0.25 + (number + 1) * share),
             )
             if depths:
@@ -877,10 +1144,11 @@ def suggest_sections(histology, label_volume, intensity_volume, midline, pivot,
     best = replace(best, orientation=preferred_form(best.plane, best.orientation))
     # Depth in two passes: every few pages, then each page around the best
     # few (scores are compared within one pass only).
+    section = section_for(best.orientation)
     stride = max(1, len(indexes) // DEPTH_PAGES)
     depths = rank_depths(
         histology, labels, intensity, best.plane, best.orientation,
-        indexes=indexes[::stride], progress=stage(0.4, 0.45),
+        indexes=indexes[::stride], progress=stage(0.4, 0.45), section=section,
     )
     if not depths:
         raise ValueError("No atlas slice could be compared with the section.")
@@ -894,13 +1162,15 @@ def suggest_sections(histology, label_volume, intensity_volume, midline, pivot,
                          if indexes[0] <= page <= indexes[-1]})
         depths = rank_depths(
             histology, labels, intensity, best.plane, best.orientation,
-            indexes=around, progress=stage(0.45, 0.5),
+            indexes=around, progress=stage(0.45, 0.5), section=section, refine=True,
         ) or depths
     spacing = max(2, length // 100)
     chosen = _distinct([match.index for match in depths], depth_candidates, spacing)
+    fits = {match.index: match.fit for match in depths}
     tilts = refine_tilt(
         histology, labels, intensity, best.plane, best.orientation,
         indexes=chosen, pivot=coarse_pivot, angles=angles, progress=stage(0.5, 0.8),
+        section=section, starts=fits,
     )
     picked, seen = [], set()
     for match in tilts:
@@ -913,15 +1183,21 @@ def suggest_sections(histology, label_volume, intensity_volume, midline, pivot,
     suggestions = []
     for count, match in enumerate(picked, start=1):
         page = _refine_page(histology, label_volume, intensity_volume, best.plane,
-                            best.orientation, match.index, match.tilt_degrees, pivot, factor)
+                            best.orientation, match.index, match.tilt_degrees, pivot, factor,
+                            section=section, start=match.fit)
+        fit_scale = None
+        if match.placement is not None and section.size_known:
+            fit_scale = match.placement.scale
         suggestions.append(Suggestion(best.plane, best.orientation, page,
                                       match.tilt_degrees, match.score, match.silhouette,
-                                      match.template_edges))
+                                      match.template_edges, fit_scale))
         if progress is not None:
             progress(0.8 + 0.2 * count / len(picked))
     # The report's plane candidate carries the orientation actually chosen,
     # which the dialog shows and applies.
     planes = [best] + [candidate for candidate in planes if candidate.plane != best.plane]
     planes = tuple(replace(candidate, index=candidate.index * factor) for candidate in planes)
+    size_known = None if voxel_um is None else section.size_known
     return SuggestionReport(planes, tuple(suggestions),
-                            midline if best.plane == "sagittal" else None, depth_span)
+                            midline if best.plane == "sagittal" else None, depth_span,
+                            size_known)

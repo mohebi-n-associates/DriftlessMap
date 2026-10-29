@@ -2081,6 +2081,17 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, QMainWindow, FORM_Ma
         planes = planes_for(plane)
         self.section_plane = plane
         view = self.atlas_view
+        if (self.image_view.pixel_size_um() is None
+                and not self.image_view.pixel_size_declined):
+            choice = self.ask_pixel_size(
+                allow_unknown=True,
+                message="Find atlas section compares the section with the atlas at its "
+                        "real size, which also copes with sections missing a part. "
+                        "Enter micrometres per pixel of the full-resolution image.")
+            if choice is None:
+                return
+            if choice == pixel_size_dialog.UNKNOWN:
+                self.image_view.pixel_size_declined = True
         section = self.registration_section()
         if section is None:
             return
@@ -2100,6 +2111,8 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, QMainWindow, FORM_Ma
                 midline,
                 pivot,
                 planes=planes,
+                voxel_um=view.vox_size_um,
+                pixel_um=self.image_view.pixel_size_um(),
             )
         except ValueError as exc:
             self.print_message(
