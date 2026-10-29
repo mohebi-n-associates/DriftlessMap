@@ -96,6 +96,13 @@ class SectionPanel(StepPanel):
         self.image_card.add(view.scale_wrap)
         self.image_card.add(view.scene_wrap)
         self.page_note = self.image_card.add(hint_label(""))
+        self.pixel_size_note = status_label("")
+        self.image_card.add_row(
+            self.pixel_size_note,
+            self.gate(button("Pixel size…", self._ask_pixel_size,
+                             tooltip="Micrometres per pixel, used by the scale bar, "
+                                     "the ruler and Find atlas section"),
+                      self.shell.needs_image))
         # Planes of further TIFF axes (for example time), read on request.
         self.planes_host = self.image_card.add(QWidget())
         self.planes_row = QHBoxLayout(self.planes_host)
@@ -462,6 +469,21 @@ class SectionPanel(StepPanel):
         InputPreview(section, engine.registration_input.describe(), self).exec()
 
     # -------------------------------------------------------------- refresh
+    def _ask_pixel_size(self):
+        if self.engine.ask_pixel_size():
+            self.shell.refresh()
+
+    def refresh_pixel_size(self):
+        view = self.engine.image_view
+        size, source = view.full_resolution_pixel_size()
+        if view.image_file is None:
+            set_status(self.pixel_size_note, "Pixel size: no section loaded.", None)
+        elif size is None:
+            set_status(self.pixel_size_note, "Pixel size: not recorded in the file.", "warn")
+        else:
+            set_status(self.pixel_size_note, "Pixel size: {:.4g} \u00b5m ({}).".format(
+                size, "entered" if source == "entered" else "from the file"), "good")
+
     def refresh_registration(self):
         recipe = self.engine.registration_input
         if self.engine.image_view.current_img is None:
@@ -503,3 +525,4 @@ class SectionPanel(StepPanel):
         self.lasso_button.setChecked(
             self.engine.tool_box.checkable_btn_dict["lasso_btn"].isChecked())
         self.refresh_registration()
+        self.refresh_pixel_size()

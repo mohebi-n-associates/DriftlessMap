@@ -114,3 +114,15 @@ def save_last_folder(folder):
     if not folder:
         raise ValueError("Folder must not be empty.")
     update_settings(last_folder=folder)
+
+
+def load_last_pixel_size():
+    """The pixel size (um) last entered by hand, or None."""
+    value = load_settings().get("last_pixel_size_um")
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return float(value) if 0 < value < float("inf") else None
+
+
+def save_last_pixel_size(size_um):
+    update_settings(last_pixel_size_um=float(size_um))

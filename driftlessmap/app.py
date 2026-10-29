@@ -123,6 +123,7 @@ from .image_reader import (
     TIFFReader,
     plane_selection,
     read_bitmap,
+    valid_pixel_size,
 )
 
 from .image_view import ImageView
@@ -170,6 +171,9 @@ from .auto_registration import propose_landmarks
 from .background import run_in_background
 from .section_suggestion_dialog import SectionSuggestionDialog
 from .registration_channels_dialog import RegistrationChannelsDialog
+from . import pixel_size_dialog
+from .pixel_size_dialog import PixelSizeDialog
+from . import user_settings
 from . import registration_input
 from .registration_review import (
     REVIEWED,
@@ -658,6 +662,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, QMainWindow, FORM_Ma
         )
         self.actionProcess_Image.triggered.connect(self.turn_current_to_process)
         self.actionReset_Image.triggered.connect(self.reset_current_image)
+        self.actionPixel_Size.triggered.connect(lambda: self.ask_pixel_size())
         self.action1_Clockwise.triggered.connect(
             lambda: self.image_view.image_1_rotate("clockwise")
         )
@@ -2000,6 +2005,35 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, QMainWindow, FORM_Ma
             return None
         return section
 
+    def ask_pixel_size(self, allow_unknown=False, message=None):
+        """Ask for the histology pixel size and apply the answer.
+
+        Returns the dialog's choice (``"set"``, ``"file"``, ``"unknown"``) or
+        None when cancelled or no image is loaded. The question starts at the
+        current size, else the size last entered by hand.
+        """
+        if self.image_view.image_file is None:
+            self.print_message("Load a histology image first.", self.error_message_color)
+            return None
+        current, source = self.image_view.full_resolution_pixel_size()
+        file_size = valid_pixel_size(getattr(self.image_view.image_file, "scaling_val", None))
+        if current is None:
+            current = user_settings.load_last_pixel_size()
+        dialog = PixelSizeDialog(current=current, file_size=file_size,
+                                 allow_unknown=allow_unknown, message=message, parent=self)
+        dialog.exec()
+        if dialog.choice == pixel_size_dialog.SET:
+            self.image_view.set_pixel_size(dialog.size_um)
+            try:
+                user_settings.save_last_pixel_size(dialog.size_um)
+            except OSError:
+                pass
+        elif dialog.choice == pixel_size_dialog.FROM_FILE:
+            self.image_view.set_pixel_size(None)
+        if dialog.choice in (pixel_size_dialog.SET, pixel_size_dialog.FROM_FILE):
+            self.set_img_ruler_length()
+        return dialog.choice
+
     def ask_section_plane(self):
         """Ask which plane the section is cut in; return a plane choice or None.
 
@@ -2840,20 +2874,14 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, QMainWindow, FORM_Ma
         if len(self.working_img_data["ruler_path"]) == 2:
             data = np.asarray(self.working_img_data["ruler_path"])
             dist = np.sqrt(np.sum((data[0] - data[1]) ** 2))
-            if self.image_view.image_file.scaling_val is None:
+            pixel_um = self.image_view.pixel_size_um()
+            if pixel_um is None:
                 self.tool_box.ruler_length_label.setText(
                     "Length: {} px".format(int(dist))
                 )
             else:
                 self.tool_box.ruler_length_label.setText(
-                    "Length: {} um".format(
-                        round(
-                            dist
-                            * self.image_view.image_file.scaling_val
-                            / self.image_view.current_scale,
-                            2,
-                        )
-                    )
+                    "Length: {} um".format(round(dist * pixel_um, 2))
                 )
 
     # ------------------------------------------------------------------

@@ -595,6 +595,7 @@ class AtlasView(QObject):
         self.slice_tb_size = self.slice_tb_size[::-1].astype(int)
 
         self.working_atlas = self.slice_stack
+        self.refresh_slice_scale_bar()
 
         rect = (0, 0, int(self.slice_size[1]), int(self.slice_size[0]))
         self.corner_points, self.side_lines = get_corner_line_from_rect(rect)
@@ -609,6 +610,7 @@ class AtlasView(QObject):
         self.slice_info_ready = slice_info_is_ready(
             self.slice_width, self.slice_height, self.slice_distance, self.slice_bregma
         )
+        self.refresh_slice_scale_bar()
 
     def save_slice_data_and_info(self):
         data = {'data': self.slice_image_data,
@@ -631,6 +633,17 @@ class AtlasView(QObject):
             self.slice_width, self.slice_height, self.slice_distance, self.slice_bregma
         )
         self.set_slice_data(img_data)
+        self.refresh_slice_scale_bar()
+
+    def refresh_slice_scale_bar(self):
+        """Scale bar of the slice atlas from its calibrated width (mm)."""
+        unit = None
+        try:
+            if self.slice_size is not None and float(self.slice_width) > 0:
+                unit = float(self.slice_width) * 1000.0 / float(self.slice_size[1])
+        except (TypeError, ValueError):
+            unit = None
+        self.slice_stack.scale_bar.set_unit(unit)
 
     def get_slice_coords(self, ruler_data):
         x, y, z = get_slice_atlas_coord(ruler_data, self.slice_cut, self.slice_size,
@@ -650,6 +663,7 @@ class AtlasView(QObject):
             self.slice_distance = 0
             self.slice_bregma = []
             self.slice_info_ready = False
+            self.refresh_slice_scale_bar()
         else:
             return
 
@@ -669,6 +683,8 @@ class AtlasView(QObject):
         self.dorsal_info = atlas_info[1]
         self.right_info = atlas_info[2]
         self.vox_size_um = atlas_info[3]['vxsize']
+        for view in (self.cimg, self.simg, self.himg):
+            view.scale_bar.set_unit(self.vox_size_um)
 
         if np.all(np.ravel(atlas_info[3]['Bregma']) == 0):
             da_bregma = (int(self.atlas_size[1] / 2), int(self.atlas_size[2] / 2), int(self.atlas_size[0] / 2))

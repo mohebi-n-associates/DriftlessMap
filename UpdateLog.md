@@ -1,5 +1,10 @@
 # Update Log
 
+### 29th October 2026
+##### DriftlessMap 2.0.0rc15
+
+`image_reader.tiff_pixel_size_um` reads OME `PhysicalSizeX` (+unit), ImageJ resolution with its `unit`, centimetre resolution, and inch resolution only below 20 µm (`PIXEL_SIZE_RANGE_UM` 0.01–1000 via `valid_pixel_size`); `TIFFReader` and TIFF folders set `scaling_val`. `ImageView.pixel_size_override` (optional `img_ctrl_data['pixel_size_um']`, None in older files), `full_resolution_pixel_size()`, `pixel_size_um()` (÷ read scale), `set_pixel_size`. `scale_bar.ScaleBar` (pyqtgraph ScaleBar picking 1/2/5×10ⁿ µm ≈ 1/5 of the view width) on `ImageStacks`, `SliceStacks` and `SliceStack`. New `actionPixel_Size`, `DriftlessMap.ask_pixel_size`, `pixel_size_dialog.PixelSizeDialog`, `user_settings.load/save_last_pixel_size`; V2 Section step pixel-size row. The user's IM-1109/IM_1112 TIFFs read 1.634 µm. Ruler uses `pixel_size_um()`.
+
 ### 28th October 2026
 ##### DriftlessMap 2.0.0rc14
 

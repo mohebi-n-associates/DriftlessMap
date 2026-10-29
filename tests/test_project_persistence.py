@@ -229,6 +229,10 @@ class ProjectPersistenceIntegrationTests(unittest.TestCase):
             window.tool_box.merge_sites = True
             from driftlessmap.registration_input import RegistrationInput
             window.registration_input = RegistrationInput.from_channels((2,), ["Blue"])
+            # A PNG records no pixel size: no scale bar until one is entered.
+            self.assertIsNone(window.image_view.pixel_size_um())
+            self.assertFalse(window.image_view.img_stacks.scale_bar.isVisible())
+            window.image_view.set_pixel_size(2.5)
 
             with patch.object(
                 QFileDialog,
@@ -265,6 +269,9 @@ class ProjectPersistenceIntegrationTests(unittest.TestCase):
             np.testing.assert_array_equal(restored.image_view.current_img, expected)
             self.assertEqual(payload["img_ctrl_data"]["image_scale"], 1.0)
             self.assertEqual(restored.image_view.current_scale, 1.0)
+            self.assertEqual(payload["img_ctrl_data"]["pixel_size_um"], 2.5)
+            self.assertEqual(restored.image_view.full_resolution_pixel_size(), (2.5, "entered"))
+            self.assertTrue(restored.image_view.img_stacks.scale_bar.isVisible())
             # Older projects stored only the slider percentage.
             self.assertEqual(
                 restored.image_view._restored_scale({"current_scale": 10}), 1.0

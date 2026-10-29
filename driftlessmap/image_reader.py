@@ -246,6 +246,80 @@ def plane_selection(value):
     return selection
 
 
+# Pixel sizes (um) outside this range are taken as not recorded.
+PIXEL_SIZE_RANGE_UM = (0.01, 1000.0)
+_LENGTH_UNITS_UM = {"nm": 1e-3, "nanometer": 1e-3, "um": 1.0, "\u00b5m": 1.0,
+                    "\u03bcm": 1.0, "micron": 1.0, "microns": 1.0, "micrometer": 1.0,
+                    "\\u00b5m": 1.0, "mm": 1e3, "millimeter": 1e3, "cm": 1e4,
+                    "centimeter": 1e4}
+
+
+def valid_pixel_size(value):
+    """``value`` as a pixel size in um, or None when unusable."""
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return None
+    low, high = PIXEL_SIZE_RANGE_UM
+    return value if np.isfinite(value) and low <= value <= high else None
+
+
+def tiff_pixel_size_um(tiff_file):
+    """Pixel width in um recorded in a TIFF, or None.
+
+    OME-XML ``PhysicalSizeX`` is read first, then ImageJ's resolution with its
+    ``unit``, then resolution tags in centimetres. Resolution in inches is
+    trusted only when finer than 20 um, since editors write 72-600 dpi by
+    default; a resolution without a unit is ignored.
+    """
+    size = _ome_pixel_size(tiff_file.ome_metadata)
+    if size is not None:
+        return size
+    if not tiff_file.pages:
+        return None
+    tags = tiff_file.pages[0].tags
+    resolution = tags.get("XResolution")
+    try:
+        numerator, denominator = resolution.value
+        per_unit = numerator / denominator
+    except (AttributeError, TypeError, ValueError, ZeroDivisionError):
+        return None
+    if not per_unit > 0:
+        return None
+    unit = tags.get("ResolutionUnit")
+    unit = int(unit.value) if unit is not None else 2
+    if tiff_file.is_imagej:
+        name = str((tiff_file.imagej_metadata or {}).get("unit", "")).strip().lower()
+        if name in _LENGTH_UNITS_UM:
+            return valid_pixel_size(_LENGTH_UNITS_UM[name] / per_unit)
+    if unit == 3:  # centimetre
+        return valid_pixel_size(1e4 / per_unit)
+    if unit == 2:  # inch
+        size = valid_pixel_size(25400.0 / per_unit)
+        return size if size is not None and size < 20.0 else None
+    return None
+
+
+def _ome_pixel_size(xml):
+    if not xml:
+        return None
+    try:
+        import xml.etree.ElementTree as ElementTree
+        root = ElementTree.fromstring(xml)
+    except Exception:
+        return None
+    pixels = next((element for element in root.iter() if element.tag.endswith("Pixels")), None)
+    if pixels is None or pixels.get("PhysicalSizeX") is None:
+        return None
+    unit = pixels.get("PhysicalSizeXUnit", "\u00b5m").strip().lower()
+    if unit not in _LENGTH_UNITS_UM:
+        return None
+    try:
+        return valid_pixel_size(float(pixels.get("PhysicalSizeX")) * _LENGTH_UNITS_UM[unit])
+    except ValueError:
+        return None
+
+
 def _ome_channels(tiff_file, n_channels):
     """Channel names and RGB colours from OME-XML, or ``(None, None)``."""
     xml = tiff_file.ome_metadata
@@ -338,6 +412,7 @@ class TIFFReader(object):
             self.is_imagej = tiff_file.is_imagej
             if tiff_file.pages:
                 self.software = tiff_file.pages[0].software
+            self.scaling_val = tiff_pixel_size_um(tiff_file)
             if self.n_scenes == 0:
                 self._fail(7)
                 return
@@ -561,6 +636,8 @@ class ImagesReader(object):
                 self.level = tiff.level
                 self.data_type = tiff.data_type
                 self.pixel_type = tiff.pixel_type
+                # Files of one folder come from one acquisition.
+                self.scaling_val = tiff.scaling_val
                 _set_channel_metadata(self, tiff.rgb_colors, tiff.channel_name)
             elif current != layout:
                 raise ValueError(

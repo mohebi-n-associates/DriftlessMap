@@ -6,6 +6,7 @@ from PyQt6.QtGui import QPainter
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore
 from .movable_points import TriangulationPoints
+from .scale_bar import ScaleBar
 
 
 class ClickableImage(pg.ImageItem):
@@ -75,6 +76,7 @@ class SliceStack(pg.GraphicsLayoutWidget):
         self.vb.setAspectLocked()
         self.vb.invertY(True)
         self.vb.setAcceptHoverEvents(True)
+        self.scale_bar = ScaleBar(self.vb)
         # self.vb.enableAutoRange(enable=False)
 
         self.base_layer = ClickableImage()
@@ -231,6 +233,7 @@ class ImageStacks(pg.GraphicsLayoutWidget):
         self.vb.setAspectLocked()
         self.vb.invertY(True)
         self.vb.setAcceptHoverEvents(True)
+        self.scale_bar = ScaleBar(self.vb)
         # self.vb.enableAutoRange(enable=False)
 
         self.base_layer = ClickableImage()

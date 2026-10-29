@@ -22,7 +22,7 @@ from PyQt6.QtCore import (
 )
 
 from .image_stacks import ImageStacks
-from .image_reader import MAX_CHANNELS
+from .image_reader import MAX_CHANNELS, valid_pixel_size
 from .widgets_utils import ChannelSelector
 from .image_curves import CurveWidget
 from .utils import (
@@ -138,6 +138,9 @@ class ImageView(QObject):
         self.processing_img = None
         self.current_img = None
         self.current_scale = None
+        # Pixel size (um at full resolution) the user entered; None uses the
+        # file's own.
+        self.pixel_size_override = None
         self._fine_rotation_base = None
         self._fine_rotation_angle = 0
         self.img_size = None
@@ -276,6 +279,7 @@ class ImageView(QObject):
             self.current_img = copy.deepcopy(self.image_file.data['scene 0'])
 
         self.current_scale = self.image_file.scale['scene 0']
+        self.pixel_size_override = None
 
         if self.image_file.n_scenes != 1:
             self.scene_slider.setMaximum(self.image_file.n_scenes - 1)
@@ -358,7 +362,34 @@ class ImageView(QObject):
     def get_corner_and_lines(self):
         rect = (0, 0, self.img_size[1], self.img_size[0])
         self.corner_points, self.side_lines = get_corner_line_from_rect(rect)
+        self.refresh_scale_bar()
         self.sig_image_changed.emit()
+
+    def full_resolution_pixel_size(self):
+        """``(um per full-resolution pixel, source)`` or ``(None, None)``.
+
+        ``source`` is "entered" for a size the user set, else "file".
+        """
+        if self.pixel_size_override is not None:
+            return self.pixel_size_override, "entered"
+        size = valid_pixel_size(getattr(self.image_file, 'scaling_val', None))
+        return (size, "file") if size is not None else (None, None)
+
+    def pixel_size_um(self):
+        """Micrometres per pixel of the displayed raster, or None."""
+        size, _ = self.full_resolution_pixel_size()
+        if size is None:
+            return None
+        return size / self._current_scale_value()
+
+    def set_pixel_size(self, size_um):
+        """Use ``size_um`` per full-resolution pixel (None: the file's)."""
+        self.pixel_size_override = valid_pixel_size(size_um)
+        self.refresh_scale_bar()
+
+    def refresh_scale_bar(self):
+        self.img_stacks.scale_bar.set_unit(
+            self.pixel_size_um() if self.image_file is not None else None)
 
     def image_page_changed(self, page_number):
         self.display_img_index = page_number
@@ -507,6 +538,9 @@ class ImageView(QObject):
                 # resolution the active raster was read at.
                 'current_scale': self.scale_slider.value(),
                 'image_scale': self._current_scale_value(),
+                # A pixel size the user entered (um at full resolution);
+                # absent in older files, meaning the file's own.
+                'pixel_size_um': self.pixel_size_override,
                 'source_metadata': source_metadata,
                 'channel_color': self.channel_color,
                 'channel_visible': self.channel_visible,
@@ -549,6 +583,7 @@ class ImageView(QObject):
     def load_img_ctrl_data(self, img_ctrl_data):
         self.current_img = img_ctrl_data['current_img']
         self.current_scale = self._restored_scale(img_ctrl_data)
+        self.pixel_size_override = valid_pixel_size(img_ctrl_data.get('pixel_size_um'))
         # Projects before 2.0 saved four-element lists.
         self.channel_color = _padded(img_ctrl_data['channel_color'], None)
         self.color_combo_index = _padded(img_ctrl_data['color_combo_index'], -1)
@@ -614,6 +649,7 @@ class ImageView(QObject):
 
         self.original_lut_list = img_ctrl_data['original_lut_list']
         self.color_lut_list = img_ctrl_data['color_lut_list']
+        self.refresh_scale_bar()
 
         # self.set_data_and_size(self.processing_img)
 

@@ -3,6 +3,18 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.0.0rc15
+
+Release-candidate fix, 29 October 2026.
+
+The histology and atlas views show a scale bar that keeps a round length as you
+zoom. DriftlessMap now reads the pixel size recorded in TIFF files (OME, ImageJ
+calibration, or resolution in centimetres), so the ruler measures in micrometres
+for TIFFs too. When a file records no size, Image > Pixel Size (Section step:
+Pixel size…) lets you enter it; the entry is saved in the project and offered
+again for the next image. Default 72-600 dpi tags written by image editors are not
+mistaken for a pixel size.
+
 ## DriftlessMap 2.0.0rc14
 
 Release-candidate fix, 28 October 2026.
