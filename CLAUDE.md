@@ -8,11 +8,11 @@ or important workflows change.
 
 ## Project identity
 
-- Current stable release: DriftlessMap 1.6.1. `main` carries DriftlessMap 2.0,
-  published as the release candidate 2.0.0rc1 (after the 2.0.0aN previews).
-  Fixes before the final release become 2.0.0rcN (currently 2.0.0rc16). Plain 2.0.0 is reserved for
-  the release that passes the gates in `release_validation.md`. Never give V2
-  work 1.x numbers. A published GitHub release runs `release.yml` (PyPI, trusted
+- Current stable release: DriftlessMap 2.0.0 (29 October 2026, after the
+  2.0.0aN previews and 2.0.0rc1-rc16). The owner released it with the
+  `release_validation.md` gates still pending (recorded there as waived); keep
+  recording evidence for them. Later fixes become 2.0.N, features 2.N.0.
+  Never give V2 work 1.x numbers. A published GitHub release runs `release.yml` (PyPI, trusted
   publishing) and `desktop-builds.yml` (Windows ZIP and macOS DMG attached to
   the release).
 - Desktop application for histology registration, atlas mapping, probe

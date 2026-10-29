@@ -1,12 +1,14 @@
 ## Automatic Section Matching and Landmark Proposal
 
-DriftlessMap 1.6 can suggest a starting point for registering a histological
+DriftlessMap can suggest a starting point for registering a histological
 section to a volume atlas. It does this in two steps:
 
-- **Atlas > Suggest Atlas Section...** finds the atlas plane, depth, cutting
-  angle and image orientation that best match the section.
-- **Atlas > Propose Landmarks** fits the chosen atlas slice to the section and
-  fills in the Triangulation tool with landmark pairs.
+- **Find atlas section** (Match step; classic interface: **Atlas > Suggest
+  Atlas Section...**) finds the atlas depth, cutting angle and image
+  orientation that best match the section, in the plane you name.
+- **Suggest landmarks** (Register step; classic interface: **Atlas > Propose
+  Landmarks**) fits the chosen atlas slice to the section and fills in the
+  Triangulation tool with landmark pairs.
 
 Both steps only suggest. You confirm the section, review the landmarks, and
 nothing is transferred until you ask for it.
@@ -14,17 +16,33 @@ nothing is transferred until you ask for it.
 This tutorial uses a single sagittal mouse section with the Allen mouse atlas
 at 50 µm. The User Manual has the reference description in
 [Section 8.2](../../MANUAL.md#82-suggest-the-section-and-landmarks-automatically).
+The screenshots were taken in the classic interface of DriftlessMap 1.6; the
+2.0 interface has the same dialogs, reached from the Match and Register steps,
+and the text below describes the 2.0 behaviour.
 
 ### Before you start
 
 The automation works best on:
 
-- one whole section per image, on a plain dark or light background;
-- tissue that is mostly intact, without large tears, folds or missing pieces;
+- one section per image, on a plain dark or light background;
+- an image with a known pixel size (see below);
 - an image cropped to roughly the section, without labels or scale bars.
 
 The section outline is found by thresholding, so debris, bubbles or a second
-section in the image will change the outline that is compared.
+section in the image will change the outline that is compared. Sections
+missing a part (for example the ventral brain) are handled when the pixel size
+is known.
+
+**Registration channels.** For a multichannel image, tick the channels to
+register on in the Section step (for example DAPI only), so a bright tracer
+channel does not change the outline or the match.
+
+**Pixel size.** The section is compared with the atlas at its real size. CZI
+files and most microscope TIFFs record their pixel size, which the Section step
+shows ("Pixel size: 1.634 µm (from the file)"); the scale bar on the histology
+view uses it too. If the file records none, press **Pixel size...** there (or
+**Image > Pixel Size...**) and enter micrometres per pixel; otherwise Find atlas
+section asks for it.
 
 ### 1. Load the atlas and the section
 
@@ -41,38 +59,48 @@ olfactory bulb on the left, while the atlas shows anterior on the right.
 
 ### 2. How the section is found
 
-Choose **Atlas > Suggest Atlas Section...**. The comparison runs in the
-background and takes a few seconds with a 50 µm atlas. It has three stages,
-shown below for the sample section.
+In the Match step, choose the **Section plane** the section was cut in and
+press **Find atlas section** (classic interface: **Atlas > Suggest Atlas
+Section...**, which asks for the plane). The comparison runs in the background
+and takes up to about half a minute. It has three stages, shown below for the
+sample section (the figure was made with the 1.6 method, which scaled outlines
+to fill each slice; stages 2 and 3 now place the section at its real size).
 
 <p align="center">
 <img src="../../image/automation/00_how_it_works.png" width="100%">
 </p>
 
-**Stage 1: the plane, from the outline.** DriftlessMap finds the tissue
-outline (yellow, top left). It then scales every atlas slice of every plane to
-a common size and compares its outline with the section's. Each comparison is
-tried in all eight rotations and flips of the section. The score is the
-overlap of the two outlines (intersection over union; 1.0 means identical). In
-the panels, grey is where both outlines overlap, magenta is section only and
-green is atlas only.
+**Stage 1: the orientation (and, if you are not sure, the plane), from the
+outline.** DriftlessMap finds the tissue outline (yellow, top left). It scales
+atlas slices to a common size and compares their outlines with the section's,
+in all eight rotations and flips of the section. The score is the overlap of
+the two outlines (intersection over union; 1.0 means identical). In the
+panels, grey is where both outlines overlap, magenta is section only and green
+is atlas only.
 
-The sagittal plane wins clearly: its best outline overlaps 0.79, against 0.62
-for coronal and 0.61 for horizontal. The dialog calls the plane **clear** when
-the winner leads by at least 0.08, **uncertain** when it leads by 0.03 to
-0.08, and **ambiguous** below that. Check the plane yourself whenever it is
-not clear.
+The search stays in the plane you named. Compared without size, a small slice
+of one plane can resemble a whole section of another, so choose **Not sure**
+only when you do not know the plane. Then all three are compared: on the
+sample, sagittal wins clearly (0.79, against 0.62 for coronal and 0.61 for
+horizontal), and the dialog calls the plane **clear** when the winner leads by
+at least 0.08, **uncertain** at 0.03 to 0.08, and **ambiguous** below that.
 
 **Stage 2: the depth, from internal anatomy.** Neighbouring slices have
 nearly the same outline. In the plot, the outline score (green) is almost
 flat over the first millimetre from the midline, so the outline alone cannot
 pick the depth. For every slice in the chosen plane, DriftlessMap therefore
-fits the section outline onto the atlas outline and compares what is inside:
+places the section, at its real size, inside the atlas slice. Tissue shrinks
+and flattens when it is fixed and mounted, so the section may be enlarged by
+0.9-1.5x and stretched in height by 0.8-1.3x. Each point of the section's
+outline is charged its distance to the atlas outline, capped at 180 µm, so a
+cut or torn edge inside the brain costs little; tissue outside the brain is
+penalised. It then compares what is inside:
 
 - the edges in the section against the edges in the atlas template (blue);
 - the edges in the section against the atlas region boundaries (orange).
 
-These three measures are combined into one score (black). For a sagittal
+These three measures (outline fit, template edges, region boundaries) are
+combined into one score (black). For a sagittal
 section only one hemisphere is searched, because the other hemisphere mirrors
 it. On the sample, the combined score peaks 0.15 mm from the midline.
 
@@ -85,8 +113,9 @@ sample, the best match after this search is 0.50 mm lateral, tilted
 ### 3. Choose the section
 
 The dialog lists up to six candidates, best first. Each row shows your section
-on the left and the atlas on the right, together with the depth, the tilt and
-the combined score.
+on the left and the atlas on the right, together with the depth, the tilt, the
+combined score, a **confidence** level and the tissue size relative to the atlas
+(for example "tissue at 78 % of atlas size").
 
 <p align="center">
 <img src="../../image/automation/02_suggestion_dialog.png" width="70%">
@@ -94,9 +123,18 @@ the combined score.
 
 1. Compare the thumbnails and select the candidate that matches best. The
    scores rank candidates within this search; they are not probabilities.
-2. **Hemisphere**: brain outlines are left-right symmetric, so the hemisphere
-   cannot be detected. Choose **Other hemisphere** if the section comes from
-   the other side. The depth, tilt and orientation are mirrored to match.
+   **Confidence** (high, medium or low; hover over a candidate for the
+   reasons) says whether the best one can be trusted: it is the lowest of how
+   well the internal anatomy agrees with the atlas, how narrowly the depth is
+   determined, and, when the pixel size was unknown, at most medium. On low
+   confidence, check carefully or place the section by hand. The thresholds
+   were set on sections cut from the atlas and are not yet checked on real
+   sections with known positions.
+2. **Side**: brain outlines are left-right symmetric, so the side cannot be
+   detected. For sagittal sections choose the **Right** or **Left
+   hemisphere**; for coronal and horizontal sections say where the animal's
+   right side is in your section. The depth, tilt and orientation are mirrored
+   to match.
 3. **Apply the suggested cutting-angle tilt**: leave this on to use the tilt,
    or turn it off to show the untilted slice.
 4. **Rotate/flip the histology to match**: leave this on to orient the image
@@ -118,7 +156,8 @@ hand as usual.
 
 ### 4. Propose landmarks
 
-With the matching atlas slice on screen, choose **Atlas > Propose Landmarks**.
+With the matching atlas slice on screen, press **Suggest landmarks** in the
+Register step (classic interface: **Atlas > Propose Landmarks**).
 If there are landmarks already, DriftlessMap asks before replacing them.
 Remove any transform overlay first.
 
@@ -208,13 +247,18 @@ before using the registration for quantitative work.
 
 ### When the suggestions go wrong
 
-- **The plane is wrong or marked ambiguous.** Damaged, partial or oddly
-  shaped sections can outline-match the wrong plane. Choose the plane
-  yourself, set the slice by hand, and use **Propose Landmarks** from there.
-- **The depth is off.** Try the other candidates in the dialog. Weak or
-  uneven staining gives the internal-anatomy score less to work with.
+- **The plane is wrong.** Name the plane instead of **Not sure**; outlines
+  compared without size confuse planes.
+- **The depth is off.** Check the pixel size in the Section step first: a
+  wrong or missing size makes partial sections hard to place. Try the other
+  candidates in the dialog. Weak or uneven staining gives the internal-anatomy
+  score less to work with; low confidence warns about this. Sections shrunk by
+  more than about a third, or strongly distorted, may need placing by hand.
 - **The tilt looks wrong.** Apply the suggestion without the tilt, then set
   the tilt by hand. Only tilts within ±6° are searched.
+- **The section is placed in the wrong part of the slice.** Tissue outside
+  the brain, debris or a second section changes the outline: crop the image
+  (Section step, Crop to lasso) and try again.
 - **The landmarks are badly placed.** This usually means the atlas slice
   does not match the section. Fix the slice first, then propose again.
 - **Few or no landmarks are proposed.** Points that land off the tissue are

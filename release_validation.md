@@ -1,10 +1,24 @@
 # DriftlessMap 2.0 release validation
 
-Release candidate: **2.0.0rc1**, 28 October 2026 (PyPI pre-release and GitHub
-pre-release with Windows and macOS builds). Stable release: **1.6.1**.
-Passing automated tests does not satisfy the native-installation or user-evaluation
-gates. Keep release-candidate versions (2.0.0rcN) until every required gate has
-recorded evidence; then release 2.0.0.
+Stable release: **2.0.0**, 29 October 2026 (PyPI, and a GitHub release with
+Windows and macOS builds), after release candidates 2.0.0rc1 (published) to
+2.0.0rc16. Passing automated tests does not satisfy the native-installation or
+user-evaluation gates.
+
+## Gates waived for 2.0.0
+
+On 29 October 2026 the project owner chose to release 2.0.0 while every gate in
+"Remaining gates for stable 2.0" below was still pending, after being told which
+ones lacked evidence. No installer was tried on a clean machine (the only
+Windows build tried, 2.0.0rc1, could not save; the cause was fixed in rc7 but not
+retried on Windows), no real 1.x/HERBS project or real-data numerical comparison
+was recorded, and no performance or user evaluation was done. These gates are
+**waived, not passed**: record evidence for them against 2.0.x as it is
+gathered, and fix what they find in 2.0.N releases.
+
+Recorded 2.0.0 automated result (macOS arm64, Python 3.13.9): 412 tests run,
+410 passed, 2 skipped; ruff, mypy, UI parsing and guide equality passed; CI on
+Python 3.10-3.14 passed for the release commit.
 
 ## Correctness checks added in a26
 

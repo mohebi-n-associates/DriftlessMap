@@ -3,6 +3,31 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.0.0
+
+Stable release, 29 October 2026.
+
+DriftlessMap 2.0 brings the redesigned interface, which opens by default and
+guides each section through Project, Section, Match, Register, Annotate and
+Results. It reads multichannel microscopy directly (up to 16 channels, TIFF
+hyperstacks and series) and registers on explicitly chosen channels. It suggests
+the matching atlas section at the section's real size, so sections missing a part
+are placed where they belong, with a confidence level for each candidate, and
+proposes starting landmarks. It records human review of each registration and
+what every result was mapped with, and offers undo for mapping and building.
+Optical fibers and microprisms are reconstructed with probes in one Implants
+list, and Results > Export all results writes everything into one folder. The
+histology and atlas views show scale bars, and TIFF pixel sizes are read from the
+file. Projects reopen where you left off, and projects from 1.6.1 open unchanged.
+
+This release combines release candidates 2.0.0rc1 to 2.0.0rc16, listed below.
+Install with `pip install driftlessmap`, or download the Windows ZIP or macOS DMG
+from the 2.0.0 release on GitHub. The classic interface remains available with
+`--classic`. Projects saved by 2.0 use project schema 3, which 1.6.1 and earlier
+cannot open: keep a copy of important 1.x projects. The installers and real-data
+migration have not yet been validated on clean machines (see
+`release_validation.md`); please report problems on GitHub.
+
 ## DriftlessMap 2.0.0rc16
 
 Release-candidate fix, 29 October 2026.
