@@ -1,6 +1,6 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 2.0.0rc14**, the release candidate of
+This manual applies to **DriftlessMap 2.0.0rc15**, the release candidate of
 DriftlessMap 2.0. The current stable release is 1.6.1; `pip install driftlessmap`
 keeps installing 1.6.1 until 2.0.0 is released, and Section 2 explains how to
 install the release candidate.
@@ -110,7 +110,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-DriftlessMap 2.0.0rc14 requires:
+DriftlessMap 2.0.0rc15 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -416,7 +416,7 @@ its controls to the right.
 
 | Tool | Purpose and important controls |
 | --- | --- |
-| Ruler | Two-point length measurement; color and line width. |
+| Ruler | Two-point length measurement (um when the pixel size is known, see 7.1); color and line width. |
 | Pencil | Draw an open line or closed area; color, width, and path type. |
 | Eraser | Delete points or erase within the current editable layer; color and radius. |
 | Polygon Lasso | Select an inside or outside region for cropping or deletion. |
@@ -741,6 +741,20 @@ Use **File > Load Image** or the histology-image toolbar button.
 | JPEG `.jpg`, `.jpeg` | Loaded as 8-bit RGB. |
 | PNG `.png` | Loaded as 8-bit RGB. |
 | BMP `.bmp` | Loaded as 8-bit RGB. |
+
+**Pixel size and scale bars.** The histology view and the atlas views show a
+scale bar in the bottom-right corner that keeps a round length (1, 2 or 5 x
+10^n um) as you zoom. The atlas bar uses the atlas voxel size; a slice atlas
+shows one once its width is registered. The histology bar uses the image's
+pixel size: CZI files record it, and TIFF files when they carry OME
+`PhysicalSizeX`, ImageJ calibration (for example "micron") or resolution in
+centimetres. Resolution in inches is used only when finer than 20 um, because
+editors write 72-600 dpi regardless of the image; a resolution without a unit
+is ignored. When the file records no size, use **Image > Pixel Size...** (2.0
+interface: Section step, **Pixel size...**) to enter micrometres per pixel of
+the full-resolution image; the entry is saved in the project, and the last
+value you typed is offered for the next image. **Use the file's value** returns
+to the recorded size. The ruler measures in um whenever a pixel size is known.
 
 DriftlessMap supports up to 16 non-RGB image channels, kept at their native 8-
 or 16-bit depth. Images with more channels are refused rather than truncated.

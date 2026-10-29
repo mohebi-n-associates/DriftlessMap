@@ -190,6 +190,47 @@ if __name__ == "__main__":
     unittest.main()
 
 
+class PixelSizeTests(unittest.TestCase):
+    def size_of(self, data=None, **kwargs):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "size.tif"
+            tifffile.imwrite(path, np.zeros((6, 7), np.uint8) if data is None else data,
+                             **kwargs)
+            with tifffile.TiffFile(path) as tiff_file:
+                direct = image_reader.tiff_pixel_size_um(tiff_file)
+            self.assertEqual(image_reader.TIFFReader(path).scaling_val, direct)
+            return direct
+
+    def test_imagej_resolution_with_micron_unit(self):
+        # As ImageJ writes it: pixels per micron, unit "none", unit in metadata.
+        size = self.size_of(imagej=True, resolution=(1 / 1.634, 1 / 1.634),
+                            metadata={"unit": "micron"})
+        self.assertAlmostEqual(size, 1.634, places=4)
+
+    def test_ome_physical_size_in_nanometres(self):
+        size = self.size_of(ome=True, metadata={"PhysicalSizeX": 650,
+                                                "PhysicalSizeXUnit": "nm"})
+        self.assertAlmostEqual(size, 0.65)
+
+    def test_centimetre_resolution(self):
+        size = self.size_of(resolution=(20000, 20000), resolutionunit="CENTIMETER")
+        self.assertAlmostEqual(size, 0.5)
+
+    def test_default_dpi_and_missing_tags_are_not_a_pixel_size(self):
+        self.assertIsNone(self.size_of(resolution=(72, 72), resolutionunit="INCH"))
+        self.assertIsNone(self.size_of(resolution=(300, 300), resolutionunit="INCH"))
+        self.assertIsNone(self.size_of(resolution=(2, 2), resolutionunit="NONE"))
+        self.assertIsNone(self.size_of())
+        # A slide scanner at 2400 dpi records 10.6 um.
+        self.assertAlmostEqual(
+            self.size_of(resolution=(2400, 2400), resolutionunit="INCH"), 25400 / 2400)
+
+    def test_valid_pixel_size_rejects_nonsense(self):
+        for value in (None, "x", 0, -1, float("nan"), float("inf"), 1e9):
+            self.assertIsNone(image_reader.valid_pixel_size(value))
+        self.assertEqual(image_reader.valid_pixel_size("0.5"), 0.5)
+
+
 class TiffLayoutTests(unittest.TestCase):
     def write(self, folder, name, data, **kwargs):
         path = Path(folder) / name

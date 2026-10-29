@@ -4,6 +4,7 @@ from PyQt6.QtCore import QObject, Qt, pyqtSignal
 from PyQt6.QtGui import QPainter, QTransform
 from .coordinate_validation import coordinates_in_bounds
 from .movable_points import TriangulationPoints
+from .scale_bar import ScaleBar
 
 
 def image_position_in_bounds(position, image):
@@ -94,6 +95,7 @@ class SliceStacks(pg.GraphicsLayoutWidget):
         self.vb.setAspectLocked()
         self.vb.invertY(True)
         self.vb.setAcceptHoverEvents(True)
+        self.scale_bar = ScaleBar(self.vb)
 
         # self.img = SliceStack()
         self.img = ClickableSlice()

@@ -311,6 +311,8 @@ border-color: rgb(75, 78, 84);</string>
     <addaction name="actionProcess_Image"/>
     <addaction name="actionCut"/>
     <addaction name="actionReset_Image"/>
+    <addaction name="separator"/>
+    <addaction name="actionPixel_Size"/>
    </widget>
    <widget class="QMenu" name="menuAtlas">
     <property name="styleSheet">
@@ -550,6 +552,11 @@ selection-background-color: rgb(50, 50, 50);</string>
   <action name="actionProcess_Image">
    <property name="text">
     <string>Process</string>
+   </property>
+  </action>
+  <action name="actionPixel_Size">
+   <property name="text">
+    <string>Pixel Size...</string>
    </property>
   </action>
   <action name="actionReset_Image">

@@ -10,7 +10,7 @@ or important workflows change.
 
 - Current stable release: DriftlessMap 1.6.1. `main` carries DriftlessMap 2.0,
   published as the release candidate 2.0.0rc1 (after the 2.0.0aN previews).
-  Fixes before the final release become 2.0.0rcN (currently 2.0.0rc14). Plain 2.0.0 is reserved for
+  Fixes before the final release become 2.0.0rcN (currently 2.0.0rc15). Plain 2.0.0 is reserved for
   the release that passes the gates in `release_validation.md`. Never give V2
   work 1.x numbers. A published GitHub release runs `release.yml` (PyPI, trusted
   publishing) and `desktop-builds.yml` (Windows ZIP and macOS DMG attached to
@@ -56,6 +56,14 @@ or important workflows change.
   plane); `DriftlessMap.select_image_planes` re-reads the section.
   Pyramidal single-plane TIFFs (`has_levels`) are read at a stored level
   chosen by the Scale slider, recorded through the saved `image_scale`. `czi_reader.py` handles optional CZI input.
+  Pixel size: readers set `scaling_val` (um per full-resolution pixel; TIFF via
+  `tiff_pixel_size_um`: OME, ImageJ unit, centimetre tags, inch only below
+  20 um; `valid_pixel_size` bounds it). `ImageView.pixel_size_um()` divides the
+  file's or user-entered size (`pixel_size_override`, saved as optional
+  `img_ctrl_data["pixel_size_um"]`, `DriftlessMap.ask_pixel_size`,
+  `pixel_size_dialog.py`, Image > Pixel Size) by the read scale; the ruler and
+  `scale_bar.ScaleBar` (histology, atlas views by `vox_size_um`, slice atlas by
+  its calibrated width) use it.
 - `driftlessmap/image_view.py`: image scene/page/channel/LUT state. Channel
   `ImageItem`s (`image_stacks.py`) use `autoDownsample` and additive blending
   for all 16 channels.
