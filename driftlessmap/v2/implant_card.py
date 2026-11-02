@@ -461,8 +461,11 @@ class ImplantCard(Card):
         parts = len(engine.implant_objects(implant.implant_id, built=False))
         built = bool(engine.implant_objects(implant.implant_id, built=True))
         sections = "{} section{}".format(parts, "" if parts == 1 else "s") if parts else ""
+        mapped = len(engine.mapped_section_ids(("fiber", "prism"), implant.implant_id))
         if built:
-            return "built" + (" · {} new to build".format(sections) if parts else "")
+            return "built" + (" · {} new to build".format(sections) if parts else
+                              " from {} section{}".format(mapped, "" if mapped == 1 else "s")
+                              if mapped else "")
         return "{} · not built".format(sections) if parts else "no sections yet"
 
     def _sync_actions(self):

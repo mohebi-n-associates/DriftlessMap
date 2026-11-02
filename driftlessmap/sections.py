@@ -239,6 +239,45 @@ class SectionBook:
         return book, problems
 
 
+def section_pixel_size_um(img_ctrl_data):
+    """Micrometres per pixel of a section's saved working raster, or None."""
+    from .image_reader import valid_pixel_size
+
+    source = img_ctrl_data.get("source_metadata") or {}
+    size = valid_pixel_size(img_ctrl_data.get("pixel_size_um")) or \
+        valid_pixel_size(source.get("scaling_val"))
+    if size is None:
+        return None
+    try:
+        scale = float(img_ctrl_data.get("image_scale") or source.get("image_scale") or 1.0)
+    except (TypeError, ValueError):
+        scale = 1.0
+    return size / scale if np.isfinite(scale) and scale > 0 else size
+
+
+def write_section_image(path, raster, channel_names=(), pixel_um=None):
+    """Write a section's working raster as a lossless TIFF (channels first,
+    ImageJ hyperstack where ImageJ supports the type), with its channel names
+    and pixel size."""
+    import tifffile
+
+    raster = np.asarray(raster)
+    data = raster if raster.ndim == 2 else np.moveaxis(raster, -1, 0)
+    axes = "YX" if raster.ndim == 2 else "CYX"
+    resolution = None if pixel_um is None else (1.0 / pixel_um, 1.0 / pixel_um)
+    if data.dtype in (np.uint8, np.uint16, np.float32):
+        metadata = {"axes": axes, "unit": "um"}
+        names = [str(name) for name in channel_names]
+        if axes == "CYX" and len(names) == data.shape[0]:
+            metadata["Labels"] = names
+        tifffile.imwrite(path, data, imagej=True, metadata=metadata, resolution=resolution,
+                         compression="zlib")
+    else:
+        tifffile.imwrite(path, data, metadata={"axes": axes}, resolution=resolution,
+                         resolutionunit="MICROMETER" if resolution else None,
+                         compression="zlib")
+
+
 def _stored_problem(item, active_id, seen):
     """Why a saved stored section cannot be used, or None."""
     if not isinstance(item, dict):

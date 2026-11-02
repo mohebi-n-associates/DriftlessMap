@@ -92,6 +92,37 @@ class SectionsMixin:
                                "{}".format(len(problems), "; ".join(problems)),
                                self.reminder_color)
 
+    def section_name(self, section_id):
+        entry = self.sections.entry(section_id)
+        return entry.name if entry is not None else "a section without a stored image"
+
+    def section_position(self):
+        """(number, count, name) of the open section."""
+        book = self.sync_sections()
+        ids = [entry.section_id for entry in book.entries()]
+        return ids.index(book.active_id) + 1, len(ids), book.entry(book.active_id).name
+
+    def object_section_names(self, index):
+        """Names of the sections an object's mapped marks came from."""
+        names = []
+        for unit, _revision in self.object_ctrl.obj_derivation[index]:
+            record = self.mapping_ledger.by_unit(unit)
+            if record is not None:
+                name = self.section_name(record.section_id)
+                if name not in names:
+                    names.append(name)
+        return names
+
+    def mapped_section_ids(self, kind=None, owner=None):
+        """Sections with mapping records (of ``kind`` and ``owner``: a probe
+        name or an implant id), in section order."""
+        ids = {r.section_id for r in self.mapping_ledger.records()
+               if (kind is None or r.kind in (kind if isinstance(kind, tuple) else (kind,)))
+               and (owner is None or r.probe == owner)}
+        order = [entry.section_id for entry in self.sections.entries()]
+        return sorted(ids, key=lambda sid: (order.index(sid) if sid in order else len(order),
+                                            sid))
+
     def sections_without_image(self):
         """Sections with mapping records but no stored section: mapped before
         projects kept every section, or removed with their results kept."""
@@ -139,6 +170,82 @@ class SectionsMixin:
             return
         self.sections.put_away(*stored)
         self.sections.add(self.section_id, self._section_default_name())
+
+    # ------------------------------------------------------------- exporting
+    def export_sections(self, folder):
+        """Write each section's working image, landmarks and placement into
+        ``folder`` (Export all results). Returns (paths, notes)."""
+        import csv
+        import json
+
+        from .project_io import object_file_names
+        from .sections import section_pixel_size_um, write_section_image
+
+        self.sync_sections()
+        payload = self.project_payload()
+        sections = []
+        for entry in self.sections.entries():
+            state = section_state(payload) if entry.section_id == self.sections.active_id \
+                else entry.state
+            if state and state.get("img_ctrl_data") is not None:
+                sections.append((entry, state))
+        if not sections:
+            return [], []
+        os.makedirs(folder, exist_ok=True)
+        paths, notes, index = [], [], []
+        def stem_of(name):
+            root, extension = os.path.splitext(name or "section")
+            images = (".tif", ".tiff", ".png", ".jpg", ".jpeg", ".bmp", ".czi")
+            return root if extension.lower() in images and root else (name or "section")
+
+        stems = object_file_names([stem_of(entry.name) for entry, _state in sections])
+        for (entry, state), stem in zip(sections, stems):
+            image = state["img_ctrl_data"]
+            source = image.get("source_metadata") or {}
+            pixel_um = section_pixel_size_um(image)
+            record = {"name": entry.name, "section_id": entry.section_id,
+                      "open": entry.section_id == self.sections.active_id,
+                      "pixel_size_um": pixel_um,
+                      "channels": [str(n) for n in source.get("channel_name") or []]}
+            raster_path = os.path.join(folder, stem + ".tif")
+            try:
+                write_section_image(raster_path, image["current_img"], record["channels"],
+                                    pixel_um)
+            except (OSError, ValueError, TypeError) as exc:
+                notes.append("The image of {} was not written: {}".format(entry.name, exc))
+            else:
+                paths.append(raster_path)
+                record["image"] = os.path.basename(raster_path)
+            setting = state.get("setting_data") or {}
+            pairs = list(zip(setting.get("atlas_tri_inside_data") or [],
+                             setting.get("histo_tri_inside_data") or []))
+            if pairs:
+                landmark_path = os.path.join(folder, stem + "_landmarks.csv")
+                with open(landmark_path, "w", newline="") as stream:
+                    writer = csv.writer(stream)
+                    writer.writerow(["pair", "atlas_x", "atlas_y", "section_x", "section_y"])
+                    for number, (atlas, section) in enumerate(pairs, start=1):
+                        writer.writerow([number, *atlas[:2], *section[:2]])
+                paths.append(landmark_path)
+                record["landmarks"] = os.path.basename(landmark_path)
+            control = state.get("atlas_control") or {}
+            if "atlas_display" in control:
+                plane = control["atlas_display"]
+                record["atlas_plane"] = plane
+                record["atlas_page"] = control.get(
+                    {"coronal": "coronal_index", "sagittal": "sagittal_index",
+                     "horizontal": "horizontal_index"}.get(plane))
+                record["atlas_tilt_deg"] = control.get("slice_rotation")
+            reference = (state.get("histology_provenance") or {}).get("reference") or {}
+            record["source"] = reference.get("absolute_path") or state.get("img_path")
+            record["source_sha256"] = reference.get("sha256")
+            index.append(record)
+        index_path = os.path.join(folder, "sections.json")
+        with open(index_path, "w") as stream:
+            json.dump(index, stream, indent=2, default=lambda value: (
+                value.tolist() if hasattr(value, "tolist") else str(value)))
+        paths.append(index_path)
+        return paths, notes
 
     # -------------------------------------------------------------- saving
     def _stored_section_provenance(self, entry, project_path):

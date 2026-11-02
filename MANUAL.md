@@ -497,7 +497,7 @@ What each step does:
 
 | Step | Main actions |
 | --- | --- |
-| Project | Load atlas, load or replace the section, open, save, save a portable copy, atlas download and slice-atlas tools |
+| Project | Load atlas; the project's **Sections** (add, open, rename, order, remove; Section 7.7); open, save, save a portable copy; atlas download and slice-atlas tools |
 | Section | Per-channel name, colour, visibility and display range; brightness, contrast, gamma and Auto (ImageJ-style, saturating 0.35% of samples) for the channels ticked under **Adjust** (those on screen unless you choose; Section 7.4); **Register** ticks that choose the registration channels, with a preview of the registration input; the **pixel size** (from the file, or entered with **Pixel size...**), used by the scale bar, the ruler and Find atlas section; rotation, flips, crop and clean-up |
 | Match | Find atlas section in the chosen **Section plane** with the chosen channels, at the section's real size; for sagittal pages the hemisphere and distance from the midline, with **Other hemisphere**; the plane, depth and tilt controls of the 1.x Atlasing Controller |
 | Register | Suggest landmarks; add, move and delete pairs; a list of pairs marked Outline, Internal, Edited or Manual; mesh check; **Mark review complete**; warp preview in either direction |
@@ -873,6 +873,43 @@ press Delete/Backspace.
 
 Use **Image > Reset** to discard processed-image changes and return to the
 loaded image state.
+
+### 7.7 Several sections in one project
+
+A project keeps every section you load. **Add section…** (Project step;
+**File > Load Image** in the classic interface) loads an image as a new section
+and keeps the open one. Each section has its own image (after rotations, flips
+and crops), display and registration channels, pixel size, landmarks and mesh,
+review, the atlas plane, page and tilt it was matched to, its marks and layers,
+and its unmapped implant outlines. The atlas, objects, mapping records,
+implants and probes belong to the project and are shared by all sections.
+
+The **Sections** card in the Project step lists the sections in order with
+their plane and page, landmark pairs, review state and what was mapped from
+them; the open one is marked. **Open** (or a double-click) switches to the
+selected section exactly as it was left; its mappings are current again, so
+**Edit marks**, **Update mapping** and mapping once more (which replaces that
+section's earlier part, not the other sections') work as before. Undo history
+is cleared when you switch. **Rename…** and **Move up/down** change only the
+list. **Remove…** deletes a section's image, landmarks and marks; when
+something was mapped from it, you choose whether its mapped results (and the
+parts and built objects made from them) are kept or removed. In the classic
+interface, **File > Sections…** does the same.
+
+Implants, probes and other objects are built from the mapped parts of all
+sections. The step list shows "section 2 of 3", Annotate names the other
+sections with mappings, the Implants list says how many sections an implant
+was built from, and each object's tooltip names the sections its parts came
+from. Projects saved before 2.4 open as one section; results mapped from their
+earlier sections are kept and listed as sections without a stored image.
+
+Every section's image is saved in the project, so a project with several large
+sections is correspondingly larger (two sections of 276 MB and 6 MB: 162 MB).
+When a section is opened, DriftlessMap looks for its original file by checksum,
+also next to the project if the folder moved; if the file is missing or
+changed, it opens the section's saved image. A portable copy packs every
+section's original file. Sections that are not open are kept in temporary
+memory-mapped files rather than in memory.
 
 ## 8. Registering histology to an atlas
 
@@ -1616,6 +1653,7 @@ folder there, named after the project and the date and time, containing:
 | `objects/` | Every built object as `.dmapobj` (fibers, prisms, probes, cells, expression, contours, drawings) |
 | `probes/` | Each built probe's localisation CSVs (contacts, labeled track, trajectory, regions) |
 | `implants.csv` | The implant table: one row per built fiber, prism and probe |
+| `sections/` | Every section's working image as a lossless TIFF (channels first, with channel names and pixel size), its landmark pairs as CSV, and `sections.json` with each section's atlas plane, page and tilt, pixel size, channels and original source |
 | `layers/` | Every layer as `.dmaplayer` (image layers add a `.jpg` preview) |
 
 Items that do not exist are skipped. Unbuilt parts are only in the project
@@ -1822,7 +1860,7 @@ changes the active atlas type.
 
 | Extension | Payload | Portability and dependencies |
 | --- | --- | --- |
-| `.dmap` | Complete working project state. | Embeds the active histology raster and verifies linked atlas/source data by checksum. A portable save can also embed the original histology source. |
+| `.dmap` | Complete working project state, with every section (project schema 4). | Embeds every section's working raster and verifies linked atlas/source data by checksum. A portable save also embeds each section's original source. 2.3 and earlier cannot open schema-4 projects. |
 | `.dmaplayer` | One 2D layer. | Must match the target image dimensions and required layer metadata. |
 | `.dmapobj` | One object or merged object. | Load an appropriate atlas first. Current merged probes embed self-contained reconstruction metadata. |
 | `.dmapslice` | Calibrated 2D atlas slice. | Contains image, plane, physical dimensions, distance, and Bregma point. |

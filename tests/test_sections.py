@@ -457,6 +457,53 @@ class SectionPersistenceTests(SectionEngineTests):
             self.assertIn("do not belong", damaged.statusbar.currentMessage())
 
     @isolated_gui_test
+    def test_export_all_results_writes_every_section_image_and_landmarks(self):
+        import csv
+        import json
+
+        import tifffile
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window, _fiber, first_id, raster = self.two_section_project(root)
+            second_raster = np.array(window.image_view.current_img)
+            out = root / "results"
+            paths, notes = window.export_all_results(str(out))
+            sections = out / "sections"
+            index = json.loads((sections / "sections.json").read_text())
+            self.assertEqual([r["name"] for r in index], ["rostral", "pfc-2.png"])
+            self.assertEqual(index[0]["section_id"], first_id)
+            self.assertEqual(index[0]["atlas_plane"], "coronal")
+            self.assertEqual(index[0]["atlas_page"], 12)
+            self.assertTrue(index[1]["open"])
+            for record, expected in zip(index, (raster, second_raster)):
+                written = tifffile.imread(str(sections / record["image"]))
+                np.testing.assert_array_equal(np.moveaxis(written, 0, -1), expected)
+            with open(sections / index[0]["landmarks"]) as stream:
+                rows = list(csv.DictReader(stream))
+            self.assertEqual(len(rows), 3)
+            self.assertEqual(float(rows[0]["section_x"]), 2.0)
+            self.assertIn(str(sections / "sections.json"), paths)
+
+    @isolated_gui_test
+    def test_the_classic_sections_dialog_lists_and_opens_sections(self):
+        from driftlessmap.sections_dialog import SectionsDialog
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window, _fiber, first_id, raster = self.two_section_project(root)
+            self.assertIn(window.actionSections, window.menuFile.actions())
+            dialog = SectionsDialog(window)
+            self.assertEqual(dialog.list.count(), 2)
+            self.assertIn("(open)", dialog.list.item(1).text())
+            dialog.list.setCurrentRow(0)
+            dialog.open_selected()
+            self.assertEqual(window.section_id, first_id)
+            np.testing.assert_array_equal(window.image_view.current_img, raster)
+            self.assertIn("(open)", dialog.list.item(0).text())
+            dialog.close()
+
+    @isolated_gui_test
     def test_the_change_digest_covers_stored_sections_without_rereading_them(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

@@ -324,7 +324,10 @@ class ImplantEngineTests(unittest.TestCase):
                              len(window.layer_ctrl.layer_link))
             self.assertEqual([n for n in names if n not in layers],
                              ["implants.csv", "implants.dmap",
-                              str(Path("objects") / "Prism A.dmapobj")])
+                              str(Path("objects") / "Prism A.dmapobj"),
+                              # The section the results were mapped from.
+                              str(Path("sections") / "section.tif"),
+                              str(Path("sections") / "sections.json")])
             self.assertEqual(notes, [])
             self.assertEqual(window.current_project_path, str(project))
             copy, error = load_driftlessmap_file(out / "implants.dmap", "project")

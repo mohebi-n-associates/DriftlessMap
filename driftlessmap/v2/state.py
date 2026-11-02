@@ -134,6 +134,9 @@ def step_status(engine):
     status["project"] = ("atlas and section loaded" if has_atlas and has_image
                          else "atlas loaded" if has_atlas
                          else "section loaded" if has_image else "nothing loaded")
+    number, count, name = engine.section_position()
+    if count > 1:
+        status["project"] = "section {} of {}: {}".format(number, count, name)
     if not has_image:
         status["section"] = "no image"
     elif engine.registration_input is None:
