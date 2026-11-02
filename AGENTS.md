@@ -228,7 +228,8 @@ or important workflows change.
   `project_io.layer_points` / `plot_points`, so an empty layer (formerly
   saved as `[None, None]`) saves and reopens.
 - `driftlessmap/sections.py` (GUI-free) and `section_engine.py`: multi-section
-  projects (`multi_section_design.md`; phase 1 of 4, engine only, unreleased).
+  projects (`multi_section_design.md`; phases 1-2 of 4: engine and
+  persistence, unreleased).
   `SECTION_FIELDS` / `section_fields` split the payload into document and
   section fields (`atlas_control` is a section's only with a volume atlas).
   `SectionBook` lists the sections in order; the open one lives in the engine
@@ -240,8 +241,13 @@ or important workflows change.
   the target's fields through `ProjectSnapshot.restore` (rollback on failure)
   with `keep_atlas` (the volume is not re-set) and restores the section's own
   `section_id`; a missing or changed source opens its embedded raster.
-  `remove_section(delete_results=)`. `load_project` resets the book; saving
-  keeps only the open section until phase 2 (schema 4) and says so.
+  `remove_section(delete_results=)`. Saving writes every section
+  (`sections_for_save`, fingerprints and packing off the GUI thread); opening
+  rebuilds the book (`restore_sections`: invalid stored sections are left out
+  and named) and finds a stored section's source through its provenance, or
+  its packed portable source, when it is opened. `sections_index` (cached
+  per-entry digests) is the payload's `sections` for change detection.
+  `sections_without_image` lists mapped sections with no stored section.
 - `driftlessmap/landmarks.py`: `LandmarkModel` owns paired landmark lists,
   topology, the cached registration and label items (the `DriftlessMap`
   attributes of the same names delegate to it), plus `.dmaptri` validation.
@@ -310,9 +316,15 @@ or important workflows change.
 
 - New files are never executable pickle payloads. They are atomic ZIP archives
   containing `manifest.json`, `.npy` arrays, and optional streamed attachments.
-- Archive format version is currently 1. Project payload schema is version 3
+- Archive format version is currently 1. Project payload schema is version 4
   (`project_io.PROJECT_SCHEMA_VERSION`); schema 3 adds `registration_input`,
-  `registration_review` and `mapping_review_state`, and up to 16 channels.
+  `registration_review` and `mapping_review_state`, and up to 16 channels;
+  schema 4 adds `sections`: the open section stays at the top level as before,
+  and `sections.stored` holds every other section's fields (`SECTION_FIELDS`,
+  each with its own embedded working raster and histology provenance), plus
+  `order`, `names`, `active_section_id` and `section_images` (only "embed" is
+  used). Schemas 1-3 open as one section. Portable copies pack stored
+  sections' sources under `portable_sources.sections`.
   The optional `interface_state` (where the user left off) needs no schema
   bump: it is absent in older files and dropped when unusable.
   Schemas 1 and 2 load with Legacy registration input.

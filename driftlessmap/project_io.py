@@ -16,7 +16,7 @@ CELL_COUNT_SLOTS = MAX_CHANNELS + 1
 
 # Project payload schema. 3 adds the registration-input recipe; projects with
 # schema 1 or 2 are read with Legacy registration input.
-PROJECT_SCHEMA_VERSION = 3
+PROJECT_SCHEMA_VERSION = 4
 
 
 def prefingerprint_inputs(atlas_path, histology_path):

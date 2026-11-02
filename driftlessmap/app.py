@@ -8879,15 +8879,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
         ):
             self.print_message("No project can be saved.", self.reminder_color)
             return False
-        if len(self.sync_sections()) > 1:
-            # Until project schema 4 (multi_section_design.md, phase 2) stores
-            # every section, say plainly what a save keeps.
-            self.print_message(
-                "This project has {} sections; this version saves only the open one "
-                "({}) with its image and landmarks. The mapped results of all "
-                "sections are saved.".format(
-                    len(self.sections), self.sections.entry(self.sections.active_id).name),
-                self.reminder_color)
+        self.sync_sections()
         if path is not None:
             file_name = (path, "")
         else:
@@ -8961,11 +8953,27 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
                         )
                         return False
 
+            # Every section that is not open, with its own provenance and,
+            # for a portable copy, its packed source.
+            try:
+                sections, packed_sections, notes, section_states = run_in_background(
+                    self, "Fingerprinting sections...", self.sections_for_save,
+                    project_path, portable)
+            except (OSError, ValueError) as exc:
+                self.print_message("Unable to save the project's sections: {}".format(exc),
+                                   self.error_message_color)
+                return False
+            for note in notes:
+                self.print_message(note + ".", self.reminder_color)
+            if packed_sections:
+                portable_sources = dict(portable_sources or {}, sections=packed_sections)
+
             project_data = self.project_payload()
             project_data.update(saved_at=saved_at, created_at=self.project_created_at,
                                 atlas_provenance=atlas_provenance,
                                 histology_provenance=histology_provenance,
-                                portable_sources=portable_sources, portable=bool(portable_sources))
+                                portable_sources=portable_sources, portable=bool(portable_sources),
+                                sections=sections)
             if (self.current_img_path == self._temporary_histology_source
                     and histology_provenance and histology_provenance.get("reference")):
                 project_data["img_path"] = histology_provenance["reference"]["absolute_path"]
@@ -8984,6 +8992,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
             if as_copy:
                 self.print_message("Project copy saved.", self.normal_color)
                 return True
+            self.sections_saved(section_states)
             self.current_project_path = project_path
             self.atlas_provenance = atlas_provenance
             self.histology_provenance = histology_provenance

@@ -19,6 +19,9 @@ from typing import Optional
 
 import numpy as np
 
+from .mapping_records import is_identifier
+from .state_digest import state_digest
+
 # Project payload keys that belong to one section. ``atlas_control`` (the
 # plane, page and tilt the section is matched to) belongs to the section only
 # with a volume atlas; a slice atlas is the document's (see section_fields).
@@ -39,6 +42,10 @@ SECTION_METADATA = (
 
 # Arrays at least this large are spilled to disk when a section is put away.
 SPILL_BYTES = 1 << 20
+
+# Version of the ``sections`` block of a project payload (project schema 4).
+SECTIONS_SCHEMA_VERSION = 1
+SECTION_IMAGES = ("embed", "link")
 
 
 def section_fields(payload):
@@ -63,10 +70,26 @@ class SectionEntry:
     state: Optional[dict] = None
     metadata: Optional[dict] = None
     summary: dict = field(default_factory=dict)
+    # The packed original source of a section opened from a portable project.
+    portable: Optional[dict] = None
+    _digest: Optional[str] = field(default=None, repr=False)
 
     @property
     def stored(self):
         return self.state is not None
+
+    def digest(self):
+        """Digest of the stored fields, computed once: a stored section does
+        not change until it is opened again."""
+        if self._digest is None:
+            self._digest = state_digest(self.state)
+        return self._digest
+
+    def saved(self, state=None):
+        """The section as written to a project file."""
+        return {"section_id": self.section_id, "name": self.name,
+                "summary": dict(self.summary),
+                "state": self.state if state is None else state}
 
 
 class SectionBook:
@@ -122,6 +145,7 @@ class SectionBook:
         entry = self._entries[self.active_id]
         entry.state, entry.metadata = state, metadata
         entry.summary = dict(summary or {})
+        entry._digest = None
 
     def add(self, section_id, name):
         """Add a new open section after the current one."""
@@ -148,7 +172,8 @@ class SectionBook:
     def opened(self, section_id):
         """The section is installed in the engine: drop its stored fields."""
         entry = self._entries[section_id]
-        entry.state = entry.metadata = None
+        entry.state = entry.metadata = entry.portable = None
+        entry._digest = None
 
     def remove(self, section_id):
         if section_id == self.active_id:
@@ -160,6 +185,88 @@ class SectionBook:
         index = self._order.index(section_id)
         target = max(0, min(len(self._order) - 1, index + step))
         self._order.insert(target, self._order.pop(index))
+
+    def index(self, section_images="embed"):
+        """What the change digest needs: order, names and stored contents."""
+        return {
+            "schema_version": SECTIONS_SCHEMA_VERSION,
+            "active_section_id": self.active_id,
+            "section_images": section_images,
+            "order": list(self._order),
+            "names": {entry.section_id: entry.name for entry in self.entries()},
+            "stored": {entry.section_id: entry.digest()
+                       for entry in self.entries() if entry.stored},
+        }
+
+    @classmethod
+    def from_saved(cls, block, active_id, active_name=None):
+        """The book of a saved ``sections`` block; returns (book, problems).
+
+        Stored sections that cannot be used are left out and named in
+        ``problems``; the open section is always kept.
+        """
+        problems = []
+        book = cls(active_id, active_name)
+        if not isinstance(block, dict):
+            return book, problems
+        if block.get("schema_version") != SECTIONS_SCHEMA_VERSION:
+            problems.append("unknown sections format {!r}".format(block.get("schema_version")))
+            return book, problems
+        names = block.get("names") if isinstance(block.get("names"), dict) else {}
+        if isinstance(names.get(active_id), str):
+            book._entries[active_id].name = names[active_id]
+        stored = {}
+        for item in block.get("stored") or []:
+            reason = _stored_problem(item, active_id, stored)
+            if reason:
+                name = item.get("name") if isinstance(item, dict) else None
+                problems.append("{}: {}".format(name or "a section", reason))
+                continue
+            stored[item["section_id"]] = item
+        order = [sid for sid in block.get("order") or [] if sid in stored or sid == active_id]
+        order += [sid for sid in stored if sid not in order]
+        if active_id not in order:
+            order.insert(0, active_id)
+        book._order = []
+        for section_id in order:
+            if section_id == active_id:
+                book._order.append(active_id)
+                continue
+            item = stored[section_id]
+            entry = SectionEntry(section_id, book.unique_name(item.get("name")),
+                                 summary=dict(item.get("summary") or {}))
+            entry.state = item["state"]
+            book._entries[section_id] = entry
+            book._order.append(section_id)
+        return book, problems
+
+
+def _stored_problem(item, active_id, seen):
+    """Why a saved stored section cannot be used, or None."""
+    if not isinstance(item, dict):
+        return "not a section record"
+    section_id = item.get("section_id")
+    if not is_identifier(section_id):
+        return "invalid section identity"
+    if section_id == active_id or section_id in seen:
+        return "duplicate section identity"
+    state = item.get("state")
+    if not isinstance(state, dict) or state.get("section_id") != section_id:
+        return "its stored fields do not belong to it"
+    image = state.get("img_ctrl_data")
+    if not isinstance(image, dict) or not isinstance(image.get("current_img"), np.ndarray):
+        return "its image is missing"
+    if not isinstance(state.get("setting_data"), dict):
+        return "its registration is missing"
+    if not isinstance(item.get("name", ""), str):
+        return "invalid name"
+    return None
+
+
+def section_images_setting(block):
+    """The saved embed/link setting, defaulting to embed."""
+    value = block.get("section_images") if isinstance(block, dict) else None
+    return value if value in SECTION_IMAGES else "embed"
 
 
 class SpillCache:

@@ -293,5 +293,184 @@ class SectionEngineTests(unittest.TestCase):
             self.assertEqual(window.section_mappings(first_id), [])
 
 
+
+class SectionPersistenceTests(SectionEngineTests):
+    """Saving and opening projects with several sections (project schema 4)."""
+
+    def open_project(self, root, path):
+        from driftlessmap.persistence import load_driftlessmap_file
+
+        payload, error = load_driftlessmap_file(str(path), expected_kind="project")
+        self.assertIsNone(error)
+        window = DriftlessMap()
+        self.windows.append(window)
+        prepared = window.prepare_project_sources(payload, str(path))
+        self.assertIsNotNone(prepared)
+        self.assertTrue(window.load_project(prepared, project_path=str(path)))
+        return window, payload
+
+    def two_section_project(self, root):
+        window = self.window_with_atlas(root)
+        first, second = root / "pfc-1.png", root / "pfc-2.png"
+        self.write_section(first, 200)
+        self.write_section(second, 120)
+        self.load_section(window, first)
+        fiber = window.add_implant("fiber", specs={"diameter_um": 100})
+        window.atlas_view.cpage_ctrl.set_val(12)
+        window.atlas_tri_inside_data[:] = [[1.0, 1.0], [5.0, 1.0], [3.0, 5.0]]
+        window.histo_tri_inside_data[:] = [[2.0, 2.0], [6.0, 2.0], [4.0, 6.0]]
+        self.map_fiber(window, fiber)
+        first_id = window.section_id
+        raster = np.array(window.image_view.current_img)
+        self.load_section(window, second)
+        window.atlas_view.cpage_ctrl.set_val(20)
+        self.map_fiber(window, fiber)
+        window.rename_section(first_id, "rostral")
+        return window, fiber, first_id, raster
+
+    @isolated_gui_test
+    def test_every_section_round_trips_through_a_project(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window, fiber, first_id, raster = self.two_section_project(root)
+            second_id = window.section_id
+            path = root / "two.dmap"
+            self.assertTrue(window.save_project_called(path=str(path)))
+
+            reopened, payload = self.open_project(root, path)
+            self.assertEqual(payload["project_schema_version"], 4)
+            self.assertEqual(len(payload["sections"]["stored"]), 1)
+            self.assertEqual(payload["sections"]["active_section_id"], second_id)
+            self.assertEqual(reopened.section_id, second_id)
+            self.assertEqual(reopened.sections.names(), ["rostral", "pfc-2.png"])
+            self.assertEqual(reopened.atlas_view.current_coronal_index, 20)
+
+            ok, message = reopened.switch_section(first_id)
+            self.assertTrue(ok, message)
+            np.testing.assert_array_equal(reopened.image_view.current_img, raster)
+            self.assertEqual(reopened.atlas_view.current_coronal_index, 12)
+            self.assertEqual(reopened.atlas_tri_inside_data,
+                             [[1.0, 1.0], [5.0, 1.0], [3.0, 5.0]])
+            # Its source was found through its provenance and linked again.
+            self.assertEqual(Path(reopened.current_img_path).resolve(),
+                             (root / "pfc-1.png").resolve())
+            record = reopened.mapping_ledger.get(first_id, "fiber", fiber.implant_id)
+            self.assertEqual(record.status(reopened.section_id,
+                                           reopened.current_registration_fingerprint()),
+                             "current")
+            self.map_fiber(reopened, fiber)
+            self.assertEqual(len(reopened.implant_objects(fiber.implant_id)), 2)
+            self.assertTrue(reopened.build_implant(fiber.implant_id)[0])
+
+            # Saved again with the other section open, both survive.
+            again = root / "again.dmap"
+            self.assertTrue(reopened.save_project_called(path=str(again)))
+            third, payload = self.open_project(root, again)
+            self.assertEqual(third.section_id, first_id)
+            self.assertEqual([e.section_id for e in third.sections.entries()],
+                             [first_id, second_id])
+            self.assertTrue(third.switch_section(second_id)[0])
+            self.assertEqual(third.atlas_view.current_coronal_index, 20)
+
+    @isolated_gui_test
+    def test_moved_changed_and_missing_sources_of_stored_sections(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder) / "study"
+            root.mkdir()
+            window, _fiber, first_id, raster = self.two_section_project(root)
+            path = root / "two.dmap"
+            self.assertTrue(window.save_project_called(path=str(path)))
+
+            # The study folder moved: found again next to the project.
+            moved = Path(folder) / "moved"
+            root.rename(moved)
+            reopened, _payload = self.open_project(moved, moved / "two.dmap")
+            self.assertTrue(reopened.switch_section(first_id)[0])
+            self.assertEqual(Path(reopened.current_img_path).resolve(),
+                             (moved / "pfc-1.png").resolve())
+
+            # Changed bytes do not match the checksum: the saved image opens.
+            self.write_section(moved / "pfc-1.png", 30)
+            reopened, _payload = self.open_project(moved, moved / "two.dmap")
+            ok, message = reopened.switch_section(first_id)
+            self.assertTrue(ok, message)
+            self.assertIn("saved image", message)
+            self.assertIsNone(reopened.current_img_path)
+            np.testing.assert_array_equal(reopened.image_view.current_img, raster)
+
+            # Missing entirely: the same.
+            (moved / "pfc-1.png").unlink()
+            reopened, _payload = self.open_project(moved, moved / "two.dmap")
+            self.assertTrue(reopened.switch_section(first_id)[0])
+            np.testing.assert_array_equal(reopened.image_view.current_img, raster)
+
+    @isolated_gui_test
+    def test_a_portable_project_carries_every_section_source(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder) / "study"
+            root.mkdir()
+            window, _fiber, first_id, raster = self.two_section_project(root)
+            path = Path(folder) / "portable.dmap"
+            self.assertTrue(window.save_project_called(portable=True, path=str(path)))
+            for name in ("pfc-1.png", "pfc-2.png"):
+                (root / name).unlink()
+            reopened, payload = self.open_project(Path(folder), path)
+            self.assertIn(first_id, payload["portable_sources"]["sections"])
+            self.assertTrue(reopened.switch_section(first_id)[0])
+            # The packed source was extracted and verified, not the fallback.
+            self.assertIsNotNone(reopened.current_img_path)
+            self.assertTrue(Path(reopened.current_img_path).is_file())
+            np.testing.assert_array_equal(reopened.image_view.current_img, raster)
+
+    @isolated_gui_test
+    def test_older_projects_open_as_one_section_and_bad_entries_are_left_out(self):
+        from driftlessmap.persistence import save_driftlessmap_file
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window, _fiber, first_id, _raster = self.two_section_project(root)
+            path = root / "two.dmap"
+            self.assertTrue(window.save_project_called(path=str(path)))
+            reopened, payload = self.open_project(root, path)
+
+            # A schema 3 project: no sections block. Its earlier section's
+            # mappings remain, listed as a section without a stored image.
+            legacy = dict(payload, project_schema_version=3)
+            legacy.pop("sections")
+            legacy_path = root / "legacy.dmap"
+            self.assertTrue(save_driftlessmap_file(str(legacy_path), legacy, "project")[0])
+            old, _payload = self.open_project(root, legacy_path)
+            self.assertEqual(len(old.sections), 1)
+            self.assertEqual(old.sections_without_image(), [first_id])
+
+            # A damaged stored section is left out; the project still opens.
+            broken = dict(payload)
+            block = dict(broken["sections"])
+            item = dict(block["stored"][0])
+            item["state"] = dict(item["state"], section_id="not-this-one")
+            block["stored"] = [item]
+            broken["sections"] = block
+            broken_path = root / "broken.dmap"
+            self.assertTrue(save_driftlessmap_file(str(broken_path), broken, "project")[0])
+            damaged, _payload = self.open_project(root, broken_path)
+            self.assertEqual(len(damaged.sections), 1)
+            self.assertIn("do not belong", damaged.statusbar.currentMessage())
+
+    @isolated_gui_test
+    def test_the_change_digest_covers_stored_sections_without_rereading_them(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window, _fiber, first_id, _raster = self.two_section_project(root)
+            index = window.sections_index()
+            self.assertIn(first_id, index["stored"])
+            entry = window.sections.entry(first_id)
+            with patch("driftlessmap.sections.state_digest") as digest:
+                self.assertEqual(window.sections_index(), index)
+                digest.assert_not_called()
+            window.rename_section(first_id, "caudal")
+            self.assertNotEqual(window.sections_index(), index)
+            self.assertIsNotNone(entry._digest)
+
+
 if __name__ == "__main__":
     unittest.main()

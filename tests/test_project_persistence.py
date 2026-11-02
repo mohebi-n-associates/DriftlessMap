@@ -243,7 +243,7 @@ class ProjectPersistenceIntegrationTests(unittest.TestCase):
 
             payload, error = load_driftlessmap_file(project, "project")
             self.assertIsNone(error)
-            self.assertEqual(payload["project_schema_version"], 3)
+            self.assertEqual(payload["project_schema_version"], 4)
             self.assertEqual(payload["registration_input"]["mode"], "channels")
             self.assertEqual(payload["registration_input"]["channels"], [2])
             self.assertEqual(payload["probe_planning"]["site_face"], 2)
