@@ -2,7 +2,8 @@
 
 Stable release: **2.0.0**, 29 October 2026 (PyPI, and a GitHub release with
 Windows and macOS builds), after release candidates 2.0.0rc1 (published) to
-2.0.0rc16. Passing automated tests does not satisfy the native-installation or
+2.0.0rc16. Current fix release: 2.0.1, 2 November 2026; the waiver below
+applies to it as well. Passing automated tests does not satisfy the native-installation or
 user-evaluation gates.
 
 ## Gates waived for 2.0.0

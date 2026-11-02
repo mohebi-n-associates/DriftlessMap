@@ -63,7 +63,7 @@ VIEWS = (
     ("3d", "3D", "The atlas in 3D with objects"),
     ("multi", "Multi-plane", "Coronal, sagittal, horizontal and 3D"),
 )
-PREVIEW_LABEL = "DriftlessMap 2.0 preview (development build of {})".format(__version__)
+WINDOW_LABEL = "DriftlessMap {}".format(__version__)
 
 
 # Events after which the saved-state check runs at the next refresh.
@@ -80,7 +80,7 @@ class V2Window(QMainWindow):
         super().__init__()
         self.settings = settings or QSettings("Mohebi & Associates", "DriftlessMap-V2-preview")
         self.theme = self.settings.value("theme", "dark")
-        self.setWindowTitle(PREVIEW_LABEL)
+        self.setWindowTitle(WINDOW_LABEL)
         self.resize(1480, 920)
         self.setMinimumSize(1100, 700)
 
@@ -145,9 +145,9 @@ class V2Window(QMainWindow):
         brand = QLabel("DriftlessMap")
         brand.setObjectName("CardTitle")
         rail_layout.addWidget(brand)
-        preview = QLabel("2.0 preview")
-        preview.setObjectName("Muted")
-        rail_layout.addWidget(preview)
+        release = QLabel(__version__)
+        release.setObjectName("Muted")
+        rail_layout.addWidget(release)
         rail_layout.addSpacing(10)
         self.rail_group = QButtonGroup(self)
         self.rail_buttons, self.rail_status, self.panels = {}, {}, {}
@@ -981,4 +981,4 @@ class V2Window(QMainWindow):
         self.save_label.style().polish(self.save_label)
         name = os.path.basename(engine.current_project_path) if engine.current_project_path \
             else "Untitled"
-        self.setWindowTitle("{}{} — {}".format(name, " •" if dirty else "", PREVIEW_LABEL))
+        self.setWindowTitle("{}{} — {}".format(name, " •" if dirty else "", WINDOW_LABEL))

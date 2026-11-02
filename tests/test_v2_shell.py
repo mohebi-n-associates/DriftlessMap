@@ -242,6 +242,75 @@ class V2ShellTests(unittest.TestCase):
             self.assertEqual(engine.image_view.image_file.channel_name[0], "Hoechst")
             self.assertEqual(engine.registration_input.channel_names, ("Hoechst", "NeuN"))
 
+    @isolated_gui_test
+    def test_brightness_and_contrast_change_the_adjusted_channels(self):
+        import tifffile
+
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "three.ome.tif"
+            data = np.random.default_rng(4).integers(0, 255, (3, 30, 40), dtype=np.uint8)
+            tifffile.imwrite(path, data, ome=True, metadata={"axes": "CYX"})
+            window = self.make_window(folder)
+            engine = window.engine
+            view = engine.image_view
+            self.assertTrue(engine.load_single_image_file(str(path), ".tif"))
+            window.go_to("section")
+            panel = window.panels["section"]
+            panel.refresh()
+            levels = lambda: [channel_display.channel_levels(view, i) for i in range(3)]  # noqa: E731
+
+            # The controls follow the visible channels: with only the second
+            # channel on screen, the sliders change it and nothing else.
+            self.assertEqual(panel._adjusted, [0, 1, 2])
+            panel._rows[0]["show"].setChecked(False)
+            panel._rows[2]["show"].setChecked(False)
+            self.assertEqual(panel._adjusted, [1])
+            self.assertEqual([row["select"].isChecked() for row in panel._rows],
+                             [False, True, False])
+            before = levels()
+            panel.brightness.setValue(700)
+            after = levels()
+            self.assertEqual(after[0], before[0])
+            self.assertEqual(after[2], before[2])
+            self.assertGreater(after[1][0], before[1][0])
+
+            # Ticking Adjust on several rows changes all of them together.
+            panel._rows[0]["select"].setChecked(True)
+            panel._rows[2]["select"].setChecked(True)
+            self.assertEqual(panel._adjusted, [0, 1, 2])
+            self.assertIn("(hidden)", panel.adjust_title.text())
+            panel.black.setValue(40)
+            self.assertEqual([lv[0] for lv in levels()], [40.0, 40.0, 40.0])
+            panel.gamma.setValue(1.5)
+            self.assertEqual([lv[2] for lv in levels()], [1.5, 1.5, 1.5])
+            # Contrast keeps each channel's own brightness (window centre).
+            centres = [(b + w) / 2 for b, w, _g in levels()]
+            panel.contrast.setValue(800)
+            for (b, w, _g), centre in zip(levels(), centres):
+                self.assertAlmostEqual((b + w) / 2, centre, delta=1.0)
+            panel._auto()
+            for index in range(3):
+                low, high = channel_display.auto_levels(view, index)
+                self.assertEqual(levels()[index][:2], (low, high))
+
+            # Once chosen by hand, Show no longer changes the adjusted set,
+            # and the last adjusted channel cannot be unticked.
+            panel._rows[0]["show"].setChecked(True)
+            self.assertEqual(panel._adjusted, [0, 1, 2])
+            for row in panel._rows:
+                row["select"].setChecked(False)
+            self.assertEqual(panel._adjusted, [2])
+            self.assertTrue(panel._rows[2]["select"].isChecked())
+
+            # Renaming keeps the choice; a new section follows Show again.
+            panel._rows[2]["name"].setText("Tracer")
+            panel._rename(2, "Tracer")
+            panel.refresh()
+            self.assertEqual(panel._adjusted, [2])
+            self.assertTrue(engine.load_single_image_file(str(path), ".tif"))
+            panel.refresh()
+            self.assertEqual(panel._adjusted, panel._visible_channels())
+
 
     @isolated_gui_test
     def test_actions_that_need_data_are_disabled_with_a_reason(self):

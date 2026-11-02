@@ -6,7 +6,6 @@ import numpy as np
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor, QImage, QPixmap
 from PyQt6.QtWidgets import (
-    QButtonGroup,
     QCheckBox,
     QColorDialog,
     QComboBox,
@@ -18,7 +17,6 @@ from PyQt6.QtWidgets import (
     QLineEdit,
     QMenu,
     QMessageBox,
-    QRadioButton,
     QSlider,
     QSpinBox,
     QToolButton,
@@ -86,7 +84,11 @@ class SectionPanel(StepPanel):
         self._rows = []
         self._headers = []
         self._last_channels = None   # restored when leaving Legacy mode
-        self._selected = 0
+        # Channels the brightness/contrast controls act on. They follow the
+        # visible channels until the user ticks Adjust boxes themselves.
+        self._adjusted = [0]
+        self._adjust_follows_show = True
+        self._adjust_image = None
         self._updating = False
 
         self.image_card = self.add(Card("Image"))
@@ -112,18 +114,18 @@ class SectionPanel(StepPanel):
         self._planes_key = None
 
         self.channel_card = self.add(Card(
-            "Channels", "Show: visible on screen. Register: used by automatic "
-            "registration. Select a row to adjust its brightness and contrast."))
+            "Channels", "Adjust: channels the brightness and contrast controls change "
+            "(they follow Show until you tick them; tick several to adjust them "
+            "together). Show: visible on screen. Register: used by automatic "
+            "registration."))
         self.channel_grid_host = QWidget()
         self.channel_grid = QGridLayout(self.channel_grid_host)
         self.channel_grid.setContentsMargins(0, 0, 0, 0)
         self.channel_grid.setHorizontalSpacing(6)
         self.channel_card.add(self.channel_grid_host)
         self.empty_note = self.channel_card.add(hint_label("Load a section to see its channels."))
-        self.select_group = QButtonGroup(self)
-        self.select_group.idClicked.connect(self._select)
 
-        # Brightness and contrast of the selected channel.
+        # Brightness and contrast of the adjusted channels.
         adjust = QWidget()
         grid = QGridLayout(adjust)
         grid.setContentsMargins(0, 4, 0, 0)
@@ -131,24 +133,24 @@ class SectionPanel(StepPanel):
         grid.addWidget(self.adjust_title, 0, 0, 1, 4)
         self.brightness = QSlider(Qt.Orientation.Horizontal)
         self.contrast = QSlider(Qt.Orientation.Horizontal)
-        for slider in (self.brightness, self.contrast):
+        for kind, slider in (("brightness", self.brightness), ("contrast", self.contrast)):
             slider.setRange(0, 1000)
-            slider.valueChanged.connect(self._bc_changed)
+            slider.valueChanged.connect(lambda _value, k=kind: self._bc_changed(k))
         grid.addWidget(QLabel("Brightness"), 1, 0)
         grid.addWidget(self.brightness, 1, 1, 1, 3)
         grid.addWidget(QLabel("Contrast"), 2, 0)
         grid.addWidget(self.contrast, 2, 1, 1, 3)
         self.black = QSpinBox()
         self.white = QSpinBox()
-        for box in (self.black, self.white):
+        for kind, box in (("black", self.black), ("white", self.white)):
             box.setRange(0, 65535)
             box.setKeyboardTracking(False)
-            box.valueChanged.connect(self._range_changed)
+            box.valueChanged.connect(lambda _value, k=kind: self._range_changed(k))
         self.gamma = QDoubleSpinBox()
         self.gamma.setRange(0.01, 16.0)
         self.gamma.setSingleStep(0.05)
         self.gamma.setKeyboardTracking(False)
-        self.gamma.valueChanged.connect(self._range_changed)
+        self.gamma.valueChanged.connect(lambda _value: self._range_changed("gamma"))
         grid.addWidget(QLabel("Min"), 3, 0)
         grid.addWidget(self.black, 3, 1)
         grid.addWidget(QLabel("Max"), 3, 2)
@@ -162,8 +164,10 @@ class SectionPanel(StepPanel):
         needs_image = self.shell.needs_image
         self.channel_card.add_row(
             self.gate(button("Auto", self._auto,
-                             tooltip="Saturate 0.35% of samples, as ImageJ Auto"), needs_image),
-            self.gate(button("Reset", self._reset, tooltip="Full data range, gamma 1"),
+                             tooltip="Saturate 0.35% of samples of each adjusted channel, "
+                                     "as ImageJ Auto"), needs_image),
+            self.gate(button("Reset", self._reset,
+                             tooltip="Full data range, gamma 1, for each adjusted channel"),
                       needs_image),
             self.gate(button("Auto all", self._auto_all), needs_image), None)
         self.channel_card.add(Disclosure("Curve editor and histogram", view.curve_widget))
@@ -255,8 +259,6 @@ class SectionPanel(StepPanel):
             widget.deleteLater()
         self._rows = []
         self._headers = []
-        for button_ in list(self.select_group.buttons()):
-            self.select_group.removeButton(button_)
         count = display.channel_count(view)
         self.empty_note.setVisible(count == 0)
         self.adjust.setVisible(count > 0)
@@ -264,16 +266,18 @@ class SectionPanel(StepPanel):
             return
         names = list(getattr(view.image_file, "channel_name", []) or [])
         names += ["Channel {}".format(i + 1) for i in range(len(names), count)]
-        for column, text in enumerate(("", "Name", "Colour", "Show", "Register", "Range")):
+        for column, text in enumerate(("Adjust", "Name", "Colour", "Show", "Register",
+                                       "Range")):
             header = QLabel(text)
             header.setObjectName("Muted")
             self.channel_grid.addWidget(header, 0, column)
             self._headers.append(header)
         for index in range(count):
             row = {}
-            select = QRadioButton()
-            select.setToolTip("Adjust this channel")
-            self.select_group.addButton(select, index)
+            select = QCheckBox()
+            select.setToolTip("Brightness and contrast change this channel; tick several "
+                              "to adjust them together")
+            select.toggled.connect(lambda checked, i=index: self._adjust_toggled(i, checked))
             name = QLineEdit(names[index])
             name.setToolTip("Display name; the original channel index is kept")
             name.editingFinished.connect(lambda i=index, w=name: self._rename(i, w.text()))
@@ -298,19 +302,31 @@ class SectionPanel(StepPanel):
             row.update(select=select, name=name, swatch=swatch, show=show,
                        register=register, span=span)
             self._rows.append(row)
-        self._selected = min(self._selected, count - 1)
-        self.select_group.button(self._selected).setChecked(True)
+        if id(view.image_file) != self._adjust_image:
+            # A new section: adjust what is on screen again.
+            self._adjust_image = id(view.image_file)
+            self._adjust_follows_show = True
+        if self._adjust_follows_show:
+            self._adjusted = self._visible_channels()
+        else:
+            self._adjusted = [i for i in self._adjusted if i < count] or [0]
         self._sync_rows()
         self._sync_adjust()
 
     def _channel_rows(self):
         return self._rows
 
+    def _visible_channels(self):
+        view = self.engine.image_view
+        count = display.channel_count(view)
+        return [i for i in range(count) if view.channel_visible[i]] or [0]
+
     def _sync_rows(self):
         view = self.engine.image_view
         recipe = self.engine.registration_input
         self._updating = True
         for index, row in enumerate(self._channel_rows()):
+            row["select"].setChecked(index in self._adjusted)
             row["show"].setChecked(bool(view.channel_visible[index]))
             rgb = _rgb(view.channel_color[index])
             row["swatch"].setStyleSheet(
@@ -330,12 +346,19 @@ class SectionPanel(StepPanel):
         view = self.engine.image_view
         if display.channel_count(view) == 0:
             return
-        index = self._selected
+        index = self._adjusted[0]
         limit = display.intensity_limit(view)
         black, white, gamma = display.channel_levels(view, index)
         brightness, contrast = display.brightness_contrast(black, white, limit)
         names = [row["name"].text() for row in self._channel_rows()]
-        self.adjust_title.setText("Adjusting: {}  (0 – {})".format(names[index], limit))
+        labels = [names[i] + ("" if view.channel_visible[i] else " (hidden)")
+                  for i in self._adjusted]
+        title = "Adjusting: {}  (0 – {})".format(", ".join(labels), limit)
+        if any(display.channel_levels(view, i) != (black, white, gamma)
+               for i in self._adjusted[1:]):
+            title += "\nValues shown are {}'s; each change applies to all.".format(
+                names[index])
+        self.adjust_title.setText(title)
         self._updating = True
         for box in (self.black, self.white):
             box.setMaximum(limit)
@@ -348,45 +371,87 @@ class SectionPanel(StepPanel):
 
     # ------------------------------------------------------------- actions
     def _select(self, index):
-        self._selected = index
-        self._sync_adjust()
-
-    def _apply(self, black, white, gamma=None):
-        view = self.engine.image_view
-        display.set_channel_levels(view, self._selected, black, white, gamma)
+        """Adjust only ``index`` (the user's choice; Show no longer leads)."""
+        self._adjust_follows_show = False
+        self._adjusted = [index]
         self._sync_rows()
         self._sync_adjust()
 
-    def _bc_changed(self, _value):
+    def _adjust_toggled(self, index, checked):
         if self._updating:
             return
-        limit = display.intensity_limit(self.engine.image_view)
-        black, white = display.window_from_brightness_contrast(
-            self.brightness.value() / 10.0, self.contrast.value() / 10.0, limit)
-        self._apply(black, white)
+        chosen = [i for i, row in enumerate(self._channel_rows()) if row["select"].isChecked()]
+        if not chosen:
+            self.shell.message("At least one channel is adjusted.", "warn")
+            self._sync_rows()
+            return
+        self._adjust_follows_show = False
+        self._adjusted = chosen
+        self._sync_adjust()
 
-    def _range_changed(self, _value):
+    def _apply_each(self, levels):
+        """Set every adjusted channel to ``levels(index)`` = (black, white, gamma)."""
+        view = self.engine.image_view
+        for index in self._adjusted:
+            display.set_channel_levels(view, index, *levels(index))
+        self._sync_rows()
+        self._sync_adjust()
+
+    def _bc_changed(self, kind):
+        """Move one of brightness or contrast; each channel keeps the other."""
         if self._updating:
             return
-        self._apply(self.black.value(), self.white.value(), self.gamma.value())
+        view = self.engine.image_view
+        limit = display.intensity_limit(view)
+
+        def levels(index):
+            black, white, _gamma = display.channel_levels(view, index)
+            brightness, contrast = display.brightness_contrast(black, white, limit)
+            if kind == "brightness":
+                brightness = self.brightness.value() / 10.0
+            else:
+                contrast = self.contrast.value() / 10.0
+            return display.window_from_brightness_contrast(brightness, contrast, limit) + (None,)
+
+        self._apply_each(levels)
+
+    def _range_changed(self, kind):
+        """Set the edited one of Min, Max or Gamma on every adjusted channel."""
+        if self._updating:
+            return
+        view = self.engine.image_view
+
+        def levels(index):
+            black, white, gamma = display.channel_levels(view, index)
+            if kind == "black":
+                black = self.black.value()
+            elif kind == "white":
+                white = self.white.value()
+            else:
+                gamma = self.gamma.value()
+            return black, white, gamma
+
+        self._apply_each(levels)
 
     def _auto(self):
         view = self.engine.image_view
         if display.channel_count(view) == 0:
             return
-        low, high = display.auto_levels(view, self._selected)
-        self._apply(low, high)
-        self.auto_note.setText("Auto: {:.0f} – {:.0f}, saturating {}% of samples. Pixel "
-                               "values are unchanged.".format(low, high, display.AUTO_SATURATION))
+        found = {index: display.auto_levels(view, index) for index in self._adjusted}
+        self._apply_each(lambda index: found[index] + (None,))
+        if len(found) == 1:
+            low, high = next(iter(found.values()))
+            text = "Auto: {:.0f} – {:.0f}".format(low, high)
+        else:
+            text = "Auto: each adjusted channel"
+        self.auto_note.setText("{}, saturating {}% of samples. Pixel values are "
+                               "unchanged.".format(text, display.AUTO_SATURATION))
 
     def _auto_all(self):
         view = self.engine.image_view
-        current = self._selected
         for index in range(display.channel_count(view)):
-            self._selected = index
             low, high = display.auto_levels(view, index)
             display.set_channel_levels(view, index, low, high)
-        self._selected = current
         self._sync_rows()
         self._sync_adjust()
 
@@ -394,8 +459,7 @@ class SectionPanel(StepPanel):
         view = self.engine.image_view
         if display.channel_count(view) == 0:
             return
-        low, high, gamma = display.reset_levels(view, self._selected)
-        self._apply(low, high, gamma)
+        self._apply_each(lambda index: display.reset_levels(view, index))
         self.auto_note.setText("")
 
     def _show(self, index, checked):
@@ -410,6 +474,9 @@ class SectionPanel(StepPanel):
         selector.set_checked(not actual)
         if actual != checked:
             self.shell.message("At least one channel stays visible.", "warn")
+        if self._adjust_follows_show:
+            self._adjusted = self._visible_channels()
+            self._sync_adjust()
         self._sync_rows()
 
     def _set_colour(self, index, rgb):

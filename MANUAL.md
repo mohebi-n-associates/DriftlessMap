@@ -1,7 +1,7 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 2.0.0**. Section 2 explains how to
-install it; `pip install driftlessmap` installs 2.0.0.
+This manual applies to **DriftlessMap 2.0.1**. Section 2 explains how to
+install it; `pip install driftlessmap` installs 2.0.1.
 
 DriftlessMap - Histological E-data Registration in Brain Space - is a desktop
 application for aligning rodent histology with a reference atlas, reconstructing
@@ -102,7 +102,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-DriftlessMap 2.0.0 requires:
+DriftlessMap 2.0.1 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -121,8 +121,8 @@ page. The macOS DMG (`-macOS-arm64.dmg`) is built for Apple Silicon; on an Intel
 Mac, use the developer installation below.
 The desktop builds include Python and all runtime dependencies. Windows users
 extract the entire ZIP and run `DriftlessMap.exe`; macOS users open the DMG and
-drag `DriftlessMap.app` to Applications. The 2.0.0 downloads are named
-`DriftlessMap-2.0.0-Windows-x64.zip` and `DriftlessMap-2.0.0-macOS-arm64.dmg`.
+drag `DriftlessMap.app` to Applications. The 2.0.1 downloads are named
+`DriftlessMap-2.0.1-Windows-x64.zip` and `DriftlessMap-2.0.1-macOS-arm64.dmg`.
 Release builds are unsigned unless the release notes say otherwise, so the first
 launch may require Windows SmartScreen confirmation or Control-clicking the
 macOS app and choosing **Open**.
@@ -171,7 +171,7 @@ python -m pip --version
 python -c "import driftlessmap; print(driftlessmap.__version__)"
 ```
 
-The final command prints the installed version, `2.0.0`.
+The final command prints the installed version, `2.0.1`.
 
 ### 2.5 Launching DriftlessMap
 
@@ -498,7 +498,7 @@ What each step does:
 | Step | Main actions |
 | --- | --- |
 | Project | Load atlas, load or replace the section, open, save, save a portable copy, atlas download and slice-atlas tools |
-| Section | Per-channel name, colour, visibility and display range; brightness, contrast, gamma and Auto (ImageJ-style, saturating 0.35% of samples); **Register** ticks that choose the registration channels, with a preview of the registration input; the **pixel size** (from the file, or entered with **Pixel size...**), used by the scale bar, the ruler and Find atlas section; rotation, flips, crop and clean-up |
+| Section | Per-channel name, colour, visibility and display range; brightness, contrast, gamma and Auto (ImageJ-style, saturating 0.35% of samples) for the channels ticked under **Adjust** (those on screen unless you choose; Section 7.4); **Register** ticks that choose the registration channels, with a preview of the registration input; the **pixel size** (from the file, or entered with **Pixel size...**), used by the scale bar, the ruler and Find atlas section; rotation, flips, crop and clean-up |
 | Match | Find atlas section in the chosen **Section plane** with the chosen channels, at the section's real size; the plane, depth and tilt controls of the 1.x Atlasing Controller |
 | Register | Suggest landmarks; add, move and delete pairs; a list of pairs marked Outline, Internal, Edited or Manual; mesh check; **Mark review complete**; warp preview in either direction |
 | Annotate | **Implants:** one list of optical fibers, microprisms and probes, added with **Add implant…**. A fiber or prism: outline each section, **Map this section**, **Build**; reports the fiber tip or the prism bottom and ML edges (Section 12.7). A probe: for each section that shows its track, **Mark track**, click along it, **Map this section** (this maps the marks with the current registration and files them under the probe); **Build** one probe from all its sections, **Rebuild** after adding more; **Delete…** removes a probe with its parts, built object, mapping records and any marks still being placed for it; **Probe settings** holds multi-probe layouts and saved probe settings. Cells, colour detection, drawing, erasing, lasso and measuring; **Map to atlas**; make parts and build other 3D objects |
@@ -774,7 +774,7 @@ multi-channel TIFF, and page-stack TIFF are intentionally distinct:
 - A page axis displays one section at a time. In a hyperstack (for example
   ZCYX from ImageJ or OME-TIFF), Z is browsed as pages and every channel is
   kept. If the file has a further axis, such as time, one plane of it is used
-  (the first by default) and DriftlessMap reports which. In the 2.0 preview,
+  (the first by default) and DriftlessMap reports which. In the 2.0 interface,
   the Section step's Image card shows a plane box for each such axis; choose
   a plane and press **Read plane**. This loads the section again, which
   clears its landmarks. The chosen plane is saved in the project and read
@@ -807,6 +807,17 @@ In the Image View Controller:
 4. Use Gamma for nonlinear brightness adjustment.
 5. Choose `linear` or `spline` for manual curve control.
 6. Use **Reset** to restore the mapping.
+
+In the 2.0 interface's Section step, the **Channels** card has an **Adjust**
+tick on each row. Brightness, Contrast, Min, Max, Gamma, **Auto** and **Reset**
+change every ticked channel. The ticks follow **Show** (the channels on screen)
+until you tick or untick one yourself; loading another section makes them follow
+**Show** again. With several channels ticked, Brightness and Contrast move each
+channel's window while keeping its own contrast or brightness, Min, Max and
+Gamma set the same value on each, and Auto and Reset compute each channel's own
+range. The line above the sliders names the adjusted channels, marks hidden ones
+and says whose values are shown when they differ. **Auto all** sets every
+channel.
 
 These controls change the display lookup table. When scientific intensity
 values matter, preserve the original source image and document display
@@ -1094,7 +1105,7 @@ status bar lists them so they can be transferred first.
 
 **Kept marks (2.0 development preview).** Transferring keeps a copy of the
 section marks in a *mapping record*: one per kind of mark on the section (cells,
-drawing, contour, expression) and, in the 2.0 preview, one per named probe. The
+drawing, contour, expression) and, in the 2.0 interface, one per named probe. The
 section shows them as faint, read-only marks; the editable marks are cleared as
 before, so the next annotation starts empty. Records are saved with the project.
 Pieces made from transferred marks remember which record they came from:
@@ -1113,7 +1124,7 @@ are no longer loaded stay valid, so a probe built from several sections is not
 flagged when the next section is loaded. Objects made before 2.0.0a8, imported
 objects and pieces made from marks placed on the atlas show *origin not
 recorded*. Out-of-date objects can still be exported; the exported file records
-`mapping_status`, and the status bar names them. In the 2.0 preview, Annotate
+`mapping_status`, and the status bar names them. In the 2.0 interface, Annotate
 lists the section's mapped marks with their status, Results shows the selected
 object's status, and each object's tooltip in the Objects list names it.
 Changing a fiber's or prism's specifications also makes its built result out of
@@ -1123,7 +1134,7 @@ identifies stale results; its dimensions and coordinates describe the stored bui
 Renaming a probe preserves its mapping identity and updates retained part names,
 so **Update mapping**, **Edit parts** and **Build** continue under the new name.
 
-**Update mapping and Edit marks (2.0 preview, Annotate step).** Select a mapping
+**Update mapping and Edit marks (2.0 interface, Annotate step).** Select a mapping
 in *Mapped marks on this section*:
 
 - **Update mapping** maps the kept marks again with the current registration.
@@ -1477,9 +1488,9 @@ Probe objects created by older versions may lack the `reconstruction` block.
 Load their original project with the same atlas, unmerge/re-merge the probe,
 and save a new `.dmapobj` before exporting CSV.
 
-### 12.7 Optical fibers and microprisms (2.0 preview)
+### 12.7 Optical fibers and microprisms (2.0 interface)
 
-The **Implants** card at the top of the 2.0 preview's Annotate step locates
+The **Implants** card at the top of the 2.0 interface's Annotate step locates
 optical fibers and microprisms. You outline what the implant left in each
 section that shows it; DriftlessMap maps the outlines to the atlas and fits
 the device's known shape to them. Probes are added and listed in the same
@@ -1566,7 +1577,7 @@ implants. Projects save the implants, their unmapped outlines, mapping
 records and built objects; projects from 2.0.0a12 and earlier open with no
 implants.
 
-### 12.8 Export all results (2.0 preview)
+### 12.8 Export all results (2.0 interface)
 
 **Results > Export all results…** asks for a location and creates one new
 folder there, named after the project and the date and time, containing:
@@ -1821,7 +1832,7 @@ Use **File > Save Project** frequently. A project records:
 - Probe design, face, multi-probe plan, and merge-sites choice.
 - Object pieces and merged objects.
 - Current layout and related state.
-- In the 2.0 preview, where you left off: step, view, selection, probes not
+- In the 2.0 interface, where you left off: step, view, selection, probes not
   yet mapped, Mark track and an outline still being drawn. Projects without
   it open as before.
 
