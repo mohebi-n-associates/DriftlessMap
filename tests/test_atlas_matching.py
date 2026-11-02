@@ -379,6 +379,13 @@ class PlaneChoiceTests(unittest.TestCase):
         self.assertIsNone(plane_from_name("IM_1112_left.tif"))
         self.assertIsNone(plane_from_name("coronal_vs_sagittal.tif"))
         self.assertIsNone(plane_from_name(None))
+        from driftlessmap.atlas_matching import hemisphere_from_name
+
+        self.assertEqual(hemisphere_from_name("/d/IM-1076_left_All_insertion.tif"), "left")
+        self.assertEqual(hemisphere_from_name("Right hemi 2.tif"), "right")
+        self.assertIsNone(hemisphere_from_name("left_and_right.tif"))
+        self.assertIsNone(hemisphere_from_name("leftover.tif"))
+        self.assertIsNone(hemisphere_from_name(None))
         self.assertEqual(planes_for("auto"), ("coronal", "sagittal", "horizontal"))
         self.assertEqual(planes_for("sagittal"), ("sagittal",))
         with self.assertRaises(ValueError):

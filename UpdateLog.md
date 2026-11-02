@@ -1,6 +1,11 @@
 # Update Log
 
 ### 2nd November 2026
+##### DriftlessMap 2.1.0
+
+`v2/state.sagittal_hemisphere(engine)` returns (`sagittal_side`, mm from `origin_3d[0]` × `vox_size_um`) for the sagittal page shown, or None; `plane_summary` adds "right/left hemisphere N mm" or "midline". `MatchPanel` gets a hemisphere status row (visible only for sagittal) and **Other hemisphere** (`mirrored_index`, clamped to the slider range). `atlas_matching.hemisphere_from_name` reads a single whole word "left" or "right" from the file name; when it disagrees with the page shown the row warns. Reported case: IM-1076_left_All_insertion.tif applied at sagittal page 581, which the readout names as the right hemisphere when the midline page is below 581 (about 570 in a 1140-page atlas; not checked against the user's atlas). Version 2.1.0 (a feature, per the 2.N.0 rule).
+
+### 2nd November 2026
 ##### DriftlessMap 2.0.2
 
 `v2/shell.V2Window`: `_visible_views()` (visible frames of `engine.splitter_3`), `_balance_views()` records `_balanced_views`, and `refresh()` calls `_balance_if_views_changed()`, which balances one event-loop pass later (`QTimer.singleShot(0)`) when the visible set changed; `set_view` also balances again after layout. Cause: the engine switches to atlas + section by itself on loading (`show_2_windows`), and the splitter kept the histology frame at the width it had while hidden (50 px in the report, 0 px with fresh settings); sizes set in the same pass as a frame is shown are ignored. Widths the user drags are kept until the visible set changes. `image_reader.color_name`, `channel_names_from_colors`: TIFF channels without names but with stored colours (ImageJ `LUTs`, OME `Color`) are named after the colour's hue (repeated colours numbered, "Green 2"); `_ome_channels` returns no names when no channel has a `Name`. The reported file (ImageJ 1.54p composite, LUT ends (0,107,255), (25,255,0), (255,157,0), (234,0,0), no `Labels`) was named Gray, Red, Green, Blue; now Blue, Green, Orange, Red. Files with neither names nor colours keep `CHANNEL_NAMES`. Version 2.0.2.

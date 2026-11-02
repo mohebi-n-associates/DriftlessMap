@@ -83,6 +83,24 @@ def section_summary(engine):
     return str(name).split("/")[-1], detail
 
 
+def sagittal_hemisphere(engine):
+    """(side, mm from the midline) of the sagittal page shown, or None.
+
+    ``side`` is "right", "left" or "midline" (the animal's sides; pages above
+    the midline are the right hemisphere).
+    """
+    from ..atlas_matching import sagittal_side
+
+    view = engine.atlas_view
+    if view.atlas_data is None or engine.atlas_display != "sagittal" \
+            or view.current_sagital_index is None:
+        return None
+    midline = float(view.origin_3d[0])
+    index = int(view.current_sagital_index)
+    return (sagittal_side(index, midline),
+            abs(index - midline) * float(view.vox_size_um) / 1000.0)
+
+
 def plane_summary(engine):
     """"Sagittal · page 124 of 228 · tilt +3.0° / −6.0°" for the canvas header."""
     view = engine.atlas_view
@@ -99,6 +117,10 @@ def plane_summary(engine):
     text = "{} · page {}".format(str(plane).capitalize(), index)
     if total:
         text += " of {}".format(total)
+    side = sagittal_hemisphere(engine)
+    if side is not None:
+        text += " · midline" if side[0] == "midline" else \
+            " · {} hemisphere {:.2f} mm".format(side[0], side[1])
     text += " · tilt {:+.1f}° / {:+.1f}°".format(float(tilt[0]), float(tilt[1]))
     return text
 

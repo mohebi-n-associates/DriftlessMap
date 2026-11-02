@@ -1,7 +1,7 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 2.0.2**. Section 2 explains how to
-install it; `pip install driftlessmap` installs 2.0.2.
+This manual applies to **DriftlessMap 2.1.0**. Section 2 explains how to
+install it; `pip install driftlessmap` installs 2.1.0.
 
 DriftlessMap - Histological E-data Registration in Brain Space - is a desktop
 application for aligning rodent histology with a reference atlas, reconstructing
@@ -102,7 +102,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-DriftlessMap 2.0.2 requires:
+DriftlessMap 2.1.0 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -121,8 +121,8 @@ page. The macOS DMG (`-macOS-arm64.dmg`) is built for Apple Silicon; on an Intel
 Mac, use the developer installation below.
 The desktop builds include Python and all runtime dependencies. Windows users
 extract the entire ZIP and run `DriftlessMap.exe`; macOS users open the DMG and
-drag `DriftlessMap.app` to Applications. The 2.0.2 downloads are named
-`DriftlessMap-2.0.2-Windows-x64.zip` and `DriftlessMap-2.0.2-macOS-arm64.dmg`.
+drag `DriftlessMap.app` to Applications. The 2.1.0 downloads are named
+`DriftlessMap-2.1.0-Windows-x64.zip` and `DriftlessMap-2.1.0-macOS-arm64.dmg`.
 Release builds are unsigned unless the release notes say otherwise, so the first
 launch may require Windows SmartScreen confirmation or Control-clicking the
 macOS app and choosing **Open**.
@@ -171,7 +171,7 @@ python -m pip --version
 python -c "import driftlessmap; print(driftlessmap.__version__)"
 ```
 
-The final command prints the installed version, `2.0.2`.
+The final command prints the installed version, `2.1.0`.
 
 ### 2.5 Launching DriftlessMap
 
@@ -499,7 +499,7 @@ What each step does:
 | --- | --- |
 | Project | Load atlas, load or replace the section, open, save, save a portable copy, atlas download and slice-atlas tools |
 | Section | Per-channel name, colour, visibility and display range; brightness, contrast, gamma and Auto (ImageJ-style, saturating 0.35% of samples) for the channels ticked under **Adjust** (those on screen unless you choose; Section 7.4); **Register** ticks that choose the registration channels, with a preview of the registration input; the **pixel size** (from the file, or entered with **Pixel size...**), used by the scale bar, the ruler and Find atlas section; rotation, flips, crop and clean-up |
-| Match | Find atlas section in the chosen **Section plane** with the chosen channels, at the section's real size; the plane, depth and tilt controls of the 1.x Atlasing Controller |
+| Match | Find atlas section in the chosen **Section plane** with the chosen channels, at the section's real size; for sagittal pages the hemisphere and distance from the midline, with **Other hemisphere**; the plane, depth and tilt controls of the 1.x Atlasing Controller |
 | Register | Suggest landmarks; add, move and delete pairs; a list of pairs marked Outline, Internal, Edited or Manual; mesh check; **Mark review complete**; warp preview in either direction |
 | Annotate | **Implants:** one list of optical fibers, microprisms and probes, added with **Add implant…**. A fiber or prism: outline each section, **Map this section**, **Build**; reports the fiber tip or the prism bottom and ML edges (Section 12.7). A probe: for each section that shows its track, **Mark track**, click along it, **Map this section** (this maps the marks with the current registration and files them under the probe); **Build** one probe from all its sections, **Rebuild** after adding more; **Delete…** removes a probe with its parts, built object, mapping records and any marks still being placed for it; **Probe settings** holds multi-probe layouts and saved probe settings. Cells, colour detection, drawing, erasing, lasso and measuring; **Map to atlas**; make parts and build other 3D objects |
 | Results | Region tables, show on plane, compare, 3D options, export and import. **Export all results…** writes everything available into one new folder (below); the single-kind exports stay under **Individual files** |
@@ -965,6 +965,12 @@ atlas and ranks candidate sections:
    section"). For sagittal sections it names the **Right** or **Left
    hemisphere**. The atlas convention is that positive medio-lateral
    coordinates are on the animal's right, as in the probe exports.
+   For sagittal sections the 2.0 interface's Match step also names the
+   hemisphere of the page shown, and its distance from the midline, under
+   **Plane, depth and tilt** and in the canvas header. **Other hemisphere**
+   moves to the page at the same distance on the other side. When the file
+   name says left or right and the page shown is in the other hemisphere,
+   the Match step points it out.
 5. Leave **Apply the suggested cutting-angle tilt** on to use the tilt, and
    **Rotate/flip the histology to match** on to orient the image. Rotating
    the histology resets its landmarks.

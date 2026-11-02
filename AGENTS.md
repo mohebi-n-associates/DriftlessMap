@@ -8,7 +8,7 @@ or important workflows change.
 
 ## Project identity
 
-- Current stable release: DriftlessMap 2.0.2 (2 November 2026). 2.0.0
+- Current stable release: DriftlessMap 2.1.0 (2 November 2026). 2.0.0
   (29 October 2026) followed the 2.0.0aN previews and 2.0.0rc1-rc16. The owner released it with the
   `release_validation.md` gates still pending (recorded there as waived); keep
   recording evidence for them. Later fixes become 2.0.N, features 2.N.0.
@@ -122,6 +122,9 @@ or important workflows change.
   from template-edge agreement (`CONFIDENT_ANATOMY`/`FAIR_ANATOMY`), the span of
   near-equal depths (`report.depth_span`, `DEPTH_TIE`) and the plane margin;
   thresholds come from atlas-cut sections, not yet real ones.
+  V2 Match step: `state.sagittal_hemisphere` (side and mm from the midline,
+  `origin_3d[0]`), `MatchPanel.show_other_hemisphere` (`mirrored_index`), and
+  a warning when `hemisphere_from_name` disagrees with the page shown.
   `section_suggestion_dialog.py` shows ranked candidates for confirmation and
   `DriftlessMap.apply_section_suggestion` sets the view, page, tilt and
   histology orientation. Tilted matches use `tilted_slice`, which must stay
