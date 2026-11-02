@@ -3,6 +3,17 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.3.0
+
+Feature release, 2 November 2026.
+
+Built fibers and microprisms appear on the atlas. Wherever the page shown in the
+coronal, sagittal or horizontal atlas view cuts a built implant, its
+cross-section is outlined and lightly filled in the implant's colour. This works
+at any tilt and follows the pages as you move through them. **Show on atlas** in
+the Implants card moves the pages to the fiber's tip or the prism's bottom. The
+eye in the Objects list hides the drawing.
+
 ## DriftlessMap 2.2.0
 
 Feature release, 2 November 2026.

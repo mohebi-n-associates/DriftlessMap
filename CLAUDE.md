@@ -8,7 +8,7 @@ or important workflows change.
 
 ## Project identity
 
-- Current stable release: DriftlessMap 2.2.0 (2 November 2026). 2.0.0
+- Current stable release: DriftlessMap 2.3.0 (2 November 2026). 2.0.0
   (29 October 2026) followed the 2.0.0aN previews and 2.0.0rc1-rc16. The owner released it with the
   `release_validation.md` gates still pending (recorded there as waived); keep
   recording evidence for them. Later fixes become 2.0.N, features 2.N.0.
@@ -201,7 +201,11 @@ or important workflows change.
   the section's part at once (`"<name> - piece"`, data carries
   `implant_id`); `build_implant` fits all parts into `merged fiber` /
   `merged prism`. Implants and live outlines are saved in the project and in
-  undo transactions. V2: `v2/implant_card.py` and `v2/outline_editor.py`
+  undo transactions. `implant_overlay.ImplantOverlay` (created by the engine)
+  outlines each visible built fiber/prism on the atlas views where the shown
+  slice cuts its fitted model (`implants.model_section`, slices mapped with
+  `AtlasView.get_*_3d`); `show_implant_on_atlas` moves the pages to the tip.
+  V2: `v2/implant_card.py` and `v2/outline_editor.py`
   (draw, Propose by flood fill inside the brain envelope, tip/bottom point).
   Undo help: `v2/widgets.undo_help()` (native shortcut text via `keys`) is
   the tooltip text for Mark track, Map this section, Build and Delete; only

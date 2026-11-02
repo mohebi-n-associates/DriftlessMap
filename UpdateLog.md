@@ -1,6 +1,11 @@
 # Update Log
 
 ### 2nd November 2026
+##### DriftlessMap 2.3.0
+
+`implants.model_section(model, origin, axis_x, axis_y, shape)` returns the slice pixels inside a fitted cylinder (flat ends, radius) or block, or None when the slice misses it (plane distance test, then only the model's bounding box in slice pixels is evaluated). `implant_overlay.ImplantOverlay` (created with `AtlasView`, both interfaces) maps each atlas view's slice with `get_coronal_3d` / `get_sagittal_3d` / `get_horizontal_3d` (so tilts match the mapped outlines) and draws `cv2.findContours` outlines as `QGraphicsPolygonItem`s (implant colour, 70/255 fill, z 50) for visible built implants; it redraws on page and tilt signals and checks every 400 ms for builds, deletions, undo and visibility. `ImplantEngineMixin.show_implant_on_atlas` sets the three pages through the model's bottom point; V2 implant card **Show on atlas**. Before, built implants were drawn in 3D only. Version 2.3.0 (feature).
+
+### 2nd November 2026
 ##### DriftlessMap 2.2.0
 
 `V2Window.toggle_focus` / `is_focused` / `_sync_focus`; command `view.focus` ("Focus on images (hide side panels)", Ctrl+Shift+F, palette synonyms full screen, hide panels, maximise); header `focus_button` and checkable View menu `focus_item`. Focus sets the existing View items `toggle_task_item` and `toggle_inspector_item`, so hiding both by hand also counts as focus; the view splitter is re-balanced after the layout pass. Not saved with the project. Version 2.2.0 (feature).

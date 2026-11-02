@@ -97,6 +97,21 @@ class ImplantEngineMixin:
         built = self.implant_objects(implant_id, built=True)
         return self.object_ctrl.obj_data[built[-1]].get("report") if built else None
 
+    def show_implant_on_atlas(self, implant_id):
+        """Move the atlas pages through the built implant's tip (fiber) or
+        bottom centre (prism); returns False when it is not built."""
+        report = self.implant_report(implant_id)
+        model = (report or {}).get("model")
+        view = self.atlas_view
+        if not model or view.atlas_data is None:
+            return False
+        point = np.asarray(model["bottom"], dtype=float) + np.asarray(view.origin_3d, float)
+        pages = ((view.spage_ctrl, point[0]), (view.cpage_ctrl, point[1]),
+                 (view.hpage_ctrl, point[2]))
+        for control, page in pages:
+            control.set_val(int(np.clip(round(page), 0, control.page_slider.maximum())))
+        return True
+
     def implant_build_status(self, index):
         """Compare the retained build recipe with the current implant specs."""
         o = self.object_ctrl

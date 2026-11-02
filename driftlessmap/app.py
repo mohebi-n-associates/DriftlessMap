@@ -168,6 +168,7 @@ from .probe_reconstruction import (
 from .roi_analysis import build_drawing_roi_info
 from .atlas_matching import plane_from_name, planes_for, suggest_sections
 from .auto_registration import propose_landmarks
+from .implant_overlay import ImplantOverlay
 from .background import run_in_background
 from .section_suggestion_dialog import SectionSuggestionDialog
 from .registration_channels_dialog import RegistrationChannelsDialog
@@ -469,6 +470,8 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, QMainWindow, FORM_Ma
         # self.image_view.img_stacks.image_dict['img-probe'].sigClicked.connect(self.img_probe_pnts_clicked)
 
         self.atlas_view = AtlasView()
+        # Built fibers and prisms are outlined where the shown slices cut them.
+        self.implant_overlay = ImplantOverlay(self)
         self.atlas_view.show_boundary_btn.clicked.connect(self.vis_atlas_boundary)
         self.atlas_view.section_rabnt1.toggled.connect(self.display_changed)
         self.atlas_view.section_rabnt2.toggled.connect(self.display_changed)

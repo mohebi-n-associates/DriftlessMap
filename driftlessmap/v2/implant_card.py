@@ -207,9 +207,12 @@ class ImplantCard(Card):
         self.report.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.results = grid_of([
             button("Report…", self.open_report),
+            button("Show on atlas", self.show_on_atlas,
+                   tooltip="Move the atlas pages to the tip (fiber) or bottom (prism); "
+                           "the built implant is outlined wherever a page cuts it"),
             button("Show in 3D", lambda: shell.set_view("3d")),
             button("Export table…", self.export_table),
-        ], columns=3)
+        ], columns=2)
         self.add(self.results)
         self.add(self.probe_card)
 
@@ -362,6 +365,14 @@ class ImplantCard(Card):
             return
         ok, message = self.engine.build_implant(implant.implant_id)
         self._say(ok, message)
+        self.shell.refresh()
+
+    def show_on_atlas(self):
+        implant = self.implant()
+        if implant is None or not self.engine.show_implant_on_atlas(implant.implant_id):
+            self._say(False, "Build the implant first.")
+            return
+        self.shell.set_view("compare")
         self.shell.refresh()
 
     def open_report(self):

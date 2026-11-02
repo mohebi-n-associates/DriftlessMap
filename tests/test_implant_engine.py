@@ -89,6 +89,47 @@ class ImplantEngineTests(unittest.TestCase):
             self.assertEqual(restored.implant_report(fiber.implant_id)["specs"]["diameter_um"], 400)
 
     @isolated_gui_test
+    def test_a_built_fiber_is_drawn_where_the_atlas_slices_cut_it(self):
+        with tempfile.TemporaryDirectory() as folder:
+            window = self.window_with_section(Path(folder))
+            overlay = window.implant_overlay
+            view = window.atlas_view
+            fiber = window.add_implant("fiber", specs={"diameter_um": 100})
+            window.set_implant_outline(fiber.implant_id, SLOT)
+            self.assertTrue(window.map_implant(fiber.implant_id)[0])
+            overlay.refresh()
+            self.assertEqual(overlay.drawn("coronal"), 0)   # parts only: nothing built
+            self.assertTrue(window.build_implant(fiber.implant_id)[0])
+            overlay.refresh()
+            # The section was mapped on the coronal page shown, so the fiber
+            # crosses it; the outline covers the mapped outline's pixels.
+            self.assertEqual(overlay.drawn("coronal"), 1)
+            model = window.implant_report(fiber.implant_id)["model"]
+            page = view.current_coronal_index
+            outline = np.asarray(window.object_ctrl.obj_data[
+                window.implant_objects(fiber.implant_id, built=True)[0]]["data"][0]["outline"])
+            self.assertTrue(np.allclose(outline[:, 1], outline[0, 1]))
+            # Pages well in front of or behind the fiber show nothing.
+            radius = int(np.ceil(model["radius_vox"])) + 2
+            view.cpage_ctrl.set_val(page + radius + 1)
+            self.assertEqual(overlay.drawn("coronal"), 0)
+            # Show on atlas returns the pages to the fiber's tip.
+            self.assertTrue(window.show_implant_on_atlas(fiber.implant_id))
+            self.assertEqual(view.current_coronal_index, page)
+            self.assertEqual(overlay.drawn("coronal"), 1)
+            # Hidden built objects are not drawn; deleting the build clears it.
+            built = window.implant_objects(fiber.implant_id, built=True)[0]
+            window.object_ctrl.obj_list[built].vis = False
+            overlay.refresh()
+            self.assertEqual(overlay.drawn("coronal"), 0)
+            window.object_ctrl.obj_list[built].vis = True
+            overlay.refresh()
+            self.assertEqual(overlay.drawn("coronal"), 1)
+            self.assertTrue(window.undo_mapping_step())   # undo the build
+            overlay.refresh()
+            self.assertEqual(overlay.drawn("coronal"), 0)
+
+    @isolated_gui_test
     def test_unrecordable_mutation_clears_both_history_directions(self):
         with tempfile.TemporaryDirectory() as folder:
             window = self.window_with_section(Path(folder))
