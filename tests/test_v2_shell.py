@@ -243,6 +243,52 @@ class V2ShellTests(unittest.TestCase):
             self.assertEqual(engine.registration_input.channel_names, ("Hoechst", "NeuN"))
 
     @isolated_gui_test
+    def test_loading_a_section_shows_atlas_and_section_at_equal_widths(self):
+        import cv2
+
+        from tests.atlas_fixture import make_processed_atlas
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window = self.make_window(folder)
+            window.resize(1480, 950)
+            window.show()
+            engine = window.engine
+            splitter = engine.splitter_3
+
+            def shown_widths():
+                self.application.processEvents()
+                return [size for size, shown in zip(splitter.sizes(), window._visible_views())
+                        if shown]
+
+            # Atlas first: it takes the whole canvas. Loading the section
+            # switches the engine to atlas + section by itself.
+            self.assertTrue(engine.load_volume_atlas(str(make_processed_atlas(root / "atlas"))))
+            window.refresh()
+            self.assertEqual(len(shown_widths()), 1)
+            source = root / "section.png"
+            cv2.imwrite(str(source), np.full((60, 120, 3), 80, dtype=np.uint8))
+            self.assertTrue(engine.load_single_image_file(str(source), ".png"))
+            window.refresh()
+            atlas_width, section_width = shown_widths()
+            self.assertGreater(section_width, 200)
+            self.assertLessEqual(abs(atlas_width - section_width), 0.05 * atlas_width)
+
+            # Widths the user drags are kept until the visible views change.
+            total = atlas_width + section_width
+            shares = iter((total * 2 // 3, total // 3))
+            splitter.setSizes([next(shares) if shown else 0
+                               for shown in window._visible_views()])
+            dragged = shown_widths()
+            window.refresh()
+            self.assertEqual(shown_widths(), dragged)
+            window.set_view("section")
+            window.refresh()
+            window.set_view("compare")
+            atlas_width, section_width = shown_widths()
+            self.assertLessEqual(abs(atlas_width - section_width), 0.05 * atlas_width)
+
+    @isolated_gui_test
     def test_brightness_and_contrast_change_the_adjusted_channels(self):
         import tifffile
 

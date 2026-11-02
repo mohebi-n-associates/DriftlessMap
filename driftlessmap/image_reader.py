@@ -60,6 +60,43 @@ def named_channel_color(name):
     return None
 
 
+# Hue ranges (degrees, upper bound exclusive) for naming a channel after its
+# display colour.
+_HUE_NAMES = ((15, "Red"), (45, "Orange"), (70, "Yellow"), (165, "Green"),
+              (195, "Cyan"), (255, "Blue"), (285, "Purple"), (345, "Magenta"),
+              (361, "Red"))
+
+
+def color_name(rgb):
+    """A plain colour name for an RGB display colour ("Blue", "Orange", ...)."""
+    import colorsys
+
+    hue, saturation, value = colorsys.rgb_to_hsv(*(float(c) / 255.0 for c in rgb))
+    if value < 0.15:
+        return "Black"
+    if saturation < 0.2:
+        return "Gray"
+    degrees = hue * 360.0
+    return next(name for upper, name in _HUE_NAMES if degrees < upper)
+
+
+def channel_names_from_colors(colors):
+    """Names for unnamed channels whose colours the file stores.
+
+    Each channel is named after its colour; repeated colours are numbered
+    ("Green", "Green 2"). Channels without a colour are "Channel N".
+    """
+    names, counts = [], {}
+    for index, rgb in enumerate(colors):
+        if rgb is None:
+            names.append("Channel {}".format(index + 1))
+            continue
+        name = color_name(rgb)
+        counts[name] = counts.get(name, 0) + 1
+        names.append(name if counts[name] == 1 else "{} {}".format(name, counts[name]))
+    return names
+
+
 def default_channel_colors(names, n_channels):
     """Display colours for channels without stored colours.
 
@@ -345,6 +382,8 @@ def _ome_channels(tiff_file, n_channels):
             continue
         value = int(colour) & 0xFFFFFFFF  # signed 32-bit RGBA
         colours.append(((value >> 24) & 255, (value >> 16) & 255, (value >> 8) & 255))
+    if not any(channel.get("Name") for channel in channels):
+        names = None   # named from their colours, or by position
     return names, colours
 
 
@@ -440,7 +479,13 @@ class TIFFReader(object):
                 for i in range(self.n_scenes)
             ]
         if not self.is_rgb:
-            default_names = CHANNEL_NAMES[: self.n_channels]
+            # Unnamed channels with stored colours (an ImageJ composite, for
+            # example) are named after those colours; the 1.x positional
+            # names (Gray, Red, Green, Blue) would contradict them.
+            if names is None and colours and any(c is not None for c in colours):
+                default_names = channel_names_from_colors(colours)
+            else:
+                default_names = CHANNEL_NAMES[: self.n_channels]
             default_colours = default_channel_colors(names, self.n_channels)
             colours = [c if c is not None else default_colours[i]
                        for i, c in enumerate(colours or default_colours)]

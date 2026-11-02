@@ -8,7 +8,7 @@ or important workflows change.
 
 ## Project identity
 
-- Current stable release: DriftlessMap 2.0.1 (2 November 2026). 2.0.0
+- Current stable release: DriftlessMap 2.0.2 (2 November 2026). 2.0.0
   (29 October 2026) followed the 2.0.0aN previews and 2.0.0rc1-rc16. The owner released it with the
   `release_validation.md` gates still pending (recorded there as waived); keep
   recording evidence for them. Later fixes become 2.0.N, features 2.N.0.
@@ -58,6 +58,9 @@ or important workflows change.
   active-raster readers. TIFF axes beyond C and the paged axis are read at
   the plane in `plane_selection` (saved in `img_ctrl_data`; default first
   plane); `DriftlessMap.select_image_planes` re-reads the section.
+  Unnamed channels whose colours the file stores (ImageJ LUTs, OME Color)
+  are named after those colours (`channel_names_from_colors`); otherwise the
+  1.x positional names apply.
   Pyramidal single-plane TIFFs (`has_levels`) are read at a stored level
   chosen by the Scale slider, recorded through the saved `image_scale`. `czi_reader.py` handles optional CZI input.
   Pixel size: readers set `scaling_val` (um per full-resolution pixel; TIFF via
@@ -73,6 +76,9 @@ or important workflows change.
   for all 16 channels. In the V2 Section step the brightness, contrast, Min,
   Max, Gamma, Auto and Reset controls act on the rows ticked under Adjust,
   which follow Show until the user ticks them (reset for a new section).
+  `V2Window` re-evens the view splitter (`_balance_views`, deferred one
+  event-loop pass) whenever the set of visible view frames changes, including
+  layouts the engine switches itself (loading an atlas or a section).
 - `driftlessmap/atlas_matching.py`: GUI-free suggestion of the atlas plane,
   orientation and slice that match a histology section (silhouette search on
   slices exactly as `AtlasView` displays them). Coronal/horizontal matches are

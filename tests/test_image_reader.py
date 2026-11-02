@@ -323,6 +323,38 @@ class TiffLayoutTests(unittest.TestCase):
         self.assertEqual(reader.rgb_colors[1], (0, 255, 0))
         self.assertEqual(reader.rgb_colors[2], (255, 0, 0))
 
+    def test_unnamed_channels_are_named_after_their_stored_colours(self):
+        # An ImageJ composite with LUTs but no labels, as the reported file
+        # (blue, green, orange, red), which used to be called Gray, Red,
+        # Green and Blue.
+        data = np.zeros((4, 6, 7), dtype=np.uint8)
+        ramp = np.arange(256)
+        luts = [np.stack([ramp * c // 255 for c in end]).astype(np.uint8)
+                for end in ((0, 107, 255), (25, 255, 0), (255, 157, 0), (234, 0, 0))]
+        with tempfile.TemporaryDirectory() as folder:
+            path = self.write(folder, "composite.tif", data, imagej=True,
+                              metadata={"axes": "CYX", "mode": "composite", "LUTs": luts})
+            reader = image_reader.TIFFReader(path)
+        self.assertEqual(reader.error_index, 0)
+        self.assertEqual(reader.channel_name, ["Blue", "Green", "Orange", "Red"])
+        self.assertEqual(reader.rgb_colors[2], (255, 157, 0))
+        # OME colours without names, and repeated colours.
+        with tempfile.TemporaryDirectory() as folder:
+            path = self.write(folder, "colours.ome.tif", np.zeros((3, 6, 7), np.uint16),
+                              ome=True, metadata={"axes": "CYX", "Channel": {
+                                  "Color": [16711935, 16711935, -1]}})
+            reader = image_reader.TIFFReader(path)
+        self.assertEqual(reader.channel_name, ["Green", "Green 2", "Gray"])
+        # Neither names nor colours: the 1.x names and colours, as before.
+        with tempfile.TemporaryDirectory() as folder:
+            path = self.write(folder, "plain.tif", np.zeros((3, 6, 7), np.uint8),
+                              imagej=True, metadata={"axes": "CYX"})
+            reader = image_reader.TIFFReader(path)
+        self.assertEqual(reader.channel_name, ["Gray", "Red", "Green"])
+        self.assertEqual([image_reader.color_name(c) for c in image_reader.CHANNEL_COLORS[:8]],
+                         ["Gray", "Red", "Green", "Blue", "Magenta", "Cyan", "Yellow",
+                          "Orange"])
+
     def test_named_channels_without_colours_get_conventional_colours(self):
         data = np.zeros((4, 6, 7), dtype=np.uint16)
         metadata = {"axes": "CYX", "Channel": {"Name": ["GFP", "Hoechst 33342", "tdTomato",
