@@ -106,6 +106,7 @@ from .transactions import TransactionHistory, unpack
 from .project_session import ProjectSessionMixin
 from .state_digest import state_digest
 from .implant_engine import ImplantEngineMixin
+from .section_engine import SectionsMixin
 from .mapping_records import (
     IMPLANT_KINDS,
     MappingLedger,
@@ -213,7 +214,8 @@ script_dir = dirname(realpath(__file__))
 FORM_Main, _ = loadUiType((join(dirname(__file__), "main_window.ui")))
 
 
-class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, QMainWindow, FORM_Main):
+class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMainWindow,
+                   FORM_Main):
     def __init__(self, parent=FORM_Main):
         super(DriftlessMap, self).__init__()
         QMainWindow.__init__(self)
@@ -249,6 +251,8 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, QMainWindow, FORM_Ma
         # every load) and one record per mapped unit of marks.
         self.section_id = new_identifier()
         self.mapping_ledger = MappingLedger()
+        # Every section of the project (multi_section_design.md).
+        self._init_sections()
         # kind -> [unit_id, revision, digest of the atlas marks it produced]
         self.atlas_mark_origin = {}
         # Units whose kept marks are back on the section for editing.
@@ -7278,6 +7282,13 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, QMainWindow, FORM_Ma
         if image_file_path[0] != "":
             _, image_file_type = os.path.splitext(image_file_path[0])
             image_file_type = image_file_type.lower()
+            # The open section is kept: the image becomes a new section.
+            try:
+                stored = self.begin_new_section()
+            except Exception as exc:
+                self.print_message("The open section could not be kept ({}); no image was "
+                                   "loaded.".format(exc), self.error_message_color)
+                return
             if not self.load_single_image_file(
                 image_file_path[0], image_file_type
             ):
@@ -7290,6 +7301,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, QMainWindow, FORM_Ma
                 os.path.realpath(image_file_path[0])
             )
             self.save_path = image_file_path[0]
+            self.finish_new_section(stored)
             self.project_method = "pre plan"
             self.tool_box.pre_site_face_combo.setVisible(False)
             self.tool_box.after_site_face_combo.setVisible(True)
@@ -8867,6 +8879,15 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, QMainWindow, FORM_Ma
         ):
             self.print_message("No project can be saved.", self.reminder_color)
             return False
+        if len(self.sync_sections()) > 1:
+            # Until project schema 4 (multi_section_design.md, phase 2) stores
+            # every section, say plainly what a save keeps.
+            self.print_message(
+                "This project has {} sections; this version saves only the open one "
+                "({}) with its image and landmarks. The mapped results of all "
+                "sections are saved.".format(
+                    len(self.sections), self.sections.entry(self.sections.active_id).name),
+                self.reminder_color)
         if path is not None:
             file_name = (path, "")
         else:
@@ -9188,7 +9209,13 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, QMainWindow, FORM_Ma
         if self.current_atlas_path is not None:
             atlas_ctrl_data = p_dict["atlas_control"]
             if self.current_atlas == "volume":
-                if runtime is not None and runtime["volume"] is not None:
+                if runtime is not None and runtime.get("keep_atlas"):
+                    # Switching sections: the atlas in the views is the
+                    # document's and unchanged. Re-setting it costs about 1.4 s
+                    # on a 10 um atlas (and memory); clear only the previous
+                    # section's atlas landmarks.
+                    self.reset_tri_points_atlas()
+                elif runtime is not None and runtime["volume"] is not None:
                     volume = runtime["volume"]
                     self.set_volume_atlas_to_view(*volume[:5])
                     self.set_volume_atlas_3d(list(volume[6]), volume[5], volume[6])

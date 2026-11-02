@@ -261,6 +261,7 @@ class ProjectSessionMixin:
             self._project_loading = False
         self.__dict__.pop("_project_recovery", None)
         self.__dict__.pop("_project_recovery_path", None)
+        self.reset_sections()
         self.print_message("Project loaded successfully.", self.normal_color)
         if callable(self.on_project_loaded):
             try:
