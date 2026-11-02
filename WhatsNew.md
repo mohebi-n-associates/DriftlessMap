@@ -3,6 +3,32 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.4.0
+
+Feature release, 2 November 2026. The first release since 2.0.0: it also
+contains everything listed below for 2.0.1 to 2.3.0, which were not published
+separately.
+
+**Several sections in one project.** A project now keeps every section you
+load instead of replacing the previous one. Each section keeps its own image
+(after rotations, flips and crops), display, registration channels, pixel
+size, landmarks and mesh, review, atlas plane, page and tilt, marks and layers.
+The Project step's **Sections** card lists them. **Add section…** adds one;
+**Open** returns to a section exactly as you left it, so **Edit marks**,
+**Update mapping** and mapping again (which replaces that section's earlier
+part) work as for the open section. **Rename…**, **Move up/down** and
+**Remove…** are also there; Remove asks whether to keep the section's mapped
+results. The classic interface has **File > Sections…**. Implants, probes and
+objects are built from the mapped parts of all sections.
+
+Projects save every section, with its exact image, and find each section's
+original file again by checksum when it is opened. Portable copies carry every
+section's original. **Export all results** adds each section's working image
+(lossless TIFF), its landmarks and its atlas placement (`sections/`). Projects
+from earlier versions open as one section; results mapped from their earlier
+sections are kept. Projects saved by 2.4 use project schema 4, which 2.3 and
+earlier cannot open: keep a copy of important projects.
+
 ## DriftlessMap 2.3.0
 
 Feature release, 2 November 2026.

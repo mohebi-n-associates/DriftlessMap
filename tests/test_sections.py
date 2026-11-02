@@ -177,9 +177,13 @@ class SectionEngineTests(unittest.TestCase):
             first_id = window.section_id
             first_raster = np.array(window.image_view.current_img)
 
-            # Loading another image adds a section; the first is kept.
+            # Loading another image adds a section; the first is kept. The new
+            # one starts without the first one's landmarks or warp preview.
             self.load_section(window, second)
             self.assertEqual(len(window.sections), 2)
+            self.assertEqual(window.atlas_tri_inside_data, [])
+            self.assertEqual(window.histo_tri_inside_data, [])
+            self.assertFalse(window.h2a_transferred)
             self.assertNotEqual(window.section_id, first_id)
             self.assertEqual(window.sections.names(), ["pfc-1.png", "pfc-2.png"])
             second_id = window.section_id

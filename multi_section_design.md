@@ -1,7 +1,7 @@
 # Multi-section projects (design, proposed for 2.4.0)
 
-Status: design agreed on 2 November 2026 (see Decisions). Phases 1-3 (engine,
-persistence, interface) are implemented; phase 4 is not.
+Status: implemented and released in 2.4.0 (2 November 2026). Phase 4 checked
+the two 1108-pfc sections end to end (see UpdateLog).
 
 ## Problem
 

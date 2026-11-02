@@ -8,7 +8,8 @@ or important workflows change.
 
 ## Project identity
 
-- Current stable release: DriftlessMap 2.3.0 (2 November 2026). 2.0.0
+- Current stable release: DriftlessMap 2.4.0 (2 November 2026; the first
+  release since 2.0.0, including 2.0.1-2.3.0 and multi-section projects). 2.0.0
   (29 October 2026) followed the 2.0.0aN previews and 2.0.0rc1-rc16. The owner released it with the
   `release_validation.md` gates still pending (recorded there as waived); keep
   recording evidence for them. Later fixes become 2.0.N, features 2.N.0.
@@ -228,8 +229,7 @@ or important workflows change.
   `project_io.layer_points` / `plot_points`, so an empty layer (formerly
   saved as `[None, None]`) saves and reopens.
 - `driftlessmap/sections.py` (GUI-free) and `section_engine.py`: multi-section
-  projects (`multi_section_design.md`; phases 1-3 of 4: engine,
-  persistence and interface, unreleased). V2 Project step **Sections** card
+  projects (`multi_section_design.md`, released in 2.4.0). V2 Project step **Sections** card
   (`ProjectPanel.refresh_sections`), classic File > Sections…
   (`sections_dialog.py`); `export_sections` writes each section's working
   TIFF, landmark CSV and `sections.json` for Export all results.
