@@ -26,7 +26,6 @@ from .sections import (
     SECTION_METADATA,
     SectionBook,
     SpillCache,
-    section_images_setting,
     section_state,
 )
 
@@ -37,13 +36,11 @@ class SectionsMixin:
     def _init_sections(self):
         self.sections = SectionBook(self.section_id)
         self._section_cache = SpillCache()
-        # "embed" or "link": how a save stores sections that are not open.
-        self.section_images = "embed"
 
     def sections_index(self):
         """The ``sections`` entry of the project payload (for change detection;
         a save replaces it with :meth:`sections_for_save`)."""
-        return self.sync_sections().index(self.section_images)
+        return self.sync_sections().index()
 
     # ----------------------------------------------------------- listing
     def _section_default_name(self):
@@ -64,7 +61,6 @@ class SectionsMixin:
         self._section_cache.close()
         self._section_cache = SpillCache(self._section_cache.min_bytes)
         self.sections = SectionBook(self.section_id)
-        self.section_images = "embed"
         self.sync_sections()
 
     def restore_sections(self, p_dict):
@@ -72,7 +68,6 @@ class SectionsMixin:
         open one for older projects."""
         self.reset_sections()
         block = p_dict.get("sections")
-        self.section_images = section_images_setting(block)
         book, problems = SectionBook.from_saved(block, self.section_id,
                                                 self._section_default_name())
         packed = ((p_dict.get("portable_sources") or {}).get("sections") or {})
@@ -181,7 +176,7 @@ class SectionsMixin:
 
         GUI-free (runs in the background): fingerprints and packing only.
         """
-        block = self.sections.index(self.section_images)
+        block = self.sections.index()
         del block["stored"]
         stored, packed, notes, states = [], {}, [], {}
         for entry in self.sections.entries():
