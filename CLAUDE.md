@@ -228,8 +228,11 @@ or important workflows change.
   `project_io.layer_points` / `plot_points`, so an empty layer (formerly
   saved as `[None, None]`) saves and reopens.
 - `driftlessmap/sections.py` (GUI-free) and `section_engine.py`: multi-section
-  projects (`multi_section_design.md`; phases 1-2 of 4: engine and
-  persistence, unreleased).
+  projects (`multi_section_design.md`; phases 1-3 of 4: engine,
+  persistence and interface, unreleased). V2 Project step **Sections** card
+  (`ProjectPanel.refresh_sections`), classic File > Sections…
+  (`sections_dialog.py`); `export_sections` writes each section's working
+  TIFF, landmark CSV and `sections.json` for Export all results.
   `SECTION_FIELDS` / `section_fields` split the payload into document and
   section fields (`atlas_control` is a section's only with a volume atlas).
   `SectionBook` lists the sections in order; the open one lives in the engine

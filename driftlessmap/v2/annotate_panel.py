@@ -142,9 +142,11 @@ class AnnotatePanel(StepPanel):
         rows = [(record.unit_id, record_label(record, status, self.engine),
                  state.is_out_of_date(status))
                 for record, status in records]
-        if rows == self._mapped_key:
+        key = (rows, tuple(self.engine.mapped_section_ids()),
+               tuple(self.engine.sections.names()))
+        if key == self._mapped_key:
             return
-        self._mapped_key = rows
+        self._mapped_key = key
         selected = self.selected_unit()
         self.mapped_list.clear()
         for unit_id, text, stale in rows:
@@ -154,7 +156,15 @@ class AnnotatePanel(StepPanel):
             if unit_id == selected:
                 self.mapped_list.setCurrentItem(item)
         self.mapped_list.setVisible(bool(rows))
-        self.mapped_note.setText("" if rows else "Nothing mapped from this section yet.")
+        engine = self.engine
+        others = [engine.section_name(sid) for sid in engine.mapped_section_ids()
+                  if sid != engine.section_id and engine.sections.entry(sid) is not None]
+        note = "" if rows else "Nothing mapped from this section yet."
+        if others:
+            note = (note + " " if note else "") + (
+                "Also mapped on: {}. To change those, open the section in Project › "
+                "Sections.".format(", ".join(others)))
+        self.mapped_note.setText(note)
 
     def refresh(self):
         engine = self.engine

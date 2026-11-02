@@ -351,8 +351,11 @@ class V2Window(QMainWindow):
         """Name each object's mapping status in its tooltip in the Objects list."""
         o = self.engine.object_ctrl
         _records, statuses = self.engine.mapping_overview()
-        for widget, name, status in zip(o.obj_list, o.obj_name, statuses):
+        for index, (widget, name, status) in enumerate(zip(o.obj_list, o.obj_name, statuses)):
             text = "{} · mapping {}".format(name, state.mapping_status_text(status))
+            sections = self.engine.object_section_names(index)
+            if sections:
+                text += " · from {}".format(", ".join(sections))
             if widget.toolTip() != text:
                 widget.setToolTip(text)
 
@@ -559,7 +562,7 @@ class V2Window(QMainWindow):
 
         add(Command("atlas.load", "Load atlas…", engine.actionAtlas.trigger, "Project",
                     ("open atlas", "volume atlas"), "Ctrl+Shift+A"))
-        add(Command("section.load", "Load section…", engine.actionSingle_Image.trigger,
+        add(Command("section.load", "Add section…", engine.actionSingle_Image.trigger,
                     "Project", ("load image", "open image", "histology", "replace section"),
                     "Ctrl+Shift+I"))
         add(Command("project.open", "Open project…", self.open_project, "Project",

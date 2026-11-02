@@ -695,6 +695,12 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
         self.actionOpen_Preview.setProperty("classic_only", True)
         self.actionOpen_Preview.triggered.connect(self.open_preview_interface)
         self.menuHelp.insertAction(self.actionAbout_HERBS, self.actionOpen_Preview)
+        # Sections of the project (the 2.0 interface lists them in Project).
+        self.actionSections = QAction("Sections…", self)
+        self.actionSections.setObjectName("actionSections")
+        self.actionSections.setProperty("classic_only", True)
+        self.actionSections.triggered.connect(self.show_sections_dialog)
+        self.menuFile.insertAction(self.actionSave_Project, self.actionSections)
 
         self.init_tool_bar()
         self.init_side_bar()
@@ -7264,6 +7270,11 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
     #                       Image Loader
     #
     # ------------------------------------------------------------------
+    def show_sections_dialog(self):
+        from .sections_dialog import SectionsDialog
+
+        SectionsDialog(self).exec()
+
     def load_image(self):
         self.print_message("Load Image ...", self.normal_color)
         file_title = "Select Histological Image File"
@@ -7920,7 +7931,8 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
 
         Writes a copy of the project, each built object as ``.dmapobj``
         (``objects/``), the localisation CSVs of each probe (``probes/``),
-        the implant table and every layer (``layers/``). The project being
+        the implant table, every section's working image, landmarks and
+        placement (``sections/``) and every layer (``layers/``). The project being
         worked on keeps its own file. Returns ``(paths, notes)``: the files
         written and what was left out and why. Raises OSError when the
         folder cannot be created.
@@ -7989,6 +8001,12 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
             table = os.path.join(folder, "implants.csv")
             self.export_implant_table(table)
             paths.append(table)
+
+        # Every section's working image, landmarks and atlas placement: the
+        # images the exported results were mapped from.
+        written, section_notes = self.export_sections(os.path.join(folder, "sections"))
+        paths.extend(written)
+        notes.extend(section_notes)
 
         if self.layer_ctrl.layer_link:
             layers = os.path.join(folder, "layers")

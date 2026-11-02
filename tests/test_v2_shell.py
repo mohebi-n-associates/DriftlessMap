@@ -356,6 +356,82 @@ class V2ShellTests(unittest.TestCase):
             self.assertEqual(shown(), (True, True))
 
     @isolated_gui_test
+    def test_the_sections_card_adds_opens_renames_and_removes_sections(self):
+        import cv2
+        from unittest.mock import patch
+
+        from PyQt6.QtWidgets import QInputDialog, QMessageBox
+
+        from driftlessmap import file_dialogs
+        from tests.atlas_fixture import make_processed_atlas
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window = self.make_window(folder)
+            engine = window.engine
+            self.assertTrue(engine.load_volume_atlas(str(make_processed_atlas(root / "atlas"))))
+            for name, value in (("pfc-1.png", 200), ("pfc-2.png", 120)):
+                image = np.zeros((32, 24, 3), dtype=np.uint8)
+                image[4:28, 4:20] = value
+                cv2.imwrite(str(root / name), image)
+                with patch.object(file_dialogs, "get_open_file_name",
+                                  return_value=(str(root / name), "")):
+                    window.run("section.load")
+            first_id = engine.sections.entries()[0].section_id
+            fiber = engine.add_implant("fiber")
+            engine.set_implant_outline(fiber.implant_id,
+                                       [[10.0, 4.0], [14.0, 4.0], [14.0, 20.0], [10.0, 20.0]])
+            self.assertTrue(engine.map_implant(fiber.implant_id)[0])
+            window.go_to("project")
+            panel = window.panels["project"]
+            window.refresh()
+            self.assertEqual(panel.section_list.count(), 2)
+            self.assertIn("(open)", panel.section_list.item(1).text())
+            self.assertIn("mapped: Fiber 1", panel.section_list.item(1).text())
+            self.assertIn("section 2 of 2: pfc-2.png", window.rail_status["project"].text())
+
+            # Open the first section from the list.
+            panel.section_list.setCurrentRow(0)
+            panel.apply_gates()
+            self.assertTrue(panel.section_list.currentItem() is not None)
+            panel.open_selected()
+            self.assertEqual(engine.section_id, first_id)
+            window.refresh()
+            self.assertIn("(open)", panel.section_list.item(0).text())
+            # Annotate names the other section's mapping.
+            window.go_to("annotate")
+            window.refresh()
+            self.assertIn("Also mapped on: pfc-2.png",
+                          window.panels["annotate"].mapped_note.text())
+            o = engine.object_ctrl
+            self.assertIn("from pfc-2.png", o.obj_list[0].toolTip())
+
+            window.go_to("project")
+            panel.section_list.setCurrentRow(0)
+            with patch.object(QInputDialog, "getText", return_value=("rostral", True)):
+                panel.rename_selected()
+            self.assertEqual(engine.sections.names()[0], "rostral")
+            panel.section_list.setCurrentRow(1)
+            panel.move_selected(-1)
+            self.assertEqual(engine.sections.names(), ["pfc-2.png", "rostral"])
+
+            # Remove the other section, keeping its results.
+            window.refresh()
+            panel.section_list.setCurrentRow(0)
+
+            def choose_keep(box):
+                box._choice = next(b for b in box.buttons()
+                                   if b.text() == "Remove, keep results")
+            with patch.object(QMessageBox, "exec", choose_keep), \
+                    patch.object(QMessageBox, "clickedButton", lambda box: box._choice):
+                panel.remove_selected()
+            self.assertEqual(engine.sections.names(), ["rostral"])
+            self.assertEqual(len(engine.implant_objects(fiber.implant_id)), 1)
+            window.refresh()
+            self.assertIn("1 earlier section mapped without a stored image",
+                          panel.orphans.text())
+
+    @isolated_gui_test
     def test_brightness_and_contrast_change_the_adjusted_channels(self):
         import tifffile
 
