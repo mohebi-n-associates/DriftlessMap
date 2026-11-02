@@ -170,6 +170,15 @@ class SectionsMixin:
             return
         self.sections.put_away(*stored)
         self.sections.add(self.section_id, self._section_default_name())
+        # Loading clears the section side only; the atlas landmarks, atlas
+        # marks and layers and the warp preview were the previous section's
+        # (kept with it) and must not carry over to the new one.
+        self.reset_tri_points_atlas()
+        self.delete_all_atlas_layer()
+        self.remove_a2h_transferred_layers()
+        self.working_atlas_data = self._default_working_atlas_data()
+        self.atlas_mark_origin = {}
+        self.refresh_kept_marks()
 
     # ------------------------------------------------------------- exporting
     def export_sections(self, folder):

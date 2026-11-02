@@ -42,18 +42,21 @@ acknowledgements are in [THANKS.txt](THANKS.txt).
 - Drawing, cell, virus-expression, and user-defined object workflows.
 - Registration review, out-of-date tracking and undo for mapped results.
 - Safe, versioned project and object archives that reopen where you left off.
+- Several sections per project, each with its own image, registration and marks.
 - Support for custom compatible atlases.
 
 ## DriftlessMap 2.0
 
-**2.3.0** is the current release. It opens the
+**2.4.0** is the current release. It opens the
 redesigned step-by-step interface by default (Project, Section, Match, Register,
 Annotate, Results); the classic interface is still available with
 `driftlessmap --classic` or from Help > Open the classic interface. See
 [What’s New](WhatsNew.md) for the full list of changes.
 
-Projects saved by 2.0 cannot be opened by 1.6.1 or earlier; 2.0 opens 1.x and
-HERBS projects. Keep a copy of important projects before opening them in 2.0.
+Projects saved by 2.0 cannot be opened by 1.6.1 or earlier, and projects saved
+by 2.4, which keep every section, cannot be opened by 2.3 or earlier; 2.4 opens
+all earlier DriftlessMap and HERBS projects. Keep a copy of important projects
+before opening them in a newer version.
 DriftlessMap 1.6.1 remains available from its
 [release page](https://github.com/mohebi-n-associates/DriftlessMap/releases/tag/v1.6.1)
 and with `pip install "driftlessmap==1.6.1"`.
@@ -61,18 +64,18 @@ and with `pip install "driftlessmap==1.6.1"`.
 ## Installation
 
 DriftlessMap is available as a desktop application for end users and as a
-Python package for developers. The current release is 2.3.0.
+Python package for developers. The current release is 2.4.0.
 
 ### Mode 1: desktop application for end users
 
 No Python or Conda installation is required. Download the asset for your
 computer from [GitHub Releases](https://github.com/mohebi-n-associates/DriftlessMap/releases).
-From the [2.3.0 release](https://github.com/mohebi-n-associates/DriftlessMap/releases/tag/v2.3.0):
+From the [2.4.0 release](https://github.com/mohebi-n-associates/DriftlessMap/releases/tag/v2.4.0):
 
-- **Windows 64-bit:** download `DriftlessMap-2.3.0-Windows-x64.zip`, extract
+- **Windows 64-bit:** download `DriftlessMap-2.4.0-Windows-x64.zip`, extract
   the complete folder, and double-click `DriftlessMap.exe`. Do not move the
   executable out of its extracted folder.
-- **macOS (Apple Silicon):** download `DriftlessMap-2.3.0-macOS-arm64.dmg`,
+- **macOS (Apple Silicon):** download `DriftlessMap-2.4.0-macOS-arm64.dmg`,
   open it, and drag `DriftlessMap.app` to Applications. The application bundle
   includes the DriftlessMap icon and all Python dependencies. Intel Macs are
   not covered by the desktop build; use the Conda/pip installation below.
