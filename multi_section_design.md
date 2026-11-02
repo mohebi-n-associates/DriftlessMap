@@ -1,7 +1,7 @@
 # Multi-section projects (design, proposed for 2.4.0)
 
 Status: design agreed on 2 November 2026 (see Decisions). Phases 1 (engine) and
-2 (persistence, embedding) are implemented; linking and phases 3-4 are not.
+2 (persistence) are implemented; phases 3-4 are not.
 
 ## Problem
 
@@ -96,7 +96,6 @@ uint8). Inactive sections must not stay in RAM:
 
 ## Persistence (project schema 4)
 
-- `section_images` ("embed" or "link", default "embed"; see Decisions).
 - Top level stays as today and holds the **active** section, so the loader,
   recovery file and every existing field keep their meaning.
 - New `sections`: a list of the **inactive** entries, each with the section
@@ -161,8 +160,9 @@ dialog (Image menu) lists, opens, renames and removes them.
 
 ## Decisions (2 November 2026)
 
-1. **Images of inactive sections: chosen per project.** A project setting
-   `section_images` is `"embed"` (default: every section's exact raster is in
+1. **Images of inactive sections: embedded (first chosen per project; see the
+   end of this item).** The first decision was a project setting:
+   `section_images` would be `"embed"` (default: every section's exact raster is in
    the archive, so the project alone restores everything) or `"link"` (only
    the active section's raster is embedded, as the persistence contract
    requires; inactive sections keep their small fields and a provenance link,
@@ -181,8 +181,7 @@ dialog (Image menu) lists, opens, renames and removes them.
    reoriented or cropped. Linking can only drop the raster of a section whose
    working raster still equals its file as read (same scene, page, planes and
    scale), which a save would have to verify by reading the file again.
-   Phase 2 embeds every section; `section_images` is saved but only "embed"
-   is used until this is decided.
+   **Decided (2 November 2026): embed always; there is no link setting.**
 2. **Add and remove only.** Loading an image adds a section; there is no
    Replace. Project > Replace section becomes **Add section…**.
 3. **Undo is cleared on switching sections**, as on loading one today.

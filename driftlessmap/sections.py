@@ -45,7 +45,6 @@ SPILL_BYTES = 1 << 20
 
 # Version of the ``sections`` block of a project payload (project schema 4).
 SECTIONS_SCHEMA_VERSION = 1
-SECTION_IMAGES = ("embed", "link")
 
 
 def section_fields(payload):
@@ -186,12 +185,11 @@ class SectionBook:
         target = max(0, min(len(self._order) - 1, index + step))
         self._order.insert(target, self._order.pop(index))
 
-    def index(self, section_images="embed"):
+    def index(self):
         """What the change digest needs: order, names and stored contents."""
         return {
             "schema_version": SECTIONS_SCHEMA_VERSION,
             "active_section_id": self.active_id,
-            "section_images": section_images,
             "order": list(self._order),
             "names": {entry.section_id: entry.name for entry in self.entries()},
             "stored": {entry.section_id: entry.digest()
@@ -261,12 +259,6 @@ def _stored_problem(item, active_id, seen):
     if not isinstance(item.get("name", ""), str):
         return "invalid name"
     return None
-
-
-def section_images_setting(block):
-    """The saved embed/link setting, defaulting to embed."""
-    value = block.get("section_images") if isinstance(block, dict) else None
-    return value if value in SECTION_IMAGES else "embed"
 
 
 class SpillCache:

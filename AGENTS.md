@@ -322,8 +322,9 @@ or important workflows change.
   schema 4 adds `sections`: the open section stays at the top level as before,
   and `sections.stored` holds every other section's fields (`SECTION_FIELDS`,
   each with its own embedded working raster and histology provenance), plus
-  `order`, `names`, `active_section_id` and `section_images` (only "embed" is
-  used). Schemas 1-3 open as one section. Portable copies pack stored
+  `order`, `names` and `active_section_id`. Every section's working raster is
+  embedded (linking originals was rejected: the raster is the working one,
+  after rotations, flips and crops). Schemas 1-3 open as one section. Portable copies pack stored
   sections' sources under `portable_sources.sections`.
   The optional `interface_state` (where the user left off) needs no schema
   bump: it is absent in older files and dropped when unusable.
