@@ -16,7 +16,7 @@ from driftlessmap.v2 import channel_display, state
 
 if V2_TEST_CHILD:
     from PyQt6.QtCore import QSettings
-    from PyQt6.QtGui import QAction
+    from PyQt6.QtGui import QAction, QKeySequence
     from PyQt6.QtCore import Qt
     from PyQt6.QtWidgets import QAbstractButton, QApplication, QPushButton
 
@@ -791,6 +791,42 @@ class V2ShellTests(unittest.TestCase):
             engine.action3D_Mode_Dark.trigger()
             self.assertEqual(engine.display_mode_3d, "dark")
             self.assertEqual(engine.action3D_Mode_Dark.text(), "3D Mode: Dark")
+
+    @isolated_gui_test
+    def test_probe_controls_say_how_to_take_marks_back_and_undo_does(self):
+        import cv2
+
+        from tests.atlas_fixture import make_processed_atlas
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window = self.make_window(folder)
+            engine = window.engine
+            self.assertTrue(engine.load_volume_atlas(str(make_processed_atlas(root / "atlas"))))
+            cv2.imwrite(str(root / "s.png"), np.full((40, 30, 3), 120, dtype=np.uint8))
+            self.assertTrue(engine.load_single_image_file(str(root / "s.png"), ".png"))
+            window.go_to("annotate")
+            probes = window.panels["annotate"].implants.probe_card
+            probes.new_probe("NP A")
+            window.refresh()
+            undo = QKeySequence("Ctrl+Z").toString(QKeySequence.SequenceFormat.NativeText)
+            self.assertIn(undo, probes.mark.toolTip())
+            self.assertIn("Undo mapping step", probes.add_button.toolTip())
+            self.assertIn("Edit marks", probes.add_button.toolTip())
+            self.assertIn("Undo mapping step", probes.build_button.toolTip())
+            self.assertIn(undo, probes.undo_note.text())
+
+            # What the tooltip promises: Undo removes the last point, one at a time.
+            probes.toggle_marking()
+            for point in ((13.0, 5.0), (14.0, 15.0), (15.0, 25.0)):
+                engine.img_stacks_clicked(point)
+            self.assertEqual(len(engine.working_img_data["img-probe"]), 3)
+            engine.actionUndo.trigger()
+            self.assertEqual(engine.working_img_data["img-probe"], [[13.0, 5.0], [14.0, 15.0]])
+            engine.actionUndo.trigger()
+            self.assertEqual(engine.working_img_data["img-probe"], [[13.0, 5.0]])
+            engine.actionRedo.trigger()
+            self.assertEqual(len(engine.working_img_data["img-probe"]), 2)
 
     @isolated_gui_test
     def test_a_deleted_probe_leaves_no_marks_on_screen(self):

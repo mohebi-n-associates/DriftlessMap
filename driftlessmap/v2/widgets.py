@@ -254,3 +254,22 @@ class StepPanel(QScrollArea):
             card.setVisible(text is not None)
             if text is not None:
                 set_status(self._requirement_text, text, "warn")
+
+
+def keys(sequence):
+    """A shortcut as this platform writes it ("Ctrl+Z" is "⌘Z" on macOS)."""
+    from PyQt6.QtGui import QKeySequence
+
+    return QKeySequence(sequence).toString(QKeySequence.SequenceFormat.NativeText)
+
+
+def undo_help():
+    """How to take back marking, mapping and building, for tooltips."""
+    return {
+        "point": "{} (Edit > Undo) removes the last point; repeat to walk back.".format(
+            keys("Ctrl+Z")),
+        "step": "Edit > Undo mapping step ({}) takes back the last Map, Update "
+                "mapping, Make parts or Build.".format(keys("Ctrl+Alt+Z")),
+        "edit": "To correct mapped points instead, select the mapping under Mapped "
+                "marks on this section and click Edit marks.",
+    }

@@ -3,6 +3,17 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.1.1
+
+Fix release, 2 November 2026.
+
+The probe and implant controls say how to take work back. **Mark track** and
+the point count say that Undo (Cmd+Z on macOS, Ctrl+Z elsewhere) removes the
+last point, one at a time. **Map this section** and **Build** name **Undo
+mapping step** (Edit menu) and **Edit marks**. **Delete…** says that Undo
+mapping step restores a deleted probe or implant. A line under the probe buttons
+repeats this.
+
 ## DriftlessMap 2.1.0
 
 Feature release, 2 November 2026.

@@ -9,7 +9,7 @@ reconstruction); only where it is shown changed.
 from PyQt6.QtWidgets import QInputDialog, QLabel, QMenu, QMessageBox
 
 from .probes import ProbeBook
-from .widgets import Card, button, grid_of, hint_label, set_status, status_label
+from .widgets import Card, button, grid_of, hint_label, set_status, status_label, undo_help
 
 
 class ProbeControls(Card):
@@ -25,16 +25,24 @@ class ProbeControls(Card):
         self._select = select       # selects a probe (or nothing) in the Implants list
         self.probe = None
 
+        help_ = undo_help()
         self.guide = self.add(hint_label(""))
         self.mark = button("1  Mark track", self.toggle_marking, checkable=True,
-                           tooltip="Click along the probe track in the image")
+                           tooltip="Click along the probe track in the image. "
+                                   + help_["point"])
         self.marks = QLabel("")
         self.marks.setObjectName("Muted")
+        self.marks.setToolTip(help_["point"])
         self.add_row(self.mark, self.marks, None)
-        self.add_button = button("2  Map this section", self.add_section, primary=True)
+        self.add_button = button("2  Map this section", self.add_section, primary=True,
+                                 tooltip=help_["step"] + " " + help_["edit"])
         self.add_row(self.add_button, None)
-        self.build_button = button("3  Build probe", self.build_probe)
+        self.build_button = button("3  Build probe", self.build_probe,
+                                   tooltip=help_["step"])
         self.add_row(self.build_button, None)
+        self.undo_note = self.add(hint_label(
+            "Made a mistake? {} Undo mapping step (Edit menu) takes back Map or "
+            "Build. Hover over a button for more.".format(help_["point"])))
         self.status = self.add(status_label(""))
         self.results = grid_of([
             button("Region table…", self.region_table),
