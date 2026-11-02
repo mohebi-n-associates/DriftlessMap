@@ -3,6 +3,17 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.1.0
+
+Feature release, 2 November 2026.
+
+Sagittal sections show their hemisphere. A sagittal page has no left-right axis
+within it, so the page alone decides the hemisphere. The Match step and the
+canvas header now name it (for example "Right hemisphere, 0.11 mm from the
+midline"). **Other hemisphere** jumps to the page at the same distance on the
+other side. When the section's file name says left or right and the page shown
+is in the other hemisphere, the Match step says so.
+
 ## DriftlessMap 2.0.2
 
 Fix release, 2 November 2026.

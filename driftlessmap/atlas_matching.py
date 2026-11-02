@@ -224,6 +224,15 @@ def plane_from_name(path):
     return found.pop() if len(found) == 1 else None
 
 
+def hemisphere_from_name(path):
+    """"left" or "right" when a file name names one hemisphere, else None."""
+    if not path:
+        return None
+    words = set(re.split(r"[^a-z]+", os.path.basename(str(path)).lower()))
+    found = words & {"left", "right"}
+    return found.pop() if len(found) == 1 else None
+
+
 def plane_length(shape, plane):
     return {"coronal": shape[2], "sagittal": shape[1], "horizontal": shape[0]}[plane]
 

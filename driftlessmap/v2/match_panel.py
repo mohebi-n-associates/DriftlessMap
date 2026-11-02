@@ -1,8 +1,8 @@
 """Match step: find the atlas plane, depth and tilt that match the section."""
 
-from PyQt6.QtWidgets import QComboBox, QLabel
+from PyQt6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QWidget
 
-from ..atlas_matching import plane_from_name
+from ..atlas_matching import hemisphere_from_name, mirrored_index, plane_from_name
 from . import state
 from .widgets import Card, StepPanel, button, hint_label, set_status, status_label
 
@@ -47,9 +47,47 @@ class MatchPanel(StepPanel):
             "changes; it is off by default, as in 1.x. Navigation makes the other "
             "planes follow the cursor in the multi-plane view."))
         self.plane = manual.add(QLabel(""))
+        # Sagittal pages carry no left-right axis: the page decides the
+        # hemisphere, so name it and offer the mirrored page.
+        self.hemisphere = status_label("")
+        self.other_side = button(
+            "Other hemisphere", self.show_other_hemisphere,
+            tooltip="The sagittal page at the same distance on the other side of "
+                    "the midline")
+        self.hemisphere_row = manual.add(QWidget())
+        row = QHBoxLayout(self.hemisphere_row)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.addWidget(self.hemisphere, 1)
+        row.addWidget(self.other_side)
         view = engine.atlas_view
         # The V2 theme restyles these 1.x controls (see adopted.py).
         manual.add(self.gate(view.sidebar_wrap, shell.needs_volume))
+
+    def show_other_hemisphere(self):
+        view = self.engine.atlas_view
+        if state.sagittal_hemisphere(self.engine) is None:
+            return
+        index = mirrored_index(int(view.current_sagital_index), float(view.origin_3d[0]))
+        index = max(0, min(index, view.spage_ctrl.page_slider.maximum()))
+        view.spage_ctrl.set_val(index)
+        self.shell.refresh()
+
+    def _refresh_hemisphere(self):
+        engine = self.engine
+        side = state.sagittal_hemisphere(engine)
+        self.hemisphere_row.setVisible(side is not None)
+        if side is None:
+            return
+        named = hemisphere_from_name(engine.current_img_path)
+        if side[0] == "midline":
+            text, kind = "At the midline.", None
+        else:
+            text, kind = "{} hemisphere, {:.2f} mm from the midline.".format(
+                side[0].capitalize(), side[1]), None
+        if named is not None and side[0] != "midline" and named != side[0]:
+            text += " The file name says {}.".format(named)
+            kind = "warn"
+        set_status(self.hemisphere, text, kind)
 
     def chosen_plane(self):
         return self.plane_choice.currentData()
@@ -83,3 +121,4 @@ class MatchPanel(StepPanel):
         else:
             set_status(self.recipe, "Registration input: " + recipe.describe(), None)
         self.plane.setText(state.plane_summary(engine))
+        self._refresh_hemisphere()

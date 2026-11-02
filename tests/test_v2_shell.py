@@ -12,7 +12,7 @@ V2_TEST_CHILD = os.environ.get("DRIFTLESSMAP_V2_TEST_CHILD") == "1"
 
 import numpy as np
 
-from driftlessmap.v2 import channel_display
+from driftlessmap.v2 import channel_display, state
 
 if V2_TEST_CHILD:
     from PyQt6.QtCore import QSettings
@@ -287,6 +287,42 @@ class V2ShellTests(unittest.TestCase):
             window.set_view("compare")
             atlas_width, section_width = shown_widths()
             self.assertLessEqual(abs(atlas_width - section_width), 0.05 * atlas_width)
+
+    @isolated_gui_test
+    def test_match_step_names_the_sagittal_hemisphere_and_mirrors_the_page(self):
+        from tests.atlas_fixture import make_processed_atlas
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window = self.make_window(folder)
+            engine = window.engine
+            view = engine.atlas_view
+            self.assertTrue(engine.load_volume_atlas(str(make_processed_atlas(root / "atlas"))))
+            window.go_to("match")
+            panel = window.panels["match"]
+            panel.refresh()
+            self.assertFalse(panel.hemisphere_row.isVisibleTo(panel))   # coronal
+
+            view.section_rabnt2.setChecked(True)
+            midline = int(view.origin_3d[0])
+            view.spage_ctrl.set_val(midline + 3)
+            panel.refresh()
+            self.assertTrue(panel.hemisphere_row.isVisibleTo(panel))
+            self.assertTrue(panel.hemisphere.text().startswith("Right hemisphere"))
+            self.assertIn("right hemisphere", state.plane_summary(engine))
+            # A file named for the other side is pointed out.
+            engine.current_img_path = str(root / "IM-1076_left_All_insertion.tif")
+            panel.refresh()
+            self.assertIn("The file name says left", panel.hemisphere.text())
+
+            panel.show_other_hemisphere()
+            self.assertEqual(int(view.current_sagital_index), midline - 3)
+            panel.refresh()
+            self.assertTrue(panel.hemisphere.text().startswith("Left hemisphere, 0.07"))
+            self.assertNotIn("file name", panel.hemisphere.text())
+            view.spage_ctrl.set_val(midline)
+            panel.refresh()
+            self.assertEqual(panel.hemisphere.text(), "At the midline.")
 
     @isolated_gui_test
     def test_brightness_and_contrast_change_the_adjusted_channels(self):
