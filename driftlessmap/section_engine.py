@@ -10,10 +10,25 @@ current again and mapping it once more replaces its earlier part.
 
 import copy
 import os
+import tempfile
 
+from .background import run_in_background
 from .project_session import ProjectSnapshot, snapshot_metadata
-from .provenance import path_stat_signature
-from .sections import SECTION_METADATA, SectionBook, SpillCache, section_state
+from .provenance import (
+    describe_path,
+    pack_path,
+    path_stat_signature,
+    resolve_reference,
+    unpack_path,
+    verify_reference,
+)
+from .sections import (
+    SECTION_METADATA,
+    SectionBook,
+    SpillCache,
+    section_images_setting,
+    section_state,
+)
 
 
 class SectionsMixin:
@@ -22,6 +37,13 @@ class SectionsMixin:
     def _init_sections(self):
         self.sections = SectionBook(self.section_id)
         self._section_cache = SpillCache()
+        # "embed" or "link": how a save stores sections that are not open.
+        self.section_images = "embed"
+
+    def sections_index(self):
+        """The ``sections`` entry of the project payload (for change detection;
+        a save replaces it with :meth:`sections_for_save`)."""
+        return self.sync_sections().index(self.section_images)
 
     # ----------------------------------------------------------- listing
     def _section_default_name(self):
@@ -38,10 +60,48 @@ class SectionsMixin:
         return self.sections
 
     def reset_sections(self):
-        """A project was opened or the document replaced: one open section."""
+        """The document was replaced: one open section."""
         self._section_cache.close()
+        self._section_cache = SpillCache(self._section_cache.min_bytes)
         self.sections = SectionBook(self.section_id)
+        self.section_images = "embed"
         self.sync_sections()
+
+    def restore_sections(self, p_dict):
+        """After a project was opened: its sections (schema 4), or only the
+        open one for older projects."""
+        self.reset_sections()
+        block = p_dict.get("sections")
+        self.section_images = section_images_setting(block)
+        book, problems = SectionBook.from_saved(block, self.section_id,
+                                                self._section_default_name())
+        packed = ((p_dict.get("portable_sources") or {}).get("sections") or {})
+        for entry in book.entries():
+            if not entry.stored:
+                continue
+            entry.state = self._section_cache.spill(entry.state)
+            setting = entry.state.get("setting_data") or {}
+            # The source is found through its provenance when it is opened.
+            entry.metadata = {
+                "current_img_path": None, "current_img_name": None, "save_path": None,
+                "_loaded_histology_signature": None, "_temporary_histology_source": None,
+                "editing_units": set(), "tri_simplices": setting.get("tri_simplices"),
+                "triangulation_topology_point_count":
+                    setting.get("triangulation_topology_point_count"),
+            }
+            entry.portable = packed.get(entry.section_id)
+        self.sections = book
+        self.sync_sections()
+        if problems:
+            self.print_message("{} section(s) could not be restored and were left out: "
+                               "{}".format(len(problems), "; ".join(problems)),
+                               self.reminder_color)
+
+    def sections_without_image(self):
+        """Sections with mapping records but no stored section: mapped before
+        projects kept every section, or removed with their results kept."""
+        known = {entry.section_id for entry in self.sections.entries()}
+        return sorted({r.section_id for r in self.mapping_ledger.records()} - known)
 
     def section_summary(self, entry):
         """Plane, page, landmark pairs and review of a section, for listing."""
@@ -85,7 +145,105 @@ class SectionsMixin:
         self.sections.put_away(*stored)
         self.sections.add(self.section_id, self._section_default_name())
 
+    # -------------------------------------------------------------- saving
+    def _stored_section_provenance(self, entry, project_path):
+        """(histology provenance, source changed since load) of a stored section."""
+        meta = entry.metadata or {}
+        path = meta.get("current_img_path")
+        signature = meta.get("_loaded_histology_signature")
+        previous = dict(entry.state.get("histology_provenance") or {})
+        reference, changed = None, False
+        if (path and os.path.exists(path) and signature is not None
+                and path != meta.get("_temporary_histology_source")):
+            if path_stat_signature(path) != signature:
+                changed = True
+            else:
+                reference = describe_path(path, project_path=project_path)
+        else:
+            reference = previous.get("reference")
+        image = entry.state["img_ctrl_data"]
+        raster = image["current_img"]
+        previous.update({
+            "schema_version": 1,
+            "reference": reference,
+            "selected_scene": int(image.get("current_scene") or 0),
+            "selected_page": int(image.get("current_page") or 0),
+            "working_raster_embedded": True,
+            "working_raster_shape": tuple(int(v) for v in raster.shape),
+            "working_raster_dtype": raster.dtype.name,
+            "source_changed_since_load": changed,
+        })
+        return previous, changed
+
+    def sections_for_save(self, project_path, portable=False):
+        """The ``sections`` block of a saved project, the packed sources of
+        stored sections for a portable copy, and notes for the user.
+
+        GUI-free (runs in the background): fingerprints and packing only.
+        """
+        block = self.sections.index(self.section_images)
+        del block["stored"]
+        stored, packed, notes, states = [], {}, [], {}
+        for entry in self.sections.entries():
+            if not entry.stored:
+                continue
+            provenance, changed = self._stored_section_provenance(entry, project_path)
+            state = dict(entry.state, histology_provenance=provenance)
+            states[entry.section_id] = state
+            stored.append(entry.saved(state))
+            if changed:
+                notes.append("{}: its source changed after loading; its saved image is "
+                             "kept and the changed file is not linked".format(entry.name))
+            if portable:
+                reference = provenance.get("reference")
+                path = (entry.metadata or {}).get("current_img_path")
+                if reference is not None and path and os.path.exists(path):
+                    packed[entry.section_id] = pack_path(path, reference=reference)
+                elif entry.portable is not None:
+                    packed[entry.section_id] = entry.portable
+                else:
+                    notes.append("{}: its original source is unavailable; the portable "
+                                 "project keeps its saved image".format(entry.name))
+        block["stored"] = stored
+        return block, packed, notes, states
+
+    def sections_saved(self, states):
+        """After a save: stored sections keep the provenance that was written."""
+        for section_id, state in states.items():
+            entry = self.sections.entry(section_id)
+            if entry is not None and entry.stored:
+                entry.state = state
+                entry._digest = None
+
     # ----------------------------------------------------------- switching
+    def _locate_section_source(self, entry, metadata):
+        """Find a stored section's source through its provenance (after a
+        project was opened); updates ``metadata`` when found."""
+        reference = (entry.state.get("histology_provenance") or {}).get("reference")
+        if reference is None:
+            return False
+        found, _ = run_in_background(self, "Finding the section's image...", resolve_reference,
+                                     reference, project_path=self.current_project_path)
+        if found is None and entry.portable is not None:
+            folder = tempfile.TemporaryDirectory(prefix="driftlessmap-project-")
+            try:
+                found = unpack_path(entry.portable, folder.name)
+                if not verify_reference(found, reference)[0]:
+                    found = None
+            except (OSError, ValueError):
+                found = None
+            if found is None:
+                folder.cleanup()
+            else:
+                self._portable_source_directories.append(folder)
+                metadata["_temporary_histology_source"] = found
+        if found is None:
+            return False
+        metadata["current_img_path"] = str(found)
+        metadata["current_img_name"] = os.path.basename(str(found))
+        metadata["_loaded_histology_signature"] = path_stat_signature(str(found))
+        return True
+
     def switch_section(self, section_id):
         """Open another section of the project; returns (ok, message)."""
         self.sync_sections()
@@ -109,6 +267,10 @@ class SectionsMixin:
         metadata = dict(rollback.metadata)
         metadata.update(copy.deepcopy(target.metadata))
         metadata["action_list"], metadata["action_id"] = [], 0
+        if metadata.get("save_path") is None:
+            metadata["save_path"] = self.save_path
+        if metadata.get("_loaded_histology_signature") is None:
+            self._locate_section_source(target, metadata)
         path = metadata.get("current_img_path")
         signature = metadata.get("_loaded_histology_signature")
         if payload.get("img_ctrl_data") is not None and not (
@@ -119,6 +281,8 @@ class SectionsMixin:
             payload["_histology_load_mode"] = "embedded"
             metadata["current_img_path"] = None
             metadata["_loaded_histology_signature"] = None
+        elif payload.get("img_ctrl_data") is not None:
+            payload["img_path"] = path    # where the source was found
         install = copy.copy(rollback)
         install.payload = payload
         install.metadata = metadata

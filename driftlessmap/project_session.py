@@ -182,6 +182,7 @@ class ProjectSessionMixin:
             "atlas_mark_origin": self.atlas_mark_origin,
             "implants": self.implants.to_list(),
             "implant_outlines": self.implant_outlines,
+            "sections": self.sections_index(),
             "interface_state": self._interface_state_for_save(),
             "np_onside": self.np_onside,
             "processing_slice": self.atlas_view.processing_slice,
@@ -261,8 +262,9 @@ class ProjectSessionMixin:
             self._project_loading = False
         self.__dict__.pop("_project_recovery", None)
         self.__dict__.pop("_project_recovery_path", None)
-        self.reset_sections()
         self.print_message("Project loaded successfully.", self.normal_color)
+        # After the message above, so a section left out is what is shown.
+        self.restore_sections(p_dict)
         if callable(self.on_project_loaded):
             try:
                 self.on_project_loaded(self.interface_state)
