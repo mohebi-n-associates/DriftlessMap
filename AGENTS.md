@@ -227,6 +227,21 @@ or important workflows change.
   Mark track, an outline being drawn). Point layers are read through
   `project_io.layer_points` / `plot_points`, so an empty layer (formerly
   saved as `[None, None]`) saves and reopens.
+- `driftlessmap/sections.py` (GUI-free) and `section_engine.py`: multi-section
+  projects (`multi_section_design.md`; phase 1 of 4, engine only, unreleased).
+  `SECTION_FIELDS` / `section_fields` split the payload into document and
+  section fields (`atlas_control` is a section's only with a volume atlas).
+  `SectionBook` lists the sections in order; the open one lives in the engine
+  (`sections.active_id` follows `section_id`, `sync_sections`), the others are
+  `SectionEntry`s whose large arrays `SpillCache` keeps as content-addressed
+  copy-on-write `.npy` memmaps. `load_image` adds a section
+  (`begin_new_section` / `finish_new_section`); direct `load_single_image_file`
+  calls re-read the open one. `switch_section` installs document fields plus
+  the target's fields through `ProjectSnapshot.restore` (rollback on failure)
+  with `keep_atlas` (the volume is not re-set) and restores the section's own
+  `section_id`; a missing or changed source opens its embedded raster.
+  `remove_section(delete_results=)`. `load_project` resets the book; saving
+  keeps only the open section until phase 2 (schema 4) and says so.
 - `driftlessmap/landmarks.py`: `LandmarkModel` owns paired landmark lists,
   topology, the cached registration and label items (the `DriftlessMap`
   attributes of the same names delegate to it), plus `.dmaptri` validation.

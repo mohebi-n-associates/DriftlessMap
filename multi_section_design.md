@@ -1,6 +1,7 @@
 # Multi-section projects (design, proposed for 2.4.0)
 
-Status: design agreed on 2 November 2026 (see Decisions); not implemented yet.
+Status: design agreed on 2 November 2026 (see Decisions). Phase 1 (engine) is
+implemented; phases 2-4 are not.
 
 ## Problem
 
