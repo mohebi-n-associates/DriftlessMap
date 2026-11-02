@@ -1,6 +1,11 @@
 # Update Log
 
 ### 2nd November 2026
+##### DriftlessMap 2.1.1
+
+`v2/widgets.keys(sequence)` (native shortcut text) and `undo_help()` (point, step and edit-marks sentences). `ProbeControls`: tooltips on Mark track, the point count, Map this section and Build, plus `undo_note` under the buttons. `ImplantCard`: Delete…, Map this section (also when `refresh` sets the tooltip) and Build. Test: three probe clicks, Undo twice leaves the first point, Redo restores the second. Version 2.1.1.
+
+### 2nd November 2026
 ##### DriftlessMap 2.1.0
 
 `v2/state.sagittal_hemisphere(engine)` returns (`sagittal_side`, mm from `origin_3d[0]` × `vox_size_um`) for the sagittal page shown, or None; `plane_summary` adds "right/left hemisphere N mm" or "midline". `MatchPanel` gets a hemisphere status row (visible only for sagittal) and **Other hemisphere** (`mirrored_index`, clamped to the slider range). `atlas_matching.hemisphere_from_name` reads a single whole word "left" or "right" from the file name; when it disagrees with the page shown the row warns. Reported case: IM-1076_left_All_insertion.tif applied at sagittal page 581, which the readout names as the right hemisphere when the midline page is below 581 (about 570 in a 1140-page atlas; not checked against the user's atlas). Version 2.1.0 (a feature, per the 2.N.0 rule).

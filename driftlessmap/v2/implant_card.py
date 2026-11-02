@@ -27,7 +27,7 @@ from .. import file_dialogs
 from .. import implants as model
 from .outline_editor import OutlineEditor
 from .probe_card import ProbeControls
-from .widgets import Card, button, grid_of, hint_label, set_status, status_label
+from .widgets import Card, button, grid_of, hint_label, set_status, status_label, undo_help
 
 NEUROPIXELS = "neuropixels"
 PROBE_ROW = "probe:"
@@ -174,7 +174,11 @@ class ImplantCard(Card):
         self.add(self.list)
         self.add_row(button("Add implant…", self.add_implant),
                      button("Settings…", self.edit_settings),
-                     button("Rename…", self.rename), button("Delete…", self.delete), None)
+                     button("Rename…", self.rename),
+                     button("Delete…", self.delete,
+                            tooltip="Delete the selected implant or probe with its parts, "
+                                    "built object and mapping records. "
+                                    + undo_help()["step"]), None)
 
         self.active = self.add(QLabel(""))
         self.active.setObjectName("CardTitle")
@@ -191,8 +195,10 @@ class ImplantCard(Card):
                                 columns=2)
         self.add(self.controls)
         self.outline_state = self.add(hint_label(""))
-        self.map_button = button("2  Map this section", self.map_section, primary=True)
-        self.build_button = button("3  Build", self.build)
+        help_ = undo_help()
+        self.map_button = button("2  Map this section", self.map_section, primary=True,
+                                 tooltip=help_["step"] + " " + help_["edit"])
+        self.build_button = button("3  Build", self.build, tooltip=help_["step"])
         self.add_row(self.map_button, None)
         self.add_row(self.build_button, None)
         self.status = self.add(status_label(""))
@@ -479,7 +485,9 @@ class ImplantCard(Card):
         self.outline_state.setText(", ".join(parts).capitalize() + ".")
         reason = self.shell.needs_both()
         self.map_button.setEnabled(bool(outline["points"]) and reason is None)
-        self.map_button.setToolTip(reason or ("" if outline["points"]
+        help_ = undo_help()
+        self.map_button.setToolTip(reason or (help_["step"] + " " + help_["edit"]
+                                              if outline["points"]
                                               else "Draw the outline first."))
         has_parts = bool(engine.implant_objects(implant.implant_id))
         self.build_button.setEnabled(has_parts)

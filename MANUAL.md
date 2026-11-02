@@ -1,7 +1,7 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 2.1.0**. Section 2 explains how to
-install it; `pip install driftlessmap` installs 2.1.0.
+This manual applies to **DriftlessMap 2.1.1**. Section 2 explains how to
+install it; `pip install driftlessmap` installs 2.1.1.
 
 DriftlessMap - Histological E-data Registration in Brain Space - is a desktop
 application for aligning rodent histology with a reference atlas, reconstructing
@@ -102,7 +102,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-DriftlessMap 2.1.0 requires:
+DriftlessMap 2.1.1 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -121,8 +121,8 @@ page. The macOS DMG (`-macOS-arm64.dmg`) is built for Apple Silicon; on an Intel
 Mac, use the developer installation below.
 The desktop builds include Python and all runtime dependencies. Windows users
 extract the entire ZIP and run `DriftlessMap.exe`; macOS users open the DMG and
-drag `DriftlessMap.app` to Applications. The 2.1.0 downloads are named
-`DriftlessMap-2.1.0-Windows-x64.zip` and `DriftlessMap-2.1.0-macOS-arm64.dmg`.
+drag `DriftlessMap.app` to Applications. The 2.1.1 downloads are named
+`DriftlessMap-2.1.1-Windows-x64.zip` and `DriftlessMap-2.1.1-macOS-arm64.dmg`.
 Release builds are unsigned unless the release notes say otherwise, so the first
 launch may require Windows SmartScreen confirmation or Control-clicking the
 macOS app and choosing **Open**.
@@ -171,7 +171,7 @@ python -m pip --version
 python -c "import driftlessmap; print(driftlessmap.__version__)"
 ```
 
-The final command prints the installed version, `2.1.0`.
+The final command prints the installed version, `2.1.1`.
 
 ### 2.5 Launching DriftlessMap
 
@@ -1171,8 +1171,12 @@ step can still be restored, but further history is cleared. Steps that change
 nothing are not recorded. Loading a section or
 opening a project starts a new history, and the history is not saved. The
 existing Edit > Undo and Redo (Ctrl+Z) still undo individual drawing and erasing
-edits; a mapping step clears that shorter history, because its snapshots
-describe the marks the step replaced.
+edits and probe track points, one point at a time; a mapping step clears that
+shorter history, because its snapshots describe the marks the step replaced.
+In the 2.0 interface the probe and implant controls say this in their tooltips
+(hover over **Mark track**, **Map this section**, **Build** or **Delete…**),
+and a line under the probe buttons repeats it. On macOS the shortcuts use Cmd
+and Option in place of Ctrl and Alt.
 
 Points outside the registration mesh cannot be assigned a valid atlas
 coordinate. DriftlessMap preserves or rejects them according to the data type and
