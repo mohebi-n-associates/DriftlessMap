@@ -3,6 +3,16 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.2.0
+
+Feature release, 2 November 2026.
+
+**Focus** gives the atlas and section the whole window. The Focus button (top
+right of the view bar), View > Focus on images, or Shift+Cmd+F on macOS
+(Ctrl+Shift+F elsewhere) hides the step list, the step panel and the
+objects/layers panel. The same again brings them back. Tool options above the
+image stay available, so you can mark points while focused.
+
 ## DriftlessMap 2.1.2
 
 Fix release, 2 November 2026.

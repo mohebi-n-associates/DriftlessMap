@@ -210,6 +210,16 @@ class V2Window(QMainWindow):
         self.plane_label.setObjectName("Muted")
         header_layout.addWidget(self.plane_label)
         header_layout.addStretch(1)
+        self.focus_button = QToolButton()
+        self.focus_button.setObjectName("Segment")
+        self.focus_button.setText("Focus")
+        self.focus_button.setCheckable(True)
+        self.focus_button.setToolTip(
+            "Hide the step panels and the objects/layers panel to give the images the "
+            "whole window ({}); press again to bring them back".format(
+                QKeySequence("Ctrl+Shift+F").toString(QKeySequence.SequenceFormat.NativeText)))
+        self.focus_button.clicked.connect(lambda _checked: self.run("view.focus"))
+        header_layout.addWidget(self.focus_button)
         canvas_layout.addWidget(header)
 
         self.tool_options = QFrame()
@@ -665,6 +675,9 @@ class V2Window(QMainWindow):
         for key, title, tip in VIEWS:
             add(Command("view." + key, "{} view".format(title), lambda k=key: self.set_view(k),
                         "View", (tip.lower(),)))
+        add(Command("view.focus", "Focus on images (hide side panels)", self.toggle_focus,
+                    "View", ("full screen", "hide panels", "maximise", "maximize", "sidebars"),
+                    "Ctrl+Shift+F"))
 
         # Every 1.x menu command stays reachable, under its 1.x name.
         seen = {id(engine.actionSingle_Image), id(engine.actionAtlas)}
@@ -740,14 +753,20 @@ class V2Window(QMainWindow):
         self.boundaries_item.triggered.connect(
             lambda: self.boundaries_item.setChecked(boundary_button.isChecked()))
         item(view_menu, "view.theme")
+        view_menu.addSeparator()
+        self.focus_item = item(view_menu, "view.focus")
+        self.focus_item.setCheckable(True)
         toggle_task = view_menu.addAction("Show task column")
         toggle_task.setCheckable(True)
         toggle_task.setChecked(True)
         toggle_task.toggled.connect(self.task_column.setVisible)
+        toggle_task.toggled.connect(lambda _shown: self._sync_focus())
         toggle_inspector = view_menu.addAction("Show objects and layers")
         toggle_inspector.setCheckable(True)
         toggle_inspector.setChecked(True)
         toggle_inspector.toggled.connect(self.inspector_column.setVisible)
+        toggle_inspector.toggled.connect(lambda _shown: self._sync_focus())
+        self.toggle_task_item, self.toggle_inspector_item = toggle_task, toggle_inspector
 
         help_menu = bar.addMenu("&Help")
         item(help_menu, "palette")
@@ -916,6 +935,28 @@ class V2Window(QMainWindow):
             self.message("Opening the classic interface in a new window.")
         else:
             self.message("The classic interface could not be started.", "bad")
+
+    def is_focused(self):
+        """True while both side columns are hidden."""
+        return not self.toggle_task_item.isChecked() and \
+            not self.toggle_inspector_item.isChecked()
+
+    def toggle_focus(self):
+        """Hide both side columns, or show them again."""
+        show = self.is_focused()
+        self.toggle_task_item.setChecked(show)
+        self.toggle_inspector_item.setChecked(show)
+        if not show:
+            self.message("Side panels hidden. {} or Focus (top right) brings them "
+                         "back.".format(QKeySequence("Ctrl+Shift+F").toString(
+                             QKeySequence.SequenceFormat.NativeText)), None)
+        # The canvas width changes once the columns are laid out again.
+        QTimer.singleShot(0, self._balance_views)
+
+    def _sync_focus(self):
+        focused = self.is_focused()
+        self.focus_button.setChecked(focused)
+        self.focus_item.setChecked(focused)
 
     def open_palette(self):
         palette = CommandPalette(self.registry, self)

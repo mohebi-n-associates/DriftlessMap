@@ -8,7 +8,7 @@ or important workflows change.
 
 ## Project identity
 
-- Current stable release: DriftlessMap 2.1.2 (2 November 2026). 2.0.0
+- Current stable release: DriftlessMap 2.2.0 (2 November 2026). 2.0.0
   (29 October 2026) followed the 2.0.0aN previews and 2.0.0rc1-rc16. The owner released it with the
   `release_validation.md` gates still pending (recorded there as waived); keep
   recording evidence for them. Later fixes become 2.0.N, features 2.N.0.
@@ -79,6 +79,9 @@ or important workflows change.
   `V2Window` re-evens the view splitter (`_balance_views`, deferred one
   event-loop pass) whenever the set of visible view frames changes, including
   layouts the engine switches itself (loading an atlas or a section).
+  Focus mode (`view.focus`, Ctrl+Shift+F, header Focus button,
+  `V2Window.toggle_focus`) hides both side columns through the View menu's
+  Show task column / Show objects and layers items.
 - `driftlessmap/atlas_matching.py`: GUI-free suggestion of the atlas plane,
   orientation and slice that match a histology section (silhouette search on
   slices exactly as `AtlasView` displays them). Coronal/horizontal matches are
