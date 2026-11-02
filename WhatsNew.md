@@ -3,6 +3,18 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.0.1
+
+Fix release, 2 November 2026.
+
+Brightness and contrast in the Section step now change the channels you see.
+Until now they changed one selected row, the first channel unless another was
+picked, so with that channel hidden nothing on screen moved. Each row now has an
+**Adjust** tick. The ticks follow **Show** until you choose yourself, and with
+several ticked, Brightness, Contrast, Min, Max, Gamma, Auto and Reset change them
+all together. The window title and step list show the version instead of
+"2.0 preview (development build)".
+
 ## DriftlessMap 2.0.0
 
 Stable release, 29 October 2026.

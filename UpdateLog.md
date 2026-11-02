@@ -1,5 +1,10 @@
 # Update Log
 
+### 2nd November 2026
+##### DriftlessMap 2.0.1
+
+`v2/section_panel.SectionPanel`: the per-row radio button (`select_group`, one `_selected` channel, default 0) is replaced by an **Adjust** checkbox per row (`_adjusted` list). `_adjusted` follows `channel_visible` while `_adjust_follows_show` (reset when `id(image_file)` changes, not on rename); ticking or `_select(i)` makes it the user's choice; the last ticked row cannot be unticked. `_bc_changed(kind)` moves brightness or contrast per channel, keeping that channel's other value; `_range_changed(kind)` sets only the edited Min, Max or Gamma on each; Auto and Reset use each channel's own range (`_apply_each`). The title names the adjusted channels, marks hidden ones, and says whose values are shown when they differ. The reported case: an RGB PNG with only Green shown adjusted Red. `shell.WINDOW_LABEL` is "DriftlessMap <version>" and the rail shows the version (was "2.0 preview (development build of …)"); the application display name is "DriftlessMap" (the application name, which keys V2 preferences, is unchanged); `python -m driftlessmap.v2 --version` prints "<version> (2.0 interface)". The manual says "2.0 interface" instead of "2.0 preview". Version 2.0.1 in `version.py`, `CITATION.cff` (2026-11-02), tests, README, MANUAL and the agent guides.
+
 ### 29th October 2026
 ##### DriftlessMap 2.0.0
 

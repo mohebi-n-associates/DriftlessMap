@@ -7332,10 +7332,10 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, QMainWindow, FORM_Ma
         """Start the 2.0 preview in its own process and window."""
         if start_interface("preview"):
             self.print_message(
-                "Opening the 2.0 preview in a new window. It saves the same project "
+                "Opening the 2.0 interface in a new window. It saves the same project "
                 "files; open a copy of a project to try it.", self.normal_color)
         else:
-            self.print_message("The 2.0 preview could not be started.",
+            self.print_message("The 2.0 interface could not be started.",
                                self.error_message_color)
 
     def load_single_image_file(

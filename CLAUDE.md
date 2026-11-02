@@ -8,8 +8,8 @@ or important workflows change.
 
 ## Project identity
 
-- Current stable release: DriftlessMap 2.0.0 (29 October 2026, after the
-  2.0.0aN previews and 2.0.0rc1-rc16). The owner released it with the
+- Current stable release: DriftlessMap 2.0.1 (2 November 2026). 2.0.0
+  (29 October 2026) followed the 2.0.0aN previews and 2.0.0rc1-rc16. The owner released it with the
   `release_validation.md` gates still pending (recorded there as waived); keep
   recording evidence for them. Later fixes become 2.0.N, features 2.N.0.
   Never give V2 work 1.x numbers. A published GitHub release runs `release.yml` (PyPI, trusted
@@ -70,7 +70,9 @@ or important workflows change.
   its calibrated width) use it.
 - `driftlessmap/image_view.py`: image scene/page/channel/LUT state. Channel
   `ImageItem`s (`image_stacks.py`) use `autoDownsample` and additive blending
-  for all 16 channels.
+  for all 16 channels. In the V2 Section step the brightness, contrast, Min,
+  Max, Gamma, Auto and Reset controls act on the rows ticked under Adjust,
+  which follow Show until the user ticks them (reset for a new section).
 - `driftlessmap/atlas_matching.py`: GUI-free suggestion of the atlas plane,
   orientation and slice that match a histology section (silhouette search on
   slices exactly as `AtlasView` displays them). Coronal/horizontal matches are

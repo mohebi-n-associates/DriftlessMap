@@ -54,7 +54,7 @@ class InterfaceChoiceTests(unittest.TestCase):
             check=False, capture_output=True, text=True, env=environment,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("2.0 preview", result.stdout)
+        self.assertIn("(2.0 interface)", result.stdout)
 
     def test_launching_without_a_flag_starts_the_2_0_interface(self):
         from unittest import mock
