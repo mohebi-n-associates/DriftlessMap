@@ -213,6 +213,28 @@ class PhysicalSizeTests(unittest.TestCase):
                 # brain and is charged a capped distance; the rest fits.
                 self.assertGreater(ranked[0].silhouette, 0.6)
 
+    def test_a_sliver_of_brain_cannot_win_on_anatomy(self):
+        # Reported on a real sagittal section: a slice at the brain's lateral
+        # edge (2,100 brain voxels against 700,000) ranked first, because its
+        # anatomy correlated well over the few pixels it shared with the section.
+        labels, intensity = brain_with_depth_cues()
+        index = labels.shape[1] // 2 + 6
+        section = sagittal_section(labels, intensity, index)
+        fitted = PhysicalSection(section, ORIENTATIONS[0], self.VOXEL_UM, self.VOXEL_UM / 4)
+        true_labels = atlas_slice(labels, "sagittal", index)
+        true_intensity = atlas_slice(intensity, "sagittal", index)
+        full = fitted.measure(true_labels, true_intensity, refine=True)[0]
+        # The same slice with all but a small patch of brain removed.
+        rows, cols = np.nonzero(true_labels > 0)
+        r, c = int(np.median(rows)), int(np.median(cols))
+        keep = np.zeros(true_labels.shape, bool)
+        keep[r - 8:r + 8, c - 10:c + 10] = True
+        sliver = fitted.measure(np.where(keep, true_labels, 0),
+                                np.where(keep, true_intensity, 0), refine=True)[0]
+        # Unweighted, the patch's anatomy agreed 0.71 (whole slice 0.99).
+        self.assertLess(sliver[1], 0.5 * full[1], (sliver, full))
+        self.assertLess(sliver[2], 0.5 * full[2], (sliver, full))
+
     def test_shrunken_tissue_is_enlarged_to_atlas_size(self):
         labels, intensity = brain_with_depth_cues()
         index = labels.shape[1] // 2 + 9
@@ -355,6 +377,23 @@ class ConfidenceTests(unittest.TestCase):
         level, reasons = confidence(self._suggestion(0.9), self._report(20, 2, 0.01), 10.0)
         self.assertEqual(level, "low")
         self.assertIn("ambiguous", reasons[0])
+
+    def test_the_confidence_number_agrees_with_the_level(self):
+        from driftlessmap.atlas_matching import confidence, confidence_points
+
+        self.assertEqual(confidence_points(self._suggestion(0.3), self._report(20), 10.0), 50)
+        self.assertEqual(confidence_points(self._suggestion(0.5), self._report(20), 10.0), 80)
+        self.assertEqual(confidence_points(self._suggestion(0.0), self._report(20), 10.0), 0)
+        for anatomy in np.linspace(0.0, 1.0, 41):
+            for span in (5, 20, 50, 75, 100, 150, 300):
+                for planes, margin in ((1, 0.1), (2, 0.01), (2, 0.05), (2, 0.2)):
+                    suggestion = self._suggestion(float(anatomy))
+                    report = self._report(span, planes, margin)
+                    points = confidence_points(suggestion, report, 10.0)
+                    level = confidence(suggestion, report, 10.0)[0]
+                    self.assertTrue(0 <= points <= 100)
+                    expected = "high" if points >= 80 else "medium" if points >= 50 else "low"
+                    self.assertEqual(level, expected, (anatomy, span, margin, points))
 
     def test_reports_carry_what_confidence_needs(self):
         from driftlessmap.atlas_matching import confidence

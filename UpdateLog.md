@@ -1,6 +1,11 @@
 # Update Log
 
 ### 2nd November 2026
+##### DriftlessMap 2.1.2
+
+`PhysicalSection.measure` multiplies the template-edge and label-edge agreements by the coverage (section tissue inside the slice's brain ÷ section tissue). Cause: the combined score adds z-scores of outline, template-edge and label-edge agreement; a sagittal slice near the lateral edge (page 1086, 2,102 brain voxels against ~700,000) had outline 0.00 but template agreement 0.43-0.55 over its few overlapping pixels, and won. Reported case (IM-1076_left_All_insertion.tif, channel 1, 1.633 µm, Allen 10 µm, midline 570): before, 1086 (5.16 mm), 589, 595, 580; after, 605, 587, 594, 625 (0.17-0.55 mm). Atlas-cut sections (DAPI-like stain, 1.5 × 1.275 resampling, 0 or 35 % ventral removed), error before → after: sagittal 620: 4660 → 190 and 4650 → 330 µm; 750: 310 → 310 and 260 → 260; 900: 1860 → 170 and 1860 → 1210; 1030: 30 → 30 and 0 → 0; coronal 500/800/1100: unchanged (0-60 µm). Sagittal errors remain larger than coronal and are rated low. `confidence_points` (0-100: `_points` maps each criterion so its fair threshold is 50 and confident 80; weakest wins; unknown size 79) and `_criteria`, shared with `confidence`, whose levels are unchanged. The dialog shows "confidence: level (N/100)" on its own line and explains the scale in the tooltip. Version 2.1.2.
+
+### 2nd November 2026
 ##### DriftlessMap 2.1.1
 
 `v2/widgets.keys(sequence)` (native shortcut text) and `undo_help()` (point, step and edit-marks sentences). `ProbeControls`: tooltips on Mark track, the point count, Map this section and Build, plus `undo_note` under the buttons. `ImplantCard`: Delete…, Map this section (also when `refresh` sets the tooltip) and Build. Test: three probe clicks, Undo twice leaves the first point, Redo restores the second. Version 2.1.1.
