@@ -227,6 +227,49 @@ class SectionEngineTests(unittest.TestCase):
             self.assertEqual(len(window.implant_objects(fiber.implant_id, built=True)), 1)
 
     @isolated_gui_test
+    def test_out_of_date_objects_name_the_section_and_the_reason(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window = self.window_with_atlas(root)
+            first, second = root / "pfc-1.png", root / "pfc-2.png"
+            self.write_section(first, 200)
+            self.write_section(second, 120)
+            fiber = None
+            for path in (first, second):
+                self.load_section(window, path)
+                fiber = fiber or window.add_implant("fiber", specs={"diameter_um": 100})
+                window.atlas_tri_inside_data[:] = [[1.0, 1.0], [5.0, 1.0], [3.0, 5.0]]
+                window.histo_tri_inside_data[:] = [[2.0, 2.0], [6.0, 2.0], [4.0, 6.0]]
+                self.map_fiber(window, fiber)
+            first_id = window.sections.entries()[0].section_id
+            self.assertTrue(window.build_implant(fiber.implant_id)[0])
+            built = window.implant_objects(fiber.implant_id, built=True)[0]
+            self.assertIsNone(window.out_of_date_reason(built))
+
+            # Moving a landmark of the open section names that section.
+            window.atlas_tri_inside_data[0] = [1.5, 1.0]
+            reason = window.out_of_date_reason(built)
+            self.assertIn("pfc-2.png", reason)
+            self.assertIn("landmarks, page or tilt", reason)
+            self.assertIn("build it again", reason)
+            exported, notes = window.export_all_results(str(root / "results"))
+            self.assertTrue(exported)
+            self.assertTrue(any("Fiber 1: the landmarks, page or tilt of pfc-2.png" in note
+                                for note in notes), notes)
+            window.atlas_tri_inside_data[0] = [1.0, 1.0]
+            self.assertIsNone(window.out_of_date_reason(built))
+
+            # Mapping the other section again names that one.
+            self.assertTrue(window.switch_section(first_id)[0])
+            self.map_fiber(window, fiber)
+            self.assertIn("pfc-1.png was mapped again", window.out_of_date_reason(built))
+            self.assertTrue(window.build_implant(fiber.implant_id)[0])
+            built = window.implant_objects(fiber.implant_id, built=True)[0]
+            self.assertIsNone(window.out_of_date_reason(built))
+            window.set_implant_specs(fiber.implant_id, {"diameter_um": 400})
+            self.assertIn("implant settings changed", window.out_of_date_reason(built))
+
+    @isolated_gui_test
     def test_a_failed_switch_restores_the_open_section(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

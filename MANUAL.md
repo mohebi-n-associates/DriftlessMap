@@ -1,7 +1,7 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 2.4.0**. Section 2 explains how to
-install it; `pip install driftlessmap` installs 2.4.0.
+This manual applies to **DriftlessMap 2.4.1**. Section 2 explains how to
+install it; `pip install driftlessmap` installs 2.4.1.
 
 DriftlessMap - Histological E-data Registration in Brain Space - is a desktop
 application for aligning rodent histology with a reference atlas, reconstructing
@@ -102,7 +102,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-DriftlessMap 2.4.0 requires:
+DriftlessMap 2.4.1 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -121,8 +121,8 @@ page. The macOS DMG (`-macOS-arm64.dmg`) is built for Apple Silicon; on an Intel
 Mac, use the developer installation below.
 The desktop builds include Python and all runtime dependencies. Windows users
 extract the entire ZIP and run `DriftlessMap.exe`; macOS users open the DMG and
-drag `DriftlessMap.app` to Applications. The 2.4.0 downloads are named
-`DriftlessMap-2.4.0-Windows-x64.zip` and `DriftlessMap-2.4.0-macOS-arm64.dmg`.
+drag `DriftlessMap.app` to Applications. The 2.4.1 downloads are named
+`DriftlessMap-2.4.1-Windows-x64.zip` and `DriftlessMap-2.4.1-macOS-arm64.dmg`.
 Release builds are unsigned unless the release notes say otherwise, so the first
 launch may require Windows SmartScreen confirmation or Control-clicking the
 macOS app and choosing **Open**.
@@ -171,7 +171,7 @@ python -m pip --version
 python -c "import driftlessmap; print(driftlessmap.__version__)"
 ```
 
-The final command prints the installed version, `2.4.0`.
+The final command prints the installed version, `2.4.1`.
 
 ### 2.5 Launching DriftlessMap
 
@@ -1181,9 +1181,12 @@ are no longer loaded stay valid, so a probe built from several sections is not
 flagged when the next section is loaded. Objects made before 2.0.0a8, imported
 objects and pieces made from marks placed on the atlas show *origin not
 recorded*. Out-of-date objects can still be exported; the exported file records
-`mapping_status`, and the status bar names them. In the 2.0 interface, Annotate
+`mapping_status`, and the export message names each one with the reason and the
+section it concerns, for example *Fiber 1: the landmarks, page or tilt of
+1108-pfc-2 changed after it was mapped; update its mapping in Annotate, then
+build it again*. In the 2.0 interface, Annotate
 lists the section's mapped marks with their status, Results shows the selected
-object's status, and each object's tooltip in the Objects list names it.
+object's status (with the same reason), and each object's tooltip in the Objects list names it.
 Changing a fiber's or prism's specifications also makes its built result out of
 date: **Build** it again to use the new settings. Its previous report remains
 available, explicitly labelled as out of date. The implant CSV's `status` column
