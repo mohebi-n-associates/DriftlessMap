@@ -325,6 +325,37 @@ class V2ShellTests(unittest.TestCase):
             self.assertEqual(panel.hemisphere.text(), "At the midline.")
 
     @isolated_gui_test
+    def test_focus_hides_and_restores_the_side_panels(self):
+        with tempfile.TemporaryDirectory() as folder:
+            window = self.make_window(folder)
+            window.resize(1400, 900)
+            window.show()
+            self.application.processEvents()
+            self.assertEqual(window.registry.get("view.focus").shortcut, "Ctrl+Shift+F")
+
+            def shown():
+                return (window.task_column.isVisibleTo(window),
+                        window.inspector_column.isVisibleTo(window))
+
+            self.assertEqual(shown(), (True, True))
+            window.run("view.focus")
+            self.assertEqual(shown(), (False, False))
+            self.assertTrue(window.focus_button.isChecked())
+            self.assertTrue(window.focus_item.isChecked())
+            self.assertIn("Side panels hidden", window.message_label.text())
+            window.focus_button.click()
+            self.assertEqual(shown(), (True, True))
+            self.assertFalse(window.focus_button.isChecked())
+            # Hiding both columns from the View menu counts as focus too, and
+            # Focus then brings both back.
+            window.toggle_task_item.setChecked(False)
+            self.assertFalse(window.focus_button.isChecked())
+            window.toggle_inspector_item.setChecked(False)
+            self.assertTrue(window.focus_button.isChecked())
+            window.run("view.focus")
+            self.assertEqual(shown(), (True, True))
+
+    @isolated_gui_test
     def test_brightness_and_contrast_change_the_adjusted_channels(self):
         import tifffile
 

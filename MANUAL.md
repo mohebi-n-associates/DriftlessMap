@@ -1,7 +1,7 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 2.1.2**. Section 2 explains how to
-install it; `pip install driftlessmap` installs 2.1.2.
+This manual applies to **DriftlessMap 2.2.0**. Section 2 explains how to
+install it; `pip install driftlessmap` installs 2.2.0.
 
 DriftlessMap - Histological E-data Registration in Brain Space - is a desktop
 application for aligning rodent histology with a reference atlas, reconstructing
@@ -102,7 +102,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-DriftlessMap 2.1.2 requires:
+DriftlessMap 2.2.0 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -121,8 +121,8 @@ page. The macOS DMG (`-macOS-arm64.dmg`) is built for Apple Silicon; on an Intel
 Mac, use the developer installation below.
 The desktop builds include Python and all runtime dependencies. Windows users
 extract the entire ZIP and run `DriftlessMap.exe`; macOS users open the DMG and
-drag `DriftlessMap.app` to Applications. The 2.1.2 downloads are named
-`DriftlessMap-2.1.2-Windows-x64.zip` and `DriftlessMap-2.1.2-macOS-arm64.dmg`.
+drag `DriftlessMap.app` to Applications. The 2.2.0 downloads are named
+`DriftlessMap-2.2.0-Windows-x64.zip` and `DriftlessMap-2.2.0-macOS-arm64.dmg`.
 Release builds are unsigned unless the release notes say otherwise, so the first
 launch may require Windows SmartScreen confirmation or Control-clicking the
 macOS app and choosing **Open**.
@@ -171,7 +171,7 @@ python -m pip --version
 python -c "import driftlessmap; print(driftlessmap.__version__)"
 ```
 
-The final command prints the installed version, `2.1.2`.
+The final command prints the installed version, `2.2.0`.
 
 ### 2.5 Launching DriftlessMap
 
@@ -531,6 +531,13 @@ command and every 1.x menu command by its old name, for example "merge" or
 "triangulation". Single-key shortcuts (P add or move landmark points,
 M measure, V no tool, B region boundaries, Delete remove the selected landmark
 pair) do not fire while you type in a field; Escape stops the current tool.
+
+**Focus** (top right of the view bar), **View > Focus on images** or
+**Ctrl+Shift+F** (Shift+Cmd+F on macOS) hides the step list, the step panel
+and the objects/layers panel so the atlas and section views fill the window;
+the same again brings them back. Tool options above the image stay available
+while focused. **View > Show task column** and **Show objects and layers**
+hide one side only.
 
 **View > Show region boundaries** (B) outlines the atlas regions on the atlas
 view, without names. The lines are drawn in a light blue that stays visible on
