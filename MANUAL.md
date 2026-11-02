@@ -1,7 +1,7 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 2.1.1**. Section 2 explains how to
-install it; `pip install driftlessmap` installs 2.1.1.
+This manual applies to **DriftlessMap 2.1.2**. Section 2 explains how to
+install it; `pip install driftlessmap` installs 2.1.2.
 
 DriftlessMap - Histological E-data Registration in Brain Space - is a desktop
 application for aligning rodent histology with a reference atlas, reconstructing
@@ -102,7 +102,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-DriftlessMap 2.1.1 requires:
+DriftlessMap 2.1.2 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -121,8 +121,8 @@ page. The macOS DMG (`-macOS-arm64.dmg`) is built for Apple Silicon; on an Intel
 Mac, use the developer installation below.
 The desktop builds include Python and all runtime dependencies. Windows users
 extract the entire ZIP and run `DriftlessMap.exe`; macOS users open the DMG and
-drag `DriftlessMap.app` to Applications. The 2.1.1 downloads are named
-`DriftlessMap-2.1.1-Windows-x64.zip` and `DriftlessMap-2.1.1-macOS-arm64.dmg`.
+drag `DriftlessMap.app` to Applications. The 2.1.2 downloads are named
+`DriftlessMap-2.1.2-Windows-x64.zip` and `DriftlessMap-2.1.2-macOS-arm64.dmg`.
 Release builds are unsigned unless the release notes say otherwise, so the first
 launch may require Windows SmartScreen confirmation or Control-clicking the
 macOS app and choosing **Open**.
@@ -171,7 +171,7 @@ python -m pip --version
 python -c "import driftlessmap; print(driftlessmap.__version__)"
 ```
 
-The final command prints the installed version, `2.1.1`.
+The final command prints the installed version, `2.1.2`.
 
 ### 2.5 Launching DriftlessMap
 
@@ -946,14 +946,19 @@ atlas and ranks candidate sections:
    **ambiguous**), the orientation the section needs, and up to six candidate
    sections. Each shows your section on the left and the atlas on the right,
    with its depth, cutting-angle tilt, score, **confidence** (high, medium
-   or low; hover for the reasons) and, when the pixel size is known, the
+   or low, with a number out of 100; hover for the reasons) and, when the pixel size is known, the
    tissue size relative to the atlas ("tissue at 78 % of atlas size"). The score only ranks the candidates
    against each other. Confidence is the lowest of: how well the section's
    internal anatomy agrees with the atlas (below 0.5 is medium, below 0.3
    low), how far apart the depths that fit about as well lie (more than
    0.5 mm is medium, more than 1 mm low), at most medium when the pixel size
    was unknown, and, when the plane was detected, how clearly it won. The outline alone is not used: wrong pages often fit
-   the outline well. On low confidence, check carefully or place the section
+   the outline well. The number puts each of these on one scale, where the
+   medium limit is 50 and the high limit 80, and shows the weakest: below 50
+   is low, 50-79 medium, 80 and above high. It is a scale, not a probability.
+   Anatomy agreement counts only as much of the section as lies inside the
+   slice's brain, so a slice at the edge of the brain that holds a sliver of
+   it cannot win on a few well-matching pixels. On low confidence, check carefully or place the section
    by hand. The thresholds were set on sections cut from the atlas, where
    the answer is known; they are not yet checked on real sections with
    known positions.

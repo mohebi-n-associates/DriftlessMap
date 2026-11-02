@@ -8,7 +8,7 @@ or important workflows change.
 
 ## Project identity
 
-- Current stable release: DriftlessMap 2.1.1 (2 November 2026). 2.0.0
+- Current stable release: DriftlessMap 2.1.2 (2 November 2026). 2.0.0
   (29 October 2026) followed the 2.0.0aN previews and 2.0.0rc1-rc16. The owner released it with the
   `release_validation.md` gates still pending (recorded there as waived); keep
   recording evidence for them. Later fixes become 2.0.N, features 2.N.0.
@@ -122,6 +122,10 @@ or important workflows change.
   from template-edge agreement (`CONFIDENT_ANATOMY`/`FAIR_ANATOMY`), the span of
   near-equal depths (`report.depth_span`, `DEPTH_TIE`) and the plane margin;
   thresholds come from atlas-cut sections, not yet real ones.
+  `confidence_points` gives the same judgement as 0-100 (each criterion's
+  fair threshold 50, confident 80; the weakest wins). `PhysicalSection.measure`
+  weights the anatomy agreements by the share of the section's tissue inside
+  the slice's brain, so edge slices holding a sliver of brain cannot win.
   V2 Match step: `state.sagittal_hemisphere` (side and mm from the midline,
   `origin_3d[0]`), `MatchPanel.show_other_hemisphere` (`mirrored_index`), and
   a warning when `hemisphere_from_name` disagrees with the page shown.

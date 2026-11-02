@@ -3,6 +3,21 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.1.2
+
+Fix release, 2 November 2026.
+
+- Find atlas section no longer ranks first a slice at the edge of the brain
+  that holds only a sliver of it. Such a slice could win on a few well-matching
+  pixels: in a reported sagittal case it lay 5.16 mm lateral and came first,
+  rated medium. Internal anatomy now counts only as much of the section as lies
+  inside the slice's brain. On sections cut from the atlas, where the right
+  page is known, sagittal errors fell from up to 4.7 mm to 0.17-1.2 mm;
+  coronal results were unchanged.
+- Each candidate shows its confidence as a number out of 100 with the level
+  ("confidence: medium (62/100)"), on its own line so it is no longer cut off.
+  Below 50 is low, 50-79 medium, 80 and above high.
+
 ## DriftlessMap 2.1.1
 
 Fix release, 2 November 2026.

@@ -21,6 +21,7 @@ from .atlas_matching import (
     animal_right_edge,
     atlas_slice,
     confidence,
+    confidence_points,
     histology_gray,
     tissue_mask,
     mirror_hemisphere,
@@ -200,9 +201,10 @@ class SectionSuggestionDialog(QDialog):
         else:
             where = "slice {}".format(suggestion.index)
         level, _reasons = confidence(suggestion, self.report, self.voxel_um)
-        text = "{}\ntilt ({:+.0f}°, {:+.0f}°)   score {:.2f}   confidence: {}".format(
+        points = confidence_points(suggestion, self.report, self.voxel_um)
+        text = "{}\ntilt ({:+.0f}°, {:+.0f}°)   score {:.2f}\nconfidence: {} ({}/100)".format(
             where, suggestion.tilt_degrees[0], suggestion.tilt_degrees[1], suggestion.score,
-            level
+            level, points
         )
         scale = getattr(suggestion, "fit_scale", None)
         if scale:
@@ -211,11 +213,14 @@ class SectionSuggestionDialog(QDialog):
 
     def _confidence_note(self, suggestion):
         level, reasons = confidence(suggestion, self.report, self.voxel_um)
+        points = confidence_points(suggestion, self.report, self.voxel_um)
         why = "; ".join(reasons) if reasons else "anatomy agrees and depth is well determined"
-        return ("Confidence {}: {}. The score ranks candidates against each other "
+        return ("Confidence {} ({}/100): {}. The number is the weakest criterion on one "
+                "scale (below 50 low, 50-79 medium, 80 and above high); it is not a "
+                "probability. The score ranks candidates against each other "
                 "only. Confidence thresholds come from sections cut from the atlas and "
                 "are not yet checked on real sections with known positions.".format(
-                    level, why))
+                    level, points, why))
 
     def choice(self):
         """Return (plane, index, orientation, tilt, rotate_histology) or None."""

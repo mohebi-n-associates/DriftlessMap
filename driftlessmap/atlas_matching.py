@@ -676,9 +676,14 @@ class PhysicalSection:
         both = section_mask & atlas_mask
         section_edges, inner = _edges(section_gray, both)
         template_edges, _ = _edges(np.asarray(intensity, dtype=np.float32), both)
+        # Anatomy is compared only where section and brain overlap. Weight it
+        # by the share of the section's tissue that lies there, so a lucky
+        # correlation over a few pixels (a slice at the brain's edge holding
+        # a sliver of brain) cannot outrank slices that hold the section.
+        coverage = float(both.sum()) / max(1.0, float(mask.sum()))
         measures = (max(0.0, 1.0 - placement.cost),
-                    _ncc(section_edges, template_edges, inner),
-                    _ncc(section_edges, _label_boundaries(labels), inner))
+                    coverage * _ncc(section_edges, template_edges, inner),
+                    coverage * _ncc(section_edges, _label_boundaries(labels), inner))
         return measures, tuple(params), placement
 
 
@@ -943,10 +948,64 @@ DEPTH_TIE = 1.0
 # depth was found within 60 um. Two real fluorescence sections, whose
 # suggestions were far off, agreed only 0.09-0.15 with near-equal depths over
 # 2-8.5 mm. The outline fit did not separate the two (above 0.9 for both).
-# Not yet checked on real sections with known positions.
+# Not yet checked on real sections with known positions. Since 2.1.2 the
+# anatomy agreement is weighted by the share of the section inside the
+# slice's brain (about 1 for these sections, so the thresholds stand).
 CONFIDENT_ANATOMY, FAIR_ANATOMY = 0.5, 0.3
 CONFIDENT_SPAN_UM, FAIR_SPAN_UM = 500.0, 1000.0
 CONFIDENCE_LEVELS = ("low", "medium", "high")
+
+
+# The confidence number (0-100) puts each criterion on one scale: its "fair"
+# threshold is 50 and its "confident" threshold 80, so the weakest criterion
+# gives both the number and the level (low below 50, medium below 80). It is a
+# scale, not a probability.
+FAIR_POINTS, CONFIDENT_POINTS = 50.0, 80.0
+
+
+def _points(value, fair, confident, higher_is_better=True):
+    """``value`` on the 0-100 confidence scale (see :data:`FAIR_POINTS`)."""
+    if not higher_is_better:
+        # Smaller is better (a span): mirror onto the same scale.
+        if value <= confident:
+            return min(100.0, CONFIDENT_POINTS + 20.0 * (confident - value) / (0.5 * confident))
+        if value <= fair:
+            return FAIR_POINTS + 30.0 * (fair - value) / (fair - confident)
+        return FAIR_POINTS * fair / value
+    if value >= confident:
+        return min(100.0, CONFIDENT_POINTS + 20.0 * (value - confident) / (0.25 * confident))
+    if value >= fair:
+        return FAIR_POINTS + 30.0 * (value - fair) / (confident - fair)
+    return FAIR_POINTS * max(0.0, value) / fair
+
+
+def _criteria(suggestion, report, voxel_um):
+    """(points, reason or None) for each confidence criterion."""
+    criteria = []
+    anatomy = suggestion.template_edges
+    points = _points(anatomy, FAIR_ANATOMY, CONFIDENT_ANATOMY)
+    criteria.append((points, None if points >= CONFIDENT_POINTS else
+                     "internal anatomy agrees {} ({:.2f})".format(
+                         "only moderately" if points >= FAIR_POINTS else "weakly", anatomy)))
+    if report.depth_span is not None:
+        span = report.depth_span * voxel_um
+        points = _points(span, FAIR_SPAN_UM, CONFIDENT_SPAN_UM, higher_is_better=False)
+        criteria.append((points, None if points >= CONFIDENT_POINTS else
+                         "depths {:.1f} mm apart fit about as well".format(span / 1000)))
+    if getattr(report, "size_known", None) is False:
+        criteria.append((CONFIDENT_POINTS - 1,
+                         "the pixel size is unknown, so the section's size was guessed"))
+    if len(report.plane_candidates) > 1:
+        margin = report.plane_margin
+        points = _points(margin, 0.03, 0.08)
+        criteria.append((points, None if points >= CONFIDENT_POINTS else "the plane is {}".format(
+            "uncertain" if points >= FAIR_POINTS else "ambiguous")))
+    return criteria
+
+
+def confidence_points(suggestion, report, voxel_um):
+    """The confidence number, 0-100: the weakest criterion (see :func:`confidence`)."""
+    return int(round(min(points for points, _reason in _criteria(suggestion, report, voxel_um))))
 
 
 def confidence(suggestion, report, voxel_um):
@@ -955,32 +1014,13 @@ def confidence(suggestion, report, voxel_um):
     ``level`` is "high", "medium" or "low", the lowest of: internal anatomy
     agreement, how narrowly depth is determined, "medium" when the section's
     pixel size was unknown, and (when the plane was detected) how clearly the
-    plane was preferred. ``reasons`` explain each
-    limit in words.
+    plane was preferred. ``reasons`` explain each limit in words.
+    :func:`confidence_points` gives the same judgement as a number.
     """
-    levels, reasons = [], []
-    anatomy = suggestion.template_edges
-    level = 2 if anatomy >= CONFIDENT_ANATOMY else 1 if anatomy >= FAIR_ANATOMY else 0
-    levels.append(level)
-    if level < 2:
-        reasons.append("internal anatomy agrees {} ({:.2f})".format(
-            "only moderately" if level else "weakly", anatomy))
-    if report.depth_span is not None:
-        span = report.depth_span * voxel_um
-        level = 2 if span <= CONFIDENT_SPAN_UM else 1 if span <= FAIR_SPAN_UM else 0
-        levels.append(level)
-        if level < 2:
-            reasons.append("depths {:.1f} mm apart fit about as well".format(span / 1000))
-    if getattr(report, "size_known", None) is False:
-        levels.append(1)
-        reasons.append("the pixel size is unknown, so the section's size was guessed")
-    if len(report.plane_candidates) > 1:
-        margin = report.plane_margin
-        level = 2 if margin >= 0.08 else 1 if margin >= 0.03 else 0
-        levels.append(level)
-        if level < 2:
-            reasons.append("the plane is {}".format("uncertain" if level else "ambiguous"))
-    return CONFIDENCE_LEVELS[min(levels)], reasons
+    criteria = _criteria(suggestion, report, voxel_um)
+    weakest = min(points for points, _reason in criteria)
+    level = 2 if weakest >= CONFIDENT_POINTS else 1 if weakest >= FAIR_POINTS else 0
+    return CONFIDENCE_LEVELS[level], [reason for _points_, reason in criteria if reason]
 
 
 def preferred_form(plane, orientation):
