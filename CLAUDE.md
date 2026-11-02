@@ -8,8 +8,9 @@ or important workflows change.
 
 ## Project identity
 
-- Current stable release: DriftlessMap 2.4.0 (2 November 2026; the first
-  release since 2.0.0, including 2.0.1-2.3.0 and multi-section projects). 2.0.0
+- Current stable release: DriftlessMap 2.4.1 (2 November 2026; 2.4.0 plus a
+  fix, the first release since 2.0.0, including 2.0.1-2.3.0 and multi-section
+  projects). 2.0.0
   (29 October 2026) followed the 2.0.0aN previews and 2.0.0rc1-rc16. The owner released it with the
   `release_validation.md` gates still pending (recorded there as waived); keep
   recording evidence for them. Later fixes become 2.0.N, features 2.N.0.
@@ -216,6 +217,10 @@ or important workflows change.
   adds a summary row per built probe (`probe_csv_row`). `implant_build_status` compares
   the retained report specs to the current implant specs; mismatches are out of date
   in the UI and exports until rebuilt. The implant CSV includes a `status` column.
+  `DriftlessMap.out_of_date_reason(index)` names why an object is out of date
+  (changed implant settings; the section, by name, mapped again or whose
+  registration changed) and the fix; export messages and the V2 Results
+  status use it (`out_of_date_lines`).
   `DriftlessMap.export_all_results(folder)` (Results > Export all results)
   writes a project copy (`save_project_called(path=, as_copy=True)` leaves
   the current project file and references alone), every built object, probe

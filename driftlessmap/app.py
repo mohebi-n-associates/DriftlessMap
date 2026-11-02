@@ -108,7 +108,9 @@ from .state_digest import state_digest
 from .implant_engine import ImplantEngineMixin
 from .section_engine import SectionsMixin
 from .mapping_records import (
+    BUILD_CHANGED,
     IMPLANT_KINDS,
+    REGISTRATION_CHANGED,
     MappingLedger,
     derivation,
     derivation_status,
@@ -4775,6 +4777,35 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
         indexes = range(len(o.obj_name)) if indexes is None else indexes
         return [i for i in indexes if is_out_of_date(self.object_mapping_status(i))]
 
+    def out_of_date_reason(self, index):
+        """Why object ``index`` is out of date, naming the section and the fix;
+        None when it is current."""
+        status = self.object_mapping_status(index)
+        if not is_out_of_date(status):
+            return None
+        rebuild = ("build it again" if self.object_ctrl.obj_type[index].startswith("merged")
+                   else "make its part again")
+        if status == BUILD_CHANGED:
+            return "the implant settings changed after it was built; {}".format(rebuild)
+        self.sync_sections()
+        fingerprint = self.current_registration_fingerprint()
+        for unit_id, revision in self.object_ctrl.obj_derivation[index]:
+            record = self.mapping_ledger.by_unit(unit_id)
+            if record is None:
+                continue
+            name = self.section_name(record.section_id)
+            if record.revision != revision:
+                return "{} was mapped again after it was made; {}".format(name, rebuild)
+            if record.status(self.section_id, fingerprint) == REGISTRATION_CHANGED:
+                return ("the landmarks, page or tilt of {} changed after it was mapped; "
+                        "update its mapping in Annotate, then {}".format(name, rebuild))
+        return status
+
+    def out_of_date_lines(self, indexes):
+        """One "name: reason" line per out-of-date object among ``indexes``."""
+        return ["{}: {}.".format(self.object_ctrl.obj_name[i], self.out_of_date_reason(i))
+                for i in self.out_of_date_objects(indexes)]
+
     def mapping_overview(self):
         """Statuses of the loaded section's records and of every object.
 
@@ -7949,11 +7980,10 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
             notes.append("The project copy was not saved; see the message below the image.")
 
         built = [i for i, kind in enumerate(o.obj_type) if kind.startswith("merged")]
-        stale = self.out_of_date_objects(built)
+        stale = self.out_of_date_lines(built)
         if stale:
-            notes.append("Exported results include out-of-date objects: {}. Rebuild or "
-                         "update their mappings before using them as current results.".format(
-                             ", ".join(o.obj_name[i] for i in stale)))
+            notes.append("These exported results are out of date; fix them before using them "
+                         "as current results:\n" + "\n".join(stale))
         old_probes = [i for i in built if o.obj_type[i] == "merged probe"
                       and "reconstruction" not in o.obj_data[i]]
         if old_probes:
@@ -8019,13 +8049,10 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
         return paths, notes
 
     def _note_out_of_date_export(self, indexes):
-        stale = self.out_of_date_objects(indexes)
+        stale = self.out_of_date_lines(indexes)
         if stale:
-            self.print_message(
-                "Exported, but out of date: {}. The registration, mapped marks or build "
-                "settings changed after they were made; the files record this.".format(
-                    ", ".join(self.object_ctrl.obj_name[i] for i in stale)),
-                self.reminder_color)
+            self.print_message("Exported, but out of date (the files record this). "
+                               + " ".join(stale), self.reminder_color)
 
     def save_current_object(self):
         if self.object_ctrl.current_obj_index is None:

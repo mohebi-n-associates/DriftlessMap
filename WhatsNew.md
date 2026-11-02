@@ -3,6 +3,15 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.4.1
+
+Fix release, 2 November 2026. When exported results are out of date, the
+export message (and the Results step) now says why for each object and which
+section it concerns: the landmarks, page or tilt of a named section changed
+after it was mapped, a section was mapped again after the object was built, or
+the implant's settings changed. Each reason says what to do. Everything listed
+for 2.4.0 below is included.
+
 ## DriftlessMap 2.4.0
 
 Feature release, 2 November 2026. The first release since 2.0.0: it also
