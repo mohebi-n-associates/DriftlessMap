@@ -682,6 +682,68 @@ def model_segments(model):
     return np.asarray([corners[i] for edge in edges for i in edge])
 
 
+def model_section(model, origin, axis_x, axis_y, shape):
+    """Pixels of a 2-D slice inside a fitted model, as a boolean mask or None.
+
+    Pixel ``(row, col)`` of a slice of ``shape`` has its centre at
+    ``origin + (col + 0.5) * axis_x + (row + 0.5) * axis_y`` in the model's
+    frame (the frame the mapped outlines were made in). Returns None when the
+    slice does not cut the model.
+    """
+    origin, axis_x, axis_y = (np.asarray(v, dtype=float) for v in (origin, axis_x, axis_y))
+    normal = np.cross(axis_x, axis_y)
+    length = np.linalg.norm(normal)
+    if length == 0:
+        return None
+    normal /= length
+    if model["type"] == "cylinder":
+        top, bottom = np.asarray(model["top"], float), np.asarray(model["bottom"], float)
+        reach = float(model["radius_vox"])
+        extremes = np.vstack([top, bottom])
+    else:
+        bottom = np.asarray(model["bottom"], float)
+        up, face, across = (np.asarray(model[k], float) for k in ("up", "face_normal", "across"))
+        extremes = np.asarray([bottom + h * up + d * model["half_depth_vox"] * face
+                               + w * model["half_width_vox"] * across
+                               for h in (0.0, model["height_vox"])
+                               for d in (-1, 1) for w in (-1, 1)])
+        reach = 0.0
+    distances = (extremes - origin) @ normal
+    if distances.min() > reach + 1 or distances.max() < -reach - 1:
+        return None
+    # Bounding box of the model in slice pixels, then test only those pixels.
+    frame = np.column_stack([axis_x, axis_y])
+    uv = np.linalg.lstsq(frame, (extremes - origin).T, rcond=None)[0].T
+    margin = reach / min(np.linalg.norm(axis_x), np.linalg.norm(axis_y)) + 2
+    c0, c1 = (int(np.floor(uv[:, 0].min() - margin)), int(np.ceil(uv[:, 0].max() + margin)))
+    r0, r1 = (int(np.floor(uv[:, 1].min() - margin)), int(np.ceil(uv[:, 1].max() + margin)))
+    c0, r0 = max(c0, 0), max(r0, 0)
+    c1, r1 = min(c1, shape[1]), min(r1, shape[0])
+    if c1 <= c0 or r1 <= r0:
+        return None
+    rows, cols = np.mgrid[r0:r1, c0:c1]
+    points = (origin + (cols[..., None] + 0.5) * axis_x + (rows[..., None] + 0.5) * axis_y)
+    if model["type"] == "cylinder":
+        axis = bottom - top
+        span = np.linalg.norm(axis)
+        if span == 0:
+            return None
+        axis /= span
+        along = (points - top) @ axis
+        across_ = points - top - along[..., None] * axis
+        inside = (along >= 0) & (along <= span) & (np.linalg.norm(across_, axis=-1) <= reach)
+    else:
+        relative = points - bottom
+        inside = ((relative @ up >= 0) & (relative @ up <= model["height_vox"])
+                  & (np.abs(relative @ face) <= model["half_depth_vox"])
+                  & (np.abs(relative @ across) <= model["half_width_vox"]))
+    if not inside.any():
+        return None
+    mask = np.zeros(shape, bool)
+    mask[r0:r1, c0:c1] = inside
+    return mask
+
+
 # ------------------------------------------------------------------- reporting
 def _mm(value_um):
     return "{:+.3f} mm".format(value_um / 1000.0)

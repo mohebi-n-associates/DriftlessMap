@@ -276,5 +276,45 @@ class PrismFitTests(unittest.TestCase):
         self.assertTrue(any("Imaging face" in line for line in report_lines(report)))
 
 
+
+class ModelSectionTests(unittest.TestCase):
+    """Cross-sections of fitted models on a slice (drawn on the atlas views)."""
+
+    # A coronal-like slice at AP 0: columns run along ML, rows down in DV.
+    FRAME = (np.array([0.0, 0.0, 20.0]), np.array([1.0, 0.0, 0.0]), np.array([0.0, 0.0, -1.0]))
+
+    def test_a_cylinder_in_the_slice_shows_its_band_and_none_beside_it(self):
+        from driftlessmap.implants import model_section
+
+        model = {"type": "cylinder", "top": [5.0, 0.0, 10.0], "bottom": [5.0, 0.0, 2.0],
+                 "radius_vox": 1.5}
+        mask = model_section(model, *self.FRAME, (24, 12))
+        # Pixel centres within 1.5 of x = 5 (columns 3-6), between DV 2 and 10.
+        self.assertTrue(mask[12, 3:7].all())
+        self.assertFalse(mask[12, 2] or mask[12, 7])
+        rows = np.nonzero(mask[:, 5])[0]
+        self.assertEqual((rows.min(), rows.max()), (10, 17))
+        origin, axis_x, axis_y = self.FRAME
+        self.assertIsNone(model_section(model, origin + [0.0, 3.0, 0.0], axis_x, axis_y,
+                                        (24, 12)))
+        # Within the radius in front of the axis, a narrower band.
+        near = model_section(model, origin + [0.0, 1.2, 0.0], axis_x, axis_y, (24, 12))
+        self.assertLess(near[12].sum(), mask[12].sum())
+        self.assertGreater(near[12].sum(), 0)
+
+    def test_a_block_is_cut_across_its_width(self):
+        from driftlessmap.implants import model_section
+
+        model = {"type": "block", "bottom": [6.0, 0.0, 4.0], "up": [0.0, 0.0, 1.0],
+                 "face_normal": [1.0, 0.0, 0.0], "across": [0.0, 1.0, 0.0],
+                 "height_vox": 8.0, "half_depth_vox": 2.0, "half_width_vox": 3.0}
+        mask = model_section(model, *self.FRAME, (24, 12))
+        self.assertTrue(mask[12, 4:8].all())        # ML 4-8: depth 2 either side of 6
+        self.assertFalse(mask[12, 3] or mask[12, 8])
+        origin, axis_x, axis_y = self.FRAME
+        self.assertIsNone(model_section(model, origin + [0.0, 4.0, 0.0], axis_x, axis_y,
+                                        (24, 12)))
+
+
 if __name__ == "__main__":
     unittest.main()

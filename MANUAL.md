@@ -1,7 +1,7 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 2.2.0**. Section 2 explains how to
-install it; `pip install driftlessmap` installs 2.2.0.
+This manual applies to **DriftlessMap 2.3.0**. Section 2 explains how to
+install it; `pip install driftlessmap` installs 2.3.0.
 
 DriftlessMap - Histological E-data Registration in Brain Space - is a desktop
 application for aligning rodent histology with a reference atlas, reconstructing
@@ -102,7 +102,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-DriftlessMap 2.2.0 requires:
+DriftlessMap 2.3.0 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -121,8 +121,8 @@ page. The macOS DMG (`-macOS-arm64.dmg`) is built for Apple Silicon; on an Intel
 Mac, use the developer installation below.
 The desktop builds include Python and all runtime dependencies. Windows users
 extract the entire ZIP and run `DriftlessMap.exe`; macOS users open the DMG and
-drag `DriftlessMap.app` to Applications. The 2.2.0 downloads are named
-`DriftlessMap-2.2.0-Windows-x64.zip` and `DriftlessMap-2.2.0-macOS-arm64.dmg`.
+drag `DriftlessMap.app` to Applications. The 2.3.0 downloads are named
+`DriftlessMap-2.3.0-Windows-x64.zip` and `DriftlessMap-2.3.0-macOS-arm64.dmg`.
 Release builds are unsigned unless the release notes say otherwise, so the first
 launch may require Windows SmartScreen confirmation or Control-clicking the
 macOS app and choosing **Open**.
@@ -171,7 +171,7 @@ python -m pip --version
 python -c "import driftlessmap; print(driftlessmap.__version__)"
 ```
 
-The final command prints the installed version, `2.2.0`.
+The final command prints the installed version, `2.3.0`.
 
 ### 2.5 Launching DriftlessMap
 
@@ -1590,7 +1590,11 @@ The report warns when:
   give ML that way, so these are only as precise as the section spacing.
 
 **Results.** **Report…** opens the full report; **Show in 3D** shows the fitted
-cylinder or block with the mapped outlines. **Export table…** writes one CSV
+cylinder or block with the mapped outlines. On the atlas views, a built fiber
+or prism is outlined and lightly filled in its colour wherever the page shown
+cuts it, in every plane and at any tilt, and follows the pages as they change;
+hide it with its eye in the Objects list. **Show on atlas** moves the atlas
+pages to the fiber's tip or the prism's bottom centre. **Export table…** writes one CSV
 row per built implant (type, specifications, tip or bottom coordinates and
 region, stereotaxic estimate, depth, prism edges and face, tilt and
 warnings); each built probe adds a summary row (tip, region, depth below the
