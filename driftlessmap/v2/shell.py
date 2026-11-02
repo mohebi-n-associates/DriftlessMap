@@ -445,12 +445,13 @@ class V2Window(QMainWindow):
             else:
                 engine.show_4_windows()
         self._balance_views()
+        QTimer.singleShot(0, self._balance_views)
         self._sync_view_buttons()
 
-    def _balance_views(self):
-        """Give the visible view frames equal widths."""
+    def _visible_views(self):
+        """Which frames of the view splitter are shown, as a tuple of bools."""
         splitter = self.engine.splitter_3
-        widths = []
+        shown = []
         for index in range(splitter.count()):
             widget = splitter.widget(index)
             if isinstance(widget, QSplitter):
@@ -458,10 +459,28 @@ class V2Window(QMainWindow):
                               for i in range(widget.count()))
             else:
                 visible = widget.isVisibleTo(splitter)
-            widths.append(1 if visible else 0)
-        total = max(sum(widths), 1)
+            shown.append(visible)
+        return tuple(shown)
+
+    def _balance_views(self):
+        """Give the visible view frames equal widths."""
+        splitter = self.engine.splitter_3
+        shown = self._visible_views()
+        total = max(sum(shown), 1)
         width = max(splitter.width(), 600)
-        splitter.setSizes([int(width * w / total) for w in widths])
+        splitter.setSizes([int(width * w / total) for w in shown])
+        self._balanced_views = shown
+
+    def _balance_if_views_changed(self):
+        # The engine switches layouts itself (loading a section or an atlas
+        # shows atlas and section together); a frame shown again would keep
+        # the sliver it had while hidden. Widths the user drags stay put
+        # until the set of visible frames changes. The splitter ignores sizes
+        # for a frame shown in the same pass, so balance once it is laid out.
+        shown = self._visible_views()
+        if shown != getattr(self, "_balanced_views", None):
+            self._balanced_views = shown
+            QTimer.singleShot(0, self._balance_views)
 
     def _sync_view_buttons(self):
         layout = self.engine.current_layout
@@ -965,6 +984,7 @@ class V2Window(QMainWindow):
             "ruler": "Measure", "probe": "Probe", "pencil": "Drawing", "eraser": "Eraser",
             "lasso": "Lasso"}.get(tool, str(tool).capitalize())) if tool else "")
         self._sync_view_buttons()
+        self._balance_if_views_changed()
         self._sync_empty_states()
         self._sync_object_tooltips()
         atlas, _ = state.atlas_summary(engine)

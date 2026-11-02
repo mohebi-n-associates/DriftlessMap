@@ -3,6 +3,18 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.0.2
+
+Fix release, 2 November 2026.
+
+- Atlas and section are shown at equal widths when a section or an atlas is
+  loaded. Until now the section view could open as a narrow strip beside the
+  atlas until it was dragged wider.
+- Channels that a file colours but does not name, as in an ImageJ composite, are
+  named after their colours (for example Blue, Green, Orange, Red). Until now
+  they got the 1.x names Gray, Red, Green and Blue, which did not match their
+  colours. Files with neither names nor colours keep those 1.x names.
+
 ## DriftlessMap 2.0.1
 
 Fix release, 2 November 2026.
