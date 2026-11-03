@@ -190,6 +190,30 @@ class ProbeBookTests(unittest.TestCase):
         self.assertEqual(engine.object_ctrl.obj_name,
                          ["Probe 1 - piece", "Probe 1 - piece", "Probe 2 - piece"])
 
+    def test_planning_again_replaces_the_earlier_plan(self):
+        engine = FakeEngine(section_image=False)
+        book = ProbeBook(engine)
+        probe = book.new()
+        engine.working_atlas_data["atlas-probe"] = [[0.0, 0.0], [1.0, 1.0]]
+        self.assertTrue(book.add_section(probe)[0])
+        self.assertTrue(book.build(probe)[0])
+        self.assertEqual(len(book.built(probe)), 1)
+        engine.working_atlas_data["atlas-probe"] = [[2.0, 0.0], [3.0, 1.0]]
+        ok, message = book.add_section(probe)
+        self.assertTrue(ok, message)
+        self.assertIn("Replaced the earlier plan", message)
+        self.assertEqual((len(book.parts(probe)), len(book.built(probe))), (1, 0))
+        self.assertTrue(book.build(probe)[0])
+        # With a section loaded, sections add up instead.
+        engine = FakeEngine()
+        book = ProbeBook(engine)
+        probe = book.new()
+        for _ in range(2):
+            self.mark(engine)
+            engine.h2a_transferred = False
+            book.add_section(probe)
+        self.assertEqual(len(book.parts(probe)), 2)
+
     def test_mapping_a_deleted_track_removes_the_section_and_keeps_the_probe(self):
         engine = FakeEngine()
         engine.mapping_ledger = MappingLedger()

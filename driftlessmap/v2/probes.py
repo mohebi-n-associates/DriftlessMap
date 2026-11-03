@@ -212,8 +212,14 @@ class ProbeBook:
                     return False, ("The section could not be warped onto the atlas. Place "
                                    "or check the landmarks in the Register step.")
             engine.transform_accept(probe=probe)
+        # A plan (no section loaded) is a single part: new points replace it.
+        planning = engine.image_view.image_file is None
+        earlier = self.parts(probe) + self.built(probe) if planning else []
         if not self.file_parts(probe):
             return False, "No part was made; see the message below the image."
+        if earlier:
+            engine.object_ctrl.delete_objects(earlier)
+            return True, "Replaced the earlier plan of {}; build it again.".format(probe)
         return True, "Added this section to {}.".format(probe)
 
     def file_parts(self, probe):

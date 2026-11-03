@@ -66,10 +66,10 @@ To plan probe coordinates before a surgery:
    is in the brain, crossing retrosplenial and visual cortex, CA1, the dentate
    gyrus and the thalamus (LP, PO, VPM).
 
-A planned probe must be built from exactly one part. To change a plan, add a
-new probe (or **Delete…** the old one) and plan it again: adding a second set
-of points to a probe that already has a part or a built plan gives it two parts,
-and building then stops with "a pre-surgery plan can be merged from only one
-piece". To keep a
+A planned probe is one part. To change a plan, click two new points and
+**Add the points** again: since DriftlessMap 2.5.7 they replace the earlier
+plan (and its build; the message says so), and you build it again. (In 2.5.0
+the probe got a second part and building stopped with "a pre-surgery plan can
+be merged from only one piece".) To keep a
 plan for another session, save the project; **Probe settings > Save probe
 settings…** saves the probe setup on its own (`.dmapprobe`).

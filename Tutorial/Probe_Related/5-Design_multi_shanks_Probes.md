@@ -74,7 +74,8 @@ Notes:
 
 - The multi-shanks switch, the layout and the Site-face box are shared by all
   probes. Turn the switch off (while Mark track is on) before planning a single
-  probe.
+  probe. A probe type's own shank layout (Neuropixel 2.0) is not carried over
+  to another type.
 - With *Neuropixel 2.0* the switch loads the built-in 4-shank layout, and it is
   loaded again whenever you select *Neuropixel 2.0*, change the site face or
   turn the switch on. To use your own layout with Neuropixels 2.0 shanks, set

@@ -8,7 +8,7 @@ or important workflows change.
 
 ## Project identity
 
-- Current stable release: DriftlessMap 2.5.6 (3 November 2026; 2.4.0 plus
+- Current stable release: DriftlessMap 2.5.7 (3 November 2026; 2.4.0 plus
   fixes and the rat atlas downloads, the first release since 2.0.0, including 2.0.1-2.3.0 and multi-section
   projects). 2.0.0
   (29 October 2026) followed the 2.0.0aN previews and 2.0.0rc1-rc16. The owner released it with the
@@ -310,7 +310,10 @@ or important workflows change.
   landmarks are proposed, added, moved or deleted and for Match Boundaries,
   never on load (a saved frame is part of the registration fingerprint).
 - `driftlessmap/probe_utiles.py`, `probe_reconstruction.py`, `probe_csv.py`:
-  probe geometry, mapping, reconstruction schema, and exports.
+  probe geometry, mapping, reconstruction schema, and exports. Planned shank
+  offsets are probe-frame x (across the probe) and y (face normal);
+  `get_center_lines` turns them by the site face, and the preview uses the
+  same mapping (`shank_plane_offsets`); never swap x and y for a face.
 - `driftlessmap/object_control.py`: object pieces/merged objects, visualization,
   and information dialogs.
 - `driftlessmap/layers_control.py`: layer metadata and UI state.

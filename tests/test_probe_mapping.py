@@ -218,6 +218,36 @@ class SiteFaceFrameTests(unittest.TestCase):
             np.testing.assert_allclose(n_hat, normal, atol=1e-12)
 
 
+class PlannedShankTests(unittest.TestCase):
+    def test_the_preview_shows_the_shanks_where_the_parts_are_made(self):
+        # The four-shank preview and the parts disagreed for Left/Right faces.
+        from driftlessmap.probe_utiles import (
+            get_center_lines,
+            get_pre_multi_shank_vis_base,
+            shank_plane_offsets,
+        )
+
+        r_hat = np.array([0.0, 0.0, -1.0])          # straight down
+        n_hat = np.array([0.0, 1.0, 0.0])           # out of a coronal page
+        u_hat = np.cross(n_hat, r_hat)              # across the page
+        x_vals, y_vals = [-375.0, -125.0, 125.0, 375.0], [0.0, 0.0, 0.0, 0.0]
+        start = np.array([[100.0, 200.0, 50.0], [100.0, 200.0, 10.0]])
+        for face in range(4):
+            with self.subTest(face=face):
+                lines = get_center_lines(start, r_hat, n_hat, u_hat, x_vals, y_vals,
+                                         40.0, face, 25.0)
+                offsets = np.array([line[0] - start[0] for line in lines]) * 25.0
+                in_plane, out_of_plane = shank_plane_offsets(x_vals, y_vals, face)
+                np.testing.assert_allclose(offsets @ u_hat, in_plane, atol=1e-9)
+                np.testing.assert_allclose(offsets @ n_hat, out_of_plane, atol=1e-9)
+                shown = get_pre_multi_shank_vis_base(x_vals, y_vals, face)
+                expected = in_plane if face in (0, 1) else [0.0]
+                np.testing.assert_allclose(np.sort(shown), np.sort(expected))
+        # Out/In faces put the shanks across the page, Left/Right along it.
+        self.assertEqual(len(get_pre_multi_shank_vis_base(x_vals, y_vals, 0)), 4)
+        self.assertEqual(len(get_pre_multi_shank_vis_base(x_vals, y_vals, 2)), 1)
+
+
 class ProbeRobustnessTests(unittest.TestCase):
     LABEL_INFO = {
         "index": np.array([10]),

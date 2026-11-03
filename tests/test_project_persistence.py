@@ -14,6 +14,7 @@ PROJECT_TEST_CHILD = os.environ.get("DRIFTLESSMAP_PROJECT_TEST_CHILD") == "1"
 import cv2
 import numpy as np
 
+from driftlessmap import file_dialogs
 from driftlessmap.persistence import load_driftlessmap_file
 from driftlessmap.provenance import path_stat_signature
 from driftlessmap.project_io import CELL_COUNT_SLOTS
@@ -814,6 +815,50 @@ class ProjectPersistenceIntegrationTests(unittest.TestCase):
             self.assertEqual(len(window.mapping_ledger), 0)
             self.assertEqual(window.undo_history.undo_label(), "Remove mapping of contour")
             self.assertIsNone(window.remove_mapping(contour.unit_id))
+
+    @isolated_gui_test
+    def test_probe_planning_controls_keep_their_state_consistent(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window = self._window_with_volume_atlas(root)
+            tools = window.tool_box
+            tools.checkable_btn_dict["probe_btn"].trigger()    # the probe tool is on
+            self.assertTrue(tools.multi_prb_btn.isEnabled())
+
+            # Changing the face clears a plan's points, not only their drawing.
+            window.working_atlas_data["atlas-probe"] = [[5.0, 2.0], [5.0, 20.0]]
+            tools.pre_site_face_combo.setCurrentIndex(2)
+            self.assertEqual(window.site_face, 2)
+            self.assertEqual(window.working_atlas_data["atlas-probe"], [])
+
+            # Linear silicon has no geometry until the designer describes it.
+            tools.probe_type_combo.setCurrentIndex(0)
+            self.assertTrue(window.valid_probe_settings)
+            tools.probe_type_combo.setCurrentIndex(2)
+            self.assertFalse(window.valid_probe_settings)
+            window.working_atlas_data["atlas-probe"] = [[5.0, 2.0], [5.0, 20.0]]
+            window.make_probe_piece()
+            self.assertEqual(window.object_ctrl.obj_name, [])
+
+            # Neuropixels 2.0's four shanks do not become another type's layout.
+            tools.probe_type_combo.setCurrentIndex(1)
+            if not tools.multi_prb_btn.isChecked():
+                tools.multi_prb_btn.click()
+            self.assertTrue(window.valid_multi_settings)
+            tools.probe_type_combo.setCurrentIndex(0)
+            self.assertFalse(window.valid_multi_settings)
+            tools.multi_prb_btn.click()
+
+            # After a section is loaded the face used is the one shown.
+            source = root / "section.png"
+            cv2.imwrite(str(source), np.full((32, 24, 3), 120, dtype=np.uint8))
+            tools.pre_site_face_combo.setCurrentIndex(3)
+            with patch.object(file_dialogs, "get_open_file_name",
+                              return_value=(str(source), "")):
+                window.load_image()
+            self.assertFalse(tools.after_site_face_combo.isHidden())
+            self.assertTrue(tools.pre_site_face_combo.isHidden())
+            self.assertEqual(window.site_face, tools.after_site_face_combo.currentIndex())
 
     @isolated_gui_test
     def test_map_parts_and_build_undo_and_redo_together(self):
