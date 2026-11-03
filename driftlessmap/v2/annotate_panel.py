@@ -70,7 +70,9 @@ class AnnotatePanel(StepPanel):
         self.next_button = self.gate(button("", self.next_step, primary=True),
                                      self._needs_next_step)
         self.review_button = button("Review registration", lambda: shell.go_to("register"))
-        mapping.add(grid_of([self.next_button, self.review_button], columns=2))
+        # One above the other: the next step's label can be long.
+        mapping.add(self.next_button)
+        mapping.add(self.review_button)
         self.review = mapping.add(status_label(""))
         mapping.add(hint_label(
             "Mapping copies the section's marks onto the atlas and keeps them, shown "
