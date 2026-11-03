@@ -11,6 +11,7 @@ import tempfile
 import pickle
 
 import numpy as np
+from natsort import natsorted
 
 import cv2
 
@@ -7543,41 +7544,77 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
         )
 
         if image_file_path[0] != "":
-            _, image_file_type = os.path.splitext(image_file_path[0])
-            image_file_type = image_file_type.lower()
-            # The open section is kept: the image becomes a new section.
-            try:
-                stored = self.begin_new_section()
-            except Exception as exc:
-                self.print_message("The open section could not be kept ({}); no image was "
-                                   "loaded.".format(exc), self.error_message_color)
-                return
-            if not self.load_single_image_file(
-                image_file_path[0], image_file_type
-            ):
-                return
-            self.current_img_path = image_file_path[0]
-            self._loaded_histology_signature = path_stat_signature(
-                self.current_img_path
-            )
-            self.current_img_name = os.path.basename(
-                os.path.realpath(image_file_path[0])
-            )
-            self.save_path = image_file_path[0]
-            self.finish_new_section(stored)
-            self.project_method = "pre plan"
-            self.tool_box.pre_site_face_combo.setVisible(False)
-            self.tool_box.after_site_face_combo.setVisible(True)
-            # The face used is now the after-surgery box's, which is shown.
-            self.site_face = self.tool_box.after_site_face_combo.currentIndex()
-            self.probe_settings.probe_faces_changed(
-                self.tool_box.after_site_face_combo.currentText())
+            self.add_section_from_file(image_file_path[0])
         else:
             if self.image_view.image_file is None:
                 self.statusbar.showMessage("No image file is selected.")
             else:
                 self.statusbar.showMessage("No new image file is selected.")
             return
+
+    def add_section_from_file(self, path, page=None):
+        """Load ``path`` as a new section (the open one is kept); with
+        ``page``, show that page of a multi-page file and name the section
+        after it. Returns whether it was added."""
+        image_file_type = os.path.splitext(path)[1].lower()
+        try:
+            stored = self.begin_new_section()
+        except Exception as exc:
+            self.print_message("The open section could not be kept ({}); no image was "
+                               "loaded.".format(exc), self.error_message_color)
+            return False
+        if not self.load_single_image_file(path, image_file_type):
+            return False
+        self.current_img_path = path
+        self._loaded_histology_signature = path_stat_signature(self.current_img_path)
+        self.current_img_name = os.path.basename(os.path.realpath(path))
+        self.save_path = path
+        # The new section must be listed before its page changes; otherwise the
+        # section book takes it for the previous section read again.
+        self.finish_new_section(stored)
+        if page is not None and page != self.image_view.display_img_index:
+            self.image_view.page_ctrl.page_slider.setValue(page)
+        if page is not None:
+            self.rename_section(self.section_id, "{} · page {}".format(
+                os.path.basename(path), page + 1))
+        self.project_method = "pre plan"
+        self.tool_box.pre_site_face_combo.setVisible(False)
+        self.tool_box.after_site_face_combo.setVisible(True)
+        # The face used is now the after-surgery box's, which is shown.
+        self.site_face = self.tool_box.after_site_face_combo.currentIndex()
+        self.probe_settings.probe_faces_changed(
+            self.tool_box.after_site_face_combo.currentText())
+        return True
+
+    def add_sections(self, paths, pages_as_sections=False):
+        """Add each file as a section, in natural name order; with
+        ``pages_as_sections`` each page of a multi-page TIFF becomes its own
+        section. Returns the number added; stops at the first failure."""
+        added = 0
+        for path in natsorted(paths, key=lambda p: os.path.basename(p)):
+            if not self.add_section_from_file(path):
+                self.print_message("Added {} section(s); {} could not be added.".format(
+                    added, os.path.basename(path)), self.error_message_color)
+                return added
+            added += 1
+            pages = int(getattr(self.image_view.image_file, "n_pages", 1) or 1)
+            if not pages_as_sections or pages < 2:
+                continue
+            # The first section shows page 1 (a file may open on another page).
+            if self.image_view.display_img_index != 0:
+                self.image_view.page_ctrl.page_slider.setValue(0)
+            self.rename_section(self.section_id, "{} · page 1".format(os.path.basename(path)))
+            for page in range(1, pages):
+                if not self.add_section_from_file(path, page):
+                    self.print_message("Added {} section(s); page {} of {} could not be "
+                                       "added.".format(added, page + 1, os.path.basename(path)),
+                                       self.error_message_color)
+                    return added
+                added += 1
+        if added:
+            self.print_message("Added {} section{}.".format(added, "" if added == 1 else "s"),
+                               self.normal_color)
+        return added
 
     def select_image_planes(self, planes):
         """Re-read the current TIFF showing other planes of its fixed axes.

@@ -636,9 +636,11 @@ class V2Window(QMainWindow):
 
         add(Command("atlas.load", "Load atlas…", engine.actionAtlas.trigger, "Project",
                     ("open atlas", "volume atlas"), "Ctrl+Shift+A"))
-        add(Command("section.load", "Add section…", engine.actionSingle_Image.trigger,
-                    "Project", ("load image", "open image", "histology", "replace section"),
-                    "Ctrl+Shift+I"))
+        add(Command("section.load", "Add sections…", self.add_sections,
+                    "Project", ("load image", "open image", "histology", "add section",
+                                "several sections"), "Ctrl+Shift+I"))
+        add(Command("section.load_one", "Add one section…", engine.actionSingle_Image.trigger,
+                    "Project", ("load image", "single image")))
         add(Command("project.new_window", "New window", self.open_new_window, "Project",
                     ("new project", "start again", "another atlas"), "Ctrl+N"))
         add(Command("project.open", "Open project…", self.open_project, "Project",
@@ -1047,6 +1049,36 @@ class V2Window(QMainWindow):
         if dialog.continue_process and dialog.process_finished:
             self.engine._open_downloaded_atlas(dialog)
             self.set_view("compare")
+
+    def add_sections(self):
+        """Add one or more image files as sections, in natural name order."""
+        from .. import file_dialogs
+        from ..image_reader import HISTOLOGY_IMAGE_FILTER
+
+        engine = self.engine
+        paths, _ = file_dialogs.get_open_file_names(
+            self, "Add sections (choose one or more images)",
+            engine.current_img_path or engine.home_path, HISTOLOGY_IMAGE_FILTER)
+        if not paths:
+            return
+        pages = False
+        if any(os.path.splitext(p)[1].lower() in (".tif", ".tiff") for p in paths):
+            box = QMessageBox(self)
+            box.setWindowTitle("Add sections")
+            box.setText("A TIFF with several pages: add each page as its own section?")
+            box.setInformativeText("Each page then has its own landmarks, review and "
+                                   "mappings. Otherwise the file is one section and you "
+                                   "choose the page in the Section step.")
+            each = box.addButton("Each page a section", QMessageBox.ButtonRole.AcceptRole)
+            box.addButton("One section per file", QMessageBox.ButtonRole.RejectRole)
+            box.exec()
+            pages = box.clickedButton() is each
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        try:
+            engine.add_sections(paths, pages_as_sections=pages)
+        finally:
+            QApplication.restoreOverrideCursor()
+        self.refresh()
 
     def open_new_window(self):
         """Start another 2.0 window (an empty document) in its own process."""

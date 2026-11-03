@@ -374,8 +374,8 @@ class V2ShellTests(unittest.TestCase):
                 image = np.zeros((32, 24, 3), dtype=np.uint8)
                 image[4:28, 4:20] = value
                 cv2.imwrite(str(root / name), image)
-                with patch.object(file_dialogs, "get_open_file_name",
-                                  return_value=(str(root / name), "")):
+                with patch.object(file_dialogs, "get_open_file_names",
+                                  return_value=([str(root / name)], "")):
                     window.run("section.load")
             first_id = engine.sections.entries()[0].section_id
             fiber = engine.add_implant("fiber")
