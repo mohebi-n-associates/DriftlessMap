@@ -543,7 +543,9 @@ class V2ShellTests(unittest.TestCase):
             self.assertIn("atlas", register._requirement_text.text())
             window.go_to("annotate")
             self.assertTrue(find(window.panels["annotate"], "Cells").isEnabled())
-            self.assertFalse(find(window.panels["annotate"], "Map to atlas").isEnabled())
+            next_button = window.panels["annotate"].next_button
+            self.assertFalse(next_button.isEnabled())
+            self.assertIn("atlas", next_button.toolTip())
 
     @isolated_gui_test
     def test_section_step_reads_another_time_plane(self):
