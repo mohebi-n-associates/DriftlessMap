@@ -1038,6 +1038,24 @@ class V2ShellTests(unittest.TestCase):
             self.assertNotIn("cleared", message)          # nothing left to clear
 
     @isolated_gui_test
+    def test_the_empty_window_offers_three_ways_to_start(self):
+        from tests.atlas_fixture import make_processed_atlas
+
+        with tempfile.TemporaryDirectory() as folder:
+            window = self.make_window(folder)
+            texts = {b.text() for b in window.findChildren(QPushButton)}
+            for text in ("Load atlas folder…", "Add sections…", "Allen mouse atlas…",
+                         "Waxholm rat atlas…", "SWC female rat atlas…", "Your own atlas…",
+                         "Plan a probe", "Open project…"):
+                self.assertIn(text, texts)
+            window.start_probe_plan()                   # no atlas yet
+            self.assertIn("Load an atlas folder first", window.message_label.text())
+            self.assertTrue(window.engine.load_volume_atlas(
+                str(make_processed_atlas(Path(folder) / "atlas"))))
+            window.start_probe_plan()
+            self.assertIs(window.stack.currentWidget(), window.panels["annotate"])
+
+    @isolated_gui_test
     def test_save_follows_the_open_file_and_warnings_stay_listed(self):
         import cv2
         from unittest.mock import patch

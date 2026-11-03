@@ -1,6 +1,11 @@
 # Update Log
 
 ### 3rd November 2026
+##### 2.6.0: usability, U12 (first-run guidance)
+
+Review U12. The empty canvas now offers three ways to start: map histology (Load atlas folder…, Add sections…, and downloading or processing an atlas: Allen mouse, Waxholm rat, SWC female rat, your own), plan a probe (`start_probe_plan`: Annotate with a hint, or a message to load an atlas first) and continue earlier work (Open project…). The manual opens with "Quick start in the 2.0 interface" (the classic interface was described first). A bundled example project was not added (it needs an atlas, hundreds of MB), and keyboard-only and screen-reader use, and timings with users, remain to be tested with people. Test: the eight start buttons; planning a probe without and with an atlas.
+
+### 3rd November 2026
 ##### 2.6.0: usability, U11 (predictable undo)
 
 Review U11. `TransactionHistory.labels()` lists the undo and redo steps; V2 Edit > Mapping history… (`edit.history`) shows them, newest first, with what the mapping steps cover and what clears them. Opening a section, removing one and adding an image now say when they clear a non-empty history ("The Undo mapping step history (2 steps) was cleared.", `history_cleared_note`). The probe and implant delete dialogs name the sections they were mapped on and that Undo mapping step brings them back. A single command history across all mutation types was not attempted. Test: map and build list as "1. Build Fiber 1, 2. Map Fiber 1"; after an undo the lists split; switching sections reports two cleared steps, and nothing when empty.

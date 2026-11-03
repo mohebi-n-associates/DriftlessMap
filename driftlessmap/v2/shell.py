@@ -50,7 +50,7 @@ from .results_panel import ResultsPanel
 from .section_bar import SectionBar
 from .section_panel import SectionPanel
 from .theme import stylesheet
-from .widgets import Card, button, hint_label, respond
+from .widgets import Card, button, grid_of, hint_label, respond
 
 STEPS = (
     ("project", "Project", ProjectPanel),
@@ -351,16 +351,31 @@ class V2Window(QMainWindow):
         frame.setObjectName("Canvas")
         layout = QVBoxLayout(frame)
         layout.addStretch(1)
-        card = Card("Nothing to show yet",
-                    "Load a processed atlas and a histology section, or open a project. "
-                    "Without a section, probes can be planned on the atlas alone.")
-        card.setMaximumWidth(460)
-        card.add_row(button("Load atlas…", lambda: self.run("atlas.load"), primary=True),
-                     button("Load section…", lambda: self.run("section.load")),
-                     button("Open project…", lambda: self.run("project.open")), None)
-        card.add_row(button("Download Allen mouse atlas…", self.download_allen_atlas),
-                     button("Download rat atlas…", lambda: self.download_rat_atlas("waxholm")),
-                     None)
+        # Three ways to start (review U12).
+        card = Card("Get started")
+        card.setMaximumWidth(520)
+        card.add(self._start_title("1  Map histology to an atlas"))
+        card.add(hint_label("Load a processed atlas folder and add your sections, then follow "
+                            "the steps on the left: Section, Match, Register, Annotate, "
+                            "Results."))
+        card.add(grid_of([button("Load atlas folder…", lambda: self.run("atlas.load"),
+                                 primary=True),
+                          button("Add sections…", lambda: self.run("section.load"))],
+                         columns=2))
+        card.add(hint_label("No processed atlas yet? Download and process one (once; it is "
+                            "then loaded from its folder):"))
+        card.add(grid_of([
+            button("Allen mouse atlas…", self.download_allen_atlas),
+            button("Waxholm rat atlas…", lambda: self.download_rat_atlas("waxholm")),
+            button("SWC female rat atlas…", lambda: self.download_rat_atlas("swc_female_rat")),
+            button("Your own atlas…", self.engine.actionAtlas_Processor.trigger),
+        ], columns=2))
+        card.add(self._start_title("2  Plan a probe"))
+        card.add(hint_label("With an atlas only: plan the track on the atlas before surgery."))
+        card.add(grid_of([button("Plan a probe", self.start_probe_plan)], columns=2))
+        card.add(self._start_title("3  Continue earlier work"))
+        card.add(grid_of([button("Open project…", lambda: self.run("project.open"))],
+                         columns=2))
         row = QHBoxLayout()
         row.addStretch(1)
         row.addWidget(card)
@@ -368,6 +383,22 @@ class V2Window(QMainWindow):
         layout.addLayout(row)
         layout.addStretch(2)
         return frame
+
+    @staticmethod
+    def _start_title(text):
+        label = QLabel(text)
+        label.setObjectName("CardTitle")
+        return label
+
+    def start_probe_plan(self):
+        """Go to the probe controls; planning needs an atlas (and no section)."""
+        if self.engine.atlas_view.atlas_data is None:
+            self.message("Load an atlas folder first (or download one); then plan the probe "
+                         "in Annotate › Implants: Add implant…, Probe.", "warn")
+            return
+        self.go_to("annotate")
+        self.message("Add implant… › Probe, then Mark track and click the entry point and the "
+                     "tip on the atlas.")
 
     def _name_undo_steps(self):
         history = self.engine.undo_history
