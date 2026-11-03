@@ -2,7 +2,7 @@
 
 Stable release: **2.0.0**, 29 October 2026 (PyPI, and a GitHub release with
 Windows and macOS builds), after release candidates 2.0.0rc1 (published) to
-2.0.0rc16. Current release: 2.5.7, 3 November 2026 (2.4.0 plus fixes and the rat atlas downloads; the first published since 2.0.0); the waiver below
+2.0.0rc16. Current release: 2.5.8, 3 November 2026 (2.4.0 plus fixes and the rat atlas downloads; the first published since 2.0.0); the waiver below
 applies to it as well. Passing automated tests does not satisfy the native-installation or
 user-evaluation gates.
 
@@ -56,7 +56,7 @@ PyQt6 installation's `Qt6/plugins/platforms`; do not change application imports 
 accommodate a broken local Qt setup.
 
 Local validation uses Python 3.13.9, NumPy 2.3.5, pyqtgraph 0.14.0 and SimpleITK
-2.5.7 on macOS arm64. It is not evidence for the other CI Python versions or for
+2.5.8 on macOS arm64. It is not evidence for the other CI Python versions or for
 a packaged installer.
 
 Recorded 2.0.0rc1 result: **378 tests run, 376 passed, 2 skipped** (122 seconds).

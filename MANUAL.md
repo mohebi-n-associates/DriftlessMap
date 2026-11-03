@@ -1,7 +1,7 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 2.5.7**. Section 2 explains how to
-install it; `pip install driftlessmap` installs 2.5.7.
+This manual applies to **DriftlessMap 2.5.8**. Section 2 explains how to
+install it; `pip install driftlessmap` installs 2.5.8.
 
 DriftlessMap - Histological E-data Registration in Brain Space - is a desktop
 application for aligning rodent histology with a reference atlas, reconstructing
@@ -102,7 +102,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-DriftlessMap 2.5.7 requires:
+DriftlessMap 2.5.8 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -121,8 +121,8 @@ page. The macOS DMG (`-macOS-arm64.dmg`) is built for Apple Silicon; on an Intel
 Mac, use the developer installation below.
 The desktop builds include Python and all runtime dependencies. Windows users
 extract the entire ZIP and run `DriftlessMap.exe`; macOS users open the DMG and
-drag `DriftlessMap.app` to Applications. The 2.5.7 downloads are named
-`DriftlessMap-2.5.7-Windows-x64.zip` and `DriftlessMap-2.5.7-macOS-arm64.dmg`.
+drag `DriftlessMap.app` to Applications. The 2.5.8 downloads are named
+`DriftlessMap-2.5.8-Windows-x64.zip` and `DriftlessMap-2.5.8-macOS-arm64.dmg`.
 Release builds are unsigned unless the release notes say otherwise, so the first
 launch may require Windows SmartScreen confirmation or Control-clicking the
 macOS app and choosing **Open**.
@@ -171,7 +171,7 @@ python -m pip --version
 python -c "import driftlessmap; print(driftlessmap.__version__)"
 ```
 
-The final command prints the installed version, `2.5.7`.
+The final command prints the installed version, `2.5.8`.
 
 ### 2.5 Launching DriftlessMap
 
@@ -552,7 +552,13 @@ pair) do not fire while you type in a field; Escape stops the current tool.
 and the objects/layers panel so the atlas and section views fill the window;
 the same again brings them back. Tool options above the image stay available
 while focused. **View > Show task column** and **Show objects and layers**
-hide one side only.
+hide one side only. In a window narrower than 1360 pixels the objects and
+layers column folds away by itself (a message says so) and returns when the
+window is widened; showing or hiding it by hand overrides this.
+
+Messages appear at the bottom left. Warnings and errors are also counted
+there (*⚠ 2 messages*); click the count, or choose **Messages of this
+session** (Ctrl/Cmd+K), to read every message of the session and copy them.
 
 **View > Show region boundaries** (B) outlines the atlas regions on the atlas
 view, without names. The lines are drawn in a light blue that stays visible on
@@ -2015,6 +2021,14 @@ Use **File > Save Portable Project** when the archive must also contain the
 original histology file (including CZI), or every image used by a folder-based
 source. Portable projects can be much larger. The volume atlas remains linked
 and verified rather than duplicated.
+
+In the 2.0 interface (since 2.5.8), **File > Save project** (Ctrl+S) saves to
+the open project's file without asking, and asks for a file only for a new
+project; **Save project as…** (Ctrl+Shift+S) saves under a new name, which
+becomes the open project. **Save portable copy…** writes a portable copy and
+leaves the open project's file as it is. Any notes from a save (an original
+that could not be packed, a changed file not linked) stay in its final
+message.
 
 When loading another project over active work, DriftlessMap asks whether to save the
 current project first.

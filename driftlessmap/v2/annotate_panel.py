@@ -82,7 +82,8 @@ class AnnotatePanel(StepPanel):
         self.mapped_list = QListWidget()
         self.mapped_list.setMaximumHeight(130)
         mapped.add(self.mapped_list)
-        mapped.add_row(
+        # A grid, not a row: three buttons side by side overflow the column.
+        mapped.add(grid_of([
             self.gate(button("Update mapping", self.update_selected,
                              tooltip="Map the kept marks again with the current registration"),
                       self._needs_mapped_selection),
@@ -92,7 +93,7 @@ class AnnotatePanel(StepPanel):
             self.gate(button("Remove mapping", self.remove_selected,
                              tooltip="Remove this mapping and the parts made from it; "
                                      "built objects that contain one are taken apart"),
-                      self._needs_mapped_selection), None)
+                      self._needs_mapped_selection)], columns=2))
         self.mapped_note = mapped.add(hint_label(""))
         self._mapped_key = None
 

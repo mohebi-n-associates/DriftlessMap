@@ -3,6 +3,25 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.5.8
+
+Release of 3 November 2026, the last of the fixes from the 2.5.0 review.
+
+- **Save saves.** In the 2.0 interface, **Save project** (Ctrl+S) now saves to
+  the open project's file without asking, as in other applications; **Save
+  project as…** (Ctrl+Shift+S) is new. **Save portable copy…** writes a copy
+  and leaves the open project's file as it is (it used to make the copy the
+  open project), and it no longer has Ctrl+Shift+S.
+- **Warnings are kept.** A warning used to vanish as soon as a later message
+  (often "saved") replaced it. Warnings and errors are now counted at the
+  bottom (*⚠ 2 messages*); click the count, or choose *Messages of this
+  session*, to read and copy every message of the session.
+- **Small windows.** At the smallest window size the Annotate step was wider
+  than its column, so some buttons were cut off; button rows now wrap, and in
+  a window narrower than 1360 pixels the objects and layers column folds away
+  (View > Show objects and layers brings it back). The view buttons keep
+  their names.
+
 ## DriftlessMap 2.5.7
 
 Fix release, 3 November 2026. **Probe planning.**

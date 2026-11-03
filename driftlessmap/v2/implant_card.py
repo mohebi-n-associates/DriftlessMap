@@ -172,15 +172,17 @@ class ImplantCard(Card):
         self.list.setMaximumHeight(118)
         self.list.currentRowChanged.connect(lambda _row: self._selection_changed())
         self.add(self.list)
-        self.add_row(button("Add implant…", self.add_implant),
-                     button("Settings…", self.edit_settings),
-                     button("Rename…", self.rename),
-                     button("Delete…", self.delete,
-                            tooltip="Delete the selected implant or probe with its parts, "
-                                    "built object and mapping records. "
-                                    + undo_help()["step"]), None)
+        # Two by two: four buttons in a row overflow a compact window's column.
+        self.add(grid_of([button("Add implant…", self.add_implant),
+                          button("Settings…", self.edit_settings),
+                          button("Rename…", self.rename),
+                          button("Delete…", self.delete,
+                                 tooltip="Delete the selected implant or probe with its parts, "
+                                         "built object and mapping records. "
+                                         + undo_help()["step"])], columns=2))
 
         self.active = self.add(QLabel(""))
+        self.active.setWordWrap(True)      # long hints must not widen the column
         self.active.setObjectName("CardTitle")
         self.specs = self.add(hint_label(""))
         self.draw = button("1  Draw outline", lambda: self._mode("draw"), checkable=True,
