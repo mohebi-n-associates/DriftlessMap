@@ -58,7 +58,7 @@ To reuse a design, save it with **Probe settings > Save probe settings…**
 field after loading. The design is also saved in the project.
 
 The designer always opens with the current geometry; **Cancel** leaves it
-unchanged. When you first switch to *Linear-silicon*, that geometry is the one
-of the type selected before (for example the four Neuropixels 1.0 columns), and
-it is used as it is until you change it in the designer, so always open the
-designer and check every field.
+unchanged. When you first switch to *Linear-silicon*, the designer starts from
+the geometry of the type selected before (for example the four Neuropixels 1.0
+columns). Since 2.5.7 points cannot be added until you have described the
+probe in the designer and clicked **OK**, so check every field there.

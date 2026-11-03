@@ -303,6 +303,9 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
         self.multi_shanks = False
         self.multi_settings = MultiProbes()
         self.valid_multi_settings = False
+        # True while the multi-shank layout is a probe type's built-in shanks
+        # (not one set with Multi-probe layout).
+        self.multi_layout_from_type = False
 
         self.np_onside = 2
         self.atlas_rect = None
@@ -1105,6 +1108,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
             self.multi_settings.set_multi_probes(multi_probe_info.multi_settings)
             msg = self.multi_settings.check_multi_settings()
             self.valid_multi_settings = msg is None
+            self.multi_layout_from_type = False
             if msg is not None:
                 self.print_message(msg, self.error_message_color)
 
@@ -3024,12 +3028,11 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
             if self.probe_settings.multi_shanks is not None:
                 n_shanks = len(self.probe_settings.multi_shanks)
                 site_face = self.tool_box.pre_site_face_combo.currentIndex()
-                if self.site_face in [0, 1]:
-                    x_vals = np.ravel(self.probe_settings.multi_shanks)
-                    y_vals = np.zeros(n_shanks)
-                else:
-                    y_vals = np.ravel(self.probe_settings.multi_shanks)
-                    x_vals = np.zeros(n_shanks)
+                # Shanks sit across the probe's width (probe-frame x); the site
+                # face turns that frame into the brain when the parts are made
+                # (get_center_lines), so x is never swapped here.
+                x_vals = np.ravel(self.probe_settings.multi_shanks)
+                y_vals = np.zeros(n_shanks)
                 multi_settings = {
                     "x_vals": x_vals,
                     "y_vals": y_vals,
@@ -3039,6 +3042,14 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
                 }
                 self.multi_settings.set_multi_probes(multi_settings)
                 self.valid_multi_settings = True
+                self.multi_layout_from_type = True
+            elif self.multi_layout_from_type:
+                # The layout was another probe type's shanks: not this probe's.
+                self.valid_multi_settings = False
+                self.multi_layout_from_type = False
+                self.print_message(
+                    "This probe type has no built-in shank layout; set one with Multi-probe "
+                    "layout, or switch multi-shank off.", self.reminder_color)
         else:
             self.multi_shanks = False
 
@@ -3057,6 +3068,12 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
         elif index == 2:
             if self.probe_settings.probe_type != 2:
                 self.tool_box.linear_silicon_list.setVisible(True)
+                # Until the designer describes it, the probe has no geometry of
+                # its own (the previous type's would otherwise be used).
+                self.valid_probe_settings = False
+                self.print_message(
+                    "Describe the linear silicon probe with the Linear Silicon Designer "
+                    "(next to the type) before adding points.", self.reminder_color)
             temp_settings = self.probe_settings.get_settings()
             self.probe_settings.set_linear_silicon(temp_settings)
         else:
@@ -3099,7 +3116,13 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
             site_face_text = self.tool_box.after_site_face_combo.currentText()
         self.probe_settings.probe_faces_changed(site_face_text)
         self.atlas_view.pre_trajectory_changed()
-        self.atlas_view.working_atlas.image_dict["atlas-probe"].clear()
+        if self.image_view.image_file is None:
+            # A plan's points belong to the old face: clear them, not only
+            # their drawing (as changing the probe type does).
+            self.working_atlas_data["atlas-probe"].clear()
+            self.atlas_view.working_atlas.image_dict["atlas-probe"].clear()
+        else:
+            self._show_atlas_marks("probe")
         self.multi_shanks_btn_clicked()
 
     def probe_color_changed(self, ev):
@@ -5773,7 +5796,8 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
                     points2d.append([x, y])
                     if self.multi_shanks and self.valid_multi_settings:
                         base_loc_1d = get_pre_multi_shank_vis_base(
-                            self.multi_settings.x_vals, self.multi_settings.y_vals
+                            self.multi_settings.x_vals, self.multi_settings.y_vals,
+                            self.site_face,
                         )
                     else:
                         base_loc_1d = np.array([0])
@@ -5875,7 +5899,8 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
                     points2d.append([x, y])
                     if self.multi_shanks and self.valid_multi_settings:
                         base_loc_1d = get_pre_multi_shank_vis_base(
-                            self.multi_settings.x_vals, self.multi_settings.y_vals
+                            self.multi_settings.x_vals, self.multi_settings.y_vals,
+                            self.site_face,
                         )
                     else:
                         base_loc_1d = np.array([0])
@@ -5961,7 +5986,8 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
                     points2d.append([x, y])
                     if self.multi_shanks and self.valid_multi_settings:
                         base_loc_1d = get_pre_multi_shank_vis_base(
-                            self.multi_settings.x_vals, self.multi_settings.y_vals
+                            self.multi_settings.x_vals, self.multi_settings.y_vals,
+                            self.site_face,
                         )
                     else:
                         base_loc_1d = np.array([0])
@@ -6044,7 +6070,8 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
                     points2d.append([x, y])
                     if self.multi_shanks and self.valid_multi_settings:
                         base_loc_1d = get_pre_multi_shank_vis_base(
-                            self.multi_settings.x_vals, self.multi_settings.y_vals
+                            self.multi_settings.x_vals, self.multi_settings.y_vals,
+                            self.site_face,
                         )
                     else:
                         base_loc_1d = np.array([0])
@@ -6292,7 +6319,8 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
 
             if self.multi_shanks and self.valid_multi_settings:
                 base_loc_1d = get_pre_multi_shank_vis_base(
-                    self.multi_settings.x_vals, self.multi_settings.y_vals
+                    self.multi_settings.x_vals, self.multi_settings.y_vals,
+                    self.site_face,
                 )
             else:
                 base_loc_1d = np.array([0])
@@ -7513,6 +7541,10 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
             self.project_method = "pre plan"
             self.tool_box.pre_site_face_combo.setVisible(False)
             self.tool_box.after_site_face_combo.setVisible(True)
+            # The face used is now the after-surgery box's, which is shown.
+            self.site_face = self.tool_box.after_site_face_combo.currentIndex()
+            self.probe_settings.probe_faces_changed(
+                self.tool_box.after_site_face_combo.currentText())
         else:
             if self.image_view.image_file is None:
                 self.statusbar.showMessage("No image file is selected.")

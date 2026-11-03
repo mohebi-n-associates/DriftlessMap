@@ -3,6 +3,29 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.5.7
+
+Fix release, 3 November 2026. **Probe planning.**
+
+- **Four-shank probes facing Left or Right are placed correctly.** With the
+  sites facing sideways, the four Neuropixels 2.0 shanks lie one behind the
+  other (along AP in a coronal view), as the preview showed, but the planned
+  parts were made side by side across the view. They are now made where the
+  preview puts them. The preview also mirrors custom layouts correctly for the
+  *In* face.
+- **Re-planning a probe replaces its plan.** Adding new points to a planned
+  probe gave it a second part, and building then failed; the new points now
+  replace the earlier plan.
+- **The site face shown is the one used.** After loading a section, the probe
+  could keep using the planning face while showing an after-surgery face.
+- **Changing the site face clears placed points**, as changing the probe type
+  does; they used to stay, hidden, and were still used.
+- **Linear-silicon probes need their design.** Selecting Linear-silicon used
+  the previous type's geometry until the designer was opened; points can now
+  be added only after the probe is described.
+- **Neuropixels 2.0's four-shank layout is not reused for another type** with
+  the multi-shank switch on.
+
 ## DriftlessMap 2.5.6
 
 Fix release, 3 November 2026.

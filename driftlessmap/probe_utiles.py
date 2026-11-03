@@ -1222,12 +1222,31 @@ def calculate_probe_info(
     return data_dict, error_index
 
 
-def get_pre_multi_shank_vis_base(x_vals, y_vals):
-    x_vals = np.ravel(x_vals)
-    y_vals = np.ravel(y_vals)
-    valid_ind = np.where(y_vals == 0)[0]
+def shank_plane_offsets(x_vals, y_vals, site_face):
+    """In-plane and out-of-plane offsets of shanks at probe-frame ``x`` (across
+    the probe) and ``y`` (along its face normal) for a planning ``site_face``,
+    as :func:`get_center_lines` places them (see
+    :func:`get_vector_according_to_site_face`)."""
+    x_vals = np.ravel(x_vals).astype(float)
+    y_vals = np.ravel(y_vals).astype(float)
+    if site_face == 0:
+        return x_vals, y_vals
+    if site_face == 1:
+        return -x_vals, -y_vals
+    if site_face == 2:
+        return -y_vals, x_vals
+    if site_face == 3:
+        return y_vals, -x_vals
+    raise ValueError("Unknown site face {}.".format(site_face))
+
+
+def get_pre_multi_shank_vis_base(x_vals, y_vals, site_face=0):
+    """In-plane offsets of the shanks that lie in the shown plane (only the
+    probe's own track when none does)."""
+    in_plane, out_of_plane = shank_plane_offsets(x_vals, y_vals, site_face)
+    valid_ind = np.where(np.isclose(out_of_plane, 0))[0]
     if len(valid_ind) != 0:
-        base_loc = x_vals[valid_ind]
+        base_loc = in_plane[valid_ind]
     else:
         base_loc = np.array([0])
     # if site_face in [0, 1]:

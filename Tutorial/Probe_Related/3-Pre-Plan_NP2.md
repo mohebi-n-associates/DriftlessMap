@@ -53,17 +53,19 @@ The workflow is the same as for
 
 Notes:
 
-- The shank row lies in the plane of the view for every site face. With
-  *Out* or *In*, the shanks run across the view and the 2D preview draws all
-  four. With *Left* or *Right*, the sites face sideways in the view; the four
-  shanks are still made in the plane, but the preview draws only one line, so
-  check the parts or the built shanks (for example in 3D).
+- The shanks sit side by side across the probe's width, and the site face
+  turns the probe. With *Out* or *In* the sites face you, the shanks run
+  across the view and the 2D preview draws all four. With *Left* or *Right*
+  the sites face sideways, so the probe is turned a quarter turn: the shanks
+  lie one behind the other (along AP in a coronal view), the preview draws
+  only the track you clicked, and the parts are made 250 µm apart along AP.
+  (In 2.5.0 the parts were made across the view for these faces
+  too, which put them in the wrong place.)
 - Set the type, the switch and the site face before you click the points.
-  Changing the type clears points already placed; changing the site face only
-  hides their drawing (the points stay and are still used).
-- The multi-shanks switch and the shank layout are shared by all probes. Turn
-  the switch off (while Mark track is on) before planning a single-shank probe.
-  When you switch from Neuropixel 2.0 to another type with the switch on, the
-  4-shank layout stays as the multi-probe layout until you change it under
+  Changing the type or the site face clears points already placed.
+- The multi-shanks switch is shared by all probes. Turn it off (while Mark
+  track is on) before planning a single-shank probe. Neuropixel 2.0's
+  4-shank layout belongs to that type: switching to a type without a built-in
+  layout with the switch on makes the layout unusable until you set one under
   **Probe settings > Multi-probe layout…** (see
-  [tutorial 5](5-Design_multi_shanks_Probes.md)).
+  [tutorial 5](5-Design_multi_shanks_Probes.md)) or switch it off.
