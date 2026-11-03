@@ -35,8 +35,13 @@ legacy = object()   # ``simplices=legacy``: the fingerprint written before 2.0.0
 
 
 def registration_fingerprint(atlas_points, histology_points, atlas_frame, histology_frame,
-                             plane, page, tilt, image_shape, *, simplices=None):
-    """A stable digest of the inputs a review applies to."""
+                             plane, page, tilt, image_shape, *, simplices=None, source=None):
+    """A stable digest of the inputs a review applies to.
+
+    ``source`` identifies the page, scene and planes of a multi-part image
+    file (``image_reader.source_selection``); it is left out for a single
+    image, so those fingerprints are unchanged.
+    """
     if simplices is legacy:
         return _digest(_inputs(atlas_points, histology_points, atlas_frame, histology_frame,
                                plane, page, tilt, image_shape))
@@ -57,6 +62,8 @@ def registration_fingerprint(atlas_points, histology_points, atlas_frame, histol
     payload["version"] = 2
     payload["simplices"] = None if simplices is None else sorted(
         sorted(int(i) for i in triangle) for triangle in simplices)
+    if source:
+        payload["source"] = source
     return _digest(payload)
 
 

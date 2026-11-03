@@ -1,7 +1,7 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 2.5.3**. Section 2 explains how to
-install it; `pip install driftlessmap` installs 2.5.3.
+This manual applies to **DriftlessMap 2.5.4**. Section 2 explains how to
+install it; `pip install driftlessmap` installs 2.5.4.
 
 DriftlessMap - Histological E-data Registration in Brain Space - is a desktop
 application for aligning rodent histology with a reference atlas, reconstructing
@@ -102,7 +102,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-DriftlessMap 2.5.3 requires:
+DriftlessMap 2.5.4 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -121,8 +121,8 @@ page. The macOS DMG (`-macOS-arm64.dmg`) is built for Apple Silicon; on an Intel
 Mac, use the developer installation below.
 The desktop builds include Python and all runtime dependencies. Windows users
 extract the entire ZIP and run `DriftlessMap.exe`; macOS users open the DMG and
-drag `DriftlessMap.app` to Applications. The 2.5.3 downloads are named
-`DriftlessMap-2.5.3-Windows-x64.zip` and `DriftlessMap-2.5.3-macOS-arm64.dmg`.
+drag `DriftlessMap.app` to Applications. The 2.5.4 downloads are named
+`DriftlessMap-2.5.4-Windows-x64.zip` and `DriftlessMap-2.5.4-macOS-arm64.dmg`.
 Release builds are unsigned unless the release notes say otherwise, so the first
 launch may require Windows SmartScreen confirmation or Control-clicking the
 macOS app and choosing **Open**.
@@ -171,7 +171,7 @@ python -m pip --version
 python -c "import driftlessmap; print(driftlessmap.__version__)"
 ```
 
-The final command prints the installed version, `2.5.3`.
+The final command prints the installed version, `2.5.4`.
 
 ### 2.5 Launching DriftlessMap
 
@@ -530,7 +530,12 @@ change only how the image looks; the pixel values, registration input and
 coordinates stay the same. Channels are coloured at the resolution the screen
 shows, so display changes stay quick on whole-slide images; zooming in shows
 full resolution. Mapping without a review is allowed and is recorded
-as not reviewed. Review fingerprints also identify the triangle connectivity.
+as not reviewed. Review fingerprints also identify the triangle connectivity,
+and, for an image file with several pages, scenes or planes, which one is shown
+(since 2.5.4): moving to another page makes the review and the mappings of the
+section out of date until you return to that page. (Reviews and mappings of
+such files made before 2.5.4 did not record the page and show as out of date
+once; review them again.)
 Projects reviewed before 2.0.0a26 need a fresh review; their stored results are
 preserved, and marks mapped with the same landmarks, page, tilt and image stay
 current. If a project's probe settings cannot be restored, the project still
@@ -1651,7 +1656,9 @@ contain "-".
 
 - **Draw outline**: click around the track or footprint; click the first
   point again to close it. Drag corners to correct it, or click an edge to
-  add a corner.
+  add a corner. An outline left unfinished stays with its section: opening
+  another section pauses it, and it continues when you open its section
+  again (also after saving and reopening the project).
 - **Propose**: click inside a bright track; DriftlessMap outlines the
   connected region of similar brightness, kept inside the brain even where
   the track opens at the surface. Always check and correct it. Tears and

@@ -102,6 +102,10 @@ class OutlineEditor(QObject):
         self.mode = None
         self.implant_id = None
         self.vertices = []
+        # The section the current mode and vertices belong to, and unfinished
+        # outlines of other sections: {section_id: (implant_id, vertices)}.
+        self.section_id = engine.section_id
+        self.drafts = {}
         self._roi = None
         self._roi_points = None
         self._others = {}
@@ -127,12 +131,37 @@ class OutlineEditor(QObject):
         size = self.vb.viewPixelSize()
         return 8 * max(abs(size[0]), abs(size[1]), 1e-6)
 
+    # ----------------------------------------------------------- sections
+    def follow_section(self):
+        """After the open section changed: park an unfinished outline with its
+        own section and stop editing; True if the section changed. Vertices
+        never move to another section."""
+        current = self.engine.section_id
+        if current == self.section_id:
+            return False
+        if self.mode == "draw" and self.vertices and self.implant_id:
+            self.drafts[self.section_id] = (self.implant_id, [list(v) for v in self.vertices])
+        self.mode = None
+        self.vertices = []
+        self.section_id = current
+        self._show_preview()
+        return True
+
+    def take_draft(self):
+        """The parked unfinished outline of the open section,
+        ``(implant_id, vertices)``, or None; it is no longer parked."""
+        draft = self.drafts.pop(self.engine.section_id, None)
+        if draft is not None and self.engine.implants.get(draft[0]) is None:
+            return None
+        return draft
+
     # -------------------------------------------------------------- modes
     def set_mode(self, mode):
         """Start ``draw``, ``propose`` or ``point`` for the selected implant, or stop."""
         if mode is not None and self._implant() is None:
             self.changed.emit("Add or select a fiber or prism first.")
             return False
+        self.follow_section()
         if mode is None and self.mode == "draw" and len(self.vertices) >= 3:
             self.finish()
         self.mode = mode
@@ -142,7 +171,7 @@ class OutlineEditor(QObject):
 
     def finish(self):
         """Close the outline being drawn."""
-        if self.mode != "draw":
+        if self.follow_section() or self.mode != "draw":
             return
         if len(self.vertices) < 3:
             self.changed.emit("An outline needs at least three points.")
@@ -162,6 +191,7 @@ class OutlineEditor(QObject):
         self.sync(force=True)
 
     def _clicked(self, pos):
+        self.follow_section()
         if self.mode is None or self._implant() is None:
             return
         x, y = float(pos[0]), float(pos[1])

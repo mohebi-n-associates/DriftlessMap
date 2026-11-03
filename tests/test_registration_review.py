@@ -59,6 +59,20 @@ class ReviewTests(unittest.TestCase):
         self.assertEqual(fingerprint(), fingerprint(atlas_points=[[1.0000001, 2], [3, 4], [5, 6]]))
         self.assertEqual(fingerprint(), fingerprint(image_shape=(904, 1740, 6)))
 
+    def test_the_page_of_a_multi_part_file_is_part_of_the_registration(self):
+        from driftlessmap.image_reader import source_selection
+
+        # A single image has no selection, so its fingerprint is unchanged.
+        self.assertIsNone(source_selection(1, 0, 1, 0, {}))
+        self.assertEqual(fingerprint(source=None), fingerprint())
+        page0 = source_selection(2, 0, 1, 0, None)
+        self.assertEqual(page0, {"page": 0})
+        self.assertNotEqual(fingerprint(source=page0), fingerprint())
+        self.assertNotEqual(fingerprint(source=page0),
+                            fingerprint(source=source_selection(2, 1, 1, 0, None)))
+        self.assertEqual(source_selection(1, 0, 3, 2, {"T": 4}),
+                         {"scene": 2, "planes": {"T": 4}})
+
     def test_states_for_new_and_legacy_work(self):
         self.assertEqual(RegistrationReview().state(fingerprint()), NOT_REVIEWED)
         self.assertEqual(RegistrationReview(recorded=False).state(fingerprint()), NOT_RECORDED)

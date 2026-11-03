@@ -180,6 +180,20 @@ class ImageReader(object):
         self.scale = {"scene 0": 1.0}
 
 
+def source_selection(n_pages, page, n_scenes, scene, planes):
+    """Which part of a multi-page, multi-scene or multi-plane file a raster is:
+    a dict with ``page``, ``scene`` and ``planes`` where the file has a choice,
+    or None for a single image (so single images keep their fingerprints)."""
+    selection = {}
+    if int(n_pages or 1) > 1:
+        selection["page"] = int(page or 0)
+    if int(n_scenes or 1) > 1:
+        selection["scene"] = int(scene or 0)
+    if planes:
+        selection["planes"] = {str(axis): int(index) for axis, index in sorted(planes.items())}
+    return selection or None
+
+
 class EmbeddedImageReader(object):
     """Recreate the active histology raster when its source is unavailable.
 
@@ -202,6 +216,10 @@ class EmbeddedImageReader(object):
         self.file_name_list = [metadata.get("display_name", "embedded-histology")]
         self.n_scenes = 1
         self.n_pages = 1
+        # The part of the original file this raster is (see source_selection);
+        # projects before 2.5.4 lack it and the loader fills it in.
+        selection = metadata.get("source_selection")
+        self.source_selection = selection if isinstance(selection, dict) and selection else None
         self.scaling_val = metadata.get("scaling_val")
         self.is_rgb = bool(metadata.get("is_rgb", image.shape[2] in (3, 4)))
         self.n_channels = int(metadata.get("n_channels", image.shape[2]))
