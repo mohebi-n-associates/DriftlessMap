@@ -36,6 +36,16 @@ PRESET_COLOURS = [
 ]
 
 
+def colour_name(rgb):
+    """The nearest preset name ("Red"), or "Grey"-like custom colours as RGB."""
+    rgb = tuple(int(c) for c in rgb)
+    name, preset = min(PRESET_COLOURS,
+                       key=lambda item: sum((a - b) ** 2 for a, b in zip(item[1], rgb)))
+    if sum((a - b) ** 2 for a, b in zip(preset, rgb)) <= 40 ** 2:
+        return name
+    return "RGB {}, {}, {}".format(*rgb)
+
+
 def _hsv(rgb):
     h, s, v = colorsys.rgb_to_hsv(*(c / 255.0 for c in rgb))
     return (h, s, v)
@@ -83,6 +93,7 @@ class SectionPanel(StepPanel):
         self._channel_key = None
         self._rows = []
         self._headers = []
+        self._column_toggles = {}
         self._last_channels = None   # restored when leaving Legacy mode
         # Channels the brightness/contrast controls act on. They follow the
         # visible channels until the user ticks Adjust boxes themselves.
@@ -259,6 +270,7 @@ class SectionPanel(StepPanel):
             widget.deleteLater()
         self._rows = []
         self._headers = []
+        self._column_toggles = {}
         count = display.channel_count(view)
         self.empty_note.setVisible(count == 0)
         self.adjust.setVisible(count > 0)
@@ -302,6 +314,14 @@ class SectionPanel(StepPanel):
             row.update(select=select, name=name, swatch=swatch, show=show,
                        register=register, span=span)
             self._rows.append(row)
+        # All / none for the tick columns (review U10).
+        for column, key in ((0, "select"), (3, "show"), (4, "register")):
+            toggle = QToolButton()
+            toggle.setObjectName("Muted")
+            toggle.clicked.connect(lambda _checked, k=key: self.tick_all(k))
+            self.channel_grid.addWidget(toggle, count + 1, column)
+            self._headers.append(toggle)
+            self._column_toggles[key] = toggle
         if id(view.image_file) != self._adjust_image:
             # A new section: adjust what is on screen again.
             self._adjust_image = id(view.image_file)
@@ -315,6 +335,41 @@ class SectionPanel(StepPanel):
 
     def _channel_rows(self):
         return self._rows
+
+    def tick_all(self, key):
+        """Tick every box of a column, or untick them all when all are ticked
+        (Show and Adjust keep one channel)."""
+        rows = self._channel_rows()
+        if not rows:
+            return
+        everything = all(row[key].isChecked() for row in rows)
+        if key == "register":
+            for row in rows:
+                row["register"].blockSignals(True)
+                row["register"].setChecked(not everything)
+                row["register"].blockSignals(False)
+            self._register_changed()
+        elif key == "show":
+            for index, row in enumerate(rows):
+                if not row["show"].isChecked():
+                    self._show(index, True)
+        else:
+            self._adjust_follows_show = False
+            self._adjusted = [0] if everything else list(range(len(rows)))
+            self._sync_rows()
+            self._sync_adjust()
+        self._sync_column_toggles()
+
+    def _sync_column_toggles(self):
+        rows = self._channel_rows()
+        for key, toggle in self._column_toggles.items():
+            everything = bool(rows) and all(row[key].isChecked() for row in rows)
+            # Show cannot hide every channel: it only offers All.
+            toggle.setText("None" if everything and key != "show" else "All")
+            toggle.setEnabled(not (key == "show" and everything)
+                              and (key != "register" or rows[0]["register"].isEnabled()))
+            toggle.setToolTip("{} every channel".format(
+                "Untick" if everything and key != "show" else "Tick"))
 
     def _visible_channels(self):
         view = self.engine.image_view
@@ -331,6 +386,9 @@ class SectionPanel(StepPanel):
             rgb = _rgb(view.channel_color[index])
             row["swatch"].setStyleSheet(
                 "QToolButton {{ background: rgb({},{},{}); border-radius: 4px; }}".format(*rgb))
+            colour = colour_name(rgb)
+            row["swatch"].setToolTip("Channel colour: {} (click to change)".format(colour))
+            row["swatch"].setAccessibleName("{} colour: {}".format(row["name"].text(), colour))
             row["register"].setChecked(bool(recipe is not None and recipe.mode == "channels"
                                             and index in recipe.channels))
             row["register"].setEnabled(recipe is None or recipe.mode == "channels")
@@ -341,6 +399,7 @@ class SectionPanel(StepPanel):
         self.reg_mode.setCurrentIndex(1 if recipe is not None and recipe.mode == "legacy" else 0)
         self.reg_mode.blockSignals(False)
         self._updating = False
+        self._sync_column_toggles()
 
     def _sync_adjust(self):
         view = self.engine.image_view
