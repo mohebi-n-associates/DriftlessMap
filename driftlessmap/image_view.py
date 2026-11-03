@@ -22,7 +22,12 @@ from PyQt6.QtCore import (
 )
 
 from .image_stacks import ImageStacks
-from .image_reader import MAX_CHANNELS, valid_pixel_size
+from .image_reader import (
+    MAX_CHANNELS,
+    EmbeddedImageReader,
+    source_selection,
+    valid_pixel_size,
+)
 from .widgets_utils import ChannelSelector
 from .image_curves import CurveWidget
 from .utils import (
@@ -394,6 +399,17 @@ class ImageView(QObject):
         self.img_stacks.scale_bar.set_unit(
             self.pixel_size_um() if self.image_file is not None else None)
 
+    def source_selection(self):
+        """The page, scene and fixed planes of the file the raster shows, for
+        the registration fingerprint; None for a single image."""
+        if self.image_file is None:
+            return None
+        if isinstance(self.image_file, EmbeddedImageReader):
+            return self.image_file.source_selection
+        return source_selection(self.image_file.n_pages, self.display_img_index,
+                                self.image_file.n_scenes, self.scene_slider.value(),
+                                getattr(self.image_file, 'fixed_axes', None))
+
     def image_page_changed(self, page_number):
         self.display_img_index = page_number
         temp_data = self.volume_img[page_number, :, :].copy()
@@ -528,6 +544,7 @@ class ImageView(QObject):
                 'channel_name': self.image_file.channel_name,
                 'gamma_val': self.image_file.gamma_val,
                 'image_scale': self._current_scale_value(),
+                'source_selection': self.source_selection(),
         }
         data = {'current_img': self.current_img,
                 'processing_img': self.processing_img,

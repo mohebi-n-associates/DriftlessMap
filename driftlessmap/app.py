@@ -127,6 +127,7 @@ from .image_reader import (
     TIFFReader,
     plane_selection,
     read_bitmap,
+    source_selection,
     valid_pixel_size,
 )
 
@@ -1927,6 +1928,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
             plane, pages.get(plane), tilts.get(plane, ()),
             np.shape(image) if image is not None else (),
             simplices=LEGACY_FINGERPRINT if legacy else self.tri_simplices,
+            source=None if legacy else self.image_view.source_selection(),
         )
 
     def _migrate_mapping_fingerprints(self):
@@ -9357,9 +9359,14 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
         return prepared
 
     def _load_embedded_histology(self, img_ctrl_data):
-        reader = EmbeddedImageReader(
-            img_ctrl_data["current_img"], img_ctrl_data.get("source_metadata")
-        )
+        metadata = img_ctrl_data.get("source_metadata") or {}
+        reader = EmbeddedImageReader(img_ctrl_data["current_img"], metadata)
+        if reader.source_selection is None and "source_selection" not in metadata:
+            # Saved before 2.5.4: the part of the original file it showed.
+            reader.source_selection = source_selection(
+                metadata.get("n_pages"), img_ctrl_data.get("current_page"),
+                metadata.get("n_scenes"), img_ctrl_data.get("current_scene"),
+                img_ctrl_data.get("plane_selection"))
         self.image_view.set_data(reader)
         embedded_ctrl = dict(img_ctrl_data)
         embedded_ctrl["current_scene"] = 0

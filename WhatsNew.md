@@ -3,6 +3,21 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.5.4
+
+Fix release, 3 November 2026.
+
+- **An unfinished implant outline stays with its section.** An outline left
+  unfinished on one section could be finished on another after switching
+  sections. Now opening another section pauses it, and it continues when you
+  open its own section again, also after saving and reopening.
+- **Another page of an image file is another registration.** For a TIFF with
+  several pages (or a file with several scenes or planes), moving to another
+  page kept the review and the mappings current, although the anatomy shown
+  had changed. They are now out of date until you return to that page.
+  Reviews and mappings of such files made earlier did not record the page and
+  show as out of date once; review them again. Single images are unaffected.
+
 ## DriftlessMap 2.5.3
 
 Fix release, 3 November 2026. **Out-of-date results stay out of date when you

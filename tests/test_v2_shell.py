@@ -729,6 +729,73 @@ class V2ShellTests(unittest.TestCase):
             self.assertIn("Edit mapped marks", [c.name for c in window.registry.all()])
 
     @isolated_gui_test
+    def test_an_unfinished_outline_stays_with_its_section(self):
+        # Review B4: a draft started on one section was finished on another.
+        import cv2
+        from unittest.mock import patch
+
+        from driftlessmap import file_dialogs
+        from tests.atlas_fixture import make_processed_atlas
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window = self.make_window(folder)
+            engine = window.engine
+            self.assertTrue(engine.load_volume_atlas(str(make_processed_atlas(root / "atlas"))))
+            ids = []
+            for name, value in (("one", 120), ("two", 160)):
+                path = root / (name + ".png")
+                cv2.imwrite(str(path), np.full((32, 24, 3), value, np.uint8))
+                with patch.object(file_dialogs, "get_open_file_name",
+                                  return_value=(str(path), "")):
+                    engine.load_image()
+                ids.append(engine.section_id)
+            fiber = engine.add_implant("fiber")
+            window.go_to("annotate")
+            card = window.panels["annotate"].implants
+            editor = card.editor
+            card.refresh(select=fiber.implant_id)
+            card.draw.setChecked(True)
+            card._mode("draw")
+            draft = [[5.0, 5.0], [15.0, 5.0], [15.0, 20.0], [5.0, 20.0]]
+            for point in draft:
+                editor._clicked(point)
+
+            # Open the other section: the draft is parked, not carried over.
+            window.go_to("project")
+            self.assertTrue(engine.switch_section(ids[0])[0])
+            window.refresh()
+            window.go_to("annotate")
+            self.assertIsNone(editor.mode)
+            self.assertEqual(editor.vertices, [])
+            editor.finish()
+            editor._clicked((7.0, 7.0))
+            self.assertEqual(engine.implant_outline(fiber.implant_id)["points"], [])
+            state = card.leave_state()
+            self.assertNotIn("drawing", state)
+            self.assertEqual(state["drafts"], [{"section_id": ids[1],
+                                                "implant_id": fiber.implant_id,
+                                                "vertices": draft}])
+
+            # Back on its own section the draft continues and closes there.
+            self.assertTrue(engine.switch_section(ids[1])[0])
+            window.refresh()
+            self.assertEqual(editor.mode, "draw")
+            self.assertEqual(editor.vertices, draft)
+            editor.finish()
+            np.testing.assert_allclose(engine.implant_outline(fiber.implant_id)["points"], draft)
+            self.assertTrue(engine.switch_section(ids[0])[0])
+            window.refresh()
+            self.assertEqual(engine.implant_outline(fiber.implant_id)["points"], [])
+
+            # A saved draft of another section is restored only to that section.
+            card.resume({"drafts": state["drafts"],
+                         "drawing": {"implant_id": fiber.implant_id, "section_id": ids[1],
+                                     "vertices": draft}})
+            self.assertIsNone(editor.mode)
+            self.assertIn(ids[1], editor.drafts)
+
+    @isolated_gui_test
     def test_implants_card_outlines_maps_and_builds_a_fiber(self):
         import cv2
 

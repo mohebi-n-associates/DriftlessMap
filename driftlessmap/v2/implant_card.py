@@ -409,9 +409,15 @@ class ImplantCard(Card):
                  "marking": bool(self.probe_card.probe and engine.tool_box
                                  .checkable_btn_dict["probe_btn"].isChecked())}
         editor = self.editor
+        editor.follow_section()
         if editor.mode == "draw" and editor.vertices and editor.implant_id:
             state["drawing"] = {"implant_id": editor.implant_id,
+                                "section_id": editor.section_id,
                                 "vertices": [[float(x), float(y)] for x, y in editor.vertices]}
+        # Unfinished outlines of the other sections, each with its section.
+        state["drafts"] = [{"section_id": section_id, "implant_id": implant_id,
+                            "vertices": [[float(x), float(y)] for x, y in vertices]}
+                           for section_id, (implant_id, vertices) in editor.drafts.items()]
         return state
 
     def resume(self, state):
@@ -420,24 +426,44 @@ class ImplantCard(Card):
         self.probe_card.book.restore(state.get("probes"))
         selected = state.get("selected")
         self.refresh(select=selected if isinstance(selected, str) else None)
-        drawing = state.get("drawing")
-        if isinstance(drawing, dict) and self.engine.implants.get(drawing.get("implant_id")):
-            try:
-                vertices = [[float(x), float(y)] for x, y in drawing.get("vertices") or []]
-            except (TypeError, ValueError):
-                vertices = []
-            if vertices:
-                self.refresh(select=drawing["implant_id"])
-                self.draw.setChecked(True)
-                self._mode("draw")
-                self.editor.vertices = vertices
-                self.editor._show_preview()
-                self.shell.message("Continue the outline: click around the track; click "
-                                   "the first point to close it.")
+        self.editor.follow_section()
+        self.editor.drafts = {}
+        for draft in state.get("drafts") or []:
+            parsed = self._draft(draft)
+            if parsed is not None and parsed[0] != self.engine.section_id:
+                self.editor.drafts[parsed[0]] = parsed[1:]
+        drawing = self._draft(state.get("drawing"), self.engine.section_id)
+        # Saved before 2.5.4 a draft had no section: it was the open one's.
+        if drawing is not None and drawing[0] == self.engine.section_id:
+            self._continue_drawing(*drawing[1:])
         if state.get("marking") and self.probe_card.probe and not self.engine.tool_box \
                 .checkable_btn_dict["probe_btn"].isChecked():
             self.probe_card.toggle_marking()
         self._sync_actions()
+
+    def _draft(self, value, default_section=None):
+        """A saved unfinished outline as (section_id, implant_id, vertices), or None."""
+        if not isinstance(value, dict) or self.engine.implants.get(value.get("implant_id")) \
+                is None:
+            return None
+        try:
+            vertices = [[float(x), float(y)] for x, y in value.get("vertices") or []]
+        except (TypeError, ValueError):
+            return None
+        section_id = value.get("section_id", default_section)
+        if not vertices or not isinstance(section_id, str):
+            return None
+        return section_id, value["implant_id"], vertices
+
+    def _continue_drawing(self, implant_id, vertices):
+        """Resume drawing an unfinished outline of the open section."""
+        self.refresh(select=implant_id)
+        self.draw.setChecked(True)
+        self._mode("draw")
+        self.editor.vertices = [list(v) for v in vertices]
+        self.editor._show_preview()
+        self.shell.message("Continue the outline: click around the track; click "
+                           "the first point to close it.")
 
     # ------------------------------------------------------------ refresh
     def _select_probe(self, probe):
@@ -522,6 +548,8 @@ class ImplantCard(Card):
 
     def refresh(self, select=None):
         engine = self.engine
+        # Park an unfinished outline before anything else uses the editor.
+        switched = self.editor.follow_section()
         rows = [(implant.implant_id, implant.colour,
                  "{}   ·   {} · {}".format(implant.name, implant.type_name.lower(),
                                            self.summary(implant)))
@@ -552,4 +580,10 @@ class ImplantCard(Card):
             self.editor.select(selected.implant_id if selected else None)
         else:
             self.editor.sync()
+        if switched:
+            # Another section is open: its own unfinished outline, if any, returns.
+            draft = self.editor.take_draft()
+            if draft is not None:
+                self._continue_drawing(*draft)
+                return
         self._sync_actions()

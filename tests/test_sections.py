@@ -551,6 +551,46 @@ class SectionPersistenceTests(SectionEngineTests):
             self.assertIsNone(reopened.out_of_date_reason(built))
 
     @isolated_gui_test
+    def test_another_page_of_a_tiff_is_not_the_reviewed_registration(self):
+        # Review B5: changing the TIFF page kept the review and the mapping current.
+        import tifffile
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window, fiber, _first_id, _raster = self.two_section_project(root)
+            path = root / "stack.tif"
+            tifffile.imwrite(path, np.stack([np.full((32, 24), 40, np.uint8),
+                                             np.full((32, 24), 180, np.uint8)]),
+                             metadata={"axes": "ZYX"}, photometric="minisblack")
+            self.load_section(window, path)
+            window.atlas_tri_inside_data[:] = [[5.0, 5.0], [15.0, 5.0], [10.0, 20.0]]
+            window.histo_tri_inside_data[:] = [[5.0, 5.0], [15.0, 5.0], [10.0, 20.0]]
+            self.map_fiber(window, fiber)
+            window.mark_registration_reviewed()
+            record = window.mapping_ledger.get(window.section_id, "fiber", fiber.implant_id)
+            page = window.image_view.display_img_index
+            self.assertEqual(window.registration_review_state(), "reviewed")
+            self.assertEqual(window.mapping_status(record), "current")
+
+            window.image_view.page_ctrl.page_slider.setValue(1 - page)
+            self.assertEqual(window.registration_review_state(), "not reviewed")
+            self.assertEqual(window.mapping_status(record), "registration changed")
+            window.image_view.page_ctrl.page_slider.setValue(page)
+            self.assertEqual(window.registration_review_state(), "reviewed")
+            self.assertEqual(window.mapping_status(record), "current")
+
+            # Opened from its embedded raster (original missing), it is still the
+            # same page: the review and mapping stay current.
+            project = root / "tiff.dmap"
+            self.assertTrue(window.save_project_called(path=str(project)))
+            path.unlink()
+            with patch.object(DriftlessMap, "_ask_for_verified_input", return_value=None):
+                reopened, _payload = self.open_project(root, project)
+            self.assertEqual(reopened.registration_review_state(), "reviewed")
+            self.assertEqual(reopened.mapping_status(
+                reopened.mapping_ledger.by_unit(record.unit_id)), "current")
+
+    @isolated_gui_test
     def test_every_section_round_trips_through_a_project(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
