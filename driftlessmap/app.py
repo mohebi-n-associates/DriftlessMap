@@ -152,6 +152,7 @@ from .provenance import (
     describe_path,
     pack_path,
     path_stat_signature,
+    references_match,
     resolve_reference,
     unpack_path,
     utc_now_iso,
@@ -7840,6 +7841,49 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
             self.normal_color,
         )
 
+    def has_atlas_results(self):
+        """True when the document holds work tied to the loaded volume atlas:
+        mapping records, objects, or landmarks on any section."""
+        if len(self.mapping_ledger) or self.object_ctrl.obj_name or self.atlas_tri_inside_data:
+            return True
+        return any(entry.summary.get("pairs") for entry in self.sections.entries()
+                   if entry.stored)
+
+    def atlas_replacement_problem(self, atlas_folder, signature=None):
+        """Why ``atlas_folder`` may not replace the loaded volume atlas, or None.
+
+        Results are in the loaded atlas's coordinates and labels, so another
+        atlas would mislabel them. The same folder unchanged, or a copy with
+        identical content (relocated), may replace it.
+        """
+        current = self.volume_atlas_path
+        if current is None or not self.has_atlas_results():
+            return None
+        if os.path.abspath(current) == os.path.abspath(atlas_folder) and signature is not None \
+                and signature == self._loaded_atlas_signatures.get(os.path.abspath(current)):
+            return None
+        def sizes(folder):
+            return sorted((name, os.path.getsize(os.path.join(folder, name)))
+                          for name in ATLAS_IDENTITY_FILES
+                          if os.path.isfile(os.path.join(folder, name)))
+
+        try:
+            # Different file sizes already mean different content; otherwise hash.
+            same = sizes(current) == sizes(atlas_folder) and run_in_background(
+                self, "Comparing the atlases...",
+                lambda: references_match(describe_atlas_path(current),
+                                         describe_atlas_path(atlas_folder)))
+        except (OSError, ValueError):
+            same = False
+        if same:
+            return None
+        return ("This project's results were made with the atlas in {}; {} is a different "
+                "atlas, and its coordinates and regions would be wrong for them. To work "
+                "with that atlas, save this project and start a new one (File > New "
+                "window, or start DriftlessMap again).".format(
+                    os.path.basename(os.path.normpath(current)),
+                    os.path.basename(os.path.normpath(atlas_folder))))
+
     def _commit_atlas(self, kind, path, signature):
         """Record a loaded atlas as the active one.
 
@@ -7879,8 +7923,12 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
             self.volume_atlas_axis_info = axis_info
 
     # load volume atlas
-    def load_volume_atlas(self, atlas_folder):
+    def load_volume_atlas(self, atlas_folder, *, replacing_document=False):
         """Load a processed volume atlas; return ``True`` only on success.
+
+        A different atlas may not replace the loaded one while the document
+        has results (see :meth:`atlas_replacement_problem`), except when a
+        project being opened replaces the document (``replacing_document``).
 
         Everything is read and validated before any session state changes, so
         a failed load leaves the current atlas, its layers and its provenance
@@ -7889,6 +7937,11 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
         atlas_signature = path_stat_signature(
             atlas_folder, included_names=ATLAS_IDENTITY_FILES
         )
+        problem = None if replacing_document else self.atlas_replacement_problem(
+            atlas_folder, atlas_signature)
+        if problem is not None:
+            self.print_message(problem, self.error_message_color)
+            return False
         with pg.BusyCursor():
             da_atlas = AtlasLoader(atlas_folder, load_boundaries=False)
 
@@ -9443,7 +9496,8 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
                     volume = runtime["volume"]
                     self.set_volume_atlas_to_view(*volume[:5])
                     self.set_volume_atlas_3d(list(volume[6]), volume[5], volume[6])
-                elif not self.load_volume_atlas(self.current_atlas_path):
+                elif not self.load_volume_atlas(self.current_atlas_path,
+                                                replacing_document=True):
                     raise ValueError("The project's volume atlas could not be loaded. "
                                      + self.statusbar.currentMessage().strip())
 

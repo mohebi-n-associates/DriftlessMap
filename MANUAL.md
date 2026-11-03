@@ -1,7 +1,7 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 2.5.4**. Section 2 explains how to
-install it; `pip install driftlessmap` installs 2.5.4.
+This manual applies to **DriftlessMap 2.5.5**. Section 2 explains how to
+install it; `pip install driftlessmap` installs 2.5.5.
 
 DriftlessMap - Histological E-data Registration in Brain Space - is a desktop
 application for aligning rodent histology with a reference atlas, reconstructing
@@ -102,7 +102,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-DriftlessMap 2.5.4 requires:
+DriftlessMap 2.5.5 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -121,8 +121,8 @@ page. The macOS DMG (`-macOS-arm64.dmg`) is built for Apple Silicon; on an Intel
 Mac, use the developer installation below.
 The desktop builds include Python and all runtime dependencies. Windows users
 extract the entire ZIP and run `DriftlessMap.exe`; macOS users open the DMG and
-drag `DriftlessMap.app` to Applications. The 2.5.4 downloads are named
-`DriftlessMap-2.5.4-Windows-x64.zip` and `DriftlessMap-2.5.4-macOS-arm64.dmg`.
+drag `DriftlessMap.app` to Applications. The 2.5.5 downloads are named
+`DriftlessMap-2.5.5-Windows-x64.zip` and `DriftlessMap-2.5.5-macOS-arm64.dmg`.
 Release builds are unsigned unless the release notes say otherwise, so the first
 launch may require Windows SmartScreen confirmation or Control-clicking the
 macOS app and choosing **Open**.
@@ -171,7 +171,7 @@ python -m pip --version
 python -c "import driftlessmap; print(driftlessmap.__version__)"
 ```
 
-The final command prints the installed version, `2.5.4`.
+The final command prints the installed version, `2.5.5`.
 
 ### 2.5 Launching DriftlessMap
 
@@ -653,6 +653,13 @@ annotation with a 10 um template or meshes from another folder.
 Use **File > Load Atlas** and select the folder, not an individual file. The
 toolbar’s atlas icon loads the previously selected folder from user
 preferences. If that folder was moved, DriftlessMap asks for a new location.
+
+A project's landmarks, mappings and objects are in the coordinates and regions
+of the atlas they were made with. Once a project has any of them, loading a
+different atlas is refused (since 2.5.5); loading the same atlas again, or an
+identical copy of it from another folder, is allowed. To work with another
+atlas, save the project and start a new one: **File > New window** (Ctrl+N)
+in the 2.0 interface, or start DriftlessMap again.
 
 After loading:
 
