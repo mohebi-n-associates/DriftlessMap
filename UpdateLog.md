@@ -1,6 +1,11 @@
 # Update Log
 
 ### 3rd November 2026
+##### 2.6.0: usability, U9 (visual review)
+
+Review U9. Register's Review card has a four-point checklist (hemisphere and orientation; internal anatomy; region boundaries; torn or missing tissue); Mark review complete is gated on it (`_needs_review_checks`; the shell command `register.review` itself is not gated), and the ticks reset when the registration fingerprint changes (ticked again for an already reviewed registration). With the section-on-atlas preview, Blink toggles the warped overlay every 500 ms and Checkerboard shows it in alternating squares (`checkerboard`, 8 along the longer side) so atlas and section edges meet at square borders; both stop when the preview is removed. Linked zoom between the views was not added (the views keep their own zoom). Test: the checklist gates and resets; blink toggles; the checkerboard image; tools stop with the preview.
+
+### 3rd November 2026
 ##### 2.6.0: usability, U8 (several sections at once)
 
 Review U8. `load_image`'s body became `add_section_from_file(path, page=)`; `add_sections(paths, pages_as_sections=)` adds files in `natsorted` base-name order and, optionally, each page of a multi-page TIFF as a section named "<file> · page N" (the first section is set to page 1: a TIFF opens on its last page; a page is set only after the new section is listed, otherwise the book took the new section for the previous one read again and gave it the new page). V2 "Add sections…" (`section.load`) takes several files and asks about pages when a TIFF is among them; the single-file command stays as "Add one section…". Reuse of display or registration settings across files was not added. Test: three files added as s1, s2, s10, then a two-page TIFF as two sections with their own pages (40 and 180), and without the option as one section.

@@ -1,11 +1,42 @@
 """Register step: suggested and manual landmarks, mesh, review and warp preview."""
 
 import numpy as np
-from PyQt6.QtWidgets import QAbstractItemView, QHeaderView, QLineEdit, QTableWidget, QTableWidgetItem
+from PyQt6.QtCore import QTimer
+from PyQt6.QtWidgets import (
+    QAbstractItemView,
+    QCheckBox,
+    QHeaderView,
+    QLineEdit,
+    QTableWidget,
+    QTableWidgetItem,
+)
 
 from .widgets import Card, StepPanel, button, grid_of, hint_label, set_status, status_label
 
 KIND_LABELS = {"outline": "Outline", "internal": "Internal", "suggested": "Suggested"}
+
+# Short: check boxes do not wrap, and the step column is narrow.
+CHECKLIST = (
+    "Hemisphere and orientation are right",
+    "Internal anatomy lines up too",
+    "Region boundaries follow the tissue",
+    "Torn or missing tissue is not stretched",
+)
+BLINK_MS = 500
+CHECKER_SQUARES = 8     # squares along the longer side
+
+
+def checkerboard(image, squares=CHECKER_SQUARES):
+    """``image`` with every other square blanked (the atlas shows through)."""
+    image = np.asarray(image)
+    height, width = image.shape[:2]
+    size = max(1, int(np.ceil(max(height, width) / squares)))
+    rows = (np.arange(height) // size)[:, None]
+    columns = (np.arange(width) // size)[None, :]
+    keep = (rows + columns) % 2 == 0
+    if image.ndim == 3:
+        keep = keep[..., None]
+    return np.where(keep, image, 0).astype(image.dtype)
 
 
 def _point(values):
@@ -61,12 +92,21 @@ class RegisterPanel(StepPanel):
 
         review = self.add(Card("Review"))
         self.review_status = review.add(status_label(""))
+        # What to look at before marking a review (review U9); the ticks clear
+        # whenever the registration changes.
+        self.checklist = [QCheckBox(text) for text in CHECKLIST]
+        for box in self.checklist:
+            review.add(box)
+        self._checked_fingerprint = None
+        review.add(hint_label(
+            "Check with the section-on-atlas preview, using Blink and Checkerboard "
+            "below to compare internal edges, not only the outline."))
         review.add_row(self.gate(button("Mark review complete",
                                         lambda: shell.run("register.review")),
-                                 self._needs_review_pairs), None)
+                                 self._needs_review_checks), None)
         review.add(hint_label(
-            "Mark the registration reviewed after checking internal anatomy as well as "
-            "the outline. Moving any landmark or changing the atlas plane clears it."))
+            "Moving any landmark or changing the atlas plane, page or tilt clears the "
+            "review and the checklist."))
 
         warp = self.add(Card("Warp preview"))
         self.warp_status = warp.add(status_label(""))
@@ -76,6 +116,16 @@ class RegisterPanel(StepPanel):
                                  checkable=True)
         warp.add(grid_of([self.gate(self.to_atlas, self._needs_warp_atlas),
                           self.gate(self.to_section, self._needs_warp_section)], columns=2))
+        self.blink = button("Blink", self._toggle_blink, checkable=True,
+                            tooltip="Flip the warped section on and off over the atlas")
+        self.checker = button("Checkerboard", self._toggle_checker, checkable=True,
+                              tooltip="Show section and atlas in alternating squares, so "
+                                      "their edges can be followed across square borders")
+        warp.add(grid_of([self.gate(self.blink, self._needs_section_preview),
+                          self.gate(self.checker, self._needs_section_preview)], columns=2))
+        self._blink_timer = QTimer(self)
+        self._blink_timer.setInterval(BLINK_MS)
+        self._blink_timer.timeout.connect(self._blink_tick)
         warp.add(hint_label(
             "Previewing shows a warped image only. Annotations move to the atlas only "
             "with Map annotations to atlas, in the Annotate step. Press the active "
@@ -108,6 +158,54 @@ class RegisterPanel(StepPanel):
 
     def _needs_review_pairs(self):
         return self._needs_pairs(3)
+
+    def _needs_review_checks(self):
+        reason = self._needs_review_pairs()
+        if reason is None and not all(box.isChecked() for box in self.checklist):
+            reason = "Tick each point of the checklist first."
+        return reason
+
+    def _needs_section_preview(self):
+        return None if self.engine.h2a_transferred else \
+            "Show the section on the atlas first (Section on atlas)."
+
+    # ------------------------------------------------------------- compare
+    def _overlay_item(self):
+        return self.engine.atlas_view.working_atlas.image_dict["atlas-overlay"]
+
+    def _toggle_blink(self):
+        if self.blink.isChecked() and self.engine.h2a_transferred:
+            self._blink_timer.start()
+        else:
+            self._blink_timer.stop()
+            self._overlay_item().setVisible(True)
+
+    def _blink_tick(self):
+        item = self._overlay_item()
+        item.setVisible(not item.isVisible())
+
+    def _toggle_checker(self):
+        engine = self.engine
+        warped = engine.working_atlas_data.get("atlas-overlay")
+        if warped is None or not len(warped):
+            self.checker.setChecked(False)
+            return
+        warped = np.asarray(warped)
+        if self.checker.isChecked():
+            self._overlay_item().setImage(checkerboard(warped))
+        else:
+            self._overlay_item().setImage(warped)
+
+    def stop_compare(self):
+        """Back to the plain preview (also when the preview goes)."""
+        self._blink_timer.stop()
+        for widget in (self.blink, self.checker):
+            widget.setChecked(False)
+        warped = self.engine.working_atlas_data.get("atlas-overlay")
+        item = self._overlay_item()
+        item.setVisible(True)
+        if self.engine.h2a_transferred and warped is not None and len(warped):
+            item.setImage(np.asarray(warped))
 
     def _needs_selection(self):
         return (None if self._selected_row() is not None
@@ -189,6 +287,14 @@ class RegisterPanel(StepPanel):
     # -------------------------------------------------------------- refresh
     def refresh(self):
         engine = self.engine
+        fingerprint = engine.current_registration_fingerprint()
+        if fingerprint != self._checked_fingerprint:
+            # Another registration: its checks start again.
+            self._checked_fingerprint = fingerprint
+            for box in self.checklist:
+                box.setChecked(engine.registration_review_state() == "reviewed")
+        if not engine.h2a_transferred and (self.blink.isChecked() or self.checker.isChecked()):
+            self.stop_compare()
         atlas, histology = engine.atlas_tri_inside_data, engine.histo_tri_inside_data
         key = (tuple(map(tuple, np.round(np.asarray(atlas, float), 1).tolist())) if atlas else (),
                tuple(map(tuple, np.round(np.asarray(histology, float), 1).tolist()))
