@@ -8,8 +8,8 @@ or important workflows change.
 
 ## Project identity
 
-- Current stable release: DriftlessMap 2.4.1 (2 November 2026; 2.4.0 plus a
-  fix, the first release since 2.0.0, including 2.0.1-2.3.0 and multi-section
+- Current stable release: DriftlessMap 2.4.2 (2 November 2026; 2.4.0 plus
+  fixes, the first release since 2.0.0, including 2.0.1-2.3.0 and multi-section
   projects). 2.0.0
   (29 October 2026) followed the 2.0.0aN previews and 2.0.0rc1-rc16. The owner released it with the
   `release_validation.md` gates still pending (recorded there as waived); keep
@@ -171,6 +171,15 @@ or important workflows change.
   section edges, so single-image edges are never chosen.
 - `driftlessmap/atlas_loader.py`, `atlas_view.py`, `atlas_transform.py`:
   processed atlas loading, display, coordinate transforms.
+- `driftlessmap/region_colors.py` (GUI-free): `AtlasView.set_data` passes
+  `label_info` through `distinct_region_colors`, which finds touching areas in
+  the label volume (sampled every `STEP` voxels) and moves an area whose colour
+  is within `MIN_DIFFERENCE` (CIE76) of a touching one to the nearest colour
+  clear of all of them, larger areas first. Areas are a label plus descendants
+  of the same colour (layers). `label_info["atlas_color"]` keeps the atlas's
+  own colours; `color` (label tree defaults, LUTs, meshes, probe exports) holds
+  the new ones. Landmark dots default to red (`toolbox.LANDMARK_COLOR`; saved
+  old gray defaults open red).
 - `driftlessmap/triangulation.py`: deterministic piecewise-affine registration,
   topology, validation, transforms, and warping.
 - `driftlessmap/mapping_records.py` and `transactions.py`: Phase 3 (see

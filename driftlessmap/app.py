@@ -2515,6 +2515,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
         self.tool_box.triang_color_btn.sigColorChanged.connect(
             self.change_triangle_color
         )
+        self.change_triangle_color(self.tool_box.triang_color_btn)
         self.tool_box.bound_pnts_num.editingFinished.connect(
             self.number_of_side_points_changed
         )

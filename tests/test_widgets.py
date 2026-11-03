@@ -30,6 +30,17 @@ class ToolBoxTests(unittest.TestCase):
         restored.set_tool_data(saved)
         self.assertEqual(restored.get_tool_data(), saved)
 
+    def test_landmarks_are_red_by_default_and_old_gray_defaults_open_red(self):
+        tools = ToolBox()
+        self.assertEqual(tools.triang_color_btn.color().getRgb(), (255, 0, 0, 255))
+        saved = tools.get_tool_data()
+        saved["triangulation_color"] = (128, 128, 128, 255)   # 2.4.1 and earlier default
+        tools.set_tool_data(saved)
+        self.assertEqual(tools.triang_color_btn.color().getRgb(), (255, 0, 0, 255))
+        saved["triangulation_color"] = (0, 0, 255, 255)       # a chosen colour stays
+        tools.set_tool_data(saved)
+        self.assertEqual(tools.triang_color_btn.color().getRgb(), (0, 0, 255, 255))
+
 
 class CurvesPlotTests(unittest.TestCase):
     @classmethod

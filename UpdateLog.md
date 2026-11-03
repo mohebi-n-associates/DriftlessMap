@@ -1,6 +1,11 @@
 # Update Log
 
 ### 2nd November 2026
+##### DriftlessMap 2.4.2
+
+Landmark dots: the toolbox colour button defaulted to pyqtgraph's gray (128, 128, 128) and the dots only took a colour when it changed; the default is now red (`toolbox.LANDMARK_COLOR`), applied to the section and atlas dots at start, and saved `triangulation_color` equal to the old gray default opens red. Region colours: new `region_colors.distinct_region_colors`, applied in `AtlasView.set_data`. On the Allen 10 µm atlas (sampled every 4 voxels, 0.9 s), 1273 touching label pairs in different areas had a CIE76 difference below 20 before (e.g. PL 47,168,80 and ILA 89,179,99); with the threshold of 30, 75 areas change and no touching pair found at that sampling is below 30; sampling every 2 voxels (6.3 s, not used) finds one more contact below it, the interpeduncular nucleus (IP) against voxels labelled only Brain (13.9); PL becomes 0,229,169 and ILA 0,158,41. Areas are a label and its same-coloured descendants, so layers keep one colour; larger areas keep theirs first. Tests: colour conversion round trip, areas, touching pairs, recolouring of a touching pair with layers, untouched regions unchanged, landmark default and old-default migration. Version 2.4.2.
+
+### 2nd November 2026
 ##### DriftlessMap 2.4.1
 
 Out-of-date objects name their reason. Found on a real export (1108-pfc-1/2, Fiber 1): the message said only "out-of-date objects: Fiber 1"; the project copy showed the 1108-pfc-2 record's registration fingerprint differed from the current one with page 972, tilt 0 and the image unchanged (no single deleted pair or frame change reproduced it), i.e. its landmarks were edited after mapping. `DriftlessMap.out_of_date_reason(index)` gives the cause per object (implant settings changed; `<section>` mapped again since; landmarks, page or tilt of `<section>` changed since mapping) with the fix; `out_of_date_lines` feeds Export all results, the single-object export message and the V2 Results status. Test: two sections mapped and built, a moved landmark names pfc-2.png in the reason and the export note, remapping pfc-1 names it, changed specs name the settings. Version 2.4.1.
