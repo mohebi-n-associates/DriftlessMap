@@ -173,6 +173,15 @@ def download_file(
             temporary_path.unlink(missing_ok=True)
 
 
+def file_sha256(path, chunk_size=8 * 1024 * 1024):
+    """SHA-256 of a file's current bytes, read in chunks."""
+    digest = hashlib.sha256()
+    with open(path, "rb") as stream:
+        for chunk in iter(lambda: stream.read(chunk_size), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def thread_is_running(thread):
     """Return whether a ``QThread`` runs, treating a deleted thread as stopped."""
     if thread is None:

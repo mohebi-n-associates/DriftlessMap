@@ -3,6 +3,23 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.5.2
+
+Fix release, 3 November 2026; the first fixes from the 2.5.0 review.
+
+- **Removing a section keeps the other sections' parts.** Removing a section
+  with its results deleted a whole built object made from several sections,
+  so the other sections' parts were lost until mapped again. The built object
+  is now taken apart and only the removed section's part goes; build it again
+  from the rest.
+- **Rat atlas files are checked by their bytes.** Files already in the folder
+  were trusted because an earlier download had recorded the right checksum;
+  now each file is hashed against the published release before it is reused
+  or processed (about half a second for the Waxholm files), in both
+  interfaces.
+- **Escape no longer closes a busy download dialog** (rat and Allen); it now
+  asks you to wait, as the Close button does.
+
 ## DriftlessMap 2.5.1
 
 Fix release, 3 November 2026.

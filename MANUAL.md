@@ -1,7 +1,7 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 2.5.1**. Section 2 explains how to
-install it; `pip install driftlessmap` installs 2.5.1.
+This manual applies to **DriftlessMap 2.5.2**. Section 2 explains how to
+install it; `pip install driftlessmap` installs 2.5.2.
 
 DriftlessMap - Histological E-data Registration in Brain Space - is a desktop
 application for aligning rodent histology with a reference atlas, reconstructing
@@ -102,7 +102,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-DriftlessMap 2.5.1 requires:
+DriftlessMap 2.5.2 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -121,8 +121,8 @@ page. The macOS DMG (`-macOS-arm64.dmg`) is built for Apple Silicon; on an Intel
 Mac, use the developer installation below.
 The desktop builds include Python and all runtime dependencies. Windows users
 extract the entire ZIP and run `DriftlessMap.exe`; macOS users open the DMG and
-drag `DriftlessMap.app` to Applications. The 2.5.1 downloads are named
-`DriftlessMap-2.5.1-Windows-x64.zip` and `DriftlessMap-2.5.1-macOS-arm64.dmg`.
+drag `DriftlessMap.app` to Applications. The 2.5.2 downloads are named
+`DriftlessMap-2.5.2-Windows-x64.zip` and `DriftlessMap-2.5.2-macOS-arm64.dmg`.
 Release builds are unsigned unless the release notes say otherwise, so the first
 launch may require Windows SmartScreen confirmation or Control-clicking the
 macOS app and choosing **Open**.
@@ -171,7 +171,7 @@ python -m pip --version
 python -c "import driftlessmap; print(driftlessmap.__version__)"
 ```
 
-The final command prints the installed version, `2.5.1`.
+The final command prints the installed version, `2.5.2`.
 
 ### 2.5 Launching DriftlessMap
 
@@ -930,8 +930,11 @@ section's earlier part, not the other sections') work as before. Undo history
 is cleared when you switch. **Rename…** and **Move up/down** change only the
 list. **Remove…** deletes a section's image, landmarks and marks; when
 something was mapped from it, you choose whether its mapped results (and the
-parts and built objects made from them) are kept or removed. In the classic
-interface, **File > Sections…** does the same.
+parts made from them) are kept or removed. Removing them takes apart a built
+object that used them, such as a fiber built from several sections; the parts
+the other sections contributed stay, so build it again from them (since
+2.5.2). Removing a section clears the Undo mapping step history. In the
+classic interface, **File > Sections…** does the same.
 
 Implants, probes and other objects are built from the mapped parts of all
 sections. The step list shows "section 2 of 3", Annotate names the other

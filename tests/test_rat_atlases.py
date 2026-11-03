@@ -200,15 +200,23 @@ class DialogTests(unittest.TestCase):
         self.assertTrue(swc.agree.isHidden())
         swc.deleteLater()
 
-    def test_files_already_downloaded_are_recognised_and_not_fetched_again(self):
+    def test_files_already_downloaded_are_recognised_by_their_bytes(self):
+        import dataclasses
+        import hashlib
+
         from driftlessmap.v2.rat_download_dialog import RatAtlasDownloadDialog
 
-        dialog = RatAtlasDownloadDialog(WAXHOLM)
+        mask = dataclasses.replace(WAXHOLM.files[2], sha256=hashlib.sha256(b"mask").hexdigest())
+        atlas = dataclasses.replace(WAXHOLM, files=WAXHOLM.files[:2] + (mask,))
+        dialog = RatAtlasDownloadDialog(atlas)
         with tempfile.TemporaryDirectory() as folder:
-            done = WAXHOLM.files[2]
-            with open(os.path.join(folder, done.local), "wb") as stream:
-                stream.write(b"mask")
-            _record_download(os.path.join(folder, done.local), done.url, done.sha256, 4)
+            template = atlas.files[1]
+            for item, data in ((mask, b"mask"), (template, b"wrong nonempty bytes")):
+                with open(os.path.join(folder, item.local), "wb") as stream:
+                    stream.write(data)
+                # The manifest claims both are the release; only bytes count.
+                _record_download(os.path.join(folder, item.local), item.url, item.sha256,
+                                 len(data))
             dialog.saving_folder = folder
             dialog._scan_folder()
             self.assertEqual(dialog.finish, [False, False, True])
@@ -219,9 +227,29 @@ class DialogTests(unittest.TestCase):
             self.assertEqual([call.args[0] for call in start.call_args_list], [0, 1])
             dialog.process_start()
             self.assertIn("Download first", dialog.process_info.text())
+            # A file changed after it was checked is checked again.
+            with open(os.path.join(folder, mask.local), "wb") as stream:
+                stream.write(b"MASK")
+            self.assertNotIn(mask.local, dialog.matching_files(folder))
             dialog.finish = [True, True, True]
             dialog._refresh()
             self.assertIn("Everything is downloaded", dialog.folder_note.text())
+        dialog.deleteLater()
+
+    def test_the_classic_dialog_refuses_to_process_altered_files(self):
+        from driftlessmap.atlas_downloader import AtlasDownloader
+
+        dialog = AtlasDownloader(atlas=SWC_FEMALE_RAT)
+        with tempfile.TemporaryDirectory() as folder:
+            item = SWC_FEMALE_RAT.files[0]
+            with open(os.path.join(folder, item.local), "wb") as stream:
+                stream.write(b"not the archive")
+            _record_download(os.path.join(folder, item.local), item.url, item.sha256, 15)
+            dialog.saving_folder = folder
+            with patch.object(dialog.thread, "start") as start:
+                dialog.process_start()
+            start.assert_not_called()
+            self.assertIn("different from the published release", dialog.process_info.text())
         dialog.deleteLater()
 
     def test_download_rows_get_their_full_height(self):
@@ -250,6 +278,30 @@ class DialogTests(unittest.TestCase):
         expected = dict(dialog.axis_info, size=(512, 1024, 512))
         self.assertEqual(rat_atlases.waxholm_axis_info((512, 1024, 512)), expected)
         dialog.deleteLater()
+
+    def test_escape_does_not_close_a_busy_download_dialog(self):
+        from PyQt6.QtCore import Qt
+        from PyQt6.QtTest import QTest
+        from PyQt6.QtWidgets import QMessageBox
+
+        from driftlessmap.atlas_downloader import AtlasDownloader
+        from driftlessmap.v2.allen_download_dialog import AllenDownloadDialog
+        from driftlessmap.v2.rat_download_dialog import RatAtlasDownloadDialog
+
+        for dialog in (AtlasDownloader(), RatAtlasDownloadDialog(SWC_FEMALE_RAT),
+                       AllenDownloadDialog()):
+            with self.subTest(type(dialog).__name__):
+                dialog.show()
+                with patch.object(dialog, "has_active_downloads", return_value=True), \
+                        patch.object(QMessageBox, "information") as told:
+                    QTest.keyClick(dialog, Qt.Key.Key_Escape)
+                self.assertTrue(dialog.isVisible())
+                self.assertTrue(dialog.continue_process)
+                told.assert_called_once()
+                QTest.keyClick(dialog, Qt.Key.Key_Escape)   # idle: Escape closes
+                self.assertFalse(dialog.isVisible())
+                self.assertFalse(dialog.continue_process)
+            dialog.deleteLater()
 
     def test_a_failing_preparation_is_reported(self):
         from driftlessmap.atlas_downloader import WorkerProcessData

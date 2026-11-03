@@ -96,7 +96,8 @@ class SectionsDialog(QDialog):
         box.setText("Remove {} from the project?".format(engine.sections.entry(section_id).name))
         box.setInformativeText(
             "Its image, landmarks and marks are removed. Keep its mapped results, or "
-            "remove them with the parts and objects made from them?" if mapped
+            "remove them with the parts made from them? Built objects that use them "
+            "are taken apart; parts from other sections stay to be built again." if mapped
             else "Nothing was mapped from it.")
         keep = box.addButton("Remove, keep results" if mapped else "Remove",
                              QMessageBox.ButtonRole.AcceptRole)

@@ -888,15 +888,26 @@ class AllenDownloader(QDialog):
     def process_status_changed(self, message):
         self.process_info.setText(message)
 
+    def busy(self):
+        return (self.has_active_downloads() or thread_is_running(self.mesh_thread)
+                or thread_is_running(self.thread))
+
+    def reject(self):
+        # Escape rejects without a close event: guard it the same way.
+        if self.continue_process and not self.process_finished and self.busy():
+            QMessageBox.information(
+                self, 'Operation in progress', 'Please wait for the active operation to finish.'
+            )
+            return
+        if not self.process_finished:
+            self.continue_process = False
+        super().reject()
+
     def closeEvent(self, event):
         if self.process_finished:
             event.accept()
             return
-        if (
-            self.has_active_downloads()
-            or thread_is_running(self.mesh_thread)
-            or thread_is_running(self.thread)
-        ):
+        if self.busy():
             QMessageBox.information(
                 self, 'Operation in progress', 'Please wait for the active operation to finish.'
             )
