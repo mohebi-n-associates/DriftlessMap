@@ -16,6 +16,7 @@ compatibility with HERBS data.
 
 ## Contents
 
+- [Quick start in the 2.0 interface](#quick-start-in-the-20-interface)
 1. [What DriftlessMap does](#1-what-driftlessmap-does)
 2. [Installation and launching](#2-installation-and-launching)
 3. [Concepts and coordinate systems](#3-concepts-and-coordinate-systems)
@@ -38,6 +39,30 @@ compatibility with HERBS data.
 20. [Troubleshooting](#20-troubleshooting)
 21. [Python API and development](#21-python-api-and-development)
 22. [Reproducibility checklist](#22-reproducibility-checklist)
+
+## Quick start in the 2.0 interface
+
+DriftlessMap opens in the 2.0 interface: a list of steps on the left (Project,
+Section, Match, Register, Annotate, Results), the images in the middle and the
+objects and layers on the right. Until something is loaded, the middle shows
+three ways to start:
+
+1. **Map histology to an atlas.** Load a processed atlas folder (**Load atlas
+   folder…**) and **Add sections…**, then go through the steps. If you have no
+   processed atlas yet, download one once: the Allen mouse atlas, the Waxholm
+   or SWC female rat atlas
+   ([tutorial](Tutorial/Atlas_Related/download_rat_atlases.md)), or process
+   your own (Section 6). Match finds the atlas page
+   ([tutorial](Tutorial/Registration_Related/automatic_section_and_landmarks.md)),
+   Register pairs landmarks and records your review, Annotate marks and maps
+   implants, probes, cells and other annotations, and Results exports them.
+2. **Plan a probe.** With an atlas alone, plan a track before surgery
+   (Section 11 and the [probe tutorials](Tutorial/Probe_Related/1-Important_to_know_before_you_start.md)).
+3. **Continue earlier work.** **Open project…**; it reopens where you left off.
+
+Ctrl/Cmd+K searches every command. The rest of this manual describes each part
+in detail, the classic interface (`driftlessmap --classic`) included; the
+[tutorials](Tutorial/README.md) walk through common tasks with screenshots.
 
 ## 1. What DriftlessMap does
 
