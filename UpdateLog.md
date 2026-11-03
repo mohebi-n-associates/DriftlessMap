@@ -1,6 +1,11 @@
 # Update Log
 
 ### 3rd November 2026
+##### 2.6.0: usability, U3 (repair out-of-date results)
+
+Review U3. Results' Selected object card lists the object's contributions (`DriftlessMap.object_contributions`: record and status per unit, in section order) with each section's status and review, replacing the session-level "Last mapping…" sentence. For an out-of-date object (`stale_contribution`: the first stale unit) it shows Open <section> (section bar), Review registration (opens the section, then Register), Update mapping (`ProbeBook.update_section`, then `make_pieces_of` for cells, drawings, contours and expression) and Build again (implant `build_implant`, probe `ProbeBook.build`, other built kinds: unmerge, then merge, which leaves superseded parts out). Tests: a two-section fiber repaired from the Results card (open, update to revision 2, build, current); built cells repaired on the open section.
+
+### 3rd November 2026
 ##### 2.6.0: usability, U1 (section bar)
 
 From `reviews/2.5.0/REPORT.md` U1. `v2/section_bar.SectionBar` under the canvas header: "n/N · name" list of the book's sections, ◀ ▶ and commands `section.previous` / `section.next` (Ctrl+PgUp / Ctrl+PgDown), and the shown part of a multi-part file (`selection_text` of `ImageView.source_selection`). Switching calls `engine.switch_section` and keeps the current step (previously only Project > Sections switched). Hidden until a section is loaded. Annotate's note and stored-section out-of-date reasons now point to the bar. The canvas plane label takes the free header space. Test: two sections, the bar lists both, previous/next and choosing switch while the Register step stays open.

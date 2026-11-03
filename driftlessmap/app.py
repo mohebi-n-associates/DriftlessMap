@@ -111,7 +111,9 @@ from .section_engine import SectionsMixin
 from .mapping_records import (
     BUILD_CHANGED,
     IMPLANT_KINDS,
+    NOT_RECORDED,
     REGISTRATION_CHANGED,
+    REMAPPED,
     MappingLedger,
     derivation,
     derivation_status,
@@ -4980,6 +4982,31 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
                 return ("the landmarks, page or tilt of {} changed after it was mapped; "
                         "{}update its mapping in Annotate, then {}".format(name, where, rebuild))
         return status
+
+    def object_contributions(self, index):
+        """Per mapped unit object ``index`` was made from: ``(record, status)``
+        in section order; ``record`` is None (status NOT_RECORDED) for a unit
+        whose mapping no longer exists."""
+        fingerprint = self.current_registration_fingerprint()
+        stored = self.stored_registrations()
+        rows = []
+        for unit_id, revision in self.object_ctrl.obj_derivation[index]:
+            record = self.mapping_ledger.by_unit(unit_id)
+            if record is None:
+                rows.append((None, NOT_RECORDED))
+                continue
+            status = REMAPPED if record.revision != revision else record.status(
+                self.section_id, fingerprint, stored)
+            rows.append((record, status))
+        order = {sid: n for n, sid in enumerate(e.section_id for e in self.sections.entries())}
+        rows.sort(key=lambda row: order.get(row[0].section_id, len(order)) if row[0] else
+                  len(order))
+        return rows
+
+    def stale_contribution(self, index):
+        """The first mapping that makes object ``index`` out of date, or None."""
+        return next((record for record, status in self.object_contributions(index)
+                     if record is not None and is_out_of_date(status)), None)
 
     def out_of_date_lines(self, indexes):
         """One "name: reason" line per out-of-date object among ``indexes``."""
