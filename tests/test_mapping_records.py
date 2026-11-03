@@ -76,6 +76,15 @@ class MappingLedgerTests(unittest.TestCase):
         self.assertEqual(record.status(self.section, FIRST), CURRENT)
         self.assertEqual(record.status(self.section, SECOND), REGISTRATION_CHANGED)
         self.assertEqual(record.status(new_identifier(), FIRST), OTHER_SECTION)
+        # While its section is stored, the fingerprint it was put away with counts.
+        elsewhere = new_identifier()
+        self.assertEqual(record.status(elsewhere, FIRST, {self.section: FIRST}), OTHER_SECTION)
+        self.assertEqual(record.status(elsewhere, FIRST, {self.section: SECOND}),
+                         REGISTRATION_CHANGED)
+        self.assertEqual(record.status(elsewhere, FIRST, {self.section: None}), OTHER_SECTION)
+        entries = derivation([record])
+        self.assertEqual(derivation_status(entries, self.ledger, elsewhere, FIRST,
+                                           {self.section: SECOND}), REGISTRATION_CHANGED)
 
     def test_restamp_changes_only_the_section_and_fingerprint_given(self):
         track = {"points": [[1.0, 2.0], [3.0, 4.0]]}

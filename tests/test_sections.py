@@ -46,6 +46,17 @@ def isolated_gui_test(test):
 
 
 class SectionBookTests(unittest.TestCase):
+    def test_a_stored_section_keeps_only_a_valid_registration_fingerprint(self):
+        from driftlessmap.sections import _valid_summary
+
+        good = {"page": 3, "registration": "c" * 64}
+        self.assertEqual(_valid_summary(good), good)
+        for bad in ("short", "C" * 64, 5, None):
+            summary = _valid_summary({"page": 3, "registration": bad})
+            self.assertEqual(summary, {"page": 3} if bad is not None else
+                             {"page": 3, "registration": None}, bad)
+        self.assertEqual(_valid_summary("not a dict"), {})
+
     def test_sections_are_added_after_the_open_one_and_stay_named_uniquely(self):
         book = SectionBook("a", "pfc.tif")
         with self.assertRaises(ValueError):
@@ -497,6 +508,47 @@ class SectionPersistenceTests(SectionEngineTests):
         self.map_fiber(window, fiber)
         window.rename_section(first_id, "rostral")
         return window, fiber, first_id, raster
+
+    @isolated_gui_test
+    def test_a_changed_stored_section_keeps_its_results_out_of_date(self):
+        # Review B1: switching away from a changed section made its results current.
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window, fiber, first_id, _raster = self.two_section_project(root)
+            second_id = window.section_id
+            self.assertTrue(window.build_implant(fiber.implant_id)[0])
+            built = window.implant_objects(fiber.implant_id, built=True)[0]
+            self.assertIsNone(window.out_of_date_reason(built))
+
+            window.atlas_view.cpage_ctrl.set_val(22)        # pfc-2 changes after mapping
+            self.assertIn("pfc-2.png", window.out_of_date_reason(built))
+            self.assertTrue(window.switch_section(first_id)[0])
+            built = window.implant_objects(fiber.implant_id, built=True)[0]
+            self.assertEqual(window.object_mapping_status(built), "registration changed")
+            reason = window.out_of_date_reason(built)
+            self.assertIn("pfc-2.png", reason)
+            self.assertIn("open pfc-2.png", reason)
+            exported, notes = window.export_all_results(str(root / "results"))
+            self.assertTrue(exported)
+            self.assertTrue(any("pfc-2.png" in note for note in notes), notes)
+
+            # Saved and opened with the other section open: still out of date.
+            path = root / "stale.dmap"
+            self.assertTrue(window.save_project_called(path=str(path)))
+            reopened, _payload = self.open_project(root, path)
+            built = reopened.implant_objects(fiber.implant_id, built=True)[0]
+            self.assertIn("pfc-2.png", reopened.out_of_date_reason(built))
+
+            # Opening it, updating the mapping and building again makes it current.
+            self.assertTrue(reopened.switch_section(second_id)[0])
+            record = reopened.mapping_ledger.get(second_id, "fiber", fiber.implant_id)
+            self.assertIsNotNone(reopened.update_mapping(record.unit_id))
+            self.assertTrue(reopened.build_implant(fiber.implant_id)[0])
+            built = reopened.implant_objects(fiber.implant_id, built=True)[0]
+            self.assertIsNone(reopened.out_of_date_reason(built))
+            self.assertTrue(reopened.switch_section(first_id)[0])
+            built = reopened.implant_objects(fiber.implant_id, built=True)[0]
+            self.assertIsNone(reopened.out_of_date_reason(built))
 
     @isolated_gui_test
     def test_every_section_round_trips_through_a_project(self):

@@ -127,14 +127,21 @@ class MappingRecord:
     def key(self):
         return (self.section_id, self.kind, self.probe)
 
-    def status(self, section_id, registration):
+    def status(self, section_id, registration, stored=None):
         """CURRENT, OTHER_SECTION or REGISTRATION_CHANGED.
 
-        A record of a section that is no longer loaded is OTHER_SECTION: its
-        registration can no longer change, so its mapping stays valid. Probes
-        built from several sections rely on this.
+        ``section_id`` and ``registration`` describe the open section;
+        ``stored`` maps other sections to the registration fingerprint they
+        had when they were put away. A record of another section is compared
+        with that fingerprint: REGISTRATION_CHANGED if the section's landmarks,
+        page or tilt changed after mapping, else OTHER_SECTION (current).
+        Without a known fingerprint (a section saved before 2.5.3, or one with
+        no stored image) it is OTHER_SECTION.
         """
         if section_id != self.section_id:
+            known = (stored or {}).get(self.section_id)
+            if known is not None and known != self.registration:
+                return REGISTRATION_CHANGED
             return OTHER_SECTION
         if registration != self.registration:
             return REGISTRATION_CHANGED
@@ -295,10 +302,12 @@ def is_out_of_date(status):
     return status in (REGISTRATION_CHANGED, REMAPPED, BUILD_CHANGED)
 
 
-def derivation_status(entries, ledger, section_id, registration):
+def derivation_status(entries, ledger, section_id, registration, stored=None):
     """CURRENT, NOT_RECORDED, or the first reason an object is out of date.
 
-    Parts mapped from sections that are no longer loaded count as current.
+    ``stored`` gives other sections' registration fingerprints (see
+    :meth:`MappingRecord.status`); parts from sections without one count as
+    current.
     """
     if not entries:
         return NOT_RECORDED
@@ -308,6 +317,6 @@ def derivation_status(entries, ledger, section_id, registration):
             return NOT_RECORDED
         if record.revision != revision:
             return REMAPPED
-        if record.status(section_id, registration) == REGISTRATION_CHANGED:
+        if record.status(section_id, registration, stored) == REGISTRATION_CHANGED:
             return REGISTRATION_CHANGED
     return CURRENT

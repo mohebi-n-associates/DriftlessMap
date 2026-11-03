@@ -136,9 +136,12 @@ class SectionsMixin:
             pages = {"coronal": view.current_coronal_index,
                      "sagittal": view.current_sagital_index,
                      "horizontal": view.current_horizontal_index}
+            # The registration is kept so mappings made from this section can
+            # be checked while it is stored (it cannot change until opened).
             return {"plane": self.atlas_display, "page": pages.get(self.atlas_display),
                     "pairs": len(self.atlas_tri_inside_data),
-                    "review": self.registration_review_state()}
+                    "review": self.registration_review_state(),
+                    "registration": self.current_registration_fingerprint()}
         return dict(entry.summary)
 
     def section_mappings(self, section_id):

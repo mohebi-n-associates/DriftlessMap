@@ -11,6 +11,7 @@ its section fields, with large arrays spilled to memory-mapped files by
 import copy
 import hashlib
 import os
+import re
 import shutil
 import tempfile
 import weakref
@@ -232,11 +233,22 @@ class SectionBook:
                 continue
             item = stored[section_id]
             entry = SectionEntry(section_id, book.unique_name(item.get("name")),
-                                 summary=dict(item.get("summary") or {}))
+                                 summary=_valid_summary(item.get("summary")))
             entry.state = item["state"]
             book._entries[section_id] = entry
             book._order.append(section_id)
         return book, problems
+
+
+def _valid_summary(value):
+    """A stored section's summary; an invalid registration fingerprint
+    (checked against its mappings) is dropped, so it is treated as unknown."""
+    summary = dict(value) if isinstance(value, dict) else {}
+    registration = summary.get("registration")
+    if registration is not None and not (
+            isinstance(registration, str) and re.fullmatch(r"[0-9a-f]{64}", registration)):
+        del summary["registration"]
+    return summary
 
 
 def section_pixel_size_um(img_ctrl_data):
