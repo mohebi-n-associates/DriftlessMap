@@ -185,7 +185,7 @@ from .registration_review import (
     legacy as LEGACY_FINGERPRINT,
     registration_fingerprint,
 )
-from .landmarks import LANDMARK_FIELDS, LandmarkModel, triangulation_payload_error
+from .landmarks import LANDMARK_FIELDS, LandmarkModel, fit_frame, triangulation_payload_error
 from .project_io import (
     CELL_COUNT_SLOTS,
     PROJECT_SCHEMA_VERSION,
@@ -2258,7 +2258,9 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
         self.histo_tri_inside_data = [
             [round(float(x), 2), round(float(y), 2)] for x, y in proposal.histology_points
         ]
-        if len(proposal.boundary_points) == len(self.atlas_tri_onside_data):
+        if self.fit_frame_to_landmarks():
+            pass   # the frame agrees with the proposed pairs
+        elif len(proposal.boundary_points) == len(self.atlas_tri_onside_data):
             # Carry the mesh frame through the fit too, so the fixed frame
             # points do not contradict the interior landmarks.
             self.histo_tri_onside_data = [
@@ -3759,6 +3761,30 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
             text_items.append(item)
             view.vb.addItem(item)
 
+    def fit_frame_to_landmarks(self):
+        """Move the frame (corner and side points) to agree with the paired
+        landmarks (`landmarks.fit_frame`); returns True when it moved."""
+        if (self.atlas_view.slice_size is None or self.image_view.img_size is None
+                or len(self.atlas_tri_inside_data) != len(self.histo_tri_inside_data)):
+            return False
+        rects = fit_frame(self.atlas_tri_inside_data, self.histo_tri_inside_data,
+                          self.atlas_view.slice_size, self.image_view.img_size)
+        if rects is None:
+            return False
+        self.atlas_corner_points, self.atlas_side_lines = get_corner_line_from_rect(rects[0])
+        self.histo_corner_points, self.histo_side_lines = get_corner_line_from_rect(rects[1])
+        self.atlas_tri_onside_data = num_side_pnt_changed(
+            self.np_onside, self.atlas_corner_points, self.atlas_side_lines)
+        self.histo_tri_onside_data = num_side_pnt_changed(
+            self.np_onside, self.histo_corner_points, self.histo_side_lines)
+        self.atlas_tri_data = self.atlas_tri_onside_data + self.atlas_tri_inside_data
+        self.histo_tri_data = self.histo_tri_onside_data + self.histo_tri_inside_data
+        self.atlas_view.working_atlas.image_dict["tri_pnts"].setData(
+            pos=np.asarray(self.atlas_tri_data))
+        self.image_view.img_stacks.image_dict["tri_pnts"].setData(
+            pos=np.asarray(self.histo_tri_data))
+        return True
+
     def _delete_paired_triangulation_landmark(self, interior_index):
         deleted = False
         if interior_index < len(self.atlas_tri_inside_data):
@@ -3784,6 +3810,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
         if not deleted:
             return
         self._invalidate_triangulation(clear_topology=True)
+        self.fit_frame_to_landmarks()
         if self.tool_box.triang_vis_btn.isChecked():
             self.update_atlas_tri_lines()
             self.update_histo_tri_lines()
@@ -3900,6 +3927,13 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
                 return
 
         self._invalidate_triangulation(clear_topology=True)
+        if self.fit_frame_to_landmarks():
+            if self.tool_box.triang_vis_btn.isChecked():
+                self.update_histo_tri_lines()
+                self.update_atlas_tri_lines()
+            else:
+                self._build_triangulation_registration(strict=False, show_error=False)
+            return
         slice_size = self.atlas_view.slice_size
         image_size = self.image_view.img_size
 
@@ -5251,6 +5285,8 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
         self.working_img_text[-1].setColor(self.triangle_color)
         self.image_view.img_stacks.vb.addItem(self.working_img_text[-1])
         self.working_img_text[-1].setPos(x, y)
+        if self.fit_frame_to_landmarks() and self.tool_box.triang_vis_btn.isChecked():
+            self.update_atlas_tri_lines()
         if self.tool_box.triang_vis_btn.isChecked():
             self.update_histo_tri_lines()
         elif len(self.atlas_tri_data) == len(self.histo_tri_data):
@@ -5510,6 +5546,8 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
             int(da_new_pnt[1]),
         ]
         self.working_img_text[ind - da_num].setPos(da_new_pnt[0], da_new_pnt[1])
+        if self.fit_frame_to_landmarks() and self.tool_box.triang_vis_btn.isChecked():
+            self.update_atlas_tri_lines()
         registration = self._build_triangulation_registration(
             strict=False, show_error=False
         )
@@ -6046,6 +6084,8 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
         self.working_atlas_text[-1].setColor(self.triangle_color)
         self.working_atlas_text[-1].setPos(x, y)
         self.atlas_view.working_atlas.vb.addItem(self.working_atlas_text[-1])
+        if self.fit_frame_to_landmarks() and self.tool_box.triang_vis_btn.isChecked():
+            self.update_histo_tri_lines()
         if self.tool_box.triang_vis_btn.isChecked():
             self.update_atlas_tri_lines()
         elif len(self.atlas_tri_data) == len(self.histo_tri_data):
@@ -6326,6 +6366,8 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
             int(da_new_pnt[1]),
         ]
         self.working_atlas_text[ind - da_num].setPos(da_new_pnt[0], da_new_pnt[1])
+        if self.fit_frame_to_landmarks() and self.tool_box.triang_vis_btn.isChecked():
+            self.update_histo_tri_lines()
         registration = self._build_triangulation_registration(
             strict=False, show_error=False
         )

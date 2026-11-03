@@ -2,7 +2,7 @@ import unittest
 
 import numpy as np
 
-from driftlessmap.landmarks import LandmarkModel, triangulation_payload_error
+from driftlessmap.landmarks import LandmarkModel, fit_frame, triangulation_payload_error
 from driftlessmap.utils import get_corner_line_from_rect
 
 
@@ -65,3 +65,34 @@ class TriangulationPayloadTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FitFrameTests(unittest.TestCase):
+    # A 400 x 300 section covering the middle of a 1000 x 800 atlas slice at
+    # half size: section (x, y) sits at atlas (250 + x / 2, 200 + y / 2).
+    SECTION = [[40.0, 30.0], [360.0, 40.0], [200.0, 270.0], [100.0, 200.0]]
+
+    def atlas_points(self, points):
+        return [[250 + x / 2, 200 + y / 2] for x, y in points]
+
+    def test_the_frame_follows_the_landmarks(self):
+        atlas_rect, section_rect = fit_frame(
+            self.atlas_points(self.SECTION), self.SECTION, (800, 1000), (300, 400))
+        self.assertEqual(section_rect, (0.0, 0.0, 400.0, 300.0))
+        np.testing.assert_allclose(atlas_rect, (250.0, 200.0, 200.5, 150.5))
+
+    def test_a_section_larger_than_the_atlas_gets_a_smaller_frame(self):
+        # The section at double size: only its middle falls inside the atlas.
+        atlas = [[-200 + 4 * x, -100 + 4 * y] for x, y in self.SECTION]
+        atlas_rect, section_rect = fit_frame(atlas, self.SECTION, (800, 1000), (300, 400))
+        np.testing.assert_allclose(atlas_rect, (0.0, 0.0, 1000.0, 800.0))
+        np.testing.assert_allclose(section_rect, (50.0, 25.0, 250.75, 200.75))
+
+    def test_too_few_bunched_or_mirrored_pairs_keep_the_frame(self):
+        section = self.SECTION
+        atlas = self.atlas_points(section)
+        self.assertIsNone(fit_frame(atlas[:2], section[:2], (800, 1000), (300, 400)))
+        bunched = [[200.0 + i, 150.0 + i % 2] for i in range(4)]
+        self.assertIsNone(fit_frame(self.atlas_points(bunched), bunched, (800, 1000), (300, 400)))
+        mirrored = [[1000 - x, y] for x, y in atlas]
+        self.assertIsNone(fit_frame(mirrored, section, (800, 1000), (300, 400)))

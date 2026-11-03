@@ -270,6 +270,43 @@ class SectionEngineTests(unittest.TestCase):
             self.assertIn("implant settings changed", window.out_of_date_reason(built))
 
     @isolated_gui_test
+    def test_the_frame_follows_landmarks_as_they_are_placed(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window = self.window_with_atlas(root)
+            section = root / "pfc-1.png"
+            self.write_section(section, 200)
+            self.load_section(window, section)
+            height, width = window.image_view.img_size
+            atlas_frame = [list(p) for p in window.atlas_tri_onside_data]
+            pairs = [((2.0, 3.0), (10.0, 12.0)), ((20.0, 4.0), (19.0, 12.5)),
+                     ((10.0, 28.0), (15.0, 24.0))]
+            for (sx, sy), (ax, ay) in pairs[:2]:
+                window._image_click_triang(None, sx, sy)
+                window._atlas_click_triang(None, ax, ay)
+            # Two pairs cannot fix the frame: it stays at the image corners.
+            self.assertEqual(window.atlas_tri_onside_data, atlas_frame)
+            (sx, sy), (ax, ay) = pairs[2]
+            window._image_click_triang(None, sx, sy)
+            window._atlas_click_triang(None, ax, ay)
+            # The third pair moves the frame to where the landmarks put the
+            # section's corners, kept inside both images.
+            from driftlessmap.landmarks import fit_frame
+            from driftlessmap.utils import get_corner_line_from_rect
+
+            atlas_rect, section_rect = fit_frame(
+                window.atlas_tri_inside_data, window.histo_tri_inside_data,
+                window.atlas_view.slice_size, (height, width))
+            self.assertEqual(window.atlas_tri_onside_data[:4],
+                             get_corner_line_from_rect(atlas_rect)[0])
+            self.assertEqual(window.histo_tri_onside_data[:4],
+                             get_corner_line_from_rect(section_rect)[0])
+            self.assertNotEqual(window.atlas_tri_onside_data, atlas_frame)
+            # About atlas = section / 2 + (9, 10): the top-left corner is near (9, 10).
+            np.testing.assert_allclose(atlas_rect[:2], (9.0, 10.0), atol=0.5)
+            self.assertEqual(len(window.atlas_tri_data), len(window.histo_tri_data))
+
+    @isolated_gui_test
     def test_a_failed_switch_restores_the_open_section(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

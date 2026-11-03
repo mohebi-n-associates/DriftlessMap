@@ -8,7 +8,7 @@ or important workflows change.
 
 ## Project identity
 
-- Current stable release: DriftlessMap 2.4.2 (2 November 2026; 2.4.0 plus
+- Current stable release: DriftlessMap 2.4.3 (2 November 2026; 2.4.0 plus
   fixes, the first release since 2.0.0, including 2.0.1-2.3.0 and multi-section
   projects). 2.0.0
   (29 October 2026) followed the 2.0.0aN previews and 2.0.0rc1-rc16. The owner released it with the
@@ -268,6 +268,11 @@ or important workflows change.
 - `driftlessmap/landmarks.py`: `LandmarkModel` owns paired landmark lists,
   topology, the cached registration and label items (the `DriftlessMap`
   attributes of the same names delegate to it), plus `.dmaptri` validation.
+  `fit_frame` places the frame (corner and side points) from a per-axis
+  scale/offset fit of the pairs, inside both images (`FRAME_MIN_PAIRS`,
+  `FRAME_MIN_SPREAD`); `DriftlessMap.fit_frame_to_landmarks` applies it after
+  landmarks are proposed, added, moved or deleted and for Match Boundaries,
+  never on load (a saved frame is part of the registration fingerprint).
 - `driftlessmap/probe_utiles.py`, `probe_reconstruction.py`, `probe_csv.py`:
   probe geometry, mapping, reconstruction schema, and exports.
 - `driftlessmap/object_control.py`: object pieces/merged objects, visualization,
