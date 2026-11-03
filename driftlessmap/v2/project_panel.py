@@ -34,7 +34,8 @@ class ProjectPanel(StepPanel):
         menu = QMenu(tools)
         for text, action in (
             ("Download Allen mouse atlas…", engine.actionDownload_Allen_Mice_Atlas),
-            ("Download Waxholm rat atlas…", engine.actionDownload),
+            ("Download Waxholm rat atlas (v4.01)…", engine.actionDownload),
+            ("Download SWC female rat atlas…", engine.actionDownload_SWC_Female_Rat_Atlas),
             ("Process a custom volume atlas…", engine.actionAtlas_Processor),
             (None, None),
             ("Load 2D slice atlas plate…", engine.actionLoad_Image_Atlas),

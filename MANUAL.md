@@ -1,7 +1,7 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 2.4.4**. Section 2 explains how to
-install it; `pip install driftlessmap` installs 2.4.4.
+This manual applies to **DriftlessMap 2.5.0**. Section 2 explains how to
+install it; `pip install driftlessmap` installs 2.5.0.
 
 DriftlessMap - Histological E-data Registration in Brain Space - is a desktop
 application for aligning rodent histology with a reference atlas, reconstructing
@@ -52,8 +52,8 @@ DriftlessMap combines four related activities in one application:
 - **Analyze and visualize:** convert annotations into three-dimensional objects,
   assign atlas regions, inspect measurements, compare probes, and export data.
 
-DriftlessMap includes workflows for the Waxholm Space Sprague Dawley rat atlas and
-Allen Mouse CCFv3 2017. It can also process another three-dimensional atlas when
+DriftlessMap includes workflows for the Waxholm Space Sprague Dawley rat atlas
+(v4.01), the SWC female rat atlas in Waxholm Space, and Allen Mouse CCFv3 2017. It can also process another three-dimensional atlas when
 the user supplies an intensity volume, matching segmentation volume, label
 table, voxel size, and source-axis directions.
 
@@ -102,7 +102,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-DriftlessMap 2.4.4 requires:
+DriftlessMap 2.5.0 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -121,8 +121,8 @@ page. The macOS DMG (`-macOS-arm64.dmg`) is built for Apple Silicon; on an Intel
 Mac, use the developer installation below.
 The desktop builds include Python and all runtime dependencies. Windows users
 extract the entire ZIP and run `DriftlessMap.exe`; macOS users open the DMG and
-drag `DriftlessMap.app` to Applications. The 2.4.4 downloads are named
-`DriftlessMap-2.4.4-Windows-x64.zip` and `DriftlessMap-2.4.4-macOS-arm64.dmg`.
+drag `DriftlessMap.app` to Applications. The 2.5.0 downloads are named
+`DriftlessMap-2.5.0-Windows-x64.zip` and `DriftlessMap-2.5.0-macOS-arm64.dmg`.
 Release builds are unsigned unless the release notes say otherwise, so the first
 launch may require Windows SmartScreen confirmation or Control-clicking the
 macOS app and choosing **Open**.
@@ -171,7 +171,7 @@ python -m pip --version
 python -c "import driftlessmap; print(driftlessmap.__version__)"
 ```
 
-The final command prints the installed version, `2.4.4`.
+The final command prints the installed version, `2.5.0`.
 
 ### 2.5 Launching DriftlessMap
 
@@ -578,19 +578,43 @@ Atlas processing creates large implementation-specific caches and meshes. Keep
 the original downloaded files and processed output together, and back up the
 entire folder.
 
-### 5.2 Waxholm rat atlas
+### 5.2 Rat atlases
 
-1. Select **Atlas > Download Waxholm Rat Atlas**.
-2. Click **Download** and choose an empty destination folder.
-3. Wait for the label, T2* volume, mask, and annotation downloads to finish.
-4. Click **Process**. If DriftlessMap was restarted after downloading, select the
-   folder when prompted.
-5. Leave the dialog open until processing completes.
-6. Load the folder with **File > Load Atlas**.
+Two rat atlases can be downloaded. Both are in Waxholm Space (WHS): the same
+512 × 1024 × 512 grid of 39.0625 um voxels, the same Bregma and Lambda, and
+the same region numbers, so coordinates and regions compare directly between
+them.
 
-The dialog estimates 40-60 minutes for processing, but the actual duration
-depends on CPU, storage, and memory. The standard workflow uses a voxel size of
-39.0625 um and the packaged Waxholm label information.
+- **Waxholm Space rat brain atlas (v4.01).** Sprague Dawley rat; an MRI (T2*)
+  template with 224 regions (Kleven et al. 2023), from NITRC. NITRC asks you to
+  accept its terms (CC BY 4.0, and cite the atlas) before downloading; the
+  dialog shows them and downloads only after you tick *I agree*. About 950 MB.
+- **SWC female rat brain atlas (in Waxholm Space).** Lister Hooded female rats;
+  a serial two-photon microscopy template from the Sainsbury Wellcome Centre,
+  registered to Waxholm Space, with the Waxholm v4.01 regions, as packaged by
+  BrainGlobe. Its template looks more like a histology section than the MRI
+  template does. Regions are labelled only where the template has tissue (a
+  few, such as parts of the spinal cord, are left out). About 200 MB.
+
+In the 2.0 interface choose **Project > Atlas tools > Download Waxholm rat
+atlas (v4.01)…** or **Download SWC female rat atlas…** (classic: **Atlas >
+Download Waxholm Rat Atlas** / **Download SWC Female Rat Atlas**):
+
+1. For Waxholm, read the terms and tick *I agree*.
+2. Choose an empty folder, or one with an earlier download of the same atlas
+   (files already there with the right checksum are not downloaded again).
+3. Click **Download** and wait for every file to finish.
+4. Click **Process and open atlas**, and leave the dialog open until
+   processing completes; the atlas then opens.
+
+Every file is checked against its published SHA-256 checksum; a changed
+upstream file is refused instead of processed. The region hierarchy comes from
+the downloaded atlas itself. Folders downloaded before 2.5.0 (Waxholm v4) keep
+working with the labels they were processed with; download v4.01 into a new
+folder. A project records the content of its atlas, so the other rat atlas or
+another Waxholm release is not accepted in its place. The tutorial
+[Downloading the rat atlases](Tutorial/Atlas_Related/download_rat_atlases.md)
+walks through both downloads with screenshots.
 
 Downloads are written atomically and use HTTPS. A failed or incomplete download
 does not replace an existing valid file.
@@ -2062,7 +2086,8 @@ still read when a DriftlessMap setting has not been created.
 
 | Command | Function |
 | --- | --- |
-| Download Waxholm Rat Atlas | Download/process standard rat atlas. |
+| Download Waxholm Rat Atlas | Download/process the Waxholm v4.01 rat atlas. |
+| Download SWC Female Rat Atlas | Download/process the SWC female rat atlas in Waxholm Space. |
 | Download Allen Mice Atlas | Download/process Allen 10, 25, or 50 um atlas. |
 | Atlas Processor | Process a custom volume atlas. |
 | Suggest Atlas Section... | Rank atlas plane, section, tilt and orientation for the loaded histology. |

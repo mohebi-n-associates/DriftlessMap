@@ -326,6 +326,7 @@ border-color: rgb(75, 78, 84);</string>
      <string>Atlas</string>
     </property>
     <addaction name="actionDownload"/>
+    <addaction name="actionDownload_SWC_Female_Rat_Atlas"/>
     <addaction name="actionDownload_Allen_Mice_Atlas"/>
     <addaction name="separator"/>
     <addaction name="actionAtlas_Processor"/>
@@ -537,6 +538,14 @@ selection-background-color: rgb(50, 50, 50);</string>
    </property>
    <property name="toolTip">
     <string>Download  and Process Waxholm Rat Atlas</string>
+   </property>
+  </action>
+  <action name="actionDownload_SWC_Female_Rat_Atlas">
+   <property name="text">
+    <string>Download SWC Female Rat Atlas ...</string>
+   </property>
+   <property name="toolTip">
+    <string>Download and process the SWC female rat atlas in Waxholm Space</string>
    </property>
   </action>
   <action name="actionRegister_Slice_Info">

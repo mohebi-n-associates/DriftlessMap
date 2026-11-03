@@ -98,6 +98,11 @@ class V2Window(QMainWindow):
         # The V2 atlas download dialog replaces the 1.x one in this window.
         engine.actionDownload_Allen_Mice_Atlas.triggered.disconnect()
         engine.actionDownload_Allen_Mice_Atlas.triggered.connect(self.download_allen_atlas)
+        engine.actionDownload.triggered.disconnect()
+        engine.actionDownload.triggered.connect(lambda: self.download_rat_atlas("waxholm"))
+        engine.actionDownload_SWC_Female_Rat_Atlas.triggered.disconnect()
+        engine.actionDownload_SWC_Female_Rat_Atlas.triggered.connect(
+            lambda: self.download_rat_atlas("swc_female_rat"))
         self._build_ui()
         self._register_commands()
         self._build_menus()
@@ -330,7 +335,9 @@ class V2Window(QMainWindow):
         card.add_row(button("Load atlas…", lambda: self.run("atlas.load"), primary=True),
                      button("Load section…", lambda: self.run("section.load")),
                      button("Open project…", lambda: self.run("project.open")), None)
-        card.add_row(button("Download Allen mouse atlas…", self.download_allen_atlas), None)
+        card.add_row(button("Download Allen mouse atlas…", self.download_allen_atlas),
+                     button("Download rat atlas…", lambda: self.download_rat_atlas("waxholm")),
+                     None)
         row = QHBoxLayout()
         row.addStretch(1)
         row.addWidget(card)
@@ -931,6 +938,16 @@ class V2Window(QMainWindow):
         from .allen_download_dialog import AllenDownloadDialog
 
         dialog = AllenDownloadDialog(self)
+        dialog.exec()
+        if dialog.continue_process and dialog.process_finished:
+            self.engine._open_downloaded_atlas(dialog)
+            self.set_view("compare")
+
+    def download_rat_atlas(self, key):
+        from ..rat_atlases import RAT_ATLASES
+        from .rat_download_dialog import RatAtlasDownloadDialog
+
+        dialog = RatAtlasDownloadDialog(RAT_ATLASES[key], self)
         dialog.exec()
         if dialog.continue_process and dialog.process_finished:
             self.engine._open_downloaded_atlas(dialog)
