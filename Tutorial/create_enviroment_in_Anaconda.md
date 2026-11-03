@@ -1,26 +1,49 @@
-## Create Enviroment in Anaconda
+## Create an environment with Anaconda or Miniconda
 
-The screenshots below show the Anaconda graphical interface. For HERBS 1.0,
-the equivalent and recommended terminal setup is:
+DriftlessMap needs its own Python environment, so its Qt, NumPy, OpenCV and
+OpenGL packages do not conflict with other software. Most users do not need
+this: the Windows and macOS desktop builds on the
+[Releases page](https://github.com/mohebi-n-associates/DriftlessMap/releases)
+include Python and everything else. Use an environment when you install the
+Python package, for scripting or development.
+
+In a terminal (on Windows, the *Anaconda Prompt*):
 
 ```bash
-conda create --name HERBS python=3.14 -y
-conda activate HERBS
+conda create --name DriftlessMap python=3.14 -y
+conda activate DriftlessMap
 python -m pip install --upgrade pip
-python -m pip install .
+python -m pip install driftlessmap
+driftlessmap
 ```
 
-Use Python 3.13 and `python -m pip install ".[czi]"` instead when Zeiss CZI
-support is required.
+The last command starts DriftlessMap in the 2.0 interface;
+`driftlessmap --classic` starts the classic interface.
 
-The graphical workflow is otherwise the same:
+To open Zeiss CZI files, use Python 3.13 (the CZI reader has no builds for
+newer Python yet):
 
-- After clicking Anaconda, a main window will show up. On the left panel, there are tabs for 'Home', 'Environments', 'Learning' and 'Community'. All available softwares are listed in the main area, and there is a 'Applications on' combobox on top. This combobox shows which enviroment you are using. e.g. I already chose an enviroment called 'conda38_3' in the screeshot. But when you start Anaconda, an enviroment called 'base' is the one shows there.
-<img src="../image/anaconda_0.PNG">
+```bash
+conda create --name DriftlessMap-CZI python=3.13 -y
+conda activate DriftlessMap-CZI
+python -m pip install --upgrade pip
+python -m pip install "driftlessmap[czi]"
+```
 
+Check that the environment is the one you meant:
 
-- To create a new enviroment, click 'Enviroments' tab. Before creating any new enviroments, you will only see 'base (root)' enviroment which has a small triangle arrow next to it. Click 'Creat' button on the bottom, a 'create new enviroment' window will popup. Enter a name for your desier enviroment and click 'create'. The screenshot shows an enviroment 'conda38_3' is created. Click the enviroment you would like to use and you will see the small triangle arrow move to the enviroment you clicked.
-<img src="../image/anaconda_1.PNG">
+```bash
+python -c "import driftlessmap; print(driftlessmap.__version__)"
+```
 
+It prints the installed version, for example `2.5.0`.
 
-- Click the small triangle arrow to go to Terminal. Install or update the desired package in the Terminal. Click the 'Update index...' button on the top of pakcage list. You can check the versions of packages in the package list also.
+**With Anaconda Navigator** (the graphical interface): open *Environments*,
+click *Create*, name the environment `DriftlessMap` and choose Python 3.14 (or
+3.13 for CZI). Then click the triangle next to the new environment, choose
+*Open Terminal*, and run the two `python -m pip install` commands above. The
+packages DriftlessMap needs come from PyPI through pip, not from the Navigator
+package list.
+
+The [User Manual, Section 2](../MANUAL.md#2-installation-and-launching) covers
+installation in full.

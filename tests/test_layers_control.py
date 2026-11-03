@@ -53,6 +53,13 @@ class LayersControlTests(unittest.TestCase):
         self.assertEqual(control.layer_blend_mode, ["Overlay"])
         self.assertEqual(changes, [("img-overlay", "Overlay")])
 
+    def test_image_layers_add_up_on_the_black_background(self):
+        # Overlay on black shows nothing: a cropped plate or section vanished.
+        control = layers_control.LayersControl()
+        control.add_layer("img-process", [])
+        control.add_layer("atlas-slice", [])
+        self.assertEqual(control.layer_blend_mode, ["Plus", "Plus"])
+
     def test_saved_noncontiguous_selection_is_restored_exactly(self):
         control = layers_control.LayersControl()
         control.set_layer_data(layer_state([2, 0]))

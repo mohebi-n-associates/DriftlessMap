@@ -8,7 +8,7 @@ or important workflows change.
 
 ## Project identity
 
-- Current stable release: DriftlessMap 2.5.0 (3 November 2026; 2.4.0 plus
+- Current stable release: DriftlessMap 2.5.1 (3 November 2026; 2.4.0 plus
   fixes and the rat atlas downloads, the first release since 2.0.0, including 2.0.1-2.3.0 and multi-section
   projects). 2.0.0
   (29 October 2026) followed the 2.0.0aN previews and 2.0.0rc1-rc16. The owner released it with the
@@ -179,7 +179,9 @@ or important workflows change.
   v4.01 where labelled). Both share WHS grid, Bregma/Lambda and region IDs.
   Files are pinned by SHA-256. `PREPARE[key]` writes the template,
   annotation and `atlas_labels.pkl` (`label_info_from_ilf` /
-  `label_info_from_brainglobe`) before the shared processing.
+  `label_info_from_brainglobe`) before the shared processing; the worker
+  then writes `atlas_axis_info.pkl` (`waxholm_axis_info`: identity, as the
+  Atlas Processor gives for RAS), which probe builds and cell points need.
   `atlas_downloader.AtlasDownloader(atlas=...)` is the 1.x dialog;
   `v2/rat_download_dialog.RatAtlasDownloadDialog` rebuilds its layout.
   `download_utils` serialises manifest writes (parallel downloads).

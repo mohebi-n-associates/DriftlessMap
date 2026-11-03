@@ -3,6 +3,24 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.5.1
+
+Fix release, 3 November 2026.
+
+- **Probes and cell points on the rat atlases.** Building a probe or loading
+  external cell points on a Waxholm or SWC atlas stopped with "The atlas has no
+  axis metadata" (the Waxholm download never wrote that file, also under
+  HERBS). Processing now writes it. For a rat atlas folder processed earlier,
+  open its download again, choose the folder and click **Process and open
+  atlas**; the downloaded files are reused.
+- **Cropped slice-atlas plates** no longer turn black.
+- **The Atlas Processor** accepts a mask stored with one extra fourth frame,
+  such as the Waxholm brain mask.
+- **Every tutorial is updated** for the 2.0 interface, with new screenshots:
+  atlases (rat downloads, your own atlas, slice atlas plates, coordinates),
+  automatic section matching and landmarks, the five probe tutorials, external
+  cell points and installation. See the [tutorial index](Tutorial/README.md).
+
 ## DriftlessMap 2.5.0
 
 Feature release, 3 November 2026. **Rat atlases.**

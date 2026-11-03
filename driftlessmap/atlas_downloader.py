@@ -22,7 +22,9 @@ from .atlas_loader import (
 from .obj_items import load_mesh_file, render_volume, render_small_volume
 from .persistence import load_legacy_pickle
 from .download_utils import DownloadCancelled, download_file, thread_is_running
-from .rat_atlases import PREPARE, WAXHOLM, WHS_BREGMA, WHS_LAMBDA, WHS_VOXEL_UM
+from .rat_atlases import (
+    PREPARE, WAXHOLM, WHS_BREGMA, WHS_LAMBDA, WHS_VOXEL_UM, waxholm_axis_info,
+)
 
 
 class DownloadThread(QThread):
@@ -131,6 +133,10 @@ class WorkerProcessData(QObject):
         self.message = msg
 
         if msg == 'Atlas loaded successfully.':
+            # The volumes keep the Waxholm Space axes, which are DriftlessMap's
+            # own: probe exports need this to give native atlas coordinates.
+            write_cache_pickle(os.path.join(self.saving_folder, 'atlas_axis_info.pkl'),
+                               waxholm_axis_info(self.atlas_data.shape))
             self.progress.emit(40)
             self.mesh_data = render_volume(self.atlas_data, self.saving_folder, factor=2, level=0.1)
             self.progress.emit(50)
