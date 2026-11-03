@@ -26,6 +26,7 @@ from PyQt6.QtCore import (
 )
 from .image_stacks import SliceStack
 from .slice_stacks import SliceStacks
+from .region_colors import distinct_region_colors
 from .label_tree import LabelTree
 from .utils import read_qss_file, get_corner_line_from_rect, get_slice_atlas_coord, make_contour_img,  \
     rotate_base_points, rotation_x, rotation_y, rotation_z
@@ -674,6 +675,9 @@ class AtlasView(QObject):
 
         self.atlas_data = atlas_data
         self.atlas_label = atlas_label
+        if atlas_label is not None:
+            # Touching regions get clearly different colours (region_colors).
+            label_info, _changed = distinct_region_colors(label_info, atlas_label)
         self.label_info = label_info
         self.atlas_boundary = boundaries
         self.label_tree.set_labels(label_info)

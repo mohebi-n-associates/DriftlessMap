@@ -22,6 +22,11 @@ import numpy as np
 from .resources import resource_path
 from .image_reader import MAX_CHANNELS
 
+# Landmark dots and numbers. Before 2.4.2 the default was the colour button's
+# gray, which disappears on gray brightfield sections.
+LANDMARK_COLOR = (255, 0, 0)
+OLD_LANDMARK_COLOR = (128, 128, 128)
+
 
 def read_int_field(line_edit, minimum=None, maximum=None):
     """Return a line edit's integer value, or ``None`` while it is incomplete."""
@@ -387,7 +392,7 @@ class ToolBox(QObject):
 
         # for triang_btn, triang wrap
         triang_color_label = QLabel('Color:')
-        self.triang_color_btn = pg.ColorButton(padding=0)
+        self.triang_color_btn = pg.ColorButton(color=LANDMARK_COLOR, padding=0)
         self.triang_color_btn.setFixedSize(60, 15)
         bound_pnts_num_label = QLabel('Points Number:')
         self.bound_pnts_num = QLineEdit()
@@ -602,7 +607,11 @@ class ToolBox(QObject):
         self.probe_color_btn.setColor(data['probe_color'])
         self.cell_color_btn.setColor(data['cell_color'])
         if 'triangulation_color' in data:
-            self.triang_color_btn.setColor(data['triangulation_color'])
+            color = data['triangulation_color']
+            # Projects saved before 2.4.2 hold the old gray default: show red.
+            if tuple(color)[:3] == OLD_LANDMARK_COLOR:
+                color = LANDMARK_COLOR
+            self.triang_color_btn.setColor(color)
             self.triang_vis_btn.setChecked(bool(data['triangulation_visible']))
 
 

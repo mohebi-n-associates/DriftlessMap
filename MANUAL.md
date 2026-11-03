@@ -1,7 +1,7 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 2.4.1**. Section 2 explains how to
-install it; `pip install driftlessmap` installs 2.4.1.
+This manual applies to **DriftlessMap 2.4.2**. Section 2 explains how to
+install it; `pip install driftlessmap` installs 2.4.2.
 
 DriftlessMap - Histological E-data Registration in Brain Space - is a desktop
 application for aligning rodent histology with a reference atlas, reconstructing
@@ -102,7 +102,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-DriftlessMap 2.4.1 requires:
+DriftlessMap 2.4.2 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -121,8 +121,8 @@ page. The macOS DMG (`-macOS-arm64.dmg`) is built for Apple Silicon; on an Intel
 Mac, use the developer installation below.
 The desktop builds include Python and all runtime dependencies. Windows users
 extract the entire ZIP and run `DriftlessMap.exe`; macOS users open the DMG and
-drag `DriftlessMap.app` to Applications. The 2.4.1 downloads are named
-`DriftlessMap-2.4.1-Windows-x64.zip` and `DriftlessMap-2.4.1-macOS-arm64.dmg`.
+drag `DriftlessMap.app` to Applications. The 2.4.2 downloads are named
+`DriftlessMap-2.4.2-Windows-x64.zip` and `DriftlessMap-2.4.2-macOS-arm64.dmg`.
 Release builds are unsigned unless the release notes say otherwise, so the first
 launch may require Windows SmartScreen confirmation or Control-clicking the
 macOS app and choosing **Open**.
@@ -171,7 +171,7 @@ python -m pip --version
 python -c "import driftlessmap; print(driftlessmap.__version__)"
 ```
 
-The final command prints the installed version, `2.4.1`.
+The final command prints the installed version, `2.4.2`.
 
 ### 2.5 Launching DriftlessMap
 
@@ -360,6 +360,16 @@ anatomically wrong in 3D.
 - Check a structure to display it and its descendants.
 - Change a structure color.
 - Reset label colors.
+
+Region colors start from the atlas's own colors, with one change: regions that
+touch get clearly different colors. Atlases color related regions alike (in the
+Allen atlas the prelimbic and infralimbic areas, which touch, are both green), so
+when two touching areas' colors are too close (a CIE color difference below 30),
+the smaller area moves to the nearest color that is far enough from all its
+neighbors. An area's layers keep one color. About 75 of the Allen atlas's areas
+change, mostly to a nearby shade; the rest keep the atlas color. **Reset label
+colors** returns to these colors. The 2D views, 3D meshes and the region colors
+in probe exports use them.
 - Show selected structures in 3D (**Show in 3D view**). Checking a structure
   checks its subregions, so a structure the atlas draws as its layers
   (prelimbic as PL1-PL6b) appears as those meshes.
@@ -411,7 +421,7 @@ its controls to the right.
 | Polygon Lasso | Select an inside or outside region for cropping or deletion. |
 | Magic Wand | Select pixels by tolerance; optionally clean the mask with rectangular, elliptical, or cross-shaped morphology; convert the mask to virus or contour data. |
 | Probe Marker | Mark a probe plan or observed track; choose probe type, site face, multi-shank mode, contact display, and color. |
-| Triangulation | Add paired registration landmarks; display the mesh, match boundary rectangles, set boundary-point count and color, and inspect mesh quality. |
+| Triangulation | Add paired registration landmarks; display the mesh, match boundary rectangles, set boundary-point count and the landmark color (red by default; projects that kept the earlier gray default open red), and inspect mesh quality. |
 | Cell Selector | Add cells manually or define a representative cell for blob detection; choose color and inspect counts. |
 
 The transform actions are:

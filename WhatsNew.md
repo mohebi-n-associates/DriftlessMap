@@ -3,6 +3,19 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.4.2
+
+Fix release, 2 November 2026.
+
+- **Landmark dots are red** by default, so they stand out on brightfield
+  sections; they were gray. Projects that kept the old gray default open red;
+  a color you chose is kept.
+- **Touching regions get clearly different colors.** The atlas colors related
+  regions alike (the prelimbic and infralimbic areas, which touch, were both
+  green). Regions whose colors are too close to a touching region's now move to
+  the nearest clearly different color; most regions keep the atlas color, and
+  an area's layers keep one color.
+
 ## DriftlessMap 2.4.1
 
 Fix release, 2 November 2026. When exported results are out of date, the
