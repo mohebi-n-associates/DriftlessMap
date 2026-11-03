@@ -1,5 +1,9 @@
 ## About Atlas through HERBS
 
+> DriftlessMap 2.5 downloads the Waxholm v4.01 and SWC female rat atlases; see
+> [Downloading the rat atlases](download_rat_atlases.md). Both use the Waxholm
+> coordinates described below.
+
 HERBS allows users to download Waxholm Rat altas and Allen Mouse atlas and process multiple volume brain atlases. Different atals has been developed based on different coordinates systems. In ohter words, the X-axis/Y-axis/Z-axis has different meaning and points different directions from atlas to atlas.
 
 Besides the coordinates that atlases deployed, HERBS has its Internal coordinates also. In this page, I will brifely talk about the differeces in coordinates between popular atlases and HERBS internal.

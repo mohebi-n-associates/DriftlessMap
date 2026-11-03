@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import tempfile
+import threading
 from urllib.parse import urlparse
 
 import requests
@@ -31,9 +32,17 @@ def read_download_manifest(folder):
     return data if isinstance(data, dict) else {}
 
 
+# Downloads run in parallel threads; each rewrites the folder's manifest.
+_MANIFEST_LOCK = threading.Lock()
+
+
 def _record_download(destination, url, sha256, size):
     """Remember what was downloaded so later downloads can be compared."""
-    destination = Path(destination)
+    with _MANIFEST_LOCK:
+        _write_record(Path(destination), url, sha256, size)
+
+
+def _write_record(destination, url, sha256, size):
     manifest = read_download_manifest(destination.parent)
     manifest[destination.name] = {"url": url, "sha256": sha256, "size_bytes": size}
     path = _manifest_path(destination)

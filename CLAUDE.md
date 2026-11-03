@@ -8,8 +8,8 @@ or important workflows change.
 
 ## Project identity
 
-- Current stable release: DriftlessMap 2.4.4 (3 November 2026; 2.4.0 plus
-  fixes, the first release since 2.0.0, including 2.0.1-2.3.0 and multi-section
+- Current stable release: DriftlessMap 2.5.0 (3 November 2026; 2.4.0 plus
+  fixes and the rat atlas downloads, the first release since 2.0.0, including 2.0.1-2.3.0 and multi-section
   projects). 2.0.0
   (29 October 2026) followed the 2.0.0aN previews and 2.0.0rc1-rc16. The owner released it with the
   `release_validation.md` gates still pending (recorded there as waived); keep
@@ -171,6 +171,18 @@ or important workflows change.
   section edges, so single-image edges are never chosen.
 - `driftlessmap/atlas_loader.py`, `atlas_view.py`, `atlas_transform.py`:
   processed atlas loading, display, coordinate transforms.
+- `driftlessmap/rat_atlases.py` (GUI-free): the downloadable rat atlases,
+  `WAXHOLM` (NITRC v4.01 annotation zip with its `.ilf` hierarchy, T2* and
+  mask v1.01; NITRC needs `i_agree`, which the dialog asks the user for) and
+  `SWC_FEMALE_RAT` (BrainGlobe `whs_sd_swc_female_rat_39um`, converted from
+  `asr` to WHS RAS order by `brainglobe_to_whs`; its annotation equals WHS
+  v4.01 where labelled). Both share WHS grid, Bregma/Lambda and region IDs.
+  Files are pinned by SHA-256. `PREPARE[key]` writes the template,
+  annotation and `atlas_labels.pkl` (`label_info_from_ilf` /
+  `label_info_from_brainglobe`) before the shared processing.
+  `atlas_downloader.AtlasDownloader(atlas=...)` is the 1.x dialog;
+  `v2/rat_download_dialog.RatAtlasDownloadDialog` rebuilds its layout.
+  `download_utils` serialises manifest writes (parallel downloads).
 - `driftlessmap/region_colors.py` (GUI-free): `AtlasView.set_data` passes
   `label_info` through `distinct_region_colors`, which finds touching areas in
   the label volume (sampled every `STEP` voxels) and moves an area whose colour

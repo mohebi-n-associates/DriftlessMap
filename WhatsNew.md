@@ -3,6 +3,28 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.5.0
+
+Feature release, 3 November 2026. **Rat atlases.**
+
+- **Waxholm v4.01.** The Waxholm Space rat atlas download now fetches the
+  newest annotation, version 4.01 (224 regions, Kleven et al. 2023), with its
+  own region hierarchy. NITRC asks you to accept its terms (CC BY 4.0; cite
+  the atlas) before downloading, and the dialog shows them.
+- **SWC female rat atlas.** A new download: the Sainsbury Wellcome Centre
+  female rat template (serial two-photon microscopy, Lister Hooded) registered
+  to Waxholm Space, with the same Waxholm regions, Bregma and Lambda. Its
+  template looks more like a histology section than the MRI template.
+- **New download dialogs** in the 2.0 interface (Project > Atlas tools), like
+  the Allen one: choose a folder, see each file's progress, skip files already
+  downloaded, then process and open the atlas.
+- Every rat atlas file is checked against a known SHA-256 checksum.
+- The Allen download dialog no longer squeezes its download rows on top of each
+  other.
+- Folders downloaded earlier (Waxholm v4) keep working; download v4.01 into a
+  new folder. A new tutorial, *Downloading the rat atlases*, walks through
+  both with screenshots.
+
 ## DriftlessMap 2.4.4
 
 Fix release, 3 November 2026. **Deleting mapped marks leaves nothing behind.**

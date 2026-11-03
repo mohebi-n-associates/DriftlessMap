@@ -2,6 +2,8 @@
 
 ## DriftlessMap tutorials
 
+- [Downloading the rat atlases](Atlas_Related/download_rat_atlases.md):
+  Waxholm Space v4.01 and the SWC female rat atlas (DriftlessMap 2.5).
 - [Automatic section matching and landmark proposal](Registration_Related/automatic_section_and_landmarks.md)
   (DriftlessMap 2.0; screenshots from 1.6).
 

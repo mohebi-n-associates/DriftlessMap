@@ -128,6 +128,7 @@ files = [
     "driftlessmap/state_digest.py",
     "driftlessmap/mapping_records.py",
     "driftlessmap/sections.py",
+    "driftlessmap/rat_atlases.py",
     "driftlessmap/transactions.py",
     "driftlessmap/background.py",
     "driftlessmap/cell_detection.py",

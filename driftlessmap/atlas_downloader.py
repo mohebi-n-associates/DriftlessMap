@@ -4,8 +4,8 @@ from .persistence import write_cache_pickle
 import os
 from os.path import dirname, join
 from PyQt6.QtWidgets import (
+    QCheckBox,
     QDialog,
-    QDialogButtonBox,
     QLabel,
     QMessageBox,
     QProgressBar,
@@ -22,6 +22,7 @@ from .atlas_loader import (
 from .obj_items import load_mesh_file, render_volume, render_small_volume
 from .persistence import load_legacy_pickle
 from .download_utils import DownloadCancelled, download_file, thread_is_running
+from .rat_atlases import PREPARE, WAXHOLM, WHS_BREGMA, WHS_LAMBDA, WHS_VOXEL_UM
 
 
 class DownloadThread(QThread):
@@ -76,8 +77,13 @@ class WorkerProcessData(QObject):
         self.mesh_data = None
         self.success = False
         self.message = None
+        self.prepare = None
 
-    def set_data(self, saving_folder, data_local, segmentation_local, mask_local, b_val, l_val, vox_size):
+    def set_data(self, saving_folder, data_local, segmentation_local, mask_local, b_val, l_val,
+                 vox_size, prepare=None):
+        """``prepare(folder)``, when given, turns the downloaded files into the
+        template, annotation, mask and ``atlas_labels.pkl`` processing reads."""
+        self.prepare = prepare
         self.saving_folder = saving_folder
         self.data_local = data_local
         self.segmentation_local = segmentation_local
@@ -102,7 +108,10 @@ class WorkerProcessData(QObject):
 
     def _run(self):
         target = os.path.join(self.saving_folder, 'atlas_labels.pkl')
-        if not os.path.exists(target):
+        if self.prepare is not None:
+            self.prepare(self.saving_folder)
+        elif not os.path.exists(target):
+            # Folders downloaded before 2.5.0 (Waxholm v4) use the packaged labels.
             shutil.copyfile(join(dirname(__file__), "data/atlas_labels.pkl"), target)
 
         self.progress.emit(1)
@@ -158,56 +167,45 @@ class WorkerProcessData(QObject):
 
 
 class AtlasDownloader(QDialog):
-    def __init__(self, *args, **kwargs):
+    """Download and process one of the rat atlases in :mod:`rat_atlases`."""
+
+    def __init__(self, *args, atlas=WAXHOLM, **kwargs):
         super().__init__(*args, **kwargs)
         layout = QVBoxLayout(self)
-
-        self.setWindowTitle("Waxholm Rat Atlas Downloader")
+        self.atlas = atlas
+        self.setWindowTitle(atlas.title)
 
         self.continue_process = True
-
-        self.label_url = "https://www.nitrc.org/frs/download.php/12261/WHS_SD_rat_atlas_v4.label"
-        self.data_url = "https://www.nitrc.org/frs/downloadlink.php/9423/WHS_SD_rat_T2star_v1.01.nii.gz"
-        self.mask_url = "https://www.nitrc.org/frs/downloadlink.php/9425/WHS_SD_rat_brainmask_v1.01.nii.gz"
-        self.segmentation_url = "https://www.nitrc.org/frs/download.php/12260/WHS_SD_rat_atlas_v4.nii.gz"
-
-        self.label_local = "WHS_SD_rat_atlas_v4.label"
-        self.data_local = "WHS_SD_rat_T2star_v1.01.nii.gz"
-        self.mask_local = "WHS_SD_rat_brainmask_v1.01.nii.gz"
-        self.segmentation_local = "WHS_SD_rat_atlas_v4.nii.gz"
-
         self.saving_folder = None
 
         self.thread = QThread()
         self.worker = WorkerProcessData()
 
-        self.b_val = (246, 653, 440)
-        self.l_val = (244, 442, 464)
-        self.vox_size = 39.0625
+        self.b_val = WHS_BREGMA
+        self.l_val = WHS_LAMBDA
+        self.vox_size = WHS_VOXEL_UM
 
-        self.finish = [False, False, False, False]
+        self.finish = [False] * len(atlas.files)
         self.process_finished = False
         self.download_threads = {}
         self.download_errors = {}
 
-        self.label_bar = QProgressBar()
-        self.label_bar.setMinimumWidth(400)
-        self.label_bar.setValue(0)
+        self.bars = []
+        for item in atlas.files:
+            bar = QProgressBar()
+            bar.setMinimumWidth(400)
+            bar.setValue(0)
+            bar.setFormat("{}: %p%".format(item.role))
+            self.bars.append(bar)
 
-        self.data_bar = QProgressBar()
-        self.data_bar.setMinimumWidth(400)
-        self.data_bar.setValue(0)
-
-        self.mask_bar = QProgressBar()
-        self.mask_bar.setMinimumWidth(400)
-        self.mask_bar.setValue(0)
-
-        self.segmentation_bar = QProgressBar()
-        self.segmentation_bar.setMinimumWidth(400)
-        self.segmentation_bar.setValue(0)
+        self.agree = QCheckBox("I agree")
+        self.agreement = QLabel(atlas.agreement)
+        self.agreement.setWordWrap(True)
+        self.agreement.setVisible(bool(atlas.agreement))
+        self.agree.setVisible(bool(atlas.agreement))
 
         self.download_btn = QPushButton()
-        self.download_btn. setMinimumWidth(100)
+        self.download_btn.setMinimumWidth(100)
         self.download_btn.setText("Download")
 
         self.process_btn = QPushButton()
@@ -224,53 +222,44 @@ class AtlasDownloader(QDialog):
         self.process_info = QLabel('The whole process takes around 40 min - 1 hour. \n'
                                    'This window will be closed automatically when processing finished.\n')
 
-        # ok button, used to close window
-        ok_btn = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
-        ok_btn.accepted.connect(self.accept)
-
-        layout.addWidget(self.label_bar)
-        layout.addWidget(self.data_bar)
-        layout.addWidget(self.mask_bar)
-        layout.addWidget(self.segmentation_bar)
+        for bar in self.bars:
+            layout.addWidget(bar)
+        layout.addWidget(self.agreement)
+        layout.addWidget(self.agree)
         layout.addWidget(self.download_btn)
         layout.addWidget(self.process_info)
         layout.addWidget(self.process_btn)
         layout.addWidget(self.progress)
         layout.addWidget(self.process_label)
-        # layout.addWidget(ok_btn)
 
-        # Binding Button Event
         self.download_btn.clicked.connect(self.download_start)
         self.process_btn.clicked.connect(self.process_start)
 
     # Download button event
     def download_start(self):
+        if self.atlas.agreement and not self.agree.isChecked():
+            self.process_info.setText("Tick \"I agree\" to accept the atlas terms first.")
+            return
         self.saving_folder = str(file_dialogs.get_existing_directory(self, "Select Folder to Save Atlas"))
-
         if self.saving_folder != '':
             self.download_btn.setVisible(False)
-            target = os.path.join(self.saving_folder, 'atlas_labels.pkl')
-            if not os.path.exists(target):
-                shutil.copyfile(join(dirname(__file__), "data/atlas_labels.pkl"), target)
+            for index in range(len(self.atlas.files)):
+                self.start_download(index)
 
-            self.start_thread(self.label_url, self.label_local, self.set_label_bar_value)
-            self.start_thread(self.mask_url, self.mask_local, self.set_mask_bar_value)
-            self.start_thread(self.segmentation_url, self.segmentation_local, self.set_segmentation_bar_value)
-            self.start_thread(self.data_url, self.data_local, self.set_data_bar_value)
-
-    #
-    def start_thread(self, url, local, func):
-        destination = os.path.join(self.saving_folder, local)
-        self.download_errors.pop(local, None)
-        thread = DownloadThread(url, destination, parent=self)
-        self.download_threads[local] = thread
-        thread.download_process_signal.connect(func)
+    def start_download(self, index):
+        item = self.atlas.files[index]
+        destination = os.path.join(self.saving_folder, item.local)
+        self.download_errors.pop(item.local, None)
+        self.finish[index] = False
+        thread = DownloadThread(item.url, destination, expected_sha256=item.sha256, parent=self)
+        self.download_threads[item.local] = thread
+        thread.download_process_signal.connect(
+            lambda value, index=index: self.set_bar_value(index, value))
         thread.download_error_signal.connect(
-            lambda message, name=local: self.download_failed(name, message)
-        )
-        thread.finished.connect(
-            lambda name=local: self.download_thread_finished(name)
-        )
+            lambda message, name=item.local: self.download_failed(name, message))
+        thread.download_finished_signal.connect(
+            lambda _path, index=index: self.set_bar_value(index, 100))
+        thread.finished.connect(lambda name=item.local: self.download_thread_finished(name))
         thread.start()
 
     def download_failed(self, local, message):
@@ -285,33 +274,18 @@ class AtlasDownloader(QDialog):
     def has_active_downloads(self):
         return any(thread_is_running(thread) for thread in self.download_threads.values())
 
-    # Setting progress bar
-    def set_label_bar_value(self, value):
-        self.label_bar.setValue(value)
+    def set_bar_value(self, index, value):
+        self.bars[index].setValue(value)
         if value == 100:
-            self.finish[0] = True
-            return
-
-    def set_data_bar_value(self, value):
-        self.data_bar.setValue(value)
-        if value == 100:
-            self.finish[1] = True
-            return
-
-    def set_mask_bar_value(self, value):
-        self.mask_bar.setValue(value)
-        if value == 100:
-            self.finish[2] = True
-            return
-
-    def set_segmentation_bar_value(self, value):
-        self.segmentation_bar.setValue(value)
-        if value == 100:
-            self.finish[3] = True
-            return
+            self.finish[index] = True
 
     def report_progress(self, i):
         self.progress.setValue(i)
+
+    def missing_files(self, folder):
+        return [item.local for item in self.atlas.files
+                if not os.path.isfile(os.path.join(folder, item.local))
+                or os.path.getsize(os.path.join(folder, item.local)) == 0]
 
     def process_start(self):
         if self.has_active_downloads():
@@ -323,29 +297,20 @@ class AtlasDownloader(QDialog):
             saving_folder = str(file_dialogs.get_existing_directory(self, "Select Atlas Folder"))
 
         if saving_folder != '':
-            required_files = (
-                self.data_local,
-                self.segmentation_local,
-                self.mask_local,
-            )
-            missing_files = [
-                name
-                for name in required_files
-                if not os.path.isfile(os.path.join(saving_folder, name))
-                or os.path.getsize(os.path.join(saving_folder, name)) == 0
-            ]
+            missing_files = self.missing_files(saving_folder)
             if missing_files:
                 self.process_info.setText(
                     'Missing or empty atlas files: {}'.format(', '.join(missing_files))
                 )
                 return
+            self.saving_folder = saving_folder
             self.process_btn.setVisible(False)
-            self.worker.set_data(saving_folder, self.data_local, self.segmentation_local, self.mask_local,
-                                 self.b_val, self.l_val, self.vox_size)
+            self.worker.set_data(saving_folder, self.atlas.template, self.atlas.annotation,
+                                 self.atlas.mask, self.b_val, self.l_val, self.vox_size,
+                                 prepare=PREPARE[self.atlas.key])
             self.worker.moveToThread(self.thread)
             self.thread.started.connect(self.worker.run)
             self.worker.finished.connect(self.on_finish)
-            # self.worker.finished.connect(self.worker.deleteLater)
             self.thread.finished.connect(self.thread.deleteLater)
             self.worker.progress.connect(self.report_progress)
             self.thread.start()
@@ -383,9 +348,3 @@ class AtlasDownloader(QDialog):
             event.accept()
         else:
             event.ignore()
-
-    # def accept(self) -> None:
-    #     if self.process_finished:
-    #         self.close()
-    #     else:
-    #         return

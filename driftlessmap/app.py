@@ -87,6 +87,7 @@ from .probe_utiles import (
     get_center_lines,
 )
 from .atlas_downloader import AtlasDownloader
+from .rat_atlases import SWC_FEMALE_RAT
 from .allen_downloader import AllenDownloader
 from .atlas_processor import AtlasProcessor
 from .atlas_loader import AtlasLoader
@@ -623,6 +624,9 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
 
         # atlas menu related
         self.actionDownload.triggered.connect(self.download_waxholm_rat_atlas)
+        self.actionDownload_SWC_Female_Rat_Atlas.triggered.connect(
+            self.download_swc_female_rat_atlas
+        )
         self.actionDownload_Allen_Mice_Atlas.triggered.connect(
             self.download_allen_mice_atlas
         )
@@ -1741,6 +1745,13 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
         if not wax.continue_process:
             return
         self._open_downloaded_atlas(wax)
+
+    def download_swc_female_rat_atlas(self):
+        swc = AtlasDownloader(atlas=SWC_FEMALE_RAT)
+        swc.exec()
+        if not swc.continue_process:
+            return
+        self._open_downloaded_atlas(swc)
 
     def download_allen_mice_atlas(self):
         aln = AllenDownloader()

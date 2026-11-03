@@ -203,6 +203,9 @@ class AllenDownloadDialog(AllenDownloader):
             widget.show()   # they were hidden with the 1.x layout
         for radio in (self.vs_rabnt1, self.vs_rabnt2, self.vs_rabnt3):
             radio.toggled.connect(lambda _checked: self._scan_folder())
+        # Word-wrapped hints make the layout's minimum too small for the
+        # download rows, which then overlap; start at the full height.
+        self.setMinimumHeight(self.sizeHint().height())
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._refresh)
         self._timer.start(300)
