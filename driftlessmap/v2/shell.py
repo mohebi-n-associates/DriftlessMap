@@ -572,6 +572,8 @@ class V2Window(QMainWindow):
         add(Command("section.load", "Add section…", engine.actionSingle_Image.trigger,
                     "Project", ("load image", "open image", "histology", "replace section"),
                     "Ctrl+Shift+I"))
+        add(Command("project.new_window", "New window", self.open_new_window, "Project",
+                    ("new project", "start again", "another atlas"), "Ctrl+N"))
         add(Command("project.open", "Open project…", self.open_project, "Project",
                     ("load project",), "Ctrl+O"))
         add(Command("project.save", "Save project…", self.save_project, "Project",
@@ -716,6 +718,7 @@ class V2Window(QMainWindow):
             return action
 
         file_menu = bar.addMenu("&File")
+        item(file_menu, "project.new_window")
         for command_id in ("project.open", "atlas.load", "section.load"):
             item(file_menu, command_id)
         file_menu.addSeparator()
@@ -952,6 +955,13 @@ class V2Window(QMainWindow):
         if dialog.continue_process and dialog.process_finished:
             self.engine._open_downloaded_atlas(dialog)
             self.set_view("compare")
+
+    def open_new_window(self):
+        """Start another 2.0 window (an empty document) in its own process."""
+        if start_interface("preview"):
+            self.message("Opening a new DriftlessMap window.")
+        else:
+            self.message("A new window could not be started.", "bad")
 
     def open_classic(self):
         """Start the classic interface in its own process and window."""

@@ -3,6 +3,18 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.5.5
+
+Fix release, 3 November 2026. **A project keeps the atlas its results were
+made with.** Loading a different atlas into a project that already had
+landmarks, mappings or objects replaced the atlas under them: the results kept
+their coordinates but were then reported, and exported, as belonging to the
+new atlas (even one of the same size with other voxels or regions). That is
+now refused with an explanation. Loading the same atlas again, or an identical
+copy of it from another folder, still works. To use another atlas, save the
+project and start a new one with **File > New window** (Ctrl+N), new in the
+2.0 interface.
+
 ## DriftlessMap 2.5.4
 
 Fix release, 3 November 2026.

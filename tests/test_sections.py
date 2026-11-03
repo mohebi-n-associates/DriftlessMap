@@ -591,6 +591,43 @@ class SectionPersistenceTests(SectionEngineTests):
                 reopened.mapping_ledger.by_unit(record.unit_id)), "current")
 
     @isolated_gui_test
+    def test_another_atlas_cannot_replace_the_one_results_were_made_with(self):
+        # Review B2: a different atlas of the same shape relabelled old results.
+        import shutil
+
+        from tests.atlas_fixture import make_processed_atlas
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window, fiber, _first_id, _raster = self.two_section_project(root)
+            self.assertTrue(window.build_implant(fiber.implant_id)[0])
+            original = window.volume_atlas_path
+            path = root / "two.dmap"
+            self.assertTrue(window.save_project_called(path=str(path)))
+            other = make_processed_atlas(root / "other-atlas", voxel_size=50)
+
+            self.assertFalse(window.load_volume_atlas(str(other)))
+            self.assertIn("different atlas", window.statusbar.currentMessage())
+            self.assertEqual(window.volume_atlas_path, original)
+            self.assertEqual(window.atlas_view.vox_size_um, 25)
+            self.assertEqual(window.get_object_export_provenance()["atlas"]["voxel_size_um"], 25.0)
+
+            # The same atlas again, or an identical copy elsewhere, is fine.
+            self.assertTrue(window.load_volume_atlas(original))
+            copy = root / "atlas-copy"
+            shutil.copytree(original, copy)
+            self.assertTrue(window.load_volume_atlas(str(copy)))
+
+            # Opening a project replaces the document, whatever its atlas.
+            fresh = self.window_with_atlas(root / "fresh")
+            self.write_section(root / "x.png", 90)
+            self.load_section(fresh, root / "x.png")
+            fresh.atlas_tri_inside_data[:] = [[1.0, 1.0], [5.0, 1.0], [3.0, 5.0]]
+            self.assertIsNotNone(fresh.atlas_replacement_problem(str(other)))
+            payload_window, _payload = self.open_project(root, path)
+            self.assertEqual(len(payload_window.mapping_ledger), 2)
+
+    @isolated_gui_test
     def test_every_section_round_trips_through_a_project(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

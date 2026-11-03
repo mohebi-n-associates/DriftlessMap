@@ -8,7 +8,7 @@ or important workflows change.
 
 ## Project identity
 
-- Current stable release: DriftlessMap 2.5.4 (3 November 2026; 2.4.0 plus
+- Current stable release: DriftlessMap 2.5.5 (3 November 2026; 2.4.0 plus
   fixes and the rat atlas downloads, the first release since 2.0.0, including 2.0.1-2.3.0 and multi-section
   projects). 2.0.0
   (29 October 2026) followed the 2.0.0aN previews and 2.0.0rc1-rc16. The owner released it with the
@@ -38,7 +38,11 @@ or important workflows change.
   data, merging older payloads, input pre-fingerprinting, export file names).
   Atlas kind, path and load fingerprint are committed only through
   `DriftlessMap._commit_atlas`; per-view display updates go through
-  `DriftlessMap._atlas_view_items`.
+  `DriftlessMap._atlas_view_items`. `load_volume_atlas` refuses a different
+  atlas while the document has results (`atlas_replacement_problem`: same
+  folder unchanged, or identical content elsewhere, is allowed); project
+  loading passes `replacing_document=True`. V2 File > New window starts a
+  fresh process (`open_new_window`).
 - `driftlessmap/project_session.py`: `ProjectSessionMixin.project_payload` is the
   shared saved-state collector. `load_project` snapshots the active document and
   restores it on failure, including its original reader, in-memory atlas and undo
