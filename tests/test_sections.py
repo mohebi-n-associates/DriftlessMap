@@ -367,6 +367,38 @@ class SectionEngineTests(unittest.TestCase):
             self.assertEqual(window.implant_report(fiber.implant_id)["sections"], 2)
 
     @isolated_gui_test
+    def test_several_files_and_tiff_pages_are_added_in_name_order(self):
+        # Review U8: one step adds many sections; pages can be sections.
+        import tifffile
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window = self.window_with_atlas(root)
+            paths = []
+            for name, value in (("s10.png", 90), ("s2.png", 120), ("s1.png", 200)):
+                self.write_section(root / name, value)
+                paths.append(str(root / name))
+            stack = root / "stack.tif"
+            tifffile.imwrite(stack, np.stack([np.full((32, 24), 40, np.uint8),
+                                              np.full((32, 24), 180, np.uint8)]),
+                             metadata={"axes": "ZYX"}, photometric="minisblack")
+            self.assertEqual(window.add_sections(paths + [str(stack)], pages_as_sections=True),
+                             5)
+            self.assertEqual(window.sections.names(), [
+                "s1.png", "s2.png", "s10.png", "stack.tif · page 1", "stack.tif · page 2"])
+            entries = window.sections.entries()
+            self.assertEqual(window.image_view.display_img_index, 1)      # page 2 is open
+            self.assertTrue(window.switch_section(entries[3].section_id)[0])
+            self.assertEqual(window.image_view.display_img_index, 0)
+            self.assertEqual(float(window.image_view.current_img.mean()), 40.0)
+
+            # Without the option a multi-page file is one section (added after
+            # the open one, as every new section is).
+            self.assertEqual(window.add_sections([str(stack)]), 1)
+            self.assertEqual(window.sections.names()[4], "stack.tif")
+            self.assertEqual(len(window.sections), 6)
+
+    @isolated_gui_test
     def test_the_frame_follows_landmarks_as_they_are_placed(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

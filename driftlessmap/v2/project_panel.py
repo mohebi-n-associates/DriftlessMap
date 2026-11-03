@@ -70,7 +70,7 @@ class ProjectPanel(StepPanel):
         self.section_list.itemDoubleClicked.connect(lambda _item: self.open_selected())
         self.section_list.currentItemChanged.connect(lambda *_args: self.apply_gates())
         self.section_card.add(self.section_list)
-        self.load_section = button("Add section…", lambda: shell.run("section.load"),
+        self.load_section = button("Add sections…", lambda: shell.run("section.load"),
                                    primary=True,
                                    tooltip="Load an image as a new section; the open "
                                            "section is kept")

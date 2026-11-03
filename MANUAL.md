@@ -938,9 +938,13 @@ loaded image state.
 
 ### 7.7 Several sections in one project
 
-A project keeps every section you load. **Add section…** (Project step;
-**File > Load Image** in the classic interface) loads an image as a new section
-and keeps the open one. Each section has its own image (after rotations, flips
+A project keeps every section you load. **Add sections…** (Project step;
+**File > Load Image** in the classic interface) loads images as new sections
+and keeps the open one. Since 2.6.0 you can choose several files at once; they
+are added in natural name order (s1, s2, s10). If one is a TIFF with several
+pages, you are asked whether each page should be its own section (named
+*stack.tif · page 2*, with its own landmarks, review and mappings) or the file
+one section whose page you choose in the Section step. Each section has its own image (after rotations, flips
 and crops), display and registration channels, pixel size, landmarks and mesh,
 review, the atlas plane, page and tilt it was matched to, its marks and layers,
 and its unmapped implant outlines. The atlas, objects, mapping records,
