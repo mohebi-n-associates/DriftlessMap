@@ -903,6 +903,63 @@ class V2ShellTests(unittest.TestCase):
             self.assertTrue(engine.h2a_transferred)      # prepared by the map step
 
     @isolated_gui_test
+    def test_review_needs_the_checklist_and_offers_blink_and_checkerboard(self):
+        import cv2
+
+        from driftlessmap.v2.register_panel import checkerboard
+        from tests.atlas_fixture import make_processed_atlas
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window = self.make_window(folder)
+            engine = window.engine
+            self.assertTrue(engine.load_volume_atlas(str(make_processed_atlas(root / "atlas"))))
+            cv2.imwrite(str(root / "s.png"), np.full((32, 24, 3), 120, np.uint8))
+            self.assertTrue(engine.load_single_image_file(str(root / "s.png"), ".png"))
+            engine.atlas_tri_inside_data[:] = [[1.0, 1.0], [5.0, 1.0], [3.0, 5.0]]
+            engine.histo_tri_inside_data[:] = [[2.0, 2.0], [6.0, 2.0], [4.0, 6.0]]
+            window.go_to("register")
+            panel = window.panels["register"]
+            panel.refresh()
+            panel.apply_gates()
+            mark = [b for b in panel.findChildren(QPushButton)
+                    if b.text() == "Mark review complete"][0]
+            self.assertFalse(mark.isEnabled())
+            self.assertIn("checklist", mark.toolTip())
+            for box in panel.checklist:
+                box.setChecked(True)
+            panel.apply_gates()
+            self.assertTrue(mark.isEnabled())
+            engine.atlas_tri_inside_data[0] = [1.5, 1.0]        # another registration
+            panel.refresh()
+            self.assertFalse(any(box.isChecked() for box in panel.checklist))
+
+            # Compare tools need the section-on-atlas preview.
+            panel.apply_gates()
+            self.assertFalse(panel.blink.isEnabled())
+            engine.transfer_to_atlas_clicked()
+            panel.refresh()
+            panel.apply_gates()
+            item = panel._overlay_item()
+            panel.blink.setChecked(True)
+            panel._toggle_blink()
+            panel._blink_tick()
+            self.assertFalse(item.isVisible())
+            panel._blink_tick()
+            self.assertTrue(item.isVisible())
+            warped = np.asarray(engine.working_atlas_data["atlas-overlay"])
+            panel.checker.setChecked(True)
+            panel._toggle_checker()
+            np.testing.assert_array_equal(item.image, checkerboard(warped))
+            engine.transfer_to_atlas_clicked()                 # preview removed
+            panel.refresh()
+            self.assertFalse(panel.blink.isChecked() or panel.checker.isChecked())
+
+        board = checkerboard(np.ones((16, 16), np.uint8), squares=2)
+        self.assertEqual(int(board.sum()), 128)
+        self.assertEqual((board[0, 0], board[0, 8], board[8, 8]), (1, 0, 1))
+
+    @isolated_gui_test
     def test_save_follows_the_open_file_and_warnings_stay_listed(self):
         import cv2
         from unittest.mock import patch
