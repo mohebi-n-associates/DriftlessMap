@@ -628,6 +628,35 @@ class SectionPersistenceTests(SectionEngineTests):
             self.assertEqual(len(payload_window.mapping_ledger), 2)
 
     @isolated_gui_test
+    def test_a_portable_copy_treats_every_changed_original_alike(self):
+        # Review B8: a changed stored section's original was silently left out.
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window, _fiber, _first_id, _raster = self.two_section_project(root)
+            time.sleep(0.01)
+            self.write_section(root / "pfc-1.png", 60)     # stored section's file changes
+            portable = root / "portable.dmap"
+            self.assertFalse(window.save_project_called(portable=True, path=str(portable)))
+            message = window.statusbar.currentMessage()
+            self.assertIn("rostral", message)
+            self.assertIn("cannot be packed", message)
+            self.assertFalse(portable.exists())
+
+            # A normal save keeps the saved image and says so in its final message.
+            normal = root / "normal.dmap"
+            self.assertTrue(window.save_project_called(path=str(normal)))
+            message = window.statusbar.currentMessage()
+            self.assertIn("Project saved successfully", message)
+            self.assertIn("rostral: its source changed after loading", message)
+
+            # An original that is gone: the portable copy keeps the saved image
+            # and the final message names the omission.
+            (root / "pfc-1.png").unlink()
+            self.assertTrue(window.save_project_called(portable=True, path=str(portable)))
+            self.assertIn("rostral: its original source is unavailable",
+                          window.statusbar.currentMessage())
+
+    @isolated_gui_test
     def test_every_section_round_trips_through_a_project(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

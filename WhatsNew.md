@@ -3,6 +3,22 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.5.6
+
+Fix release, 3 November 2026.
+
+- **Portable copies treat every section's original alike.** If the original
+  image of a section that was not open had changed on disk, a portable copy
+  was saved without it, and the warning was replaced by "saved successfully".
+  Now the portable save is refused for any section whose original changed
+  (as it already was for the open section), naming the section; a normal
+  save keeps its saved image. Notes from a save (an original that could not
+  be found, a changed file not linked) now stay in the final message.
+- **Suggest landmarks gives the same landmarks every time** for the same
+  section and atlas slice. They varied slightly between runs because of how
+  the registration library used several processor threads. It now takes
+  about 10 s instead of 4 s for a 1600 × 1200 section.
+
 ## DriftlessMap 2.5.5
 
 Fix release, 3 November 2026. **A project keeps the atlas its results were

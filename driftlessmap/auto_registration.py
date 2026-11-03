@@ -16,6 +16,7 @@ Stages:
    which tolerates the different contrast of histology and atlas templates.
 """
 
+from contextlib import contextmanager
 from dataclasses import dataclass
 
 import cv2
@@ -148,6 +149,16 @@ def _resampled(image, factor):
     return sitk.Resample(image, reference, sitk.Transform(), sitk.sitkLinear, 0.0)
 
 
+@contextmanager
+def _single_itk_thread():
+    previous = sitk.ProcessObject.GetGlobalDefaultNumberOfThreads()
+    sitk.ProcessObject.SetGlobalDefaultNumberOfThreads(1)
+    try:
+        yield
+    finally:
+        sitk.ProcessObject.SetGlobalDefaultNumberOfThreads(previous)
+
+
 def _bspline_on_intensities(fixed, moving, fixed_mask, affine, mesh_size):
     """The B-spline refinement that the section supports reproducibly.
 
@@ -158,12 +169,18 @@ def _bspline_on_intensities(fixed, moving, fixed_mask, affine, mesh_size):
     average displacement of these fits, reduced to nothing where they
     disagree by ``BSPLINE_AGREEMENT`` of the control-point spacing.
     """
-    fits = []
-    for factor in BSPLINE_SAMPLINGS:
+    def fit_on(factor):
         fit = sitk.BSplineTransformInitializer(fixed, [mesh_size, mesh_size])
         sampled = moving if factor == 1.0 else _resampled(moving, factor)
         _bspline_method(fixed_mask, affine, fit).Execute(fixed, sampled)
-        fits.append(fit)
+        return fit
+
+    # ITK's multithreaded metric and optimiser give slightly different fits
+    # from run to run, and the suggested landmarks then differ. On one ITK
+    # thread the fits repeat exactly; running them side by side did not
+    # (measured on 1108-pfc-1: about 10 s instead of 4 s).
+    with _single_itk_thread():
+        fits = [fit_on(factor) for factor in BSPLINE_SAMPLINGS]
     # Parameters are all x displacements, then all y displacements.
     shifts = np.array([fit.GetParameters() for fit in fits]).reshape(len(fits), 2, -1)
     mean = shifts.mean(axis=0)

@@ -177,7 +177,9 @@ with the slider under the atlas view and the **Plane, depth and tilt** card.
 With the matching atlas slice on screen, press **Suggest landmarks** in the
 Register step. If there are landmarks already, DriftlessMap asks before
 replacing them. Remove any warp preview first. On the sample this took about
-5 seconds.
+5 seconds in DriftlessMap 2.5.0 and takes about 10 seconds since 2.5.6, which
+gives the same suggestion every time for the same section (2.5.0 varied
+slightly between runs; the screenshot is from 2.5.0).
 
 The fit has two stages:
 
