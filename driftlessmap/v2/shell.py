@@ -47,6 +47,7 @@ from .match_panel import MatchPanel
 from .project_panel import ProjectPanel
 from .register_panel import RegisterPanel
 from .results_panel import ResultsPanel
+from .section_bar import SectionBar
 from .section_panel import SectionPanel
 from .theme import stylesheet
 from .widgets import Card, button, hint_label, respond
@@ -222,7 +223,6 @@ class V2Window(QMainWindow):
                                        QSizePolicy.Policy.Preferred)
         self.plane_label.setMinimumWidth(0)
         header_layout.addWidget(self.plane_label, 1)
-        header_layout.addStretch(1)
         self.focus_button = QToolButton()
         self.focus_button.setObjectName("Segment")
         self.focus_button.setText("Focus")
@@ -234,6 +234,9 @@ class V2Window(QMainWindow):
         self.focus_button.clicked.connect(lambda _checked: self.run("view.focus"))
         header_layout.addWidget(self.focus_button)
         canvas_layout.addWidget(header)
+        # Which section is open, and switching sections, beside the images.
+        self.section_bar = SectionBar(self)
+        canvas_layout.addWidget(self.section_bar)
 
         self.tool_options = QFrame()
         self.tool_options.setObjectName("ToolOptions")
@@ -644,6 +647,12 @@ class V2Window(QMainWindow):
                     ("portable project",)))
         add(Command("session.messages", "Messages of this session", self.show_activity,
                     "Help", ("log", "warnings", "errors", "activity")))
+        add(Command("section.previous", "Open the previous section",
+                    lambda: self.section_bar.step(-1), "Section",
+                    ("previous section", "section before"), "Ctrl+PgUp"))
+        add(Command("section.next", "Open the next section",
+                    lambda: self.section_bar.step(1), "Section",
+                    ("next section", "section after"), "Ctrl+PgDown"))
         add(Command("section.channels", "Choose registration channels",
                     lambda: self.go_to("section"), "Section",
                     ("registration channels", "dapi", "registration input")))
@@ -1156,6 +1165,7 @@ class V2Window(QMainWindow):
             current.refresh()
             current.apply_gates()
         self.plane_label.setText(state.plane_summary(engine))
+        self.section_bar.refresh()
         tool = engine.current_checked_tool
         self.tool_options.setVisible(tool is not None)
         self.tool_label.setText("{} options".format({

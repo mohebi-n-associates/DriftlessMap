@@ -729,6 +729,44 @@ class V2ShellTests(unittest.TestCase):
             self.assertIn("Edit mapped marks", [c.name for c in window.registry.all()])
 
     @isolated_gui_test
+    def test_the_section_bar_shows_and_switches_sections_in_place(self):
+        import cv2
+        from unittest.mock import patch
+
+        from driftlessmap import file_dialogs
+        from tests.atlas_fixture import make_processed_atlas
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window = self.make_window(folder)
+            engine = window.engine
+            self.assertTrue(engine.load_volume_atlas(str(make_processed_atlas(root / "atlas"))))
+            window.refresh()
+            self.assertTrue(window.section_bar.isHidden())       # no section yet
+            ids = []
+            for name, value in (("rostral.png", 120), ("caudal.png", 160)):
+                cv2.imwrite(str(root / name), np.full((32, 24, 3), value, np.uint8))
+                with patch.object(file_dialogs, "get_open_file_name",
+                                  return_value=(str(root / name), "")):
+                    engine.load_image()
+                ids.append(engine.section_id)
+            window.go_to("register")
+            window.refresh()
+            bar = window.section_bar
+            self.assertFalse(bar.isHidden())
+            self.assertEqual([bar.combo.itemText(i) for i in range(bar.combo.count())],
+                             ["1/2 · rostral.png", "2/2 · caudal.png"])
+            self.assertEqual(bar.combo.currentIndex(), 1)
+            self.assertFalse(bar.next.isEnabled())
+
+            window.run("section.previous")
+            self.assertEqual(engine.section_id, ids[0])
+            self.assertIs(window.stack.currentWidget(), window.panels["register"])
+            self.assertEqual(bar.combo.currentIndex(), 0)
+            bar._chosen(1)
+            self.assertEqual(engine.section_id, ids[1])
+
+    @isolated_gui_test
     def test_save_follows_the_open_file_and_warnings_stay_listed(self):
         import cv2
         from unittest.mock import patch

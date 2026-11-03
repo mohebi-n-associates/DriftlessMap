@@ -4976,7 +4976,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
                 return "{} was mapped again after it was made; {}".format(name, rebuild)
             if record.status(self.section_id, fingerprint, stored) == REGISTRATION_CHANGED:
                 where = "" if record.section_id == self.section_id else \
-                    "open {} (Project > Sections), ".format(name)
+                    "open {} (section bar above the images), ".format(name)
                 return ("the landmarks, page or tilt of {} changed after it was mapped; "
                         "{}update its mapping in Annotate, then {}".format(name, where, rebuild))
         return status
