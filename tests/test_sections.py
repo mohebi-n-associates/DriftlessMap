@@ -327,6 +327,35 @@ class SectionEngineTests(unittest.TestCase):
             self.assertEqual(window.section_mappings(first_id), [])
 
     @isolated_gui_test
+    def test_removing_a_section_keeps_the_other_sections_parts_of_a_build(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window = self.window_with_atlas(root)
+            fiber = None
+            for name, value in (("a.png", 200), ("b.png", 120), ("c.png", 90)):
+                self.write_section(root / name, value)
+                self.load_section(window, root / name)
+                fiber = fiber or window.add_implant("fiber", specs={"diameter_um": 100})
+                window.atlas_tri_inside_data[:] = [[1.0, 1.0], [5.0, 1.0], [3.0, 5.0]]
+                window.histo_tri_inside_data[:] = [[2.0, 2.0], [6.0, 2.0], [4.0, 6.0]]
+                self.map_fiber(window, fiber)
+            first_id = window.sections.entries()[0].section_id
+            self.assertTrue(window.build_implant(fiber.implant_id)[0])
+            o = window.object_ctrl
+            self.assertEqual(o.obj_type, ["merged fiber"])
+
+            ok, message = window.remove_section(first_id, delete_results=True)
+            self.assertTrue(ok, message)
+            self.assertIn("Took apart Fiber 1", message)
+            self.assertEqual(o.obj_type, ["fiber piece", "fiber piece"])
+            self.assertNotIn(first_id, [data["section_id"] for data in o.obj_data])
+            self.assertIsNone(window.undo_history.undo_label())
+            # The other two sections build again without being mapped again.
+            ok, message = window.build_implant(fiber.implant_id)
+            self.assertTrue(ok, message)
+            self.assertEqual(window.implant_report(fiber.implant_id)["sections"], 2)
+
+    @isolated_gui_test
     def test_the_frame_follows_landmarks_as_they_are_placed(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

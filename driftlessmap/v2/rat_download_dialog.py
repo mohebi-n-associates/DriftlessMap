@@ -7,7 +7,6 @@ already in the chosen folder with the expected checksum are not downloaded
 again.
 """
 
-import os
 
 from PyQt6.QtCore import QTimer
 from PyQt6.QtWidgets import (
@@ -23,7 +22,7 @@ from PyQt6.QtWidgets import (
 
 from .. import file_dialogs
 from ..atlas_downloader import AtlasDownloader
-from ..download_utils import read_download_manifest, thread_is_running
+from ..download_utils import thread_is_running
 from .widgets import Card, hint_label
 
 
@@ -140,18 +139,14 @@ class RatAtlasDownloadDialog(AtlasDownloader):
             self.folder_field.setText(folder)
             self._scan_folder()
 
-    def _verified(self, item):
-        """True if ``item`` is in the folder with its expected checksum."""
-        if not self.saving_folder:
-            return False
-        path = os.path.join(self.saving_folder, item.local)
-        entry = read_download_manifest(self.saving_folder).get(item.local) or {}
-        return os.path.isfile(path) and entry.get("sha256") == item.sha256
+    def _matching(self):
+        """Files in the folder whose current bytes match the release."""
+        return self.matching_files(self.saving_folder) if self.saving_folder else set()
 
     def _scan_folder(self):
         if self.has_active_downloads():
             return
-        self._found = {item.local for item in self.atlas.files if self._verified(item)}
+        self._found = self._matching()
         for index, item in enumerate(self.atlas.files):
             done = item.local in self._found
             self.bars[index].setValue(100 if done else 0)
@@ -178,8 +173,9 @@ class RatAtlasDownloadDialog(AtlasDownloader):
                 return
         self.process_info.setText("")
         self.folder_button.setEnabled(False)
+        matching = self._matching()
         for index, item in enumerate(self.atlas.files):
-            if self._verified(item):
+            if item.local in matching:
                 self.set_bar_value(index, 100)
             else:
                 self.start_download(index)
@@ -189,7 +185,8 @@ class RatAtlasDownloadDialog(AtlasDownloader):
             self.choose_folder()
             if not self.saving_folder:
                 return
-        missing = [item.role for item in self.atlas.files if not self._verified(item)]
+        matching = self._matching()
+        missing = [item.role for item in self.atlas.files if item.local not in matching]
         if missing:
             self.process_info.setText("Download first: {}.".format(", ".join(missing)))
             return

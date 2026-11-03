@@ -21,7 +21,8 @@ from .atlas_loader import (
 )
 from .obj_items import load_mesh_file, render_volume, render_small_volume
 from .persistence import load_legacy_pickle
-from .download_utils import DownloadCancelled, download_file, thread_is_running
+from .background import run_in_background
+from .download_utils import DownloadCancelled, download_file, file_sha256, thread_is_running
 from .rat_atlases import (
     PREPARE, WAXHOLM, WHS_BREGMA, WHS_LAMBDA, WHS_VOXEL_UM, waxholm_axis_info,
 )
@@ -288,10 +289,33 @@ class AtlasDownloader(QDialog):
     def report_progress(self, i):
         self.progress.setValue(i)
 
+    def matching_files(self, folder):
+        """Names of the atlas files in ``folder`` whose bytes match their
+        published SHA-256 (hashed off the GUI thread; a file is hashed again
+        only when its size or modification time changes)."""
+        cache = self.__dict__.setdefault("_hashes", {})
+
+        def check():
+            found = set()
+            for item in self.atlas.files:
+                path = os.path.join(folder, item.local)
+                try:
+                    stat = os.stat(path)
+                except OSError:
+                    continue
+                key = (path, stat.st_size, stat.st_mtime_ns)
+                if key not in cache:
+                    cache[key] = file_sha256(path)
+                if cache[key] == item.sha256:
+                    found.add(item.local)
+            return found
+
+        return run_in_background(self, "Checking the downloaded files…", check)
+
     def missing_files(self, folder):
-        return [item.local for item in self.atlas.files
-                if not os.path.isfile(os.path.join(folder, item.local))
-                or os.path.getsize(os.path.join(folder, item.local)) == 0]
+        """Atlas files that are absent from ``folder`` or differ from the release."""
+        found = self.matching_files(folder)
+        return [item.local for item in self.atlas.files if item.local not in found]
 
     def process_start(self):
         if self.has_active_downloads():
@@ -306,7 +330,8 @@ class AtlasDownloader(QDialog):
             missing_files = self.missing_files(saving_folder)
             if missing_files:
                 self.process_info.setText(
-                    'Missing or empty atlas files: {}'.format(', '.join(missing_files))
+                    'Missing, or different from the published release (download them '
+                    'again): {}'.format(', '.join(missing_files))
                 )
                 return
             self.saving_folder = saving_folder
@@ -336,11 +361,25 @@ class AtlasDownloader(QDialog):
         self.continue_process = True
         self.accept()
 
+    def busy(self):
+        return self.has_active_downloads() or thread_is_running(self.thread)
+
+    def reject(self):
+        # Escape rejects without a close event: guard it the same way.
+        if self.continue_process and not self.process_finished and self.busy():
+            QMessageBox.information(
+                self, 'Operation in progress', 'Please wait for the active operation to finish.'
+            )
+            return
+        if not self.process_finished:
+            self.continue_process = False
+        super().reject()
+
     def closeEvent(self, event):
         if self.process_finished:
             event.accept()
             return
-        if self.has_active_downloads() or thread_is_running(self.thread):
+        if self.busy():
             QMessageBox.information(
                 self, 'Operation in progress', 'Please wait for the active operation to finish.'
             )

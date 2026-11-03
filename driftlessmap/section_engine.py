@@ -430,19 +430,31 @@ class SectionsMixin:
 
     def remove_section(self, section_id, delete_results=False):
         """Remove a stored section; with ``delete_results`` also its mapping
-        records and the parts and built objects made from them."""
+        records and the parts made from them.
+
+        A built object that contains such a part is taken apart first, so the
+        parts other sections contributed stay to be built again. Not undoable:
+        the mapping undo history is cleared.
+        """
         self.sync_sections()
         if section_id == self.sections.active_id:
             return False, "Open another section before removing this one."
         entry = self.sections.remove(section_id)
+        message = "Removed {}.".format(entry.name)
         if delete_results:
-            units = {r.unit_id for r in self.section_mappings(section_id)}
-            o = self.object_ctrl
-            doomed = [index for index, origin in enumerate(o.obj_derivation)
-                      if any(unit in units for unit, _revision in origin)]
-            if doomed:
-                o.delete_objects(doomed)
-            for unit in units:
+            taken_apart = []
+            for unit in {r.unit_id for r in self.section_mappings(section_id)}:
+                taken_apart += [name for name in self._delete_results_of(unit)
+                                if name not in taken_apart]
                 self.mapping_ledger.forget(unit)
+                self.editing_units.discard(unit)
             self.refresh_kept_marks()
-        return True, "Removed {}.".format(entry.name)
+            if taken_apart:
+                message += (" Took apart {} (built from it too); build {} again from the "
+                            "parts that are left.".format(
+                                ", ".join(taken_apart),
+                                "it" if len(taken_apart) == 1 else "them"))
+        # Undo steps may refer to the removed section's mappings.
+        self.undo_history.clear()
+        self.sync_mapping_undo_actions()
+        return True, message
