@@ -554,7 +554,9 @@ the same again brings them back. Tool options above the image stay available
 while focused. **View > Show task column** and **Show objects and layers**
 hide one side only. In a window narrower than 1360 pixels the objects and
 layers column folds away by itself (a message says so) and returns when the
-window is widened; showing or hiding it by hand overrides this.
+window is widened; showing or hiding it by hand overrides this. Narrower than
+1200 pixels, the step list shows only the step numbers; each number's tooltip
+gives the step and its status (since 2.6.0).
 
 Messages appear at the bottom left. Warnings and errors are also counted
 there (*⚠ 2 messages*); click the count, or choose **Messages of this

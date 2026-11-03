@@ -157,6 +157,8 @@ class V2Window(QMainWindow):
         release = QLabel(__version__)
         release.setObjectName("Muted")
         rail_layout.addWidget(release)
+        self.rail = rail
+        self._rail_extras = [brand, release]
         rail_layout.addSpacing(10)
         self.rail_group = QButtonGroup(self)
         self.rail_buttons, self.rail_status, self.panels = {}, {}, {}
@@ -186,6 +188,9 @@ class V2Window(QMainWindow):
         palette_hint = QLabel("Ctrl/Cmd+K\nsearch commands")
         palette_hint.setObjectName("Muted")
         rail_layout.addWidget(palette_hint)
+        self._rail_extras.append(palette_hint)
+        self._step_titles = {key: (number, title)
+                             for number, (key, title, _panel) in enumerate(STEPS, start=1)}
         task_layout.addWidget(rail)
         self.stack.setMinimumWidth(410)
         task_layout.addWidget(self.stack, 1)
@@ -1061,8 +1066,34 @@ class V2Window(QMainWindow):
     # layers column side by side: the last folds away below this width.
     COMPACT_WIDTH = 1360
 
+    # Narrower still, the step list shows only the step numbers.
+    COMPACT_RAIL_WIDTH = 1200
+
+    def set_rail_compact(self, compact):
+        """The step list as numbers only (titles and status in the tooltips)."""
+        self.rail.setFixedWidth(56 if compact else 158)
+        for widget in self._rail_extras + list(self.rail_status.values()):
+            widget.setVisible(not compact)
+        for key, rail_button in self.rail_buttons.items():
+            number, title = self._step_titles[key]
+            rail_button.setText(str(number) if compact else "{}  {}".format(number, title))
+        self._rail_compact = compact
+        self._sync_rail_tooltips()
+
+    def _sync_rail_tooltips(self):
+        compact = getattr(self, "_rail_compact", False)
+        for key, rail_button in self.rail_buttons.items():
+            number, title = self._step_titles[key]
+            status = self.rail_status[key].text()
+            rail_button.setToolTip("{} (shortcut {}){}".format(
+                title, number, ": " + status if compact and status else ""))
+
     def resizeEvent(self, event):
         super().resizeEvent(event)
+        if hasattr(self, "rail"):
+            compact_rail = self.width() < self.COMPACT_RAIL_WIDTH
+            if compact_rail != getattr(self, "_rail_compact", False):
+                self.set_rail_compact(compact_rail)
         item = getattr(self, "toggle_inspector_item", None)
         if item is None:
             return
@@ -1160,6 +1191,7 @@ class V2Window(QMainWindow):
             statuses = {}
         for key, label in self.rail_status.items():
             label.setText(statuses.get(key, ""))
+        self._sync_rail_tooltips()
         current = self.stack.currentWidget()
         if current is not None:
             current.refresh()

@@ -1000,6 +1000,16 @@ class V2ShellTests(unittest.TestCase):
             window.resize(1480, 920)
             self.application.processEvents()
             self.assertTrue(window.toggle_inspector_item.isChecked())
+            # Narrower still, the step list shows numbers with titles in tooltips.
+            window.resize(1100, 700)
+            self.application.processEvents()
+            self.assertEqual(window.rail.width(), 56)
+            self.assertEqual(window.rail_buttons["register"].text(), "4")
+            self.assertTrue(window.rail_status["register"].isHidden())
+            self.assertIn("Register", window.rail_buttons["register"].toolTip())
+            window.resize(1480, 920)
+            self.application.processEvents()
+            self.assertEqual(window.rail_buttons["register"].text(), "4  Register")
             # Hidden by hand, it stays hidden when the window grows.
             window.toggle_inspector_item.setChecked(False)
             window.resize(1200, 760)
