@@ -621,7 +621,12 @@ Download Waxholm Rat Atlas** / **Download SWC Female Rat Atlas**):
    processing completes; the atlas then opens.
 
 Every file is checked against its published SHA-256 checksum; a changed
-upstream file is refused instead of processed. The region hierarchy comes from
+upstream file is refused instead of processed. If a download fails, the button
+becomes **Retry failed downloads** and fetches only what is missing. While
+processing, the dialog names the stage (for example *Building region meshes:
+120 of 224*). If processing in a folder stopped part-way (the dialog was
+closed, or the program quit), choosing that folder says so, and **Process and
+open atlas** starts it again with the downloaded files (since 2.6.0). The region hierarchy comes from
 the downloaded atlas itself. Processing also writes `atlas_axis_info.pkl`, which
 probe building and external cell points need; rat atlas folders processed by
 2.5.0 or earlier lack it, so open the same download again, choose the folder

@@ -303,6 +303,42 @@ class DialogTests(unittest.TestCase):
                 self.assertFalse(dialog.continue_process)
             dialog.deleteLater()
 
+    def test_failed_downloads_can_be_retried_and_stopped_processing_is_named(self):
+        from driftlessmap.atlas_loader import begin_atlas_processing
+        from driftlessmap.v2.rat_download_dialog import RatAtlasDownloadDialog
+
+        dialog = RatAtlasDownloadDialog(SWC_FEMALE_RAT)
+        with tempfile.TemporaryDirectory() as folder:
+            dialog.saving_folder = folder
+            dialog._scan_folder()
+            self.assertNotIn("did not finish", dialog.folder_note.text())
+            begin_atlas_processing(folder)          # a run that stopped part-way
+            dialog._scan_folder()
+            self.assertIn("did not finish last time", dialog.folder_note.text())
+            dialog.download_failed(SWC_FEMALE_RAT.files[0].local, "Connection reset")
+            dialog._refresh()
+            self.assertEqual(dialog.download_btn.text(), "Retry failed downloads")
+            self.assertTrue(dialog.download_btn.isEnabled())
+            self.assertIn("Failed: Connection reset", dialog._rows[0].text())
+        dialog.deleteLater()
+
+    def test_processing_names_its_stages(self):
+        from driftlessmap.atlas_downloader import WorkerProcessData
+
+        worker = WorkerProcessData()
+        stages = []
+        worker.status.connect(stages.append)
+        with tempfile.TemporaryDirectory() as folder:
+            from driftlessmap.persistence import write_cache_pickle
+
+            write_cache_pickle(os.path.join(folder, "atlas_labels.pkl"),
+                               label_info_from_brainglobe(STRUCTURES))
+            worker.set_data(folder, "t.nii.gz", "a.nii.gz", None, (1, 1, 1), (1, 1, 1), 39,
+                            prepare=lambda _folder: None)
+            worker.run()          # stops at the missing volumes, after naming the stages
+        self.assertEqual(stages[0], "Preparing the downloaded files…")
+        self.assertTrue(any("Reading the template" in stage for stage in stages))
+
     def test_a_failing_preparation_is_reported(self):
         from driftlessmap.atlas_downloader import WorkerProcessData
 

@@ -22,6 +22,7 @@ from PyQt6.QtWidgets import (
 
 from .. import file_dialogs
 from ..atlas_downloader import AtlasDownloader
+from ..atlas_loader import atlas_processing_incomplete
 from ..download_utils import thread_is_running
 from .widgets import Card, hint_label
 
@@ -151,16 +152,23 @@ class RatAtlasDownloadDialog(AtlasDownloader):
             done = item.local in self._found
             self.bars[index].setValue(100 if done else 0)
             self.finish[index] = done
+        self._sync_folder_note()
+
+    def _sync_folder_note(self):
         if not self.saving_folder:
             self.folder_note.setText("")
-        elif len(self._found) == len(self.atlas.files):
-            self.folder_note.setText("Everything is downloaded here; process it to open the "
-                                     "atlas.")
-        elif self._found:
-            self.folder_note.setText("Part of the atlas is already here; only the rest will be "
-                                     "downloaded.")
+            return
+        if all(self.finish):
+            text = "Everything is downloaded here; process it to open the atlas."
+        elif any(self.finish):
+            text = "Part of the atlas is already here; only the rest will be downloaded."
         else:
-            self.folder_note.setText("Nothing downloaded here yet.")
+            text = "Nothing downloaded here yet."
+        if atlas_processing_incomplete(self.saving_folder):
+            # A run stopped part-way (closed, crashed or failed): start it again.
+            text += (" Processing in this folder did not finish last time; Process and open "
+                     "atlas starts it again (the downloaded files are reused).")
+        self.folder_note.setText(text)
 
     # ---------------------------------------------------------- downloads
     def download_start(self):
@@ -210,9 +218,10 @@ class RatAtlasDownloadDialog(AtlasDownloader):
         busy = self.has_active_downloads() or thread_is_running(self.thread)
         agreed = not self.atlas.agreement or self.agree.isChecked()
         self.download_btn.setEnabled(not busy and agreed and not all(self.finish))
+        # Only the files that failed (or are missing) are fetched again.
+        self.download_btn.setText("Retry failed downloads" if self.download_errors and not busy
+                                  else "Download")
         self.process_btn.setEnabled(not busy)
         if not busy:
             self.folder_button.setEnabled(True)
-        if self.saving_folder and all(self.finish):
-            self.folder_note.setText("Everything is downloaded here; process it to open the "
-                                     "atlas.")
+            self._sync_folder_note()
