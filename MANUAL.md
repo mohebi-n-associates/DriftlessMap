@@ -1272,6 +1272,11 @@ section it concerns, for example *Fiber 1: the landmarks, page or tilt of
 build it again*. In the 2.0 interface, Annotate
 lists the section's mapped marks with their status, Results shows the selected
 object's status (with the same reason), and each object's tooltip in the Objects list names it.
+Results also lists every section the selected object was made from, with that
+section's status and whether its registration was reviewed, and, for an
+out-of-date object, repairs it step by step (since 2.6.0): **Open** the
+affected section, **Review registration**, **Update mapping** (which also
+makes the part again) and **Build again**.
 Changing a fiber's or prism's specifications also makes its built result out of
 date: **Build** it again to use the new settings. Its previous report remains
 available, explicitly labelled as out of date. The implant CSV's `status` column

@@ -767,6 +767,97 @@ class V2ShellTests(unittest.TestCase):
             self.assertEqual(engine.section_id, ids[1])
 
     @isolated_gui_test
+    def test_results_repair_an_out_of_date_object_step_by_step(self):
+        import cv2
+        from unittest.mock import patch
+
+        from driftlessmap import file_dialogs
+        from tests.atlas_fixture import make_processed_atlas
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window = self.make_window(folder)
+            engine = window.engine
+            self.assertTrue(engine.load_volume_atlas(str(make_processed_atlas(root / "atlas"))))
+            fiber = None
+            for name, value in (("pfc-1.png", 200), ("pfc-2.png", 120)):
+                cv2.imwrite(str(root / name), np.full((32, 24, 3), value, np.uint8))
+                with patch.object(file_dialogs, "get_open_file_name",
+                                  return_value=(str(root / name), "")):
+                    engine.load_image()
+                fiber = fiber or engine.add_implant("fiber", specs={"diameter_um": 100})
+                engine.atlas_tri_inside_data[:] = [[1.0, 1.0], [5.0, 1.0], [3.0, 5.0]]
+                engine.histo_tri_inside_data[:] = [[2.0, 2.0], [6.0, 2.0], [4.0, 6.0]]
+                engine.set_implant_outline(fiber.implant_id, [[10.0, 4.0], [14.0, 4.0],
+                                                              [14.0, 20.0], [10.0, 20.0]])
+                self.assertTrue(engine.map_implant(fiber.implant_id)[0])
+            first, second = [e.section_id for e in engine.sections.entries()]
+            self.assertTrue(engine.build_implant(fiber.implant_id)[0])
+            engine.atlas_view.cpage_ctrl.set_val(engine.atlas_view.current_coronal_index + 2)
+            window.section_bar.open(first)               # pfc-2 changed, pfc-1 open
+            o = engine.object_ctrl
+            o.current_obj_index = engine.implant_objects(fiber.implant_id, built=True)[0]
+            window.go_to("results")
+            panel = window.panels["results"]
+            panel.refresh()
+            self.assertFalse(panel.recovery.isHidden())
+            self.assertIn("pfc-1.png: current", panel.mapping.text())
+            self.assertIn("pfc-2.png: out of date", panel.mapping.text())
+            self.assertEqual(panel.open_button.text(), "Open pfc-2.png")
+
+            panel.open_affected()
+            self.assertEqual(engine.section_id, second)
+            panel.update_affected()
+            record = engine.mapping_ledger.get(second, "fiber", fiber.implant_id)
+            self.assertEqual(record.revision, 2)
+            o.current_obj_index = engine.implant_objects(fiber.implant_id, built=True)[0]
+            panel.refresh()
+            self.assertIn("mapped again", panel.origin.text())
+            panel.rebuild_selected()
+            built = engine.implant_objects(fiber.implant_id, built=True)[0]
+            self.assertEqual(engine.object_mapping_status(built), "current")
+            o.current_obj_index = built
+            panel.refresh()
+            self.assertTrue(panel.recovery.isHidden())
+
+    @isolated_gui_test
+    def test_results_repair_built_cells_on_the_open_section(self):
+        import cv2
+
+        from tests.atlas_fixture import make_processed_atlas
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window = self.make_window(folder)
+            engine = window.engine
+            self.assertTrue(engine.load_volume_atlas(str(make_processed_atlas(root / "atlas"))))
+            cv2.imwrite(str(root / "s.png"), np.full((32, 24, 3), 120, np.uint8))
+            self.assertTrue(engine.load_single_image_file(str(root / "s.png"), ".png"))
+            data = engine.working_img_data
+            data["img-cells"] = [[8.0, 8.0], [12.0, 20.0]]
+            data["cell_size"], data["cell_symbol"] = [5, 5], ["o", "o"]
+            data["cell_layer_index"] = [0, 0]
+            data["cell_count"] = [2] + [0] * (len(data["cell_count"]) - 1)
+            engine.transfer_to_atlas_clicked()
+            engine.transform_accept()
+            engine.make_pieces_of("cells")
+            engine.merge_cells()
+            o = engine.object_ctrl
+            self.assertEqual(o.obj_type, ["merged cells"])
+            engine.atlas_tri_inside_data[:] = [[1.5, 1.0], [5.0, 1.0], [3.0, 5.0]]
+            o.current_obj_index = 0
+            window.go_to("results")
+            panel = window.panels["results"]
+            panel.refresh()
+            self.assertFalse(panel.recovery.isHidden())
+            self.assertFalse(panel.open_button.isEnabled())       # already open
+            panel.update_affected()
+            o.current_obj_index = o.obj_type.index("merged cells")
+            panel.rebuild_selected()
+            self.assertEqual(o.obj_type, ["merged cells"])
+            self.assertEqual(engine.object_mapping_status(0), "current")
+
+    @isolated_gui_test
     def test_save_follows_the_open_file_and_warnings_stay_listed(self):
         import cv2
         from unittest.mock import patch
