@@ -8,7 +8,7 @@ or important workflows change.
 
 ## Project identity
 
-- Current stable release: DriftlessMap 2.5.2 (3 November 2026; 2.4.0 plus
+- Current stable release: DriftlessMap 2.5.3 (3 November 2026; 2.4.0 plus
   fixes and the rat atlas downloads, the first release since 2.0.0, including 2.0.1-2.3.0 and multi-section
   projects). 2.0.0
   (29 October 2026) followed the 2.0.0aN previews and 2.0.0rc1-rc16. The owner released it with the
@@ -285,6 +285,11 @@ or important workflows change.
   its packed portable source, when it is opened. `sections_index` (cached
   per-entry digests) is the payload's `sections` for change detection.
   `sections_without_image` lists mapped sections with no stored section.
+  A stored section's `summary["registration"]` is its registration
+  fingerprint when put away (`section_summary`); `stored_registrations` feeds
+  it to `MappingRecord.status` / `derivation_status`, so a section changed
+  after mapping stays out of date while another section is open (unknown for
+  sections saved before 2.5.3).
 - `driftlessmap/landmarks.py`: `LandmarkModel` owns paired landmark lists,
   topology, the cached registration and label items (the `DriftlessMap`
   attributes of the same names delegate to it), plus `.dmaptri` validation.

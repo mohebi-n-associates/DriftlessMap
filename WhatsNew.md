@@ -3,6 +3,17 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.5.3
+
+Fix release, 3 November 2026. **Out-of-date results stay out of date when you
+open another section.** If a section's landmarks, page or tilt changed after
+it was mapped, the objects built from it were flagged only while that section
+was open: opening another section (or saving with another section open) made
+them look current, and exports gave no warning. Each section's registration is
+now kept when it is put away, so the objects stay flagged, and the message
+says to open that section, update its mapping and build again. Sections saved
+by earlier versions are checked once they have been opened and put away again.
+
 ## DriftlessMap 2.5.2
 
 Fix release, 3 November 2026; the first fixes from the 2.5.0 review.

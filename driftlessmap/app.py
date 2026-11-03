@@ -4905,15 +4905,23 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
                                .format(len(earlier)), self.reminder_color)
         return created
 
+    def stored_registrations(self):
+        """Registration fingerprint of each stored section when it was put
+        away (None when unknown: saved before 2.5.3)."""
+        return {entry.section_id: entry.summary.get("registration")
+                for entry in self.sections.entries() if entry.stored}
+
     def mapping_status(self, record):
         """Status of a mapping record (see mapping_records)."""
-        return record.status(self.section_id, self.current_registration_fingerprint())
+        return record.status(self.section_id, self.current_registration_fingerprint(),
+                             self.stored_registrations())
 
     def object_mapping_status(self, index):
         """Whether object ``index`` is current, out of date or of unknown origin."""
         return self.implant_build_status(index) or derivation_status(
             self.object_ctrl.obj_derivation[index], self.mapping_ledger,
-            self.section_id, self.current_registration_fingerprint())
+            self.section_id, self.current_registration_fingerprint(),
+            self.stored_registrations())
 
     def out_of_date_objects(self, indexes=None):
         o = self.object_ctrl
@@ -4932,6 +4940,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
             return "the implant settings changed after it was built; {}".format(rebuild)
         self.sync_sections()
         fingerprint = self.current_registration_fingerprint()
+        stored = self.stored_registrations()
         for unit_id, revision in self.object_ctrl.obj_derivation[index]:
             record = self.mapping_ledger.by_unit(unit_id)
             if record is None:
@@ -4939,9 +4948,11 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
             name = self.section_name(record.section_id)
             if record.revision != revision:
                 return "{} was mapped again after it was made; {}".format(name, rebuild)
-            if record.status(self.section_id, fingerprint) == REGISTRATION_CHANGED:
+            if record.status(self.section_id, fingerprint, stored) == REGISTRATION_CHANGED:
+                where = "" if record.section_id == self.section_id else \
+                    "open {} (Project > Sections), ".format(name)
                 return ("the landmarks, page or tilt of {} changed after it was mapped; "
-                        "update its mapping in Annotate, then {}".format(name, rebuild))
+                        "{}update its mapping in Annotate, then {}".format(name, where, rebuild))
         return status
 
     def out_of_date_lines(self, indexes):
@@ -4956,9 +4967,10 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
         per object, computed against a single registration fingerprint.
         """
         fingerprint = self.current_registration_fingerprint()
+        stored = self.stored_registrations()
         records = [(r, r.status(self.section_id, fingerprint)) for r in self.kept_marks()]
         objects = [self.implant_build_status(i) or derivation_status(
-            entries, self.mapping_ledger, self.section_id, fingerprint)
+            entries, self.mapping_ledger, self.section_id, fingerprint, stored)
             for i, entries in enumerate(self.object_ctrl.obj_derivation)]
         return records, objects
 
