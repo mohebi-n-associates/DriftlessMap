@@ -9252,14 +9252,18 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
             if not success:
                 self.print_message(error, self.error_message_color)
                 return False
+            # The notes stay in the final message, not hidden behind "saved".
+            outcome = " ".join(note + "." for note in notes)
             if as_copy:
-                self.print_message("Project copy saved.", self.normal_color)
+                self.print_message(("Project copy saved. " + outcome).strip(),
+                                   self.reminder_color if notes else self.normal_color)
                 return True
             self.sections_saved(section_states)
             self.current_project_path = project_path
             self.atlas_provenance = atlas_provenance
             self.histology_provenance = histology_provenance
-            self.print_message("Project saved successfully.", self.normal_color)
+            self.print_message(("Project saved successfully. " + outcome).strip(),
+                               self.reminder_color if notes else self.normal_color)
             return True
         self.print_message("", self.normal_color)
         return False

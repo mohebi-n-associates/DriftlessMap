@@ -97,6 +97,19 @@ class ProposeLandmarkTests(unittest.TestCase):
                 errors = np.linalg.norm(proposal.boundary_points - known_warp(grid), axis=1)
                 self.assertLess(np.median(errors), 3.5, errors)
 
+    def test_the_same_section_gives_the_same_landmarks(self):
+        # ITK's threads made the fits, and so the landmarks, differ between
+        # runs; the fits run on one thread, and the setting is restored.
+        intensity, labels = synthetic_slice()
+        section = warped_section(intensity, labels)
+        threads = sitk.ProcessObject.GetGlobalDefaultNumberOfThreads()
+        first = propose_landmarks(intensity, labels, section)
+        second = propose_landmarks(intensity, labels, section)
+        np.testing.assert_array_equal(first.atlas_points, second.atlas_points)
+        np.testing.assert_array_equal(first.histology_points, second.histology_points)
+        self.assertEqual(first.overlap_final, second.overlap_final)
+        self.assertEqual(sitk.ProcessObject.GetGlobalDefaultNumberOfThreads(), threads)
+
     def test_bspline_keeps_only_displacements_its_fits_agree_on(self):
         # On real sections the B-spline optimum moved by up to 0.8 mm when the
         # section was analysed at a slightly different size.

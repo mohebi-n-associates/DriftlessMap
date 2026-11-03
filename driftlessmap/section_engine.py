@@ -305,6 +305,13 @@ class SectionsMixin:
             state = dict(entry.state, histology_provenance=provenance)
             states[entry.section_id] = state
             stored.append(entry.saved(state))
+            if changed and portable:
+                # As for the open section: changed bytes are never packed as
+                # the original.
+                raise ValueError(
+                    "the original image of {} changed after it was loaded, so it cannot "
+                    "be packed as its original. Restore the original file, or save a "
+                    "normal project (its saved image is kept)".format(entry.name))
             if changed:
                 notes.append("{}: its source changed after loading; its saved image is "
                              "kept and the changed file is not linked".format(entry.name))

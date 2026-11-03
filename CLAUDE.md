@@ -8,7 +8,7 @@ or important workflows change.
 
 ## Project identity
 
-- Current stable release: DriftlessMap 2.5.5 (3 November 2026; 2.4.0 plus
+- Current stable release: DriftlessMap 2.5.6 (3 November 2026; 2.4.0 plus
   fixes and the rat atlas downloads, the first release since 2.0.0, including 2.0.1-2.3.0 and multi-section
   projects). 2.0.0
   (29 October 2026) followed the 2.0.0aN previews and 2.0.0rc1-rc16. The owner released it with the
@@ -163,7 +163,10 @@ or important workflows change.
 - `driftlessmap/auto_registration.py`: SimpleITK registration (moment-based
   affine on silhouettes, then a B-spline on intensities with Mattes MI over
   every masked pixel, smoothed at each level by `BSPLINE_SMOOTHING`; random
-  sampling made results seed- and platform-dependent; sections are analysed on
+  sampling made results seed- and platform-dependent, and multithreaded ITK
+  made them run-dependent, so the fits run on one ITK thread
+  (`_single_itk_thread`; running them in parallel threads was not exact);
+  sections are analysed on
   a copy of at most `ANALYSIS_MAX_SIDE` pixels, `_analysis_copy`, with
   physical space kept in section pixels) that
   proposes atlas-to-histology landmark pairs in DriftlessMap pixel-edge
