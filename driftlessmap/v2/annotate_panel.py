@@ -1,7 +1,7 @@
 """Annotate step: marking tools, mapping to the atlas and building 3D objects."""
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QListWidget, QListWidgetItem
+from PyQt6.QtWidgets import QLabel, QListWidget, QListWidgetItem
 
 from . import state
 from .implant_card import ImplantCard
@@ -61,18 +61,25 @@ class AnnotatePanel(StepPanel):
             self.tool_buttons[key] = widget
             widgets.append(widget)
         tools.add(grid_of(widgets, columns=2))
-        mapping = self.add(Card("Map annotations to atlas"))
+        mapping = self.add(Card(
+            "Map annotations to atlas",
+            "Mark → check the registration → map → make parts → build. The next step is "
+            "offered below; mapping prepares the section → atlas warp preview if needed."))
+        self.stages = mapping.add(QLabel(""))
+        self.stages.setWordWrap(True)
+        self.next_button = self.gate(button("", self.next_step, primary=True),
+                                     self._needs_next_step)
+        self.review_button = button("Review registration", lambda: shell.go_to("register"))
+        # One above the other: the next step's label can be long.
+        mapping.add(self.next_button)
+        mapping.add(self.review_button)
         self.review = mapping.add(status_label(""))
-        self.map_button = mapping.add_row(
-            self.gate(button("Mark reviewed", lambda: shell.run("register.review")),
-                      lambda: shell.panels["register"]._needs_review_pairs()),
-            self.gate(button("Map to atlas", lambda: shell.run("annotate.map"), primary=True),
-                      shell.command_reason("annotate.map")), None)
         mapping.add(hint_label(
-            "Requires the section → atlas warp preview. Mapping copies the section's marks "
-            "onto the atlas and keeps them, shown faintly on the section; mapping the same "
-            "kind again replaces the earlier mapping. Mapping without a review "
-            "is allowed; the result is recorded as not reviewed."))
+            "Mapping copies the section's marks onto the atlas and keeps them, shown "
+            "faintly on the section; mapping the same kind again replaces the earlier "
+            "mapping. Mapping without a review is allowed; the result is recorded as not "
+            "reviewed. Make parts turns atlas marks into parts; Build turns parts into "
+            "3D objects."))
 
         mapped = self.add(Card(
             "Mapped marks on this section",
@@ -112,6 +119,75 @@ class AnnotatePanel(StepPanel):
             button("Delete object", o.delete_object_btn.click),
         ], columns=2))
         objects.add(hint_label("Select objects in the Objects list on the right first."))
+
+    # ------------------------------------------------------------ pipeline
+    NEXT_LABELS = {"mark": "Next: mark on the section", "map": "Next: map to atlas",
+                   "parts": "Next: make parts", "build": "Next: build",
+                   "inspect": "Next: inspect in Results"}
+
+    def _needs_next_step(self):
+        missing = self.shell.needs_atlas_and_image()
+        if missing:
+            return missing
+        if state.annotation_pipeline(self.engine)["next"] == "mark":
+            return "Mark cells, expression, contours or drawings with the tools above first."
+        return None
+
+    def next_step(self):
+        """Do the pipeline's next step for every kind waiting at it."""
+        engine, shell = self.engine, self.shell
+        pipeline = state.annotation_pipeline(engine)
+        step = pipeline["next"]
+        if step == "map":
+            if not engine.h2a_transferred:
+                engine.transfer_to_atlas_clicked()
+                if not engine.h2a_transferred:
+                    shell.message("The section could not be warped onto the atlas. Place or "
+                                  "check the landmarks in the Register step.", "bad")
+                    return
+            engine.transform_accept()
+            shell.message("Mapped {} to the atlas.".format(", ".join(pipeline["marked"])),
+                          "good")
+        elif step == "parts":
+            for kind in pipeline["mapped"]:
+                engine.make_pieces_of(kind)
+            shell.message("Made parts of {}.".format(", ".join(pipeline["mapped"])), "good")
+        elif step == "build":
+            builders = {"cells": engine.merge_cells, "expression": engine.merge_virus,
+                        "contour": engine.merge_contour, "drawing": engine.merge_drawings}
+            for kind in pipeline["parts"]:
+                builders[kind]()
+            shell.message("Built {}.".format(", ".join(pipeline["parts"])), "good")
+        elif step == "inspect":
+            shell.go_to("results")
+            return
+        shell.refresh()
+
+    def _stage_text(self, pipeline):
+        def line(done, active, text):
+            return ("✓ " if done else "→ " if active else "· ") + text
+
+        names = lambda kinds: ", ".join(kinds)   # noqa: E731
+        step = pipeline["next"]
+        reviewed = pipeline["review"] == "reviewed"
+        return "\n".join([
+            line(step != "mark", step == "mark",
+                 "Mark: " + (names(pipeline["marked"]) + " on the section"
+                             if pipeline["marked"] else "nothing waiting on the section")),
+            line(reviewed, step == "map" and not reviewed,
+                 "Check registration: " + ("reviewed" if reviewed else "not reviewed")),
+            line(bool(pipeline["mapped"] or pipeline["parts"] or pipeline["built"])
+                 and step != "map", step == "map",
+                 "Map" + (": " + names(pipeline["mapped"]) + " on the atlas"
+                          if pipeline["mapped"] else "")),
+            line(bool(pipeline["parts"] or pipeline["built"]) and step not in ("map", "parts"),
+                 step == "parts",
+                 "Make parts" + (": " + names(pipeline["parts"]) if pipeline["parts"] else "")),
+            line(bool(pipeline["built"]) and step == "inspect", step == "build",
+                 "Build" + (": " + names(pipeline["built"]) + " built"
+                            if pipeline["built"] else "")),
+            line(False, step == "inspect", "Inspect and export in Results"),
+        ])
 
     def selected_unit(self):
         item = self.mapped_list.currentItem()
@@ -184,15 +260,15 @@ class AnnotatePanel(StepPanel):
         engine = self.engine
         self.implants.refresh()
         self.refresh_mapped()
+        pipeline = state.annotation_pipeline(engine)
+        self.stages.setText(self._stage_text(pipeline))
+        self.next_button.setText(self.NEXT_LABELS[pipeline["next"]])
         for key, widget in self.tool_buttons.items():
             widget.setChecked(engine.tool_box.checkable_btn_dict["{}_btn".format(key)].isChecked())
         review = engine.registration_review_state()
         missing = self.shell.needs_atlas_and_image()
         if missing:
             set_status(self.review, missing, "warn")
-        elif not engine.h2a_transferred:
-            set_status(self.review, "Preview the section on the atlas first (Register step).",
-                       "warn")
         elif review == "reviewed":
             set_status(self.review, "Registration reviewed; ready to map.", "good")
         else:

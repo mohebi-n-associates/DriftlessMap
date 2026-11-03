@@ -192,3 +192,52 @@ STATUS_TEXT = {
 
 def mapping_status_text(status):
     return STATUS_TEXT.get(status, str(status))
+
+
+# The annotation kinds of the Annotate pipeline: (name, section key, atlas key,
+# part type, built type). Probes and implants have their own cards.
+PIPELINE_KINDS = (
+    ("cells", "img-cells", "atlas-cells", "cells piece", "merged cells"),
+    ("expression", "img-virus", "atlas-virus", "virus piece", "merged virus"),
+    ("contour", "img-contour", "atlas-contour", "contour piece", "merged contour"),
+    ("drawing", "img-drawing", "atlas-drawing", "drawing piece", "merged drawing"),
+)
+
+
+def _has(value):
+    if value is None:
+        return False
+    try:
+        return len(value) > 0
+    except TypeError:
+        return True
+
+
+def annotation_pipeline(engine):
+    """Where the cells, expression, contours and drawings are in the pipeline
+    Mark → Check registration → Map → Make parts → Build.
+
+    Returns a dict with the kinds at each stage (``marked``: on the section,
+    not mapped; ``mapped``: atlas marks not made into parts; ``parts``: parts
+    not built; ``built``), the review state and ``next``: one of "mark",
+    "map", "parts", "build", "inspect".
+    """
+    types = list(engine.object_ctrl.obj_type)
+    stages = {"marked": [], "mapped": [], "parts": [], "built": []}
+    for kind, section_key, atlas_key, piece, merged in PIPELINE_KINDS:
+        mask = engine.working_img_data.get(section_key)
+        if kind == "expression":
+            marked = mask is not None and bool(np.any(mask))
+        else:
+            marked = _has(mask)
+        if marked:
+            stages["marked"].append(kind)
+        if _has(engine.working_atlas_data.get(atlas_key)):
+            stages["mapped"].append(kind)
+        if piece in types:
+            stages["parts"].append(kind)
+        if merged in types:
+            stages["built"].append(kind)
+    next_step = ("map" if stages["marked"] else "parts" if stages["mapped"] else
+                 "build" if stages["parts"] else "inspect" if stages["built"] else "mark")
+    return dict(stages, next=next_step, review=engine.registration_review_state())

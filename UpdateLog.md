@@ -1,6 +1,11 @@
 # Update Log
 
 ### 3rd November 2026
+##### 2.6.0: usability, U2 (one annotation pipeline)
+
+Review U2. `v2.state.annotation_pipeline(engine)` reports, for cells, expression, contours and drawings, which kinds are marked on the section, mapped (atlas marks not made into parts), in parts and built, the review state and the next step (mark, map, parts, build, inspect). The Annotate card "Map annotations to atlas" lists the stages (✓ done, → next) and one primary button does the next step for every kind waiting at it: map (switching on the section → atlas warp preview first, as probes do), make parts, build, or open Results. Review registration opens the Register step; the separate Map to atlas / Mark reviewed buttons are replaced, and the individual Make parts / Build / Edit parts buttons stay. Test: cells and a contour go from section marks to two built objects with the one button, starting without a warp preview.
+
+### 3rd November 2026
 ##### 2.6.0: usability, U3 (repair out-of-date results)
 
 Review U3. Results' Selected object card lists the object's contributions (`DriftlessMap.object_contributions`: record and status per unit, in section order) with each section's status and review, replacing the session-level "Last mapping…" sentence. For an out-of-date object (`stale_contribution`: the first stale unit) it shows Open <section> (section bar), Review registration (opens the section, then Register), Update mapping (`ProbeBook.update_section`, then `make_pieces_of` for cells, drawings, contours and expression) and Build again (implant `build_implant`, probe `ProbeBook.build`, other built kinds: unmerge, then merge, which leaves superseded parts out). Tests: a two-section fiber repaired from the Results card (open, update to revision 2, build, current); built cells repaired on the open section.

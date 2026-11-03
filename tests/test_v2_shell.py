@@ -543,7 +543,9 @@ class V2ShellTests(unittest.TestCase):
             self.assertIn("atlas", register._requirement_text.text())
             window.go_to("annotate")
             self.assertTrue(find(window.panels["annotate"], "Cells").isEnabled())
-            self.assertFalse(find(window.panels["annotate"], "Map to atlas").isEnabled())
+            next_button = window.panels["annotate"].next_button
+            self.assertFalse(next_button.isEnabled())
+            self.assertIn("atlas", next_button.toolTip())
 
     @isolated_gui_test
     def test_section_step_reads_another_time_plane(self):
@@ -856,6 +858,49 @@ class V2ShellTests(unittest.TestCase):
             panel.rebuild_selected()
             self.assertEqual(o.obj_type, ["merged cells"])
             self.assertEqual(engine.object_mapping_status(0), "current")
+
+    @isolated_gui_test
+    def test_one_button_takes_annotations_from_marks_to_built_objects(self):
+        import cv2
+
+        from driftlessmap.v2 import state as v2_state
+        from tests.atlas_fixture import make_processed_atlas
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window = self.make_window(folder)
+            engine = window.engine
+            self.assertTrue(engine.load_volume_atlas(str(make_processed_atlas(root / "atlas"))))
+            cv2.imwrite(str(root / "s.png"), np.full((32, 24, 3), 120, np.uint8))
+            self.assertTrue(engine.load_single_image_file(str(root / "s.png"), ".png"))
+            engine.atlas_tri_inside_data[:] = [[1.0, 1.0], [5.0, 1.0], [3.0, 5.0]]
+            engine.histo_tri_inside_data[:] = [[2.0, 2.0], [6.0, 2.0], [4.0, 6.0]]
+            window.go_to("annotate")
+            panel = window.panels["annotate"]
+            panel.refresh()
+            self.assertEqual(v2_state.annotation_pipeline(engine)["next"], "mark")
+            self.assertFalse(panel.next_button.isEnabled())
+
+            data = engine.working_img_data
+            data["img-cells"] = [[8.0, 8.0], [12.0, 20.0]]
+            data["cell_size"], data["cell_symbol"] = [5, 5], ["o", "o"]
+            data["cell_layer_index"] = [0, 0]
+            data["img-contour"] = [[6.0, 6.0], [18.0, 6.0], [18.0, 26.0]]
+            self.assertFalse(engine.h2a_transferred)
+            expected = [("map", "Next: map to atlas"), ("parts", "Next: make parts"),
+                        ("build", "Next: build"), ("inspect", "Next: inspect in Results")]
+            for step, label in expected:
+                panel.refresh()
+                panel.apply_gates()
+                self.assertEqual(v2_state.annotation_pipeline(engine)["next"], step)
+                self.assertEqual(panel.next_button.text(), label)
+                self.assertTrue(panel.next_button.isEnabled())
+                self.assertIn("→ ", panel.stages.text())
+                panel.next_step()
+            self.assertIs(window.stack.currentWidget(), window.panels["results"])
+            self.assertEqual(sorted(engine.object_ctrl.obj_type),
+                             ["merged cells", "merged contour"])
+            self.assertTrue(engine.h2a_transferred)      # prepared by the map step
 
     @isolated_gui_test
     def test_save_follows_the_open_file_and_warnings_stay_listed(self):
