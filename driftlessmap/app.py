@@ -4202,6 +4202,18 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
             return self._transform_accept(probe)
 
     def _transform_accept(self, probe):
+        # Mapped marks returned for editing and then all deleted: mapping
+        # them again removes that mapping and what was made from it.
+        removed = [record for record in (
+            self.cleared_edit(kind, probe if kind == "probe" else None)
+            for kind in MAPPED_KINDS) if record is not None]
+        for record in removed:
+            if record.kind == "expression":
+                self.working_img_data["img-virus"] = None
+                self._show_section_marks("expression")
+            self._remove_mapping(record.unit_id)
+        if removed and all(self._section_marks(kind) is None for kind in MAPPED_KINDS):
+            return
         if not self.h2a_transferred:
             self.print_message(
                 "Please transfer image to atlas first", self.error_message_color
@@ -4754,6 +4766,91 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
                            "to replace the earlier mapping.".format(record.kind),
                            self.normal_color)
         return True
+
+    def remove_mapping(self, unit_id):
+        """Remove a mapping of the loaded section and everything made from it.
+
+        Forgets the record and deletes its parts and its atlas marks not yet
+        made into parts. A built object that contains one of its parts is
+        taken apart into its other parts (building it again would otherwise
+        bring the removed part back), and those parts stay for building
+        again. Returns ``(record, message)`` or None. Undoable.
+        """
+        record = self.mapping_ledger.by_unit(unit_id)
+        name = self.mapping_name(record) if record is not None else "marks"
+        with self.undoable("Remove mapping of {}".format(name)):
+            return self._remove_mapping(unit_id)
+
+    def _remove_mapping(self, unit_id):
+        record = self._loaded_record(unit_id, "Remove mapping")
+        if record is None:
+            return None
+        origin = self.atlas_marks_origin(record.kind) if record.kind in MAPPED_KINDS else None
+        taken_apart = self._delete_results_of(unit_id)
+        if origin is not None and origin.unit_id == unit_id:
+            self.working_atlas_data[MAPPED_KINDS[record.kind][1]] = []
+            if record.kind == "cells":
+                for key in ("cell_size", "cell_symbol", "cell_layer_index"):
+                    self.working_atlas_data[key] = []
+                self.working_atlas_data["cell_count"] = [0] * CELL_COUNT_SLOTS
+            self._show_atlas_marks(record.kind)
+            self.atlas_mark_origin.pop(record.kind, None)
+        self.mapping_ledger.forget(unit_id)
+        self.editing_units.discard(unit_id)
+        self.refresh_kept_marks()
+        message = "Removed the mapping of {} on this section and the parts made from it."\
+            .format(self.mapping_name(record))
+        if taken_apart:
+            message += " Took apart {} (built from it); build {} again from the parts " \
+                       "that are left.".format(", ".join(taken_apart),
+                                               "it" if len(taken_apart) == 1 else "them")
+        self.print_message(message, self.normal_color)
+        return record, message
+
+    def _delete_results_of(self, unit_id):
+        """Delete the parts made from ``unit_id``, first taking apart the built
+        objects that contain one; returns the names of those built objects."""
+        o = self.object_ctrl
+
+        def uses(entries):
+            return any(unit == unit_id for unit, _revision in entries)
+
+        taken_apart = []
+        while True:
+            built = next((index for index, kind in enumerate(o.obj_type)
+                          if kind.startswith("merged") and (
+                              uses(o.obj_derivation[index])
+                              or any(uses(part) for part in o.obj_piece_derivation[index]))),
+                         None)
+            if built is None:
+                break
+            taken_apart.append(o.obj_name[built])
+            o.current_obj_index = built
+            o.unmerge_objects()
+        parts = [index for index, entries in enumerate(o.obj_derivation)
+                 if "piece" in o.obj_type[index] and uses(entries)]
+        if parts:
+            o.delete_objects(parts)
+        return taken_apart
+
+    def mapping_name(self, record):
+        """How a mapping record is named in messages."""
+        if record.kind in IMPLANT_KINDS:
+            return self.implant_record_name(record)
+        return record.probe or record.kind
+
+    def cleared_edit(self, kind, probe=None):
+        """The record of ``kind`` (and ``probe``) on the loaded section whose
+        marks were returned for editing and are now all deleted, or None."""
+        record = self.mapping_ledger.get(self.section_id, kind, probe)
+        if record is None or record.unit_id not in self.editing_units:
+            return None
+        if kind in IMPLANT_KINDS:
+            return None if self.implant_outline(probe)["points"] else record
+        marks = self._section_marks(kind)
+        if marks is None or (kind == "expression" and not np.any(marks["mask"])):
+            return record
+        return None
 
     def atlas_marks_origin(self, kind):
         """The record the current atlas marks of ``kind`` were mapped from, or None."""

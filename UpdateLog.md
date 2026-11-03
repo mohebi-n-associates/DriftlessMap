@@ -1,5 +1,10 @@
 # Update Log
 
+### 3rd November 2026
+##### DriftlessMap 2.4.4
+
+Removing a mapping. Found by experiment on the test atlas: Edit marks, delete every mark, map again did nothing for cells and named probes (`_transform_accept` and `ProbeBook.add_section` saw no marks) and was refused for implants ("Draw the outline… first"); the record, its part and objects built from it stayed current, and no action removed a single mapping. New `DriftlessMap.remove_mapping(unit_id)` (undoable): forgets the record, deletes its parts and its atlas marks not yet made into parts, and first takes apart (unmerges) each built object whose derivation or per-part derivation contains it (`_delete_results_of`); building again would otherwise unmerge and re-merge the removed part. `cleared_edit(kind, probe)` finds a record being edited whose marks are all deleted (an all-zero expression mask counts as empty); `_transform_accept`, `map_implant` and `ProbeBook.add_section` then remove it instead of refusing or doing nothing. V2: Remove mapping button and command; the probe and implant Map this section buttons read "Remove this section's mapping" in that state; a probe left without parts stays listed. Tests: cells built and a contour mapped, cells edited, deleted and mapped (record, part and build gone, contour untouched, undo restores), Remove mapping clears unmade atlas marks; a fiber built from two sections loses one section's outline (build taken apart, the other part current, rebuilt from one section, undo restores the two-section build, removal refused from another section); probe book removal keeps the probe. Version 2.4.4.
+
 ### 2nd November 2026
 ##### DriftlessMap 2.4.3
 

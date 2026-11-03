@@ -198,6 +198,10 @@ class ProbeBook:
         engine = self.engine
         on_section, on_atlas = self.marks()
         if on_section == 0 and on_atlas == 0:
+            cleared = engine.cleared_edit("probe", probe)
+            if cleared is not None:
+                # The section's mapped track was put back for editing and deleted.
+                return self.remove_section(cleared.unit_id)
             return False, "Mark the track first: switch on Mark track and click along it."
         if on_section:
             if on_section < 2:
@@ -222,6 +226,19 @@ class ProbeBook:
         if created and probe in self._empty:
             self._empty.remove(probe)
         return created
+
+    def remove_section(self, unit_id):
+        """Remove a mapping and what was made from it; a probe left without
+        parts stays listed. Returns ``(ok, message)``."""
+        engine = self.engine
+        record = engine.mapping_ledger.by_unit(unit_id)
+        probe = record.probe if record is not None and record.kind == "probe" else None
+        result = engine.remove_mapping(unit_id)
+        if result is None:
+            return False, "The mapping could not be removed; see the message below the image."
+        if probe and probe not in self.names():
+            self._empty.append(probe)
+        return True, result[1]
 
     def update_section(self, unit_id):
         """Update a probe section's mapping and replace its part."""

@@ -1,7 +1,7 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 2.4.3**. Section 2 explains how to
-install it; `pip install driftlessmap` installs 2.4.3.
+This manual applies to **DriftlessMap 2.4.4**. Section 2 explains how to
+install it; `pip install driftlessmap` installs 2.4.4.
 
 DriftlessMap - Histological E-data Registration in Brain Space - is a desktop
 application for aligning rodent histology with a reference atlas, reconstructing
@@ -102,7 +102,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-DriftlessMap 2.4.3 requires:
+DriftlessMap 2.4.4 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -121,8 +121,8 @@ page. The macOS DMG (`-macOS-arm64.dmg`) is built for Apple Silicon; on an Intel
 Mac, use the developer installation below.
 The desktop builds include Python and all runtime dependencies. Windows users
 extract the entire ZIP and run `DriftlessMap.exe`; macOS users open the DMG and
-drag `DriftlessMap.app` to Applications. The 2.4.3 downloads are named
-`DriftlessMap-2.4.3-Windows-x64.zip` and `DriftlessMap-2.4.3-macOS-arm64.dmg`.
+drag `DriftlessMap.app` to Applications. The 2.4.4 downloads are named
+`DriftlessMap-2.4.4-Windows-x64.zip` and `DriftlessMap-2.4.4-macOS-arm64.dmg`.
 Release builds are unsigned unless the release notes say otherwise, so the first
 launch may require Windows SmartScreen confirmation or Control-clicking the
 macOS app and choosing **Open**.
@@ -171,7 +171,7 @@ python -m pip --version
 python -c "import driftlessmap; print(driftlessmap.__version__)"
 ```
 
-The final command prints the installed version, `2.4.3`.
+The final command prints the installed version, `2.4.4`.
 
 ### 2.5 Launching DriftlessMap
 
@@ -1231,9 +1231,21 @@ in *Mapped marks on this section*:
 - **Edit marks** puts the kept marks back on the section as editable marks
   (refused while the section has unmapped marks of the same kind). Mapping
   them again replaces the mapping. For a probe, the probe is selected so that
-  Map this section files the edited track under it.
+  Map this section files the edited track under it. If you delete all of
+  them (or clear an implant's outline) and map, the mapping is removed, as
+  with Remove mapping; the probe's or implant's button then reads *Remove
+  this section's mapping*.
+- **Remove mapping** (since 2.4.4) removes the mapping, its kept marks, the
+  parts made from it and its atlas marks not yet made into parts. A built
+  object that contains one of its parts (a probe, implant, cells or other
+  object built from several sections) is taken apart into its remaining
+  parts, because building it again would otherwise bring the removed part
+  back; build it again from what is left. A probe left without sections stays
+  listed. Undo mapping step brings everything back.
 
-Both need the section the marks were mapped from to be loaded.
+All three need the section the marks were mapped from to be loaded. Nothing
+mapped is left behind when you delete marks this way, delete a probe or an
+implant, or remove a section with its results.
 
 **Undoing mapping steps.** Accept and Transfer (Map), Update mapping, Make
 Pieces (Make parts) and the Merge/Build actions can be undone and redone as

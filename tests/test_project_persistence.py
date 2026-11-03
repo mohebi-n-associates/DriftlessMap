@@ -755,6 +755,67 @@ class ProjectPersistenceIntegrationTests(unittest.TestCase):
             self.assertFalse(window.edit_mapped_marks(record.unit_id))
 
     @isolated_gui_test
+    def test_deleting_edited_marks_and_mapping_removes_the_mapping_everywhere(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window = self._window_with_volume_atlas(root)
+            source = root / "section.png"
+            image = np.zeros((32, 24, 3), dtype=np.uint8)
+            image[4:28, 4:20] = 200
+            cv2.imwrite(str(source), image)
+            self.assertTrue(window.load_single_image_file(str(source), ".png"))
+
+            def mark_cells(points):
+                data = window.working_img_data
+                data["img-cells"] = [list(p) for p in points]
+                data["cell_size"] = [5] * len(points)
+                data["cell_symbol"] = ["o"] * len(points)
+                data["cell_layer_index"] = [0] * len(points)
+                data["cell_count"] = [len(points)] + [0] * (CELL_COUNT_SLOTS - 1)
+
+            # Cells mapped, made into a part and built; a contour mapped only.
+            mark_cells([[8.0, 8.0], [12.0, 20.0]])
+            window.working_img_data["img-contour"] = [[6.0, 6.0], [18.0, 6.0], [18.0, 26.0]]
+            window.transfer_to_atlas_clicked()
+            window.transform_accept()
+            window.make_pieces_of("cells")
+            window.merge_cells()
+            o = window.object_ctrl
+            self.assertEqual(o.obj_type, ["merged cells"])
+            cells = window.mapping_ledger.get(window.section_id, "cells")
+            contour = window.mapping_ledger.get(window.section_id, "contour")
+            self.assertTrue(window.working_atlas_data["atlas-contour"])
+
+            # Edit the cells, delete them all and map: the mapping, its part
+            # and the built cells go; the contour mapping is untouched.
+            self.assertTrue(window.edit_mapped_marks(cells.unit_id))
+            self.assertIsNone(window.cleared_edit("cells"))
+            mark_cells([])
+            self.assertEqual(window.cleared_edit("cells"), cells)
+            window.transform_accept()
+            self.assertIsNone(window.mapping_ledger.by_unit(cells.unit_id))
+            self.assertEqual(o.obj_type, [])
+            self.assertNotIn(cells.unit_id, window.editing_units)
+            self.assertEqual(window.mapping_ledger.by_unit(contour.unit_id), contour)
+            # Only the contour's three kept marks are still shown.
+            self.assertEqual(len(window._kept_marks_item.getData()[0]), 3)
+            self.assertEqual(window.undo_history.undo_label(), "Map marks")
+            self.assertTrue(window.undo_mapping_step())
+            self.assertEqual(o.obj_type, ["merged cells"])
+            self.assertIn(cells.unit_id, window.editing_units)
+
+            # Remove mapping: its atlas marks not yet made into parts go too.
+            self.assertTrue(window.redo_mapping_step())
+            self.assertEqual(window.atlas_marks_origin("contour"), contour)
+            removed, message = window.remove_mapping(contour.unit_id)
+            self.assertEqual(removed, contour)
+            self.assertIn("Removed the mapping of contour", message)
+            self.assertEqual(window.working_atlas_data["atlas-contour"], [])
+            self.assertEqual(len(window.mapping_ledger), 0)
+            self.assertEqual(window.undo_history.undo_label(), "Remove mapping of contour")
+            self.assertIsNone(window.remove_mapping(contour.unit_id))
+
+    @isolated_gui_test
     def test_map_parts_and_build_undo_and_redo_together(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
