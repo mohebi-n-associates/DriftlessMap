@@ -41,6 +41,32 @@ class WorkerFailureTests(unittest.TestCase):
         self.assertEqual(len(errors), 1)
         self.assertIn("Atlas processing failed", errors[0])
 
+    def test_custom_atlas_worker_accepts_a_mask_with_one_fourth_frame(self):
+        # The Waxholm brain mask is stored as X x Y x Z x 1.
+        import nibabel as nib
+        import numpy as np
+
+        worker = CustomerAtlasWorker()
+        errors = []
+        worker.error_occur.connect(errors.append)
+        with tempfile.TemporaryDirectory() as folder:
+            volume = np.zeros((12, 12, 12), dtype=np.float32)
+            volume[3:9, 3:9, 3:9] = 1
+            labels = (volume * 5).astype(np.uint16)
+            for name, data in (("t.nii.gz", volume), ("a.nii.gz", labels),
+                               ("m.nii.gz", (volume > 0).astype(np.uint8)[..., None])):
+                nib.save(nib.Nifti1Image(data, np.eye(4)), os.path.join(folder, name))
+            with open(os.path.join(folder, "labels.csv"), "w", encoding="utf-8") as stream:
+                stream.write("id,name,acronym,parent_id,structure_id_path\n"
+                             "99,Brain,Brain,-1,/99/\n5,Box,B,99,/99/5/\n")
+            worker.set_data(folder, "t.nii.gz", "a.nii.gz", "labels.csv",
+                            {"to_HERBS": (0, 1, 2), "from_HERBS": (0, 1, 2),
+                             "direction_change": (False, False, False)},
+                            (6, 6, 6), 25.0, mask_local="m.nii.gz", factor=2)
+            worker.run()
+            self.assertFalse(any("mask" in message for message in errors), errors)
+            self.assertTrue(os.path.exists(os.path.join(folder, "atlas_axis_info.pkl")), errors)
+
     def test_deleted_or_missing_threads_count_as_stopped(self):
         self.assertFalse(thread_is_running(None))
         thread = QThread()

@@ -124,6 +124,13 @@ SWC_FEMALE_RAT = RatAtlas(
 RAT_ATLASES = {atlas.key: atlas for atlas in (WAXHOLM, SWC_FEMALE_RAT)}
 
 
+def waxholm_axis_info(shape):
+    """``atlas_axis_info.pkl`` for a volume stored in Waxholm Space (RAS)
+    order, which is DriftlessMap's internal order: no transpose, no flips."""
+    return {"to_HERBS": (0, 1, 2), "from_HERBS": (0, 1, 2),
+            "direction_change": (False, False, False), "size": tuple(int(n) for n in shape)}
+
+
 # --------------------------------------------------------------- regions
 def _colour(value):
     text = (value or "#ffffff").lstrip("#")

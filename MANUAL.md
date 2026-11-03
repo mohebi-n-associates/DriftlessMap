@@ -1,7 +1,7 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 2.5.0**. Section 2 explains how to
-install it; `pip install driftlessmap` installs 2.5.0.
+This manual applies to **DriftlessMap 2.5.1**. Section 2 explains how to
+install it; `pip install driftlessmap` installs 2.5.1.
 
 DriftlessMap - Histological E-data Registration in Brain Space - is a desktop
 application for aligning rodent histology with a reference atlas, reconstructing
@@ -102,7 +102,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-DriftlessMap 2.5.0 requires:
+DriftlessMap 2.5.1 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -121,8 +121,8 @@ page. The macOS DMG (`-macOS-arm64.dmg`) is built for Apple Silicon; on an Intel
 Mac, use the developer installation below.
 The desktop builds include Python and all runtime dependencies. Windows users
 extract the entire ZIP and run `DriftlessMap.exe`; macOS users open the DMG and
-drag `DriftlessMap.app` to Applications. The 2.5.0 downloads are named
-`DriftlessMap-2.5.0-Windows-x64.zip` and `DriftlessMap-2.5.0-macOS-arm64.dmg`.
+drag `DriftlessMap.app` to Applications. The 2.5.1 downloads are named
+`DriftlessMap-2.5.1-Windows-x64.zip` and `DriftlessMap-2.5.1-macOS-arm64.dmg`.
 Release builds are unsigned unless the release notes say otherwise, so the first
 launch may require Windows SmartScreen confirmation or Control-clicking the
 macOS app and choosing **Open**.
@@ -171,7 +171,7 @@ python -m pip --version
 python -c "import driftlessmap; print(driftlessmap.__version__)"
 ```
 
-The final command prints the installed version, `2.5.0`.
+The final command prints the installed version, `2.5.1`.
 
 ### 2.5 Launching DriftlessMap
 
@@ -609,9 +609,12 @@ Download Waxholm Rat Atlas** / **Download SWC Female Rat Atlas**):
 
 Every file is checked against its published SHA-256 checksum; a changed
 upstream file is refused instead of processed. The region hierarchy comes from
-the downloaded atlas itself. Folders downloaded before 2.5.0 (Waxholm v4) keep
-working with the labels they were processed with; download v4.01 into a new
-folder. A project records the content of its atlas, so the other rat atlas or
+the downloaded atlas itself. Processing also writes `atlas_axis_info.pkl`, which
+probe building and external cell points need; rat atlas folders processed by
+2.5.0 or earlier lack it, so open the same download again, choose the folder
+and click **Process and open atlas** (the downloaded files are reused). Folders
+downloaded before 2.5.0 (Waxholm v4) keep working with the labels they were
+processed with; download v4.01 into a new folder. A project records the content of its atlas, so the other rat atlas or
 another Waxholm release is not accepted in its place. The tutorial
 [Downloading the rat atlases](Tutorial/Atlas_Related/download_rat_atlases.md)
 walks through both downloads with screenshots.

@@ -25,10 +25,10 @@ from .resources import resource_path
 
 
 DEFAULT_BLEND_MODE = "Overlay"
-# Layers that are the histology channels themselves: they must add up on the
-# black background (Overlay on black is black, so a crop or a cleaned copy
-# made the section disappear).
-CHANNEL_LAYERS = {"img-process": "Plus"}
+# Layers that are the image itself (the histology channels, or a cropped or
+# processed slice-atlas plate): they must add up on the black background
+# (Overlay on black is black, so a crop or a cleaned copy disappeared).
+CHANNEL_LAYERS = {"img-process": "Plus", "atlas-slice": "Plus"}
 
 
 eye_button_style = '''

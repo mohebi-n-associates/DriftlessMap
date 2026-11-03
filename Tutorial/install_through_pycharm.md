@@ -1,60 +1,42 @@
-## Install HERBS through PyCharm
+## Work on DriftlessMap in PyCharm
 
-This guide assumes Python 3.10–3.14 and a current PyCharm release. Python 3.14
-is recommended, or Python 3.13 if Zeiss CZI support is required.
+This is for developers who want to run DriftlessMap from its source code.
+To use DriftlessMap, the desktop builds on the
+[Releases page](https://github.com/mohebi-n-associates/DriftlessMap/releases)
+or `pip install driftlessmap` are simpler (see the
+[User Manual, Section 2](../MANUAL.md#2-installation-and-launching)).
 
-If PyCharm is not installed, please install PyCharm first through (https://www.jetbrains.com/pycharm/). For more details about how to install and set up PyCharm (https://www.jetbrains.com/help/pycharm/installation-guide.html). For example,
+DriftlessMap supports Python 3.10-3.14. Use Python 3.14, or 3.13 if you need
+Zeiss CZI files.
 
-- Create a Python project (https://www.jetbrains.com/help/pycharm/creating-empty-project.html)
+1. Install [PyCharm](https://www.jetbrains.com/pycharm/).
+2. Clone the repository, either with **File > Project from Version Control**
+   and the URL `https://github.com/mohebi-n-associates/DriftlessMap.git`, or in
+   a terminal:
 
-- Install, uninstall, and upgrade packages (https://www.jetbrains.com/help/pycharm/installing-uninstalling-and-upgrading-packages.html)
+   ```bash
+   git clone https://github.com/mohebi-n-associates/DriftlessMap.git
+   ```
 
+3. Open the folder as a PyCharm project and give it a new interpreter
+   (**Settings > Project > Python Interpreter > Add Interpreter**; a virtualenv
+   or conda environment with Python 3.14). PyCharm's guide:
+   [Configure a Python interpreter](https://www.jetbrains.com/help/pycharm/configuring-python-interpreter.html).
+4. In PyCharm's terminal, install DriftlessMap from the source in editable
+   mode, with the test tools:
 
-<table>
-<tr>
-<th align="center">
-<img width="441" height="1">
-<p> 
-<small>
-Steps
-</small>
-</p>
-</th>
-<th align="center">
-<img width="441" height="1">
-<p>
-<small>
-Results
-</small>
-</p>
-</th>
-</tr>
-<tr>
-<td>
--Go to Python Interpreter <br>
-	**File | Settings | Project | Python Interpreter** for Windows and Linux <br>
-	**PyCharm | Preferences | Project | Python Interpreter** for macOS
-	
-And press the **+** button.
-</td>
-<td align="center" width="40%">
-<img src="../image/download_pycharm1.jpg" width="500">
-</td>
-</tr>
-</tr>
-<tr>
-<td>
-<ul>
-<li>Clone the HERBS repository, open it as the PyCharm project, and select a
-fresh Python 3.14 interpreter. In PyCharm's terminal, run
-<code>python -m pip install -e .</code>. For CZI support with Python 3.13, run
-<code>python -m pip install -e ".[czi]"</code>.
-</li>
-</ul>
-</td>
-<td align="center" width="40%">
-<img src="../image/download_pycharm2.jpg" width="500">
-</td>
-</tr>
+   ```bash
+   python -m pip install -e ".[test]"
+   ```
 
-</table>
+   For CZI support (Python 3.13): `python -m pip install -e ".[test,czi]"`.
+5. Run it with `python -m driftlessmap`, or create a *Run configuration* with
+   module `driftlessmap`. Add `--classic` for the classic interface.
+6. Run the tests:
+
+   ```bash
+   QT_API=pyqt6 QT_QPA_PLATFORM=offscreen python tests/run_test_suite.py unittest
+   ```
+
+   On Windows, set the two variables in PowerShell first
+   (`$env:QT_API="pyqt6"; $env:QT_QPA_PLATFORM="offscreen"`).

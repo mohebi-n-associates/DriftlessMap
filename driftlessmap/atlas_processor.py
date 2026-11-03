@@ -34,6 +34,7 @@ from .atlas_transform import (
     compact_boundary_volume,
     compact_label_volume,
     normalize_atlas_volume,
+    prepare_atlas_mask,
     transform_atlas_volumes,
     validate_downsample_factor,
 )
@@ -221,7 +222,10 @@ class CustomerAtlasWorker(QObject):
                 )
                 return
             self.progress.emit(23)
-            if not mask_data.shape == atlas_data.shape:
+            try:
+                # A single fourth frame (as in the Waxholm brain mask) is dropped.
+                mask_data = prepare_atlas_mask(mask_data, atlas_data.shape)
+            except ValueError:
                 self.error_occur.emit("Atlas shape is different than mask shape.")
                 return
 

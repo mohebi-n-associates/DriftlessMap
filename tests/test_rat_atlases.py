@@ -237,6 +237,20 @@ class DialogTests(unittest.TestCase):
                 dialog.hide()
             dialog.deleteLater()
 
+    def test_rat_axis_info_is_what_the_atlas_processor_gives_for_ras(self):
+        # Probe exports need atlas_axis_info.pkl; WHS volumes are stored RAS.
+        from driftlessmap.atlas_processor import AtlasProcessor
+
+        dialog = AtlasProcessor()
+        for combo, axis, text in ((dialog.x_axis_combo, "x", "L.H. --> R.H."),
+                                  (dialog.y_axis_combo, "y", "Post. --> Ant."),
+                                  (dialog.z_axis_combo, "z", "Inf. --> Sup.")):
+            combo.setCurrentText(text)
+            dialog.dim_combo_changed(axis)
+        expected = dict(dialog.axis_info, size=(512, 1024, 512))
+        self.assertEqual(rat_atlases.waxholm_axis_info((512, 1024, 512)), expected)
+        dialog.deleteLater()
+
     def test_a_failing_preparation_is_reported(self):
         from driftlessmap.atlas_downloader import WorkerProcessData
 
