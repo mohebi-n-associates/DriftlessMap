@@ -1,6 +1,11 @@
 # Update Log
 
 ### 3rd November 2026
+##### 2.6.0: usability, U10 (channel controls)
+
+Review U10. The Section step's channel table has an All / None button under the Adjust, Show and Register columns (`SectionPanel.tick_all`): None when the whole column is ticked, else All; Show offers only All (the 1.x selector keeps one channel visible), and Register's follows whether the channel recipe is in use. Colour swatches carry their colour's name (`colour_name`: the nearest preset within 40 RGB units, else the RGB values) in the tooltip and accessible name. The registration-input preview and colour presets already existed. Selection presets were not added. Test: a four-channel image ticks and unticks Register (recipe of all four, then none), Adjust, and Show.
+
+### 3rd November 2026
 ##### 2.6.0: usability, U9 (visual review)
 
 Review U9. Register's Review card has a four-point checklist (hemisphere and orientation; internal anatomy; region boundaries; torn or missing tissue); Mark review complete is gated on it (`_needs_review_checks`; the shell command `register.review` itself is not gated), and the ticks reset when the registration fingerprint changes (ticked again for an already reviewed registration). With the section-on-atlas preview, Blink toggles the warped overlay every 500 ms and Checkerboard shows it in alternating squares (`checkerboard`, 8 along the longer side) so atlas and section edges meet at square borders; both stop when the preview is removed. Linked zoom between the views was not added (the views keep their own zoom). Test: the checklist gates and resets; blink toggles; the checkerboard image; tools stop with the preview.

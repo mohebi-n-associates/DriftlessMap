@@ -960,6 +960,46 @@ class V2ShellTests(unittest.TestCase):
         self.assertEqual((board[0, 0], board[0, 8], board[8, 8]), (1, 0, 1))
 
     @isolated_gui_test
+    def test_channel_columns_tick_all_or_none_and_colours_are_named(self):
+        import tifffile
+
+        from driftlessmap.v2.section_panel import colour_name
+
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "four.tif"
+            stack = (np.arange(4 * 64 * 48) % 4000).astype(np.uint16).reshape(4, 64, 48)
+            tifffile.imwrite(str(path), stack, metadata={"axes": "CYX"}, imagej=True)
+            window = self.make_window(folder)
+            engine = window.engine
+            self.assertTrue(engine.load_single_image_file(str(path), ".tif"))
+            window.go_to("section")
+            panel = window.panels["section"]
+            panel.refresh()
+            toggles = panel._column_toggles
+            self.assertEqual(toggles["register"].text(), "All")
+            panel.tick_all("register")
+            self.assertEqual(engine.registration_input.channels, (0, 1, 2, 3))
+            self.assertEqual(toggles["register"].text(), "None")
+            panel.tick_all("register")
+            self.assertIsNone(engine.registration_input)
+            # Adjust starts on every shown channel, so its toggle offers None.
+            self.assertEqual(toggles["select"].text(), "None")
+            panel.tick_all("select")
+            self.assertEqual(panel._adjusted, [0])
+            panel.tick_all("select")
+            self.assertEqual(panel._adjusted, [0, 1, 2, 3])
+            engine.image_view.set_channel_visible(False, 2)
+            panel._sync_rows()
+            self.assertEqual(toggles["show"].text(), "All")
+            panel.tick_all("show")
+            self.assertTrue(all(engine.image_view.channel_visible[:4]))
+            self.assertFalse(toggles["show"].isEnabled())        # cannot hide them all
+            swatch = panel._channel_rows()[0]["swatch"]
+            self.assertIn("Channel colour:", swatch.toolTip())
+        self.assertEqual(colour_name((250, 5, 0)), "Red")
+        self.assertEqual(colour_name((10, 120, 60)), "RGB 10, 120, 60")
+
+    @isolated_gui_test
     def test_save_follows_the_open_file_and_warnings_stay_listed(self):
         import cv2
         from unittest.mock import patch
