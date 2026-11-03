@@ -1,7 +1,7 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 2.4.2**. Section 2 explains how to
-install it; `pip install driftlessmap` installs 2.4.2.
+This manual applies to **DriftlessMap 2.4.3**. Section 2 explains how to
+install it; `pip install driftlessmap` installs 2.4.3.
 
 DriftlessMap - Histological E-data Registration in Brain Space - is a desktop
 application for aligning rodent histology with a reference atlas, reconstructing
@@ -102,7 +102,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-DriftlessMap 2.4.2 requires:
+DriftlessMap 2.4.3 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -121,8 +121,8 @@ page. The macOS DMG (`-macOS-arm64.dmg`) is built for Apple Silicon; on an Intel
 Mac, use the developer installation below.
 The desktop builds include Python and all runtime dependencies. Windows users
 extract the entire ZIP and run `DriftlessMap.exe`; macOS users open the DMG and
-drag `DriftlessMap.app` to Applications. The 2.4.2 downloads are named
-`DriftlessMap-2.4.2-Windows-x64.zip` and `DriftlessMap-2.4.2-macOS-arm64.dmg`.
+drag `DriftlessMap.app` to Applications. The 2.4.3 downloads are named
+`DriftlessMap-2.4.3-Windows-x64.zip` and `DriftlessMap-2.4.3-macOS-arm64.dmg`.
 Release builds are unsigned unless the release notes say otherwise, so the first
 launch may require Windows SmartScreen confirmation or Control-clicking the
 macOS app and choosing **Open**.
@@ -171,7 +171,7 @@ python -m pip --version
 python -c "import driftlessmap; print(driftlessmap.__version__)"
 ```
 
-The final command prints the installed version, `2.4.2`.
+The final command prints the installed version, `2.4.3`.
 
 ### 2.5 Launching DriftlessMap
 
@@ -1105,10 +1105,25 @@ pairs.
 
 ### 8.4 Match boundary rectangles
 
-The automatically generated outer points define the warp domain. After
-interior points are placed, use **Match Boundaries** when the atlas and
-histology bounding rectangles differ substantially. This updates the boundary
-anchors while retaining the paired interior anatomy.
+The automatically generated outer points (the frame: corners and side points)
+define the warp domain. They are not anatomy: they pin the section's edges to
+the atlas, and the tissue between your outermost landmarks and the image edge
+is placed by triangles that reach out to them. Pinning image corner to image
+corner would contradict the landmarks whenever the section covers only part of
+the atlas slice, stretching that tissue (on a 1600 × 1200 prefrontal section,
+37% of the tissue landed outside the atlas brain).
+
+Since 2.4.3 the frame follows the landmarks. Once three pairs spread across the
+section are placed (and whenever pairs are proposed, added, moved or deleted),
+each axis is fitted as *atlas = scale × section + offset* to the pairs; the
+section frame is the part of the section image that this fit places inside the
+atlas image, and the atlas frame is where the fit puts it. On the same section
+the tissue outside the atlas brain fell to 2.5%. Areas outside the frame (atlas
+beyond the section image, or section beyond the atlas image) are not mapped.
+Projects keep their saved frame until their landmarks are edited.
+**Match Boundaries** (V2: **Fit frame to tissue**) applies the same fit; with
+fewer than three usable pairs it matches the landmarks' bounding rectangles as
+before.
 
 For a volume atlas, boundary matching can derive the atlas extent from the
 nonzero label area. A slice atlas requires interior landmarks in both images.

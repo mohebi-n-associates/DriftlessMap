@@ -3,6 +3,19 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.4.3
+
+Fix release, 2 November 2026. **The frame follows your landmarks.** The four
+corner points (and side points) used to pin the section's image corners to the
+atlas image corners, which contradicts the landmarks whenever the section
+covers only part of the atlas slice: the tissue between the outermost
+landmarks and the edge was stretched far outside the brain. The frame is now
+placed where the landmarks put the section's edges, once three pairs are
+placed and whenever pairs are proposed, added, moved or deleted. On the two
+prefrontal test sections, the share of warped tissue outside the atlas brain
+fell from 46% and 35% to under 4%. Match Boundaries / Fit frame to tissue uses
+the same fit. Saved projects keep their frame until their landmarks change.
+
 ## DriftlessMap 2.4.2
 
 Fix release, 2 November 2026.

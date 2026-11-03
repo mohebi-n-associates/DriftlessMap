@@ -24,6 +24,54 @@ LANDMARK_FIELDS = {
 }
 
 
+# Fewest pairs, and the smallest spread of the section landmarks along each
+# axis (as a share of the image side), for fitting the frame to them.
+FRAME_MIN_PAIRS = 3
+FRAME_MIN_SPREAD = 0.05
+
+
+def fit_frame(atlas_points, histology_points, atlas_shape, histology_shape):
+    """Frame rectangles that agree with the landmark pairs.
+
+    The frame's corner and side points pin the section's edges to the atlas;
+    pinning image corner to image corner contradicts the landmarks whenever
+    the section covers only part of the atlas slice (or more), stretching
+    the tissue between the outermost landmarks and the edge. Here each axis
+    is fitted as ``atlas = scale * section + offset`` to the pairs, and the
+    section frame is the part of the section image that this fit places
+    inside the atlas image; the atlas frame is where the fit puts it.
+
+    Returns ``(atlas_rect, histology_rect)`` as (x, y, width, height), or
+    None when the pairs are too few, too bunched or flipped to fit.
+    """
+    atlas = np.asarray(atlas_points, dtype=float).reshape(-1, 2)
+    section = np.asarray(histology_points, dtype=float).reshape(-1, 2)
+    if len(atlas) != len(section) or len(atlas) < FRAME_MIN_PAIRS:
+        return None
+    lows, highs = [], []
+    for axis, (atlas_side, section_side) in enumerate(
+            ((atlas_shape[1], histology_shape[1]), (atlas_shape[0], histology_shape[0]))):
+        if np.std(section[:, axis]) < FRAME_MIN_SPREAD * section_side:
+            return None
+        scale, offset = np.polyfit(section[:, axis], atlas[:, axis], 1)
+        if not np.isfinite(scale) or scale <= 0:
+            return None
+        low = max(0.0, -offset / scale)
+        high = min(section_side - 1.0, (atlas_side - 1.0 - offset) / scale)
+        if high - low < 0.1 * section_side:
+            return None
+        lows.append((low, scale * low + offset))
+        highs.append((high, scale * high + offset))
+    (hx0, ax0), (hy0, ay0) = lows
+    (hx1, ax1), (hy1, ay1) = highs
+
+    def rect(x0, y0, x1, y1):
+        x0, y0, x1, y1 = (round(float(v), 2) for v in (x0, y0, x1, y1))
+        return (x0, y0, x1 - x0 + 1, y1 - y0 + 1)
+
+    return rect(ax0, ay0, ax1, ay1), rect(hx0, hy0, hx1, hy1)
+
+
 class LandmarkModel:
     """Owns paired landmarks, their shared topology and their label items.
 
