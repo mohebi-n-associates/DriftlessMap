@@ -3,6 +3,34 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.6.0
+
+Feature release, 3 November 2026: the usability improvements from the 2.5.0
+review.
+
+- **A section bar above the images** shows which section is open (and which
+  page of a multi-page file) and switches sections without leaving the step
+  you are in (Ctrl+PgUp / Ctrl+PgDown).
+- **One annotation pipeline.** For cells, expression, contours and drawings,
+  Annotate shows Mark → check registration → map → make parts → build →
+  inspect, and one button does the next step.
+- **Repair out-of-date results from Results**: it lists the sections an
+  object came from, with their status, and offers Open the section, Review
+  registration, Update mapping and Build again.
+- **Smaller windows**: the step list shows only numbers below 1200 pixels.
+- **Long operations**: rat atlas processing names its stages, failed
+  downloads can be retried, and a folder whose processing stopped part-way is
+  recognised.
+- **Add several sections at once**, in natural name order, and optionally
+  each page of a multi-page TIFF as its own section.
+- **Visual review**: a short checklist before Mark review complete, and Blink
+  and Checkerboard to compare the warped section with the atlas.
+- **Channel controls**: All / None for Adjust, Show and Register; colour names.
+- **Predictable undo**: Edit > Mapping history lists what Undo and Redo would
+  take back, and you are told when switching sections clears it.
+- **Getting started**: the empty window offers three ways to start, every
+  atlas download is visible, and the manual opens with a quick start.
+
 ## DriftlessMap 2.5.8
 
 Release of 3 November 2026, the last of the fixes from the 2.5.0 review.
