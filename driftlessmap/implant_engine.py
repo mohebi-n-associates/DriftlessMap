@@ -217,7 +217,17 @@ class ImplantEngineMixin:
             return False, "Choose an implant first."
         outline = self.implant_outlines.get(implant_id)
         if not outline or not outline["points"]:
-            return False, "Draw the outline of {} on this section first.".format(implant.name)
+            cleared = self.cleared_edit(implant.kind, implant_id)
+            if cleared is None:
+                return False, "Draw the outline of {} on this section first.".format(
+                    implant.name)
+            # Its mapped outline was returned for editing and deleted.
+            with self.undoable("Remove mapping of {}".format(implant.name)):
+                self.implant_outlines.pop(implant_id, None)
+                result = self._remove_mapping(cleared.unit_id)
+            if result is None:
+                return False, "The mapping of {} could not be removed.".format(implant.name)
+            return True, result[1]
         source = {"points": np.asarray(outline["points"], dtype=float),
                   "point": np.asarray([outline["point"]] if outline["point"] is not None
                                       else np.zeros((0, 2)), dtype=float)}

@@ -8,7 +8,7 @@ or important workflows change.
 
 ## Project identity
 
-- Current stable release: DriftlessMap 2.4.3 (2 November 2026; 2.4.0 plus
+- Current stable release: DriftlessMap 2.4.4 (3 November 2026; 2.4.0 plus
   fixes, the first release since 2.0.0, including 2.0.1-2.3.0 and multi-section
   projects). 2.0.0
   (29 October 2026) followed the 2.0.0aN previews and 2.0.0rc1-rc16. The owner released it with the
@@ -192,6 +192,12 @@ or important workflows change.
   their record until they are edited. `update_mapping(unit)` re-maps one
   unit's kept marks without touching other live marks; `edit_mapped_marks`
   returns them to the section; merges call `_drop_superseded_pieces`.
+  `remove_mapping(unit)` forgets a record and deletes its parts and unmade
+  atlas marks, first taking apart built objects that contain one
+  (`_delete_results_of`, so a rebuild cannot bring the part back); mapping
+  marks that were returned for editing and then all deleted
+  (`cleared_edit`) removes the mapping the same way, also from
+  `map_implant` and `ProbeBook.add_section`.
   `TransactionHistory` (10 steps, 500 MB, compressed masks) backs
   `DriftlessMap.undoable(label)`, which records only the outermost action
   (wrap new mapping, part or build entry points in it), and

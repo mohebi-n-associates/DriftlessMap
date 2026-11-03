@@ -88,6 +88,10 @@ class AnnotatePanel(StepPanel):
                       self._needs_mapped_selection),
             self.gate(button("Edit marks", self.edit_selected,
                              tooltip="Put the kept marks back on the section to edit them"),
+                      self._needs_mapped_selection),
+            self.gate(button("Remove mapping", self.remove_selected,
+                             tooltip="Remove this mapping and the parts made from it; "
+                                     "built objects that contain one are taken apart"),
                       self._needs_mapped_selection), None)
         self.mapped_note = mapped.add(hint_label(""))
         self._mapped_key = None
@@ -120,6 +124,15 @@ class AnnotatePanel(StepPanel):
         if unit_id is None:
             return
         ok, message = self.probes.book.update_section(unit_id)
+        self.shell.message(message, "good" if ok else "bad")
+        self.shell.refresh()
+
+    def remove_selected(self):
+        unit_id = self.selected_unit()
+        if unit_id is None:
+            return
+        ok, message = self.probes.book.remove_section(unit_id)
+        self.implants.refresh()
         self.shell.message(message, "good" if ok else "bad")
         self.shell.refresh()
 

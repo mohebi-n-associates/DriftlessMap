@@ -270,6 +270,63 @@ class SectionEngineTests(unittest.TestCase):
             self.assertIn("implant settings changed", window.out_of_date_reason(built))
 
     @isolated_gui_test
+    def test_clearing_a_mapped_outline_removes_it_from_parts_and_builds(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window = self.window_with_atlas(root)
+            first, second = root / "pfc-1.png", root / "pfc-2.png"
+            self.write_section(first, 200)
+            self.write_section(second, 120)
+            fiber = None
+            for path in (first, second):
+                self.load_section(window, path)
+                fiber = fiber or window.add_implant("fiber", specs={"diameter_um": 100})
+                window.atlas_tri_inside_data[:] = [[1.0, 1.0], [5.0, 1.0], [3.0, 5.0]]
+                window.histo_tri_inside_data[:] = [[2.0, 2.0], [6.0, 2.0], [4.0, 6.0]]
+                self.map_fiber(window, fiber)
+            first_id = window.sections.entries()[0].section_id
+            self.assertTrue(window.build_implant(fiber.implant_id)[0])
+            o = window.object_ctrl
+            self.assertEqual(o.obj_type, ["merged fiber"])
+
+            # Edit the open section's outline, delete it and map: that mapping
+            # goes, the build is taken apart and the other section's part stays.
+            record = window.mapping_ledger.get(window.section_id, "fiber", fiber.implant_id)
+            self.assertTrue(window.edit_mapped_marks(record.unit_id))
+            self.assertIsNone(window.cleared_edit("fiber", fiber.implant_id))
+            window.set_implant_outline(fiber.implant_id, [])
+            self.assertEqual(window.cleared_edit("fiber", fiber.implant_id), record)
+            ok, message = window.map_implant(fiber.implant_id)
+            self.assertTrue(ok, message)
+            self.assertIn("Took apart Fiber 1", message)
+            self.assertIsNone(window.mapping_ledger.by_unit(record.unit_id))
+            self.assertEqual(o.obj_type, ["fiber piece"])
+            kept = window.mapping_ledger.get(first_id, "fiber", fiber.implant_id)
+            self.assertEqual(o.obj_derivation, [[[kept.unit_id, 1]]])
+            self.assertEqual(o.obj_data[0]["section_id"], first_id)
+            self.assertEqual(window.object_mapping_status(0), "current")
+            # Building again uses only what is left.
+            self.assertTrue(window.build_implant(fiber.implant_id)[0])
+            self.assertEqual(window.implant_report(fiber.implant_id)["sections"], 1)
+
+            # Undo of both steps brings back the two-section build.
+            self.assertTrue(window.undo_mapping_step())
+            self.assertTrue(window.undo_mapping_step())
+            self.assertEqual(o.obj_type, ["merged fiber"])
+            self.assertEqual(window.implant_report(fiber.implant_id)["sections"], 2)
+            self.assertIsNotNone(window.mapping_ledger.by_unit(record.unit_id))
+
+            # Remove mapping does the same for the other section, from its own
+            # section only.
+            self.assertIsNone(window.remove_mapping(kept.unit_id))
+            self.assertTrue(window.switch_section(first_id)[0])
+            removed, message = window.remove_mapping(kept.unit_id)
+            self.assertEqual(removed.unit_id, kept.unit_id)
+            self.assertEqual(o.obj_type, ["fiber piece"])
+            self.assertNotEqual(o.obj_data[0]["section_id"], first_id)
+            self.assertEqual(window.section_mappings(first_id), [])
+
+    @isolated_gui_test
     def test_the_frame_follows_landmarks_as_they_are_placed(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

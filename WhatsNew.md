@@ -3,6 +3,19 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.4.4
+
+Fix release, 3 November 2026. **Deleting mapped marks leaves nothing behind.**
+If you put mapped marks back on the section with Edit marks, deleted all of
+them and mapped again, nothing happened: the old mapping, its part and any
+object built from it stayed and were still shown as current. Now that removes
+the mapping and the parts made from it, for cells, probes, drawings, contours,
+expression and implant outlines. A built object that contained one of those
+parts (a probe or implant built from several sections, for example) is taken
+apart into its remaining parts, so building it again cannot bring the removed
+part back. The new **Remove mapping** button under *Mapped marks on this
+section* does the same directly. Undo mapping step brings everything back.
+
 ## DriftlessMap 2.4.3
 
 Fix release, 2 November 2026. **The frame follows your landmarks.** The four

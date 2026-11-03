@@ -177,9 +177,13 @@ class ProbeControls(Card):
             parts.append("{} on the atlas".format(on_atlas))
         self.marks.setText(", ".join(parts) or "no points marked")
         self.mark.setChecked(engine.tool_box.checkable_btn_dict["probe_btn"].isChecked())
+        # A mapped track returned for editing and deleted: mapping removes it.
+        cleared = bool(probe and not (on_section or on_atlas)
+                       and engine.cleared_edit("probe", probe) is not None)
         self.add_button.setText("2  Add the points to {}".format(probe or "the probe") if pre_plan
+                                else "2  Remove this section's mapping" if cleared
                                 else "2  Map this section")
-        self.add_button.setEnabled(bool(on_section or on_atlas))
+        self.add_button.setEnabled(bool(on_section or on_atlas) or cleared)
         has_parts = bool(probe and self.book.parts(probe))
         built = bool(probe and self.book.built(probe))
         self.build_button.setText("3  {} {}".format("Rebuild" if built and has_parts else "Build",

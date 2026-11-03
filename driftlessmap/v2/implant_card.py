@@ -498,11 +498,16 @@ class ImplantCard(Card):
             parts.append("tip marked" if implant.kind == model.FIBER else "bottom marked")
         self.outline_state.setText(", ".join(parts).capitalize() + ".")
         reason = self.shell.needs_both()
-        self.map_button.setEnabled(bool(outline["points"]) and reason is None)
+        # A mapped outline returned for editing and deleted: mapping removes it.
+        cleared = engine.cleared_edit(implant.kind, implant.implant_id) is not None
+        self.map_button.setText("2  Remove this section's mapping" if cleared
+                                else "2  Map this section")
+        self.map_button.setEnabled((bool(outline["points"]) and reason is None) or cleared)
         help_ = undo_help()
-        self.map_button.setToolTip(reason or (help_["step"] + " " + help_["edit"]
-                                              if outline["points"]
-                                              else "Draw the outline first."))
+        self.map_button.setToolTip(
+            "Remove the mapping of {} on this section and its part.".format(implant.name)
+            if cleared else reason or (help_["step"] + " " + help_["edit"]
+                                       if outline["points"] else "Draw the outline first."))
         has_parts = bool(engine.implant_objects(implant.implant_id))
         self.build_button.setEnabled(has_parts)
         self.build_button.setText("3  Build {}".format(implant.name))

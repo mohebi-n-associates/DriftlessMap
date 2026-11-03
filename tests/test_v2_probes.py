@@ -91,6 +91,19 @@ class FakeEngine:
     def transfer_to_atlas_clicked(self):
         self.h2a_transferred = not self.h2a_transferred
 
+    cleared = None      # a record whose marks were put back for editing and deleted
+
+    def cleared_edit(self, kind, probe=None):
+        return self.cleared if self.cleared is not None and self.cleared.probe == probe \
+            else None
+
+    def remove_mapping(self, unit_id):
+        record, self.cleared = self.cleared, None
+        o = self.object_ctrl
+        o.delete_objects([i for i, name in enumerate(o.obj_name)
+                          if probe_of(group_of(name)) == record.probe])
+        return record, "Removed the mapping of {}.".format(record.probe)
+
     def transform_accept(self, probe=None):
         self.mapped_for = probe
         self.working_atlas_data["atlas-probe"] = list(self.working_img_data["img-probe"])
@@ -176,6 +189,24 @@ class ProbeBookTests(unittest.TestCase):
         self.assertEqual(book.summary("Probe 1"), "2 sections · not built")
         self.assertEqual(engine.object_ctrl.obj_name,
                          ["Probe 1 - piece", "Probe 1 - piece", "Probe 2 - piece"])
+
+    def test_mapping_a_deleted_track_removes_the_section_and_keeps_the_probe(self):
+        engine = FakeEngine()
+        engine.mapping_ledger = MappingLedger()
+        book = ProbeBook(engine)
+        probe = book.new()
+        self.mark(engine)
+        book.add_section(probe)
+        self.assertEqual(book.parts(probe), [0])
+        engine.cleared = engine.mapping_ledger.record(
+            new_identifier(), "probe", {"points": [[0, 0], [1, 1]]}, "a" * 64, "reviewed",
+            "now", probe=probe)
+        ok, message = book.add_section(probe)
+        self.assertTrue(ok, message)
+        self.assertIn("Removed the mapping", message)
+        self.assertEqual(book.parts(probe), [])
+        self.assertEqual(book.names(), [probe])
+        self.assertFalse(book.add_section(probe)[0])       # nothing left to remove
 
     def test_build_only_the_chosen_probe_and_rebuild_after_new_sections(self):
         engine = FakeEngine()
