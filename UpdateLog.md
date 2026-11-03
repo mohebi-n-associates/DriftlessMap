@@ -1,6 +1,11 @@
 # Update Log
 
 ### 3rd November 2026
+##### 2.6.0: usability, U4 (compact rail)
+
+Review U4, with B10's inspector folding (2.5.8). Below `COMPACT_RAIL_WIDTH` (1200 px) `set_rail_compact` narrows the step rail from 158 to 56 px: buttons show the step number, the status lines, name, version and palette hint are hidden, and each tooltip carries the step's status (`_sync_rail_tooltips`); at the 1100 px minimum the task panel gains about 100 px. Sections named from a reader's file list now use the file's base name (a directly opened TIFF showed its full path). Test: the rail switches to numbers at 1100 px and back at 1480 px.
+
+### 3rd November 2026
 ##### 2.6.0: usability, U2 (one annotation pipeline)
 
 Review U2. `v2.state.annotation_pipeline(engine)` reports, for cells, expression, contours and drawings, which kinds are marked on the section, mapped (atlas marks not made into parts), in parts and built, the review state and the next step (mark, map, parts, build, inspect). The Annotate card "Map annotations to atlas" lists the stages (✓ done, → next) and one primary button does the next step for every kind waiting at it: map (switching on the section → atlas warp preview first, as probes do), make parts, build, or open Results. Review registration opens the Register step; the separate Map to atlas / Mark reviewed buttons are replaced, and the individual Make parts / Build / Edit parts buttons stay. Test: cells and a contour go from section marks to two built objects with the one button, starting without a warp preview.

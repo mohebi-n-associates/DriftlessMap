@@ -48,7 +48,8 @@ class SectionsMixin:
             return os.path.basename(self.current_img_path)
         image_file = self.image_view.image_file
         names = getattr(image_file, "file_name_list", None) if image_file is not None else None
-        return names[0] if names else ""
+        # Readers may list full paths; a section is named after its file.
+        return os.path.basename(str(names[0])) if names else ""
 
     def sync_sections(self):
         """Follow the open section if it was read again under a new identity."""
