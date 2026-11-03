@@ -176,8 +176,8 @@ class AnnotatePanel(StepPanel):
         note = "" if rows else "Nothing mapped from this section yet."
         if others:
             note = (note + " " if note else "") + (
-                "Also mapped on: {}. To change those, open the section in Project › "
-                "Sections.".format(", ".join(others)))
+                "Also mapped on: {}. To change those, open that section with the section "
+                "bar above the images.".format(", ".join(others)))
         self.mapped_note.setText(note)
 
     def refresh(self):

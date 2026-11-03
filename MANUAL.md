@@ -939,6 +939,12 @@ review, the atlas plane, page and tilt it was matched to, its marks and layers,
 and its unmapped implant outlines. The atlas, objects, mapping records,
 implants and probes belong to the project and are shared by all sections.
 
+The **section bar** above the images (2.0 interface, since 2.6.0) shows which
+section is open, its position (*2/5 · pfc-2.tif*) and, for an image file
+with several pages, scenes or planes, which one is shown (*page 2*). Choose
+another section from its list, or use ◀ ▶ (Ctrl+PgUp / Ctrl+PgDown), to open
+it without leaving the step you are in.
+
 The **Sections** card in the Project step lists the sections in order with
 their plane and page, landmark pairs, review state and what was mapped from
 them; the open one is marked. **Open** (or a double-click) switches to the

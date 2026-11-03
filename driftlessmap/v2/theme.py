@@ -150,6 +150,7 @@ QMenuBar::item:selected {{ background: {accent_soft}; }}
 QFrame#StatusLine {{ background: {surface}; border-top: 1px solid {border}; }}
 QFrame#CanvasHeader {{ background: {surface}; border-bottom: 1px solid {border}; }}
 QFrame#ToolOptions {{ background: {surface_alt}; border-bottom: 1px solid {border}; }}
+QFrame#SectionBar {{ background: {surface}; border-bottom: 1px solid {border}; }}
 QWidget#Canvas {{ background: {canvas}; }}
 QSplitter::handle {{ background: {border}; }}
 QFrame#Tile {{
