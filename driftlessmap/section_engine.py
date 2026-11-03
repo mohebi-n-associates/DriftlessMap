@@ -93,6 +93,14 @@ class SectionsMixin:
                                "{}".format(len(problems), "; ".join(problems)),
                                self.reminder_color)
 
+    def history_cleared_note(self):
+        """" Undo mapping step history was cleared." when there was any (an
+        action about to clear it says so)."""
+        undo, redo = self.undo_history.labels()
+        return (" The Undo mapping step history ({} step{}) was cleared.".format(
+            len(undo) + len(redo), "" if len(undo) + len(redo) == 1 else "s")
+            if undo or redo else "")
+
     def section_name(self, section_id):
         entry = self.sections.entry(section_id)
         return entry.name if entry is not None else "a section without a stored image"
@@ -368,6 +376,7 @@ class SectionsMixin:
 
     def switch_section(self, section_id):
         """Open another section of the project; returns (ok, message)."""
+        history_note = self.history_cleared_note()
         self.sync_sections()
         book = self.sections
         if section_id == book.active_id:
@@ -432,7 +441,7 @@ class SectionsMixin:
         book.opened(section_id)
         note = "" if payload.get("_histology_load_mode") != "embedded" else \
             " Its source file was missing or changed, so its saved image was used."
-        return True, "Opened {}.{}".format(target.name, note)
+        return True, "Opened {}.{}{}".format(target.name, note, history_note)
 
     # ------------------------------------------------------------ editing
     def rename_section(self, section_id, name):
@@ -466,6 +475,7 @@ class SectionsMixin:
                                 ", ".join(taken_apart),
                                 "it" if len(taken_apart) == 1 else "them"))
         # Undo steps may refer to the removed section's mappings.
+        message += self.history_cleared_note()
         self.undo_history.clear()
         self.sync_mapping_undo_actions()
         return True, message

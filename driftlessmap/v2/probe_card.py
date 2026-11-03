@@ -114,10 +114,14 @@ class ProbeControls(Card):
             return
         parts = len(self.book.parts(probe))
         if parts or self.book.built(probe):
+            sections = [self.engine.section_name(sid)
+                        for sid in self.engine.mapped_section_ids("probe", probe)]
             reply = QMessageBox.question(
                 self, "Delete probe",
-                "Delete {} and its {} section part{} and built object?".format(
-                    probe, parts, "" if parts == 1 else "s"),
+                "Delete {} and its {} section part{} and built object?{} Undo mapping "
+                "step brings it back.".format(
+                    probe, parts, "" if parts == 1 else "s",
+                    " It was mapped on: {}.".format(", ".join(sections)) if sections else ""),
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No)
             if reply != QMessageBox.StandardButton.Yes:

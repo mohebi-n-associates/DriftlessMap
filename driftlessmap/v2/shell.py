@@ -465,6 +465,34 @@ class V2Window(QMainWindow):
         return "\n".join("{}  {:<7}  {}".format(time, labels.get(kind, "Note"), text)
                          for time, kind, text in getattr(self, "activity", []))
 
+    def mapping_history_text(self):
+        undo, redo = self.engine.undo_history.labels()
+        lines = ["Undo mapping step ({}) takes back, newest first:".format(
+            QKeySequence("Ctrl+Alt+Z").toString(QKeySequence.SequenceFormat.NativeText))]
+        lines += ["  {}. {}".format(n, label) for n, label in enumerate(undo, start=1)] or \
+            ["  nothing"]
+        lines += ["", "Redo mapping step brings back, next first:"]
+        lines += ["  {}. {}".format(n, label) for n, label in enumerate(redo, start=1)] or \
+            ["  nothing"]
+        lines += ["", "These steps are Map, Update or Remove mapping, Make parts, Build and "
+                  "Delete. Ordinary Undo (Ctrl/Cmd+Z) takes back single points and strokes. "
+                  "Opening or removing a section, loading an image or opening a project "
+                  "clears this history (a message says so); at most 10 steps are kept."]
+        return "\n".join(lines)
+
+    def show_mapping_history(self):
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Mapping history")
+        dialog.resize(560, 360)
+        layout = QVBoxLayout(dialog)
+        view = QPlainTextEdit(self.mapping_history_text())
+        view.setReadOnly(True)
+        layout.addWidget(view)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        dialog.exec()
+
     def show_activity(self):
         """The session's messages, copyable; warnings are no longer counted."""
         dialog = QDialog(self)
@@ -652,6 +680,8 @@ class V2Window(QMainWindow):
         add(Command("project.save_portable", "Save portable copy…",
                     lambda: self.save_project(portable=True), "Project",
                     ("portable project",)))
+        add(Command("edit.history", "Mapping history…", self.show_mapping_history, "Edit",
+                    ("undo history", "what will be undone", "steps")))
         add(Command("session.messages", "Messages of this session", self.show_activity,
                     "Help", ("log", "warnings", "errors", "activity")))
         add(Command("section.previous", "Open the previous section",
@@ -835,6 +865,7 @@ class V2Window(QMainWindow):
         edit_menu.addSeparator()
         self.undo_step_item = item(edit_menu, "edit.undo_step")
         self.redo_step_item = item(edit_menu, "edit.redo_step")
+        item(edit_menu, "edit.history")
         edit_menu.aboutToShow.connect(self._name_undo_steps)
 
         view_menu = bar.addMenu("&View")

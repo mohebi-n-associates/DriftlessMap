@@ -1328,7 +1328,10 @@ Pieces (Make parts) and the Merge/Build actions can be undone and redone as
 whole steps: undo restores the section marks, atlas marks, mapping records,
 pieces, built objects and review state together. Use **Edit > Undo** *step*
 (Ctrl+Alt+Z) and **Edit > Redo** *step* (Ctrl+Alt+Shift+Z); the menu names the
-step, for example "Undo Map cells". The last 10 steps are kept, within 500 MB;
+step, for example "Undo Map cells", and **Edit > Mapping history…** (2.0
+interface, since 2.6.0) lists every step Undo and Redo would take back.
+Opening or removing a section, or adding an image, clears this history; the
+message then says how many steps were cleared. The last 10 steps are kept, within 500 MB;
 masks are stored compressed. A step too large for that budget says so and is not
 undoable; a change that cannot be retained clears earlier undo and redo history.
 Undo and redo share the 500 MB budget. If an inverse state cannot fit, the requested

@@ -315,11 +315,14 @@ class ImplantCard(Card):
             return
         implant = self.implant()
         count = len(self.engine.implant_objects(implant.implant_id))
+        sections = [self.engine.section_name(sid) for sid in
+                    self.engine.mapped_section_ids(("fiber", "prism"), implant.implant_id)]
         reply = QMessageBox.question(
             self, "Delete implant",
-            "Delete {}{}? Undo mapping step brings it back.".format(
+            "Delete {}{}?{} Undo mapping step brings it back.".format(
                 implant.name, " and its {} part(s) and built object".format(count)
-                if count else ""),
+                if count else "",
+                " It was mapped on: {}.".format(", ".join(sections)) if sections else ""),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No)
         if reply != QMessageBox.StandardButton.Yes:
