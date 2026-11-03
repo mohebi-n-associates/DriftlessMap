@@ -26,6 +26,7 @@ from PyQt6.QtWidgets import (
 
 from .. import file_dialogs
 from ..allen_downloader import AllenDownloader
+from ..atlas_loader import atlas_processing_incomplete
 from ..download_utils import read_download_manifest, thread_is_running
 from .widgets import Card, hint_label
 
@@ -255,6 +256,10 @@ class AllenDownloadDialog(AllenDownloader):
                                      "will be downloaded.")
         else:
             self.folder_note.setText("Nothing downloaded here yet for this resolution.")
+        if self.saving_folder and atlas_processing_incomplete(self.saving_folder):
+            self.folder_note.setText(self.folder_note.text() + (
+                " Processing in this folder did not finish last time; Process and open "
+                "atlas starts it again."))
 
     # ---------------------------------------------------------- downloads
     def download_everything(self):

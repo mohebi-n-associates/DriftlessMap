@@ -59,6 +59,7 @@ class DownloadThread(QThread):
 class WorkerProcessData(QObject):
     finished = pyqtSignal()
     progress = pyqtSignal(int)
+    status = pyqtSignal(str)     # the stage being worked on, for the user
 
     def __init__(self):
         super(WorkerProcessData, self).__init__()
@@ -111,6 +112,7 @@ class WorkerProcessData(QObject):
 
     def _run(self):
         target = os.path.join(self.saving_folder, 'atlas_labels.pkl')
+        self.status.emit("Preparing the downloaded files…")
         if self.prepare is not None:
             self.prepare(self.saving_folder)
         elif not os.path.exists(target):
@@ -125,6 +127,7 @@ class WorkerProcessData(QObject):
             raise ValueError(label_error)
 
         self.progress.emit(5)
+        self.status.emit("Reading the template and the regions, and drawing region boundaries…")
 
         self.atlas_data, self.atlas_info, self.segmentation_data, self.unique_label, self.boundary, msg = \
             process_atlas_raw_data(self.saving_folder, data_file=self.data_local,
@@ -139,6 +142,7 @@ class WorkerProcessData(QObject):
             write_cache_pickle(os.path.join(self.saving_folder, 'atlas_axis_info.pkl'),
                                waxholm_axis_info(self.atlas_data.shape))
             self.progress.emit(40)
+            self.status.emit("Building the brain surface mesh…")
             self.mesh_data = render_volume(self.atlas_data, self.saving_folder, factor=2, level=0.1)
             self.progress.emit(50)
             save_path = os.path.join(self.saving_folder, 'meshes')
@@ -150,6 +154,7 @@ class WorkerProcessData(QObject):
 
             for i in range(n_label):
                 self.progress.emit(int(progress_step[i]))
+                self.status.emit("Building region meshes: {} of {}…".format(i + 1, n_label))
                 label_id = int(self.unique_label[i])
 
                 if label_id == 0:
@@ -167,6 +172,7 @@ class WorkerProcessData(QObject):
                     self.small_mesh_list[str(da_name)] = md
 
             self.progress.emit(97)
+            self.status.emit("Saving the region meshes…")
             write_cache_pickle(os.path.join(self.saving_folder, 'atlas_small_meshdata.pkl'), self.small_mesh_list)
 
             self.progress.emit(100)
@@ -344,6 +350,7 @@ class AtlasDownloader(QDialog):
             self.worker.finished.connect(self.on_finish)
             self.thread.finished.connect(self.thread.deleteLater)
             self.worker.progress.connect(self.report_progress)
+            self.worker.status.connect(self.process_info.setText)
             self.thread.start()
 
     def on_finish(self):

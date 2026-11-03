@@ -1,6 +1,11 @@
 # Update Log
 
 ### 3rd November 2026
+##### 2.6.0: usability, U7 (long operations)
+
+Review U7. `WorkerProcessData.status` names each stage of rat atlas processing (preparing files; reading template and regions with boundaries; brain mesh; "Building region meshes: i of n"; saving), shown by both rat dialogs. The V2 rat dialog's Download button becomes "Retry failed downloads" after a failure (verified files are not fetched again); both V2 download dialogs (rat and Allen) note a folder whose processing stopped part-way (`atlas_processing_incomplete`) and that processing again starts over with the downloaded files. Safe cancellation of processing was not added: the processing runs as one worker without cancellation points. Tests: retry label and failure row, the stopped-processing note, the stage names.
+
+### 3rd November 2026
 ##### 2.6.0: usability, U4 (compact rail)
 
 Review U4, with B10's inspector folding (2.5.8). Below `COMPACT_RAIL_WIDTH` (1200 px) `set_rail_compact` narrows the step rail from 158 to 56 px: buttons show the step number, the status lines, name, version and palette hint are hidden, and each tooltip carries the step's status (`_sync_rail_tooltips`); at the 1100 px minimum the task panel gains about 100 px. Sections named from a reader's file list now use the file's base name (a directly opened TIFF showed its full path). Test: the rail switches to numbers at 1100 px and back at 1480 px.
