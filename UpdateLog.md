@@ -1,6 +1,11 @@
 # Update Log
 
 ### 3rd November 2026
+##### DriftlessMap 2.6.0
+
+Release of the usability work from `reviews/2.5.0/REPORT.md` (U1-U4, U7-U12 in the phases below; U5 and U6 were in 2.5.8). Version 2.6.0 (version.py, CITATION.cff, tests, README, MANUAL, agent guides, release_validation).
+
+### 3rd November 2026
 ##### 2.6.0: usability, U12 (first-run guidance)
 
 Review U12. The empty canvas now offers three ways to start: map histology (Load atlas folder…, Add sections…, and downloading or processing an atlas: Allen mouse, Waxholm rat, SWC female rat, your own), plan a probe (`start_probe_plan`: Annotate with a hint, or a message to load an atlas first) and continue earlier work (Open project…). The manual opens with "Quick start in the 2.0 interface" (the classic interface was described first). A bundled example project was not added (it needs an atlas, hundreds of MB), and keyboard-only and screen-reader use, and timings with users, remain to be tested with people. Test: the eight start buttons; planning a probe without and with an atlas.

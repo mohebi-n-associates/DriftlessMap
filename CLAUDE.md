@@ -8,7 +8,7 @@ or important workflows change.
 
 ## Project identity
 
-- Current stable release: DriftlessMap 2.5.8 (3 November 2026; 2.4.0 plus
+- Current stable release: DriftlessMap 2.6.0 (3 November 2026; 2.4.0 plus
   fixes and the rat atlas downloads, the first release since 2.0.0, including 2.0.1-2.3.0 and multi-section
   projects). 2.0.0
   (29 October 2026) followed the 2.0.0aN previews and 2.0.0rc1-rc16. The owner released it with the
@@ -47,7 +47,17 @@ or important workflows change.
   portable copy is written `as_copy`. Every shell message is kept in
   `activity` (warnings/errors counted on `activity_button`, `show_activity`).
   Below `COMPACT_WIDTH` the inspector folds away (`resizeEvent`); step panels
-  must fit the 1100 px minimum window (test).
+  must fit the 1100 px minimum window (test). Below `COMPACT_RAIL_WIDTH`
+  the step rail shows numbers (`set_rail_compact`). 2.6.0 usability (review
+  U items): `v2/section_bar.SectionBar` above the canvas switches sections in
+  place (`section.previous/next`); `v2.state.annotation_pipeline` drives
+  Annotate's one next-step button; Results repairs a stale object
+  (`object_contributions`, `stale_contribution`, `rebuild_selected`); Register
+  gates Mark review complete on a checklist and offers Blink/Checkerboard
+  (`checkerboard`); the Section table has All/None per column (`tick_all`);
+  Edit > Mapping history (`TransactionHistory.labels`); `add_sections` adds
+  files in natural order or TIFF pages as sections; the empty canvas offers
+  three starts (`start_probe_plan`).
 - `driftlessmap/project_session.py`: `ProjectSessionMixin.project_payload` is the
   shared saved-state collector. `load_project` snapshots the active document and
   restores it on failure, including its original reader, in-memory atlas and undo
