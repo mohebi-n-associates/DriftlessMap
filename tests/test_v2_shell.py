@@ -1000,6 +1000,44 @@ class V2ShellTests(unittest.TestCase):
         self.assertEqual(colour_name((10, 120, 60)), "RGB 10, 120, 60")
 
     @isolated_gui_test
+    def test_the_mapping_history_is_listed_and_clearing_it_is_reported(self):
+        import cv2
+        from unittest.mock import patch
+
+        from driftlessmap import file_dialogs
+        from tests.atlas_fixture import make_processed_atlas
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window = self.make_window(folder)
+            engine = window.engine
+            self.assertTrue(engine.load_volume_atlas(str(make_processed_atlas(root / "atlas"))))
+            for name in ("a.png", "b.png"):
+                cv2.imwrite(str(root / name), np.full((32, 24, 3), 120, np.uint8))
+                with patch.object(file_dialogs, "get_open_file_name",
+                                  return_value=(str(root / name), "")):
+                    engine.load_image()
+            first = engine.sections.entries()[0].section_id
+            engine.atlas_tri_inside_data[:] = [[1.0, 1.0], [5.0, 1.0], [3.0, 5.0]]
+            engine.histo_tri_inside_data[:] = [[2.0, 2.0], [6.0, 2.0], [4.0, 6.0]]
+            fiber = engine.add_implant("fiber")
+            engine.set_implant_outline(fiber.implant_id, [[10.0, 4.0], [14.0, 4.0],
+                                                          [14.0, 20.0], [10.0, 20.0]])
+            self.assertTrue(engine.map_implant(fiber.implant_id)[0])
+            self.assertTrue(engine.build_implant(fiber.implant_id)[0])
+            text = window.mapping_history_text()
+            self.assertIn("1. Build Fiber 1", text)
+            self.assertIn("2. Map Fiber 1", text)
+            self.assertTrue(engine.undo_mapping_step())
+            self.assertEqual(engine.undo_history.labels(), (["Map Fiber 1"], ["Build Fiber 1"]))
+
+            ok, message = engine.switch_section(first)
+            self.assertTrue(ok)
+            self.assertIn("history (2 steps) was cleared", message)
+            ok, message = engine.switch_section(engine.sections.entries()[1].section_id)
+            self.assertNotIn("cleared", message)          # nothing left to clear
+
+    @isolated_gui_test
     def test_save_follows_the_open_file_and_warnings_stay_listed(self):
         import cv2
         from unittest.mock import patch

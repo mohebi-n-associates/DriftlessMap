@@ -7557,6 +7557,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
         ``page``, show that page of a multi-page file and name the section
         after it. Returns whether it was added."""
         image_file_type = os.path.splitext(path)[1].lower()
+        history_note = self.history_cleared_note()
         try:
             stored = self.begin_new_section()
         except Exception as exc:
@@ -7584,6 +7585,8 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
         self.site_face = self.tool_box.after_site_face_combo.currentIndex()
         self.probe_settings.probe_faces_changed(
             self.tool_box.after_site_face_combo.currentText())
+        if history_note:
+            self.print_message(history_note.strip(), self.reminder_color)
         return True
 
     def add_sections(self, paths, pages_as_sections=False):

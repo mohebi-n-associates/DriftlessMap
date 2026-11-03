@@ -126,6 +126,10 @@ class TransactionHistory:
     def _used(self):
         return sum(t.size for t in self._undo) + sum(t.size for t in self._redo)
 
+    def labels(self):
+        """(undo labels, redo labels), the next step first."""
+        return ([t.label for t in reversed(self._undo)], [t.label for t in reversed(self._redo)])
+
     def undo_label(self):
         return self._undo[-1].label if self._undo else None
 

@@ -1,6 +1,11 @@
 # Update Log
 
 ### 3rd November 2026
+##### 2.6.0: usability, U11 (predictable undo)
+
+Review U11. `TransactionHistory.labels()` lists the undo and redo steps; V2 Edit > Mapping history… (`edit.history`) shows them, newest first, with what the mapping steps cover and what clears them. Opening a section, removing one and adding an image now say when they clear a non-empty history ("The Undo mapping step history (2 steps) was cleared.", `history_cleared_note`). The probe and implant delete dialogs name the sections they were mapped on and that Undo mapping step brings them back. A single command history across all mutation types was not attempted. Test: map and build list as "1. Build Fiber 1, 2. Map Fiber 1"; after an undo the lists split; switching sections reports two cleared steps, and nothing when empty.
+
+### 3rd November 2026
 ##### 2.6.0: usability, U10 (channel controls)
 
 Review U10. The Section step's channel table has an All / None button under the Adjust, Show and Register columns (`SectionPanel.tick_all`): None when the whole column is ticked, else All; Show offers only All (the 1.x selector keeps one channel visible), and Register's follows whether the channel recipe is in use. Colour swatches carry their colour's name (`colour_name`: the nearest preset within 40 RGB units, else the RGB values) in the tooltip and accessible name. The registration-input preview and colour presets already existed. Selection presets were not added. Test: a four-channel image ticks and unticks Register (recipe of all four, then none), Adjust, and Show.
