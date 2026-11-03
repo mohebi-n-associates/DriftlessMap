@@ -9181,7 +9181,8 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
             file_name = file_dialogs.get_save_file_name(
                 self,
                 "Save Project",
-                self.save_path,
+                # Start where the open project is (Save As), else the image's folder.
+                self.current_project_path or self.save_path,
                 "DriftlessMap Project (*.dmap)",
             )
         if file_name[0] != "":

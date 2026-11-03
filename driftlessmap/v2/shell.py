@@ -9,14 +9,17 @@ scientific state.
 """
 
 import os
+from datetime import datetime
 
 from PyQt6.QtCore import QEvent, QSettings, Qt, QTimer, QUrl
-from PyQt6.QtGui import QAction, QDesktopServices, QKeySequence, QShortcut
+from PyQt6.QtGui import QAction, QDesktopServices, QKeySequence, QShortcut, QTextCursor
 from PyQt6.QtWidgets import (
     QAbstractSpinBox,
     QApplication,
     QButtonGroup,
     QCheckBox,
+    QDialog,
+    QDialogButtonBox,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -213,7 +216,12 @@ class V2Window(QMainWindow):
         header_layout.addSpacing(16)
         self.plane_label = QLabel("")
         self.plane_label.setObjectName("Muted")
-        header_layout.addWidget(self.plane_label)
+        # On a narrow canvas the view buttons keep their names; this label
+        # gives way (its text is also in the step list).
+        self.plane_label.setSizePolicy(QSizePolicy.Policy.Ignored,
+                                       QSizePolicy.Policy.Preferred)
+        self.plane_label.setMinimumWidth(0)
+        header_layout.addWidget(self.plane_label, 1)
         header_layout.addStretch(1)
         self.focus_button = QToolButton()
         self.focus_button.setObjectName("Segment")
@@ -309,6 +317,13 @@ class V2Window(QMainWindow):
         self.message_label = QLabel("")
         self.message_label.setMinimumWidth(200)
         status_layout.addWidget(self.message_label, 1)
+        # Warnings and errors stay listed after later messages replace them.
+        self.activity_button = QToolButton()
+        self.activity_button.setToolTip("Messages of this session")
+        self.activity_button.clicked.connect(self.show_activity)
+        self.activity_button.hide()
+        status_layout.addWidget(self.activity_button)
+        status_layout.addSpacing(8)
         self.context_label = QLabel("")
         self.context_label.setObjectName("Muted")
         status_layout.addWidget(self.context_label)
@@ -405,6 +420,8 @@ class V2Window(QMainWindow):
 
     def _show_message(self, text, kind):
         text = " ".join(str(text).split())
+        if text:
+            self._log_activity(text, kind)
         self.message_label.setText(text)
         self.message_label.setToolTip(text)
         colour = {"bad": "error", "warn": "warning", "good": "success"}.get(kind)
@@ -416,6 +433,48 @@ class V2Window(QMainWindow):
         self._relaying = True
         self._show_message(text, kind)
         self._relaying = False
+
+    # ----------------------------------------------------- session messages
+    ACTIVITY_LIMIT = 500
+
+    def _log_activity(self, text, kind):
+        log = self.__dict__.setdefault("activity", [])
+        if log and log[-1][1:] == (kind, text):
+            return
+        log.append((datetime.now().strftime("%H:%M:%S"), kind, text))
+        del log[:-self.ACTIVITY_LIMIT]
+        if kind in ("bad", "warn"):
+            self._unseen_issues = getattr(self, "_unseen_issues", 0) + 1
+        self._sync_activity_button()
+
+    def _sync_activity_button(self):
+        count = getattr(self, "_unseen_issues", 0)
+        self.activity_button.setText("⚠ {} message{}".format(count, "" if count == 1 else "s"))
+        self.activity_button.setVisible(count > 0)
+
+    def activity_text(self):
+        labels = {"bad": "Error", "warn": "Warning", "good": "Done", None: "Note"}
+        return "\n".join("{}  {:<7}  {}".format(time, labels.get(kind, "Note"), text)
+                         for time, kind, text in getattr(self, "activity", []))
+
+    def show_activity(self):
+        """The session's messages, copyable; warnings are no longer counted."""
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Messages of this session")
+        dialog.resize(760, 420)
+        layout = QVBoxLayout(dialog)
+        view = QPlainTextEdit(self.activity_text())
+        view.setReadOnly(True)
+        view.moveCursor(QTextCursor.MoveOperation.End)
+        layout.addWidget(view)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        copy = buttons.addButton("Copy all", QDialogButtonBox.ButtonRole.ActionRole)
+        copy.clicked.connect(lambda: QApplication.clipboard().setText(view.toPlainText()))
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        self._unseen_issues = 0
+        self._sync_activity_button()
+        dialog.exec()
 
     # ---------------------------------------------------------- navigation
     def go_to(self, step):
@@ -576,11 +635,15 @@ class V2Window(QMainWindow):
                     ("new project", "start again", "another atlas"), "Ctrl+N"))
         add(Command("project.open", "Open project…", self.open_project, "Project",
                     ("load project",), "Ctrl+O"))
-        add(Command("project.save", "Save project…", self.save_project, "Project",
+        add(Command("project.save", "Save project", self.save_project, "Project",
                     ("save",), "Ctrl+S"))
+        add(Command("project.save_as", "Save project as…", self.save_project_as, "Project",
+                    ("save as", "save a copy", "new file"), "Ctrl+Shift+S"))
         add(Command("project.save_portable", "Save portable copy…",
                     lambda: self.save_project(portable=True), "Project",
-                    ("portable project",), "Ctrl+Shift+S"))
+                    ("portable project",)))
+        add(Command("session.messages", "Messages of this session", self.show_activity,
+                    "Help", ("log", "warnings", "errors", "activity")))
         add(Command("section.channels", "Choose registration channels",
                     lambda: self.go_to("section"), "Section",
                     ("registration channels", "dapi", "registration input")))
@@ -723,6 +786,7 @@ class V2Window(QMainWindow):
             item(file_menu, command_id)
         file_menu.addSeparator()
         item(file_menu, "project.save")
+        item(file_menu, "project.save_as")
         item(file_menu, "project.save_portable")
         file_menu.addSeparator()
         export = file_menu.addMenu("Export")
@@ -783,6 +847,7 @@ class V2Window(QMainWindow):
         toggle_inspector.setChecked(True)
         toggle_inspector.toggled.connect(self.inspector_column.setVisible)
         toggle_inspector.toggled.connect(lambda _shown: self._sync_focus())
+        toggle_inspector.toggled.connect(self._inspector_toggled)
         self.toggle_task_item, self.toggle_inspector_item = toggle_task, toggle_inspector
 
         help_menu = bar.addMenu("&Help")
@@ -851,9 +916,22 @@ class V2Window(QMainWindow):
             self.message("Opened where you left off.", "good")
 
     def save_project(self, portable=False):
-        if self.engine.save_project_called(portable=portable):
+        """Save to the open project's file (asking only for a new project);
+        a portable project is written as a copy."""
+        if portable:
+            self.engine.save_project_called(portable=True, as_copy=True)
+            return
+        path = self.engine.current_project_path
+        if path and os.path.isdir(os.path.dirname(os.path.abspath(path))):
+            saved = self.engine.save_project_called(path=path)
+        else:
+            saved = self.engine.save_project_called()
+        if saved:
+            self.mark_saved()   # the engine's message names any notes
+
+    def save_project_as(self):
+        if self.engine.save_project_called():
             self.mark_saved()
-            self.message("Project saved.", "good")
 
     def _digest(self):
         return state.scientific_digest(self.engine)
@@ -969,6 +1047,32 @@ class V2Window(QMainWindow):
             self.message("Opening the classic interface in a new window.")
         else:
             self.message("The classic interface could not be started.", "bad")
+
+    # A narrow window cannot fit the task column, the views and the objects and
+    # layers column side by side: the last folds away below this width.
+    COMPACT_WIDTH = 1360
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        item = getattr(self, "toggle_inspector_item", None)
+        if item is None:
+            return
+        compact = self.width() < self.COMPACT_WIDTH
+        if compact == getattr(self, "_compact", False):
+            return
+        self._compact = compact
+        if compact and item.isChecked():
+            item.setChecked(False)
+            self._inspector_auto_hidden = True
+            self.message("The window is narrow, so objects and layers are hidden; View > "
+                         "Show objects and layers shows them.")
+        elif not compact and getattr(self, "_inspector_auto_hidden", False):
+            item.setChecked(True)
+
+    def _inspector_toggled(self, shown):
+        # Shown or hidden by hand (or shown again when wide): no longer folded away.
+        if shown:
+            self._inspector_auto_hidden = False
 
     def is_focused(self):
         """True while both side columns are hidden."""

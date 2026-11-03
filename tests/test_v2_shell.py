@@ -729,6 +729,111 @@ class V2ShellTests(unittest.TestCase):
             self.assertIn("Edit mapped marks", [c.name for c in window.registry.all()])
 
     @isolated_gui_test
+    def test_save_follows_the_open_file_and_warnings_stay_listed(self):
+        import cv2
+        from unittest.mock import patch
+
+        from PyQt6.QtWidgets import QDialog, QFileDialog
+
+        from tests.atlas_fixture import make_processed_atlas
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window = self.make_window(folder)
+            engine = window.engine
+            self.assertTrue(engine.load_volume_atlas(str(make_processed_atlas(root / "atlas"))))
+            cv2.imwrite(str(root / "s.png"), np.full((32, 24, 3), 120, np.uint8))
+            self.assertTrue(engine.load_single_image_file(str(root / "s.png"), ".png"))
+
+            first = root / "first.dmap"
+            with patch.object(QFileDialog, "getSaveFileName",
+                              return_value=(str(first), "")) as ask:
+                window.run("project.save")              # a new project: asks once
+            ask.assert_called_once()
+            self.assertEqual(engine.current_project_path, str(first))
+            engine.atlas_tri_inside_data[:] = [[1.0, 1.0], [5.0, 1.0], [3.0, 5.0]]
+            with patch.object(QFileDialog, "getSaveFileName") as ask:
+                window.run("project.save")              # then saves where it is
+            ask.assert_not_called()
+            self.assertFalse(window.is_dirty())
+
+            second = root / "second.dmap"
+            with patch.object(QFileDialog, "getSaveFileName",
+                              return_value=(str(second), "")):
+                window.run("project.save_as")
+            self.assertEqual(engine.current_project_path, str(second))
+            portable = root / "portable.dmap"
+            with patch.object(QFileDialog, "getSaveFileName",
+                              return_value=(str(portable), "")):
+                window.run("project.save_portable")
+            self.assertTrue(portable.exists())
+            self.assertEqual(engine.current_project_path, str(second))   # still the open file
+
+            # A warning stays listed after a later message replaces it.
+            with patch.object(QDialog, "exec", return_value=0):
+                window.run("session.messages")          # earlier ones seen
+            engine.print_message("Something to check.", engine.reminder_color)
+            window.message("All done.", "good")
+            self.assertEqual(window.message_label.text(), "All done.")
+            self.assertFalse(window.activity_button.isHidden())
+            self.assertIn("1 message", window.activity_button.text())
+            self.assertIn("Warning  Something to check.", window.activity_text())
+            with patch.object(QDialog, "exec", return_value=0):
+                window.run("session.messages")
+            self.assertTrue(window.activity_button.isHidden())
+
+    @isolated_gui_test
+    def test_every_step_fits_its_column_in_the_smallest_window(self):
+        # Review B10: the Annotate step was wider than its column, so controls
+        # were cut off with no way to scroll to them.
+        import tifffile
+
+        from tests.atlas_fixture import make_processed_atlas
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window = self.make_window(folder)
+            window.show()
+            window.resize(window.minimumSize())
+            engine = window.engine
+            self.assertTrue(engine.load_volume_atlas(str(make_processed_atlas(root / "atlas"))))
+            stack = (np.arange(4 * 64 * 48) % 4000).astype(np.uint16).reshape(4, 64, 48)
+            tifffile.imwrite(str(root / "s.tif"), stack, metadata={"axes": "CYX"}, imagej=True)
+            self.assertTrue(engine.load_single_image_file(str(root / "s.tif"), ".tif"))
+            for step, panel in window.panels.items():
+                with self.subTest(step):
+                    window.go_to(step)
+                    window.refresh()
+                    self.application.processEvents()
+                    self.assertLessEqual(panel.widget().minimumSizeHint().width(),
+                                         panel.viewport().width())
+            # The view buttons keep their full names.
+            for name, view_button in window.view_buttons.items():
+                self.assertGreaterEqual(view_button.width(), view_button.sizeHint().width(), name)
+
+    @isolated_gui_test
+    def test_a_narrow_window_folds_the_objects_column_away(self):
+        with tempfile.TemporaryDirectory() as folder:
+            window = self.make_window(folder)
+            window.show()
+            window.resize(1480, 920)
+            self.application.processEvents()
+            self.assertTrue(window.toggle_inspector_item.isChecked())
+            window.resize(1200, 760)
+            self.application.processEvents()
+            self.assertFalse(window.toggle_inspector_item.isChecked())
+            self.assertIn("narrow", window.message_label.text())
+            window.resize(1480, 920)
+            self.application.processEvents()
+            self.assertTrue(window.toggle_inspector_item.isChecked())
+            # Hidden by hand, it stays hidden when the window grows.
+            window.toggle_inspector_item.setChecked(False)
+            window.resize(1200, 760)
+            window.resize(1480, 920)
+            self.application.processEvents()
+            self.assertFalse(window.toggle_inspector_item.isChecked())
+
+    @isolated_gui_test
     def test_an_unfinished_outline_stays_with_its_section(self):
         # Review B4: a draft started on one section was finished on another.
         import cv2
