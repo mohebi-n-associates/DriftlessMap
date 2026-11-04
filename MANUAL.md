@@ -1,7 +1,7 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 2.6.1**. Section 2 explains how to
-install it; `pip install driftlessmap` installs 2.6.1.
+This manual applies to **DriftlessMap 2.6.2**. Section 2 explains how to
+install it; `pip install driftlessmap` installs 2.6.2.
 
 DriftlessMap - Histological E-data Registration in Brain Space - is a desktop
 application for aligning rodent histology with a reference atlas, reconstructing
@@ -127,7 +127,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-DriftlessMap 2.6.1 requires:
+DriftlessMap 2.6.2 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -146,8 +146,8 @@ page. The macOS DMG (`-macOS-arm64.dmg`) is built for Apple Silicon; on an Intel
 Mac, use the developer installation below.
 The desktop builds include Python and all runtime dependencies. Windows users
 extract the entire ZIP and run `DriftlessMap.exe`; macOS users open the DMG and
-drag `DriftlessMap.app` to Applications. The 2.6.1 downloads are named
-`DriftlessMap-2.6.1-Windows-x64.zip` and `DriftlessMap-2.6.1-macOS-arm64.dmg`.
+drag `DriftlessMap.app` to Applications. The 2.6.2 downloads are named
+`DriftlessMap-2.6.2-Windows-x64.zip` and `DriftlessMap-2.6.2-macOS-arm64.dmg`.
 Release builds are unsigned unless the release notes say otherwise, so the first
 launch may require Windows SmartScreen confirmation or Control-clicking the
 macOS app and choosing **Open**.
@@ -196,7 +196,7 @@ python -m pip --version
 python -c "import driftlessmap; print(driftlessmap.__version__)"
 ```
 
-The final command prints the installed version, `2.6.1`.
+The final command prints the installed version, `2.6.2`.
 
 ### 2.5 Launching DriftlessMap
 
@@ -535,7 +535,7 @@ What each step does:
 | Project | Load atlas; the project's **Sections** (add, open, rename, order, remove; Section 7.7); open, save, save a portable copy; atlas download and slice-atlas tools |
 | Section | Per-channel name, colour, visibility and display range; brightness, contrast, gamma and Auto (ImageJ-style, saturating 0.35% of samples) for the channels ticked under **Adjust** (those on screen unless you choose; Section 7.4); **Register** ticks that choose the registration channels, with a preview of the registration input; under the Adjust, Show and Register columns, **All** / **None** ticks or unticks the whole column (Show offers only All: one channel always stays visible), and each colour swatch names its colour in its tooltip (since 2.6.0); the **pixel size** (from the file, or entered with **Pixel size...**), used by the scale bar, the ruler and Find atlas section; rotation, flips, crop and clean-up |
 | Match | Find atlas section in the chosen **Section plane** with the chosen channels, at the section's real size; for sagittal pages the hemisphere and distance from the midline, with **Other hemisphere**; the plane, depth and tilt controls of the 1.x Atlasing Controller |
-| Register | Suggest landmarks; add, move and delete pairs; a list of pairs marked Outline, Internal, Edited or Manual; mesh check; **Mark review complete**, enabled once the four-point checklist is ticked (hemisphere and orientation, internal anatomy, region boundaries, torn or missing tissue; the ticks clear when the registration changes; since 2.6.0); warp preview in either direction, with **Blink** (the warped section flips on and off) and **Checkerboard** (section and atlas in alternating squares) to compare edges |
+| Register | Suggest landmarks; add, move and delete pairs; a list of pairs marked Outline, Internal, Edited or Manual; mesh check; **Mark review complete**, enabled once the four-point checklist is ticked (hemisphere and orientation, internal anatomy, region boundaries, torn or missing tissue; the ticks clear when the registration changes; since 2.6.0); warp preview in either direction, with **Blink** (the warped section flips on and off) and **Checkerboard** (section and atlas in alternating squares) to compare edges; both only change what is shown, never the saved or exported preview, and end when you leave the step (since 2.6.2). Mark review complete needs the checklist from the command palette too |
 | Annotate | **Implants:** one list of optical fibers, microprisms and probes, added with **Add implant…**. A fiber or prism: outline each section, **Map this section**, **Build**; reports the fiber tip or the prism bottom and ML edges (Section 12.7). A probe: for each section that shows its track, **Mark track**, click along it, **Map this section** (this maps the marks with the current registration and files them under the probe); **Build** one probe from all its sections, **Rebuild** after adding more; **Delete…** removes a probe with its parts, built object, mapping records and any marks still being placed for it; **Probe settings** holds multi-probe layouts and saved probe settings. Cells, colour detection, drawing, erasing, lasso and measuring. **Map annotations to atlas** shows where cells, expression, contours and drawings are (Mark → check registration → map → make parts → build → inspect) and offers the next step as one button (since 2.6.0); mapping prepares the warp preview itself. The individual Make parts / Build / Edit parts buttons remain |
 | Results | Region tables, show on plane, compare, 3D options, export and import. **Export all results…** writes everything available into one new folder (below); the single-kind exports stay under **Individual files** |
 
@@ -1318,7 +1318,11 @@ Results also lists every section the selected object was made from, with that
 section's status and whether its registration was reviewed, and, for an
 out-of-date object, repairs it step by step (since 2.6.0): **Open** the
 affected section, **Review registration**, **Update mapping** (which also
-makes the part again) and **Build again**.
+makes the part again) and **Build again**. When several sections changed,
+Update mapping takes them one at a time in section order, naming the next one
+and how many are left; Build again is offered once every changed section is
+mapped again, and the object stays selected throughout (since 2.6.2). A part
+whose mapping no longer exists does not hide a section that changed.
 Changing a fiber's or prism's specifications also makes its built result out of
 date: **Build** it again to use the new settings. Its previous report remains
 available, explicitly labelled as out of date. The implant CSV's `status` column

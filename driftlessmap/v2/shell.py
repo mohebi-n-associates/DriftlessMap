@@ -735,8 +735,11 @@ class V2Window(QMainWindow):
         add(Command("register.add_points", "Add or move landmark points",
                     lambda: self.toggle_tool("triang"), "Register",
                     ("triangulation", "landmark tool"), "P"))
+        # One availability for the button, the palette and any other route
+        # (review F6 of 2.6.0): three pairs and the ticked checklist.
         add(Command("register.review", "Mark review complete", engine.mark_registration_reviewed,
-                    "Register", ("review", "confirm registration")))
+                    "Register", ("review", "confirm registration"),
+                    available=self.panels["register"].needs_review_checks))
         add(Command("register.delete_pair", "Delete selected landmark pair",
                     self.panels["register"].delete_selected, "Register",
                     ("remove landmark",), "Delete"))

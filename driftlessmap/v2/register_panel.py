@@ -1,7 +1,9 @@
 """Register step: suggested and manual landmarks, mesh, review and warp preview."""
 
 import numpy as np
+import pyqtgraph as pg
 from PyQt6.QtCore import QTimer
+from PyQt6.QtGui import QPainter
 from PyQt6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -103,7 +105,7 @@ class RegisterPanel(StepPanel):
             "below to compare internal edges, not only the outline."))
         review.add_row(self.gate(button("Mark review complete",
                                         lambda: shell.run("register.review")),
-                                 self._needs_review_checks), None)
+                                 self.needs_review_checks), None)
         review.add(hint_label(
             "Moving any landmark or changing the atlas plane, page or tilt clears the "
             "review and the checklist."))
@@ -126,6 +128,9 @@ class RegisterPanel(StepPanel):
         self._blink_timer = QTimer(self)
         self._blink_timer.setInterval(BLINK_MS)
         self._blink_timer.timeout.connect(self._blink_tick)
+        self._compare = None
+        self._overlay_hidden = None     # the overlay's visibility before comparing
+        self._compare_source = None     # the preview array the comparison shows
         warp.add(hint_label(
             "Previewing shows a warped image only. Annotations move to the atlas only "
             "with Map annotations to atlas, in the Annotate step. Press the active "
@@ -159,7 +164,7 @@ class RegisterPanel(StepPanel):
     def _needs_review_pairs(self):
         return self._needs_pairs(3)
 
-    def _needs_review_checks(self):
+    def needs_review_checks(self):
         reason = self._needs_review_pairs()
         if reason is None and not all(box.isChecked() for box in self.checklist):
             reason = "Tick each point of the checklist first."
@@ -170,42 +175,83 @@ class RegisterPanel(StepPanel):
             "Show the section on the atlas first (Section on atlas)."
 
     # ------------------------------------------------------------- compare
+    # Blink and Checkerboard draw on a presentation item of their own; the
+    # overlay item keeps the warped section, which saving, layer export, the
+    # magic wand and undo read (review F3 of 2.6.0).
     def _overlay_item(self):
         return self.engine.atlas_view.working_atlas.image_dict["atlas-overlay"]
 
-    def _toggle_blink(self):
-        if self.blink.isChecked() and self.engine.h2a_transferred:
+    def compare_item(self):
+        """The item Blink and Checkerboard draw on (created on first use)."""
+        view = self.engine.atlas_view.working_atlas
+        if getattr(self, "_compare", None) is None or self._compare[0] is not view:
+            item = pg.ImageItem()
+            item.setCompositionMode(QPainter.CompositionMode.CompositionMode_Plus)
+            item.setVisible(False)
+            view.vb.addItem(item)
+            self._compare = (view, item)
+        return self._compare[1]
+
+    def comparing(self):
+        return self.blink.isChecked() or self.checker.isChecked()
+
+    def _warped(self):
+        engine = self.engine
+        warped = engine.working_atlas_data.get("atlas-overlay") if engine.h2a_transferred \
+            else None
+        return None if warped is None or not len(warped) else warped
+
+    def _show_compare(self):
+        """Draw the comparison from the current preview, or end it."""
+        warped = self._warped()
+        if not self.comparing() or warped is None:
+            self.stop_compare()
+            return
+        overlay, item = self._overlay_item(), self.compare_item()
+        if self._overlay_hidden is None:
+            self._overlay_hidden = overlay.isVisible()
+        overlay.setVisible(False)
+        image = np.asarray(warped)
+        item.setImage(checkerboard(image) if self.checker.isChecked() else image)
+        item.setTransform(overlay.transform())
+        item.setOpacity(overlay.opacity())
+        item.setZValue(overlay.zValue())
+        item.setVisible(True)
+        self._compare_source = warped
+        if self.blink.isChecked():
             self._blink_timer.start()
         else:
             self._blink_timer.stop()
-            self._overlay_item().setVisible(True)
+
+    def _toggle_blink(self):
+        self._show_compare()
 
     def _blink_tick(self):
-        item = self._overlay_item()
-        item.setVisible(not item.isVisible())
+        if self.comparing() and self._compare_source is not None:
+            item = self.compare_item()
+            item.setVisible(not item.isVisible())
 
     def _toggle_checker(self):
-        engine = self.engine
-        warped = engine.working_atlas_data.get("atlas-overlay")
-        if warped is None or not len(warped):
-            self.checker.setChecked(False)
-            return
-        warped = np.asarray(warped)
-        if self.checker.isChecked():
-            self._overlay_item().setImage(checkerboard(warped))
-        else:
-            self._overlay_item().setImage(warped)
+        self._show_compare()
 
     def stop_compare(self):
         """Back to the plain preview (also when the preview goes)."""
         self._blink_timer.stop()
         for widget in (self.blink, self.checker):
             widget.setChecked(False)
-        warped = self.engine.working_atlas_data.get("atlas-overlay")
-        item = self._overlay_item()
-        item.setVisible(True)
-        if self.engine.h2a_transferred and warped is not None and len(warped):
-            item.setImage(np.asarray(warped))
+        if getattr(self, "_compare", None) is not None:
+            self._compare[1].setVisible(False)
+            self._compare[1].clear()
+        if self._overlay_hidden is not None:
+            self._overlay_item().setVisible(self._overlay_hidden)
+        self._overlay_hidden = None
+        self._compare_source = None
+
+    def hideEvent(self, event):
+        # Leaving the step ends the comparison (not minimising the window).
+        if not event.spontaneous() and self.comparing():
+            self.stop_compare()
+        super().hideEvent(event)
 
     def _needs_selection(self):
         return (None if self._selected_row() is not None
@@ -293,8 +339,8 @@ class RegisterPanel(StepPanel):
             self._checked_fingerprint = fingerprint
             for box in self.checklist:
                 box.setChecked(engine.registration_review_state() == "reviewed")
-        if not engine.h2a_transferred and (self.blink.isChecked() or self.checker.isChecked()):
-            self.stop_compare()
+        if self.comparing() and self._warped() is not self._compare_source:
+            self._show_compare()      # a new preview (or none): redraw or end
         atlas, histology = engine.atlas_tri_inside_data, engine.histo_tri_inside_data
         key = (tuple(map(tuple, np.round(np.asarray(atlas, float), 1).tolist())) if atlas else (),
                tuple(map(tuple, np.round(np.asarray(histology, float), 1).tolist()))

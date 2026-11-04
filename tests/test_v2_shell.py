@@ -768,8 +768,24 @@ class V2ShellTests(unittest.TestCase):
             bar._chosen(1)
             self.assertEqual(engine.section_id, ids[1])
 
+    def click_object(self, window, index):
+        """Click an object row in the Objects list, then let the shell catch up."""
+        row = window.engine.object_ctrl.obj_list[index]
+        if hasattr(row, "text_btn_on_click"):
+            row.text_btn.click()
+        else:
+            row.on_click()
+        window.refresh()
+
+    def selected_object(self, engine):
+        o = engine.object_ctrl
+        index = o.current_obj_index
+        return None if index is None else (o.obj_name[index], o.obj_type[index])
+
     @isolated_gui_test
-    def test_results_repair_an_out_of_date_object_step_by_step(self):
+    def test_results_repair_two_changed_sections_by_clicking(self):
+        # Review F4 and F5 of 2.6.0: the built fiber stays selected, each
+        # changed section is mapped again once, in order, then one build.
         import cv2
         from unittest.mock import patch
 
@@ -795,35 +811,123 @@ class V2ShellTests(unittest.TestCase):
                 self.assertTrue(engine.map_implant(fiber.implant_id)[0])
             first, second = [e.section_id for e in engine.sections.entries()]
             self.assertTrue(engine.build_implant(fiber.implant_id)[0])
-            engine.atlas_view.cpage_ctrl.set_val(engine.atlas_view.current_coronal_index + 2)
-            window.section_bar.open(first)               # pfc-2 changed, pfc-1 open
-            o = engine.object_ctrl
-            o.current_obj_index = engine.implant_objects(fiber.implant_id, built=True)[0]
+            built_name = self.selected_object(engine)
+            engine.atlas_tri_inside_data[0] = [1.5, 1.0]          # pfc-2 changes
+            window.section_bar.open(first)
+            engine.atlas_tri_inside_data[0] = [1.5, 1.0]          # and pfc-1
             window.go_to("results")
             panel = window.panels["results"]
-            panel.refresh()
+            o = engine.object_ctrl
+            self.click_object(window, engine.implant_objects(fiber.implant_id, built=True)[0])
+            self.assertEqual(self.selected_object(engine)[1], "merged fiber")
+            built_name = self.selected_object(engine)
             self.assertFalse(panel.recovery.isHidden())
-            self.assertIn("pfc-1.png: current", panel.mapping.text())
-            self.assertIn("pfc-2.png: out of date", panel.mapping.text())
-            self.assertEqual(panel.open_button.text(), "Open pfc-2.png")
+            self.assertIn("2 sections to map again", panel.repair_note.text())
+            self.assertIn("pfc-1.png, pfc-2.png", panel.repair_note.text())
+            self.assertEqual(panel.update_button.text(), "Update mapping of pfc-1.png")
+            self.assertFalse(panel.rebuild_button.isEnabled())
 
-            panel.open_affected()
+            panel.update_button.click()
+            self.assertEqual(self.selected_object(engine), built_name)
+            self.assertEqual(engine.section_id, first)
+            self.assertIn("1 section to map again", panel.repair_note.text())
+            self.assertEqual(panel.update_button.text(), "Update mapping of pfc-2.png")
+            self.assertFalse(panel.rebuild_button.isEnabled())
+
+            # The user looks at another section in between.
+            window.run("section.next")
+            window.run("section.previous")
+            window.go_to("results")
+            self.assertEqual(self.selected_object(engine), built_name)
+            self.assertEqual(panel.update_button.text(), "Update mapping of pfc-2.png")
+
+            panel.update_button.click()
             self.assertEqual(engine.section_id, second)
-            panel.update_affected()
-            record = engine.mapping_ledger.get(second, "fiber", fiber.implant_id)
-            self.assertEqual(record.revision, 2)
-            o.current_obj_index = engine.implant_objects(fiber.implant_id, built=True)[0]
-            panel.refresh()
-            self.assertIn("mapped again", panel.origin.text())
-            panel.rebuild_selected()
-            built = engine.implant_objects(fiber.implant_id, built=True)[0]
-            self.assertEqual(engine.object_mapping_status(built), "current")
-            o.current_obj_index = built
-            panel.refresh()
+            self.assertEqual(self.selected_object(engine), built_name)
+            for section in (first, second):
+                self.assertEqual(engine.mapping_ledger.get(section, "fiber",
+                                                           fiber.implant_id).revision, 2)
+            self.assertTrue(panel.update_button.isHidden())
+            self.assertTrue(panel.rebuild_button.isEnabled())
+            self.assertIn("Every section is mapped", panel.repair_note.text())
+
+            panel.rebuild_button.click()
+            self.assertEqual(self.selected_object(engine), built_name)
+            self.assertEqual(engine.object_mapping_status(o.current_obj_index), "current")
             self.assertTrue(panel.recovery.isHidden())
+            for section in (first, second):          # each mapped again exactly once
+                self.assertEqual(engine.mapping_ledger.get(section, "fiber",
+                                                           fiber.implant_id).revision, 2)
 
     @isolated_gui_test
-    def test_results_repair_built_cells_on_the_open_section(self):
+    def test_results_repair_with_mixed_contributions(self):
+        # Review F5 of 2.6.0: one section mapped again since the build, one
+        # whose registration changed, and one whose mapping no longer exists.
+        import cv2
+        from unittest.mock import patch
+
+        from driftlessmap import file_dialogs
+        from driftlessmap.mapping_records import NOT_RECORDED, REGISTRATION_CHANGED
+        from tests.atlas_fixture import make_processed_atlas
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window = self.make_window(folder)
+            engine = window.engine
+            self.assertTrue(engine.load_volume_atlas(str(make_processed_atlas(root / "atlas"))))
+            fiber = None
+            outline = [[10.0, 4.0], [14.0, 4.0], [14.0, 20.0], [10.0, 20.0]]
+            for name, value in (("a.png", 200), ("b.png", 160), ("c.png", 120)):
+                cv2.imwrite(str(root / name), np.full((32, 24, 3), value, np.uint8))
+                with patch.object(file_dialogs, "get_open_file_name",
+                                  return_value=(str(root / name), "")):
+                    engine.load_image()
+                fiber = fiber or engine.add_implant("fiber", specs={"diameter_um": 100})
+                engine.atlas_tri_inside_data[:] = [[1.0, 1.0], [5.0, 1.0], [3.0, 5.0]]
+                engine.histo_tri_inside_data[:] = [[2.0, 2.0], [6.0, 2.0], [4.0, 6.0]]
+                engine.set_implant_outline(fiber.implant_id, outline)
+                self.assertTrue(engine.map_implant(fiber.implant_id)[0])
+            a, b, c = [e.section_id for e in engine.sections.entries()]
+            self.assertTrue(engine.build_implant(fiber.implant_id)[0])
+            # c: its mapping record is gone (as for parts from older files).
+            engine.mapping_ledger.forget(engine.mapping_ledger.get(c, "fiber",
+                                                                   fiber.implant_id).unit_id)
+            window.section_bar.open(b)
+            engine.atlas_tri_inside_data[0] = [1.5, 1.0]        # b: registration changed
+            window.section_bar.open(a)
+            engine.set_implant_outline(fiber.implant_id, outline)
+            self.assertTrue(engine.map_implant(fiber.implant_id)[0])   # a: mapped again
+            built = engine.implant_objects(fiber.implant_id, built=True)[0]
+            # The missing origin does not hide the changed section.
+            self.assertEqual(engine.object_mapping_status(built), REGISTRATION_CHANGED)
+
+            window.go_to("results")
+            panel = window.panels["results"]
+            self.click_object(window, built)
+            built_name = self.selected_object(engine)
+            self.assertIn("1 section to map again", panel.repair_note.text())
+            self.assertEqual(panel.update_button.text(), "Update mapping of b.png")
+            self.assertFalse(panel.rebuild_button.isEnabled())
+            self.assertIn("a mapping that no longer exists", panel.mapping.text())
+            panel.update_button.click()
+            self.assertEqual(engine.section_id, b)
+            self.assertEqual(self.selected_object(engine), built_name)
+            self.assertTrue(panel.update_button.isHidden())
+            self.assertTrue(panel.rebuild_button.isEnabled())
+            panel.rebuild_button.click()
+            self.assertEqual(self.selected_object(engine), built_name)
+            index = engine.object_ctrl.current_obj_index
+            # Built from a and b as they are now; c's origin stays unrecorded.
+            self.assertEqual(engine.object_mapping_status(index), NOT_RECORDED)
+            self.assertIsNone(engine.stale_contribution(index))
+            self.assertTrue(panel.recovery.isHidden())
+            statuses = dict((record.section_id, status) for record, status
+                            in engine.object_contributions(index) if record is not None)
+            self.assertEqual(set(statuses), {a, b})
+            self.assertTrue(set(statuses.values()) <= {"current", "another section"})
+
+    @isolated_gui_test
+    def test_results_repair_built_cells_by_clicking(self):
         import cv2
 
         from tests.atlas_fixture import make_processed_atlas
@@ -835,6 +939,8 @@ class V2ShellTests(unittest.TestCase):
             self.assertTrue(engine.load_volume_atlas(str(make_processed_atlas(root / "atlas"))))
             cv2.imwrite(str(root / "s.png"), np.full((32, 24, 3), 120, np.uint8))
             self.assertTrue(engine.load_single_image_file(str(root / "s.png"), ".png"))
+            engine.atlas_tri_inside_data[:] = [[1.0, 1.0], [5.0, 1.0], [3.0, 5.0]]
+            engine.histo_tri_inside_data[:] = [[2.0, 2.0], [6.0, 2.0], [4.0, 6.0]]
             data = engine.working_img_data
             data["img-cells"] = [[8.0, 8.0], [12.0, 20.0]]
             data["cell_size"], data["cell_symbol"] = [5, 5], ["o", "o"]
@@ -846,18 +952,61 @@ class V2ShellTests(unittest.TestCase):
             engine.merge_cells()
             o = engine.object_ctrl
             self.assertEqual(o.obj_type, ["merged cells"])
-            engine.atlas_tri_inside_data[:] = [[1.5, 1.0], [5.0, 1.0], [3.0, 5.0]]
-            o.current_obj_index = 0
+            engine.atlas_tri_inside_data[0] = [1.5, 1.0]
             window.go_to("results")
             panel = window.panels["results"]
-            panel.refresh()
+            self.click_object(window, 0)
             self.assertFalse(panel.recovery.isHidden())
             self.assertFalse(panel.open_button.isEnabled())       # already open
-            panel.update_affected()
-            o.current_obj_index = o.obj_type.index("merged cells")
-            panel.rebuild_selected()
+            panel.update_button.click()
+            self.assertEqual(self.selected_object(engine)[1], "merged cells")
+            self.assertFalse(panel.recovery.isHidden())
+            self.assertIn("mapped again", panel.origin.text())
+            panel.rebuild_button.click()
             self.assertEqual(o.obj_type, ["merged cells"])
+            self.assertEqual(self.selected_object(engine)[1], "merged cells")
             self.assertEqual(engine.object_mapping_status(0), "current")
+            self.assertTrue(panel.recovery.isHidden())
+
+    @isolated_gui_test
+    def test_results_repair_a_built_probe_by_clicking(self):
+        import cv2
+
+        from tests.atlas_fixture import make_processed_atlas
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window = self.make_window(folder)
+            engine = window.engine
+            self.assertTrue(engine.load_volume_atlas(str(make_processed_atlas(root / "atlas", axis_info=True))))
+            cv2.imwrite(str(root / "s.png"), np.full((40, 30, 3), 120, dtype=np.uint8))
+            self.assertTrue(engine.load_single_image_file(str(root / "s.png"), ".png"))
+            engine.atlas_tri_inside_data[:] = [[1.0, 1.0], [5.0, 1.0], [3.0, 5.0]]
+            engine.histo_tri_inside_data[:] = [[2.0, 2.0], [6.0, 2.0], [4.0, 6.0]]
+            window.go_to("annotate")
+            probes = window.panels["annotate"].implants.probe_card
+            probes.new_probe("NP A")
+            probes.toggle_marking()
+            for point in ((13.0, 5.0), (14.0, 25.0)):
+                engine.img_stacks_clicked(point)
+            probes.add_section()
+            window.refresh()
+            probes.build_button.click()
+            o = engine.object_ctrl
+            self.assertIn("merged probe", o.obj_type)
+            engine.atlas_tri_inside_data[0] = [1.5, 1.0]
+            window.go_to("results")
+            panel = window.panels["results"]
+            self.click_object(window, o.obj_type.index("merged probe"))
+            built_name = self.selected_object(engine)
+            self.assertFalse(panel.recovery.isHidden())
+            panel.update_button.click()
+            self.assertEqual(self.selected_object(engine), built_name)
+            self.assertTrue(panel.rebuild_button.isEnabled())
+            panel.rebuild_button.click()
+            self.assertEqual(self.selected_object(engine), built_name)
+            self.assertEqual(engine.object_mapping_status(o.current_obj_index), "current")
+            self.assertTrue(panel.recovery.isHidden())
 
     @isolated_gui_test
     def test_one_button_takes_annotations_from_marks_to_built_objects(self):
@@ -940,16 +1089,14 @@ class V2ShellTests(unittest.TestCase):
             engine.transfer_to_atlas_clicked()
             panel.refresh()
             panel.apply_gates()
-            item = panel._overlay_item()
-            panel.blink.setChecked(True)
-            panel._toggle_blink()
+            item = panel.compare_item()        # the overlay itself is never changed
+            panel.blink.click()
             panel._blink_tick()
             self.assertFalse(item.isVisible())
             panel._blink_tick()
             self.assertTrue(item.isVisible())
             warped = np.asarray(engine.working_atlas_data["atlas-overlay"])
-            panel.checker.setChecked(True)
-            panel._toggle_checker()
+            panel.checker.click()
             np.testing.assert_array_equal(item.image, checkerboard(warped))
             engine.transfer_to_atlas_clicked()                 # preview removed
             panel.refresh()
@@ -958,6 +1105,152 @@ class V2ShellTests(unittest.TestCase):
         board = checkerboard(np.ones((16, 16), np.uint8), squares=2)
         self.assertEqual(int(board.sum()), 128)
         self.assertEqual((board[0, 0], board[0, 8], board[8, 8]), (1, 0, 1))
+
+    @isolated_gui_test
+    def test_comparing_never_changes_the_saved_or_exported_preview(self):
+        # Review F3 of 2.6.0: Checkerboard replaced the overlay's pixels, which
+        # saving and layer export read.
+        import cv2
+        from unittest.mock import patch
+
+        from PyQt6.QtWidgets import QMessageBox
+
+        from driftlessmap import file_dialogs
+        from driftlessmap.persistence import load_driftlessmap_file
+        from driftlessmap.v2.register_panel import checkerboard
+        from tests.atlas_fixture import make_processed_atlas
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window = self.make_window(folder)
+            engine = window.engine
+            self.assertTrue(engine.load_volume_atlas(str(make_processed_atlas(root / "atlas"))))
+            image = np.zeros((32, 24, 3), np.uint8)
+            image[4:28, 3:21] = 90
+            image[10:20, 8:16] = 220
+            cv2.imwrite(str(root / "s.png"), image)
+            self.assertTrue(engine.load_single_image_file(str(root / "s.png"), ".png"))
+            engine.atlas_tri_inside_data[:] = [[1.0, 1.0], [5.0, 1.0], [3.0, 5.0]]
+            engine.histo_tri_inside_data[:] = [[2.0, 2.0], [6.0, 2.0], [4.0, 6.0]]
+            window.go_to("register")
+            panel = window.panels["register"]
+            panel.to_atlas.click()
+            window.refresh()
+            self.assertTrue(engine.h2a_transferred)
+            warped = np.array(engine.working_atlas_data["atlas-overlay"])
+            self.assertTrue(warped.any())
+            overlay = panel._overlay_item()
+
+            def canonical():
+                return np.asarray(engine.get_atlas_single_layer_vis_data("atlas-overlay")["data"])
+
+            panel.checker.click()
+            compare = panel.compare_item()
+            self.assertTrue(compare.isVisible())
+            self.assertFalse(overlay.isVisible())
+            np.testing.assert_array_equal(compare.image, checkerboard(warped))
+            np.testing.assert_array_equal(canonical(), warped)
+            self.assertFalse(np.array_equal(compare.image, warped))
+
+            panel.blink.click()
+            panel._blink_timer.timeout.emit()
+            self.assertFalse(compare.isVisible())
+            panel._blink_timer.timeout.emit()
+            self.assertTrue(compare.isVisible())
+            self.assertFalse(overlay.isVisible())
+
+            # Layer export and save while comparing keep the warped section.
+            engine.save_atlas_layer_data("atlas-overlay", [255, 255, 255], None,
+                                         str(root / "layer"))
+            layer, error = load_driftlessmap_file(str(root / "layer_atlas-overlay.dmaplayer"),
+                                                  expected_kind="layer")
+            self.assertIsNone(error)
+            np.testing.assert_array_equal(np.asarray(layer["data"]), warped)
+            project = root / "p.dmap"
+            self.assertTrue(engine.save_project_called(path=str(project)))
+            payload, error = load_driftlessmap_file(str(project), expected_kind="project")
+            self.assertIsNone(error)
+            links = payload["layer_data"]["layer_link"]
+            np.testing.assert_array_equal(
+                np.asarray(payload["layer_data"]["2d_data"][links.index("atlas-overlay")]),
+                warped)
+
+            # Leaving the step ends the comparison; the plain preview is back.
+            window.go_to("annotate")
+            self.assertFalse(panel.blink.isChecked() or panel.checker.isChecked())
+            self.assertFalse(compare.isVisible())
+            self.assertTrue(overlay.isVisible())
+            np.testing.assert_array_equal(overlay.image, warped)
+            window.go_to("register")
+
+            # Undo a mapping step while comparing: the preview stays canonical
+            # and the comparison shows the preview that is there.
+            panel.checker.click()
+            data = engine.working_img_data
+            data["img-cells"] = [[8.0, 8.0], [12.0, 20.0]]
+            data["cell_size"], data["cell_symbol"] = [5, 5], ["o", "o"]
+            data["cell_layer_index"] = [0, 0]
+            data["cell_count"] = [2] + [0] * (len(data["cell_count"]) - 1)
+            window.run("annotate.map")
+            window.run("edit.undo_step")
+            window.go_to("register")
+            np.testing.assert_array_equal(canonical(), warped)
+            if panel.checker.isChecked():
+                np.testing.assert_array_equal(
+                    compare.image, checkerboard(np.asarray(engine.working_atlas_data[
+                        "atlas-overlay"])))
+            else:
+                self.assertFalse(compare.isVisible())
+
+            # Reopen the project saved while comparing.
+            panel.checker.setChecked(True)
+            panel._toggle_checker()
+            with patch.object(QMessageBox, "question",
+                              return_value=QMessageBox.StandardButton.No), \
+                    patch.object(file_dialogs, "get_open_file_name",
+                                 return_value=(str(project), "")):
+                engine.load_project_called()
+            window.refresh()
+            np.testing.assert_array_equal(canonical(), warped)
+            np.testing.assert_array_equal(overlay.image, warped)
+            if panel.comparing():
+                np.testing.assert_array_equal(compare.image, checkerboard(warped))
+            else:
+                self.assertTrue(overlay.isVisible())
+
+    @isolated_gui_test
+    def test_review_command_needs_the_checklist_on_every_route(self):
+        # Review F6 of 2.6.0: the palette marked an unchecked registration reviewed.
+        import cv2
+
+        from tests.atlas_fixture import make_processed_atlas
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window = self.make_window(folder)
+            engine = window.engine
+            self.assertTrue(engine.load_volume_atlas(str(make_processed_atlas(root / "atlas"))))
+            cv2.imwrite(str(root / "s.png"), np.full((32, 24, 3), 120, np.uint8))
+            self.assertTrue(engine.load_single_image_file(str(root / "s.png"), ".png"))
+            engine.atlas_tri_inside_data[:] = [[1.0, 1.0], [5.0, 1.0], [3.0, 5.0]]
+            engine.histo_tri_inside_data[:] = [[2.0, 2.0], [6.0, 2.0], [4.0, 6.0]]
+            window.go_to("results")             # the palette works from any step
+            command = window.registry.get("register.review")
+            self.assertIn("checklist", command.reason_unavailable())
+            window.run("register.review")
+            self.assertEqual(engine.registration_review_state(), "not reviewed")
+            window.go_to("register")
+            panel = window.panels["register"]
+            mark = [b for b in panel.findChildren(QPushButton)
+                    if b.text() == "Mark review complete"][0]
+            self.assertFalse(mark.isEnabled())
+            for box in panel.checklist:
+                box.setChecked(True)
+            window.refresh()
+            self.assertIsNone(command.reason_unavailable())
+            self.assertTrue(mark.isEnabled())
+            mark.click()
+            self.assertEqual(engine.registration_review_state(), "reviewed")
 
     @isolated_gui_test
     def test_channel_columns_tick_all_or_none_and_colours_are_named(self):

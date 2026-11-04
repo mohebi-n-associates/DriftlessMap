@@ -42,6 +42,7 @@ class ResultsPanel(StepPanel):
         self.recovery = selected.add(grid_of([self.open_button, self.review_button,
                                               self.update_button, self.rebuild_button],
                                              columns=2))
+        self.repair_note = selected.add(hint_label(""))
         selected.add(grid_of([
             button("Region table…", o.info_btn.click),
             button("Show on plane", o.vis2d_btn.click),
@@ -138,15 +139,37 @@ class ResultsPanel(StepPanel):
         return (self.engine.stale_contribution(index)
                 or self.engine.unverified_contribution(index))
 
+    # The object being repaired stays selected through every repair action,
+    # also when they open another section or replace parts (review F4).
+    def _target(self):
+        index = self._selected_index()
+        if index is None:
+            return None
+        o = self.engine.object_ctrl
+        return o.obj_id[index], o.obj_name[index], o.obj_type[index]
+
+    def _reselect(self, target):
+        if target is None:
+            return
+        o = self.engine.object_ctrl
+        index = o.index_of_id(target[0])
+        if index is None:          # built again: the new object of that name and kind
+            index = next((i for i in reversed(range(len(o.obj_name)))
+                          if (o.obj_name[i], o.obj_type[i]) == target[1:]), None)
+        o.select_object(index)
+
     def _open(self, record):
         if record.section_id != self.engine.section_id:
+            target = self._target()
             self.shell.section_bar.open(record.section_id)
+            self._reselect(target)
         return record.section_id == self.engine.section_id
 
     def open_affected(self):
         record = self._affected()
         if record is not None:
             self._open(record)
+            self.shell.refresh()
 
     def review_affected(self):
         record = self._affected()
@@ -154,14 +177,27 @@ class ResultsPanel(StepPanel):
             self.shell.go_to("register")
 
     def update_affected(self):
-        record = self._affected()
+        engine = self.engine
+        target, record = self._target(), self._affected()
         if record is None or not self._open(record):
             return
+        name = engine.section_name(record.section_id)
         ok, message = self.shell.panels["annotate"].probes.book.update_section(record.unit_id)
         if ok and record.kind in ("cells", "drawing", "contour", "expression"):
             # Replace the part made from the earlier mapping.
-            self.engine.make_pieces_of(record.kind)
-            message = "Mapping updated and the part made again; build again to use it."
+            engine.make_pieces_of(record.kind)
+        self._reselect(target)
+        index = self._selected_index()
+        if ok and index is not None:
+            plan = engine.repair_plan(index)
+            if plan["remap"]:
+                left = plan["remap"]
+                message = "Updated the mapping of {}. Next: {} ({} section{} left).".format(
+                    name, engine.section_name(left[0].section_id), len(left),
+                    "" if len(left) == 1 else "s")
+            elif plan["rebuild"]:
+                message = ("Updated the mapping of {}. Every section is mapped again: build "
+                           "again to use them.".format(name))
         self.shell.message(message, "good" if ok else "bad")
         self.shell.refresh()
 
@@ -170,6 +206,12 @@ class ResultsPanel(StepPanel):
         o = engine.object_ctrl
         index = self._selected_index()
         if index is None:
+            return
+        target = self._target()
+        left = engine.repair_plan(index)["remap"]
+        if left:
+            self.shell.message("Update the mapping of {} first.".format(
+                ", ".join(engine.section_name(r.section_id) for r in left)), "bad")
             return
         kind, name, data = o.obj_type[index], o.obj_name[index], o.obj_data[index]
         if isinstance(data, dict) and data.get("implant_id"):
@@ -190,6 +232,7 @@ class ResultsPanel(StepPanel):
                 o.unmerge_objects()        # parts replaced by newer mappings are left out
                 merge()
             ok, message = True, "Built {} again.".format(kind.split(" ", 1)[1])
+        self._reselect(target)
         self.shell.message(message, "good" if ok else "bad")
         self.shell.refresh()
 
@@ -199,13 +242,17 @@ class ResultsPanel(StepPanel):
         stale = v2_state.is_out_of_date(status)
         unverified = status == v2_state.UNVERIFIED
         self.recovery.setVisible(stale or unverified)
+        self.repair_note.setVisible(stale)
         if not (stale or unverified):
             return
-        # Not verified: opening the section is the check; nothing to update yet.
-        for widget in (self.update_button, self.rebuild_button):
-            widget.setVisible(stale)
         record = self._affected()
         built = engine.object_ctrl.obj_type[index].startswith("merged")
+        plan = engine.repair_plan(index) if stale else {"remap": [], "rebuild": False}
+        left = plan["remap"]
+        # Not verified: opening the section is the check; nothing to update yet.
+        # Out of date: map each changed section again, then build once (review F5).
+        self.update_button.setVisible(bool(left))
+        self.rebuild_button.setVisible(stale and built)
         here = record is not None and record.section_id == engine.section_id
         name = engine.section_name(record.section_id) if record is not None else ""
         self.open_button.setText("Open {}".format(name) if record is not None
@@ -213,8 +260,26 @@ class ResultsPanel(StepPanel):
         self.open_button.setEnabled(record is not None and not here
                                     and engine.sections.entry(record.section_id) is not None)
         self.review_button.setEnabled(record is not None)
-        self.update_button.setEnabled(record is not None)
-        self.rebuild_button.setVisible(stale and built)
+        self.update_button.setText("Update mapping of {}".format(name) if left
+                                   else "Update mapping")
+        self.update_button.setEnabled(bool(left))
+        self.rebuild_button.setEnabled(not left)
+        if left:
+            names = [engine.section_name(r.section_id) for r in left]
+            self.rebuild_button.setToolTip("Update the mapping of {} first.".format(
+                ", ".join(names)))
+            self.repair_note.setText(
+                "{} section{} to map again with {} current registration: {}. Build again "
+                "once {} updated.".format(
+                    len(left), "" if len(left) == 1 else "s",
+                    "its" if len(left) == 1 else "their", ", ".join(names),
+                    "it is" if len(left) == 1 else "all are"))
+        else:
+            self.rebuild_button.setToolTip("Build the object again from its current parts")
+            self.repair_note.setText(
+                "Every section is mapped with its current registration; build again to "
+                "use the new parts." if built else
+                "This part comes from an earlier mapping; make parts again in Annotate.")
 
     def _contributions_text(self, index):
         engine = self.engine
