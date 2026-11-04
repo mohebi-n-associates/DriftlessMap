@@ -3,6 +3,18 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.6.3
+
+Fix release, 3 November 2026; the last fix from the 2.6.0 review.
+
+- **TIFF pages are read once.** Adding each page of a stack as its own section
+  read the whole stack again for every page. It is now read once; on a
+  60-page, 480 MiB test stack this took 5.0 s instead of 11.4 s, and the peak
+  memory used was about half.
+- **Progress and Stop for Add sections.** A progress window names each section
+  as it is added; Stop after this section ends the batch safely. If the file
+  changes while its pages are added, the rest are not added.
+
 ## DriftlessMap 2.6.2
 
 Fix release, 3 November 2026; more fixes from the 2.6.0 review.

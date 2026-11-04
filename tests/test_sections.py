@@ -522,6 +522,96 @@ class SectionPersistenceTests(SectionEngineTests):
         self.assertTrue(window.load_project(prepared, project_path=str(path)))
         return window, payload
 
+    @isolated_gui_test
+    def test_tiff_pages_are_decoded_once_and_reopen_exactly(self):
+        # Review F7 of 2.6.0: every page section decoded the whole stack again.
+        import tifffile
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window = self.window_with_atlas(root)
+            pages = 12
+            stack = (np.arange(pages * 32 * 24, dtype=np.uint16).reshape(pages, 32, 24)
+                     * 7) % 4096
+            path = root / "stack.tif"
+            tifffile.imwrite(path, stack, metadata={"axes": "ZYX"}, photometric="minisblack")
+            decodes, original = [], tifffile.TiffPageSeries.asarray
+
+            def counted(series, *args, **kwargs):
+                decodes.append(tuple(series.shape))
+                return original(series, *args, **kwargs)
+
+            seen = []
+            with patch.object(tifffile.TiffPageSeries, "asarray", counted):
+                added = window.add_sections(
+                    [str(path)], pages_as_sections=True,
+                    progress=lambda done, total, name: seen.append((done, total, name)))
+            self.assertEqual(added, pages)
+            self.assertEqual(decodes, [(pages, 32, 24)])           # one decode
+            self.assertEqual(seen[0], (0, 1, "stack.tif"))
+            self.assertEqual(seen[-1], (pages - 1, pages, "stack.tif · page {}".format(pages)))
+            names = ["stack.tif · page {}".format(n + 1) for n in range(pages)]
+            self.assertEqual(window.sections.names(), names)
+            # Sections share the decoded stack read-only; each has its own page.
+            self.assertFalse(window.image_view.volume_img.flags.writeable)
+            ids = [e.section_id for e in window.sections.entries()]
+            for page, section_id in enumerate(ids):
+                self.assertTrue(window.switch_section(section_id)[0])
+                np.testing.assert_array_equal(window.image_view.current_img[..., 0],
+                                              stack[page])
+            # Flipping one section leaves the others as they were.
+            window.image_view.image_vertical_flip()
+            np.testing.assert_array_equal(window.image_view.current_img[..., 0],
+                                          stack[-1][::-1])
+            self.assertTrue(window.switch_section(ids[0])[0])
+            np.testing.assert_array_equal(window.image_view.current_img[..., 0], stack[0])
+
+            project = root / "pages.dmap"
+            self.assertTrue(window.save_project_called(path=str(project)))
+            for source_present in (True, False):
+                if not source_present:
+                    path.unlink()          # the embedded rasters then open
+                # Declining to locate a missing source, as the user can.
+                with patch.object(DriftlessMap, "_ask_for_verified_input",
+                                  return_value=None):
+                    reopened, _payload = self.open_project(root, project)
+                self.assertEqual(reopened.sections.names(), names)
+                for page, section_id in enumerate(ids):
+                    self.assertTrue(reopened.switch_section(section_id)[0])
+                    expected = stack[page][::-1] if page == pages - 1 else stack[page]
+                    np.testing.assert_array_equal(
+                        reopened.image_view.current_img[..., 0], expected,
+                        "page {} (source present: {})".format(page + 1, source_present))
+
+    @isolated_gui_test
+    def test_adding_tiff_pages_stops_safely(self):
+        import tifffile
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window = self.window_with_atlas(root)
+            path = root / "stack.tif"
+            stack = np.stack([np.full((32, 24), 10 * (n + 1), np.uint8) for n in range(6)])
+            tifffile.imwrite(path, stack, metadata={"axes": "ZYX"}, photometric="minisblack")
+            # Stop asked for while the fourth section is next.
+            added = window.add_sections([str(path)], pages_as_sections=True,
+                                        progress=lambda done, total, name: done < 3)
+            self.assertEqual(added, 3)
+            self.assertEqual(len(window.sections), 3)
+            self.assertEqual(float(window.image_view.current_img.mean()), 30.0)
+
+            # The file changing in the middle stops before the next page.
+            def rewrite(done, total, name):
+                if name.endswith("page 3"):
+                    tifffile.imwrite(path, stack[::-1], metadata={"axes": "ZYX"},
+                                     photometric="minisblack")
+                return True
+
+            before = len(window.sections)
+            added = window.add_sections([str(path)], pages_as_sections=True, progress=rewrite)
+            self.assertEqual(added, 2)
+            self.assertEqual(len(window.sections), before + 2)
+
     def two_section_project(self, root):
         window = self.window_with_atlas(root)
         first, second = root / "pfc-1.png", root / "pfc-2.png"

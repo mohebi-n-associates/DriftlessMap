@@ -1,6 +1,7 @@
 """Readers that normalize supported image files for :class:`ImageView`."""
 
 import colorsys
+import copy
 import re
 from pathlib import Path
 
@@ -594,6 +595,24 @@ class TIFFReader(object):
             else:
                 image = image.reshape(image.shape[:3])
         return np.ascontiguousarray(image)
+
+    def shared(self):
+        """Another reader of the same file without decoding it again.
+
+        The decoded arrays are shared (the image view copies what it shows);
+        everything else is the copy's own, so reading other levels or scenes
+        through it leaves this reader as it is.
+        """
+        other = copy.copy(self)
+        other.data, other.scale = dict(self.data), dict(self.scale)
+        other.notes, other.fixed_axes = list(self.notes), dict(self.fixed_axes)
+        other.fixed_axis_sizes = dict(self.fixed_axis_sizes)
+        other.level_scales = list(self.level_scales)
+        for name in ("channel_name", "rgb_colors", "hsv_colors", "gamma_val",
+                     "file_name_list"):
+            if isinstance(getattr(self, name, None), list):
+                setattr(other, name, list(getattr(self, name)))
+        return other
 
     def read_data(self, scale=None, scene_index=0):
         """Read the series of ``scene_index``.

@@ -2,7 +2,7 @@
 
 Stable release: **2.0.0**, 29 October 2026 (PyPI, and a GitHub release with
 Windows and macOS builds), after release candidates 2.0.0rc1 (published) to
-2.0.0rc16. Current release: 2.6.2, 3 November 2026 (2.4.0 plus fixes and the rat atlas downloads; the first published since 2.0.0); the waiver below
+2.0.0rc16. Current release: 2.6.3, 3 November 2026 (2.4.0 plus fixes and the rat atlas downloads; the first published since 2.0.0); the waiver below
 applies to it as well. Passing automated tests does not satisfy the native-installation or
 user-evaluation gates.
 
@@ -56,7 +56,7 @@ PyQt6 installation's `Qt6/plugins/platforms`; do not change application imports 
 accommodate a broken local Qt setup.
 
 Local validation uses Python 3.13.9, NumPy 2.3.5, pyqtgraph 0.14.0 and SimpleITK
-2.6.2 on macOS arm64. It is not evidence for the other CI Python versions or for
+2.6.3 on macOS arm64. It is not evidence for the other CI Python versions or for
 a packaged installer.
 
 Recorded 2.0.0rc1 result: **378 tests run, 376 passed, 2 skipped** (122 seconds).
@@ -81,6 +81,24 @@ edits. Measurements on an Apple M3 Max with 48 GiB RAM, macOS 26.1 arm64:
 The shell does not rescan these arrays on idle 600 ms refreshes. Close/open
 decisions always check the full state. These measurements exclude load, warp,
 save/reopen and peak application memory; they are not a complete performance gate.
+
+## TIFF pages as sections (2.6.3)
+
+Run `QT_QPA_PLATFORM=offscreen python tests/benchmark_tiff_pages.py PAGES SIDE`.
+It writes a PAGES × SIDE × SIDE uint16 ZYX stack, adds every page as a section
+(`add_sections(..., pages_as_sections=True)`), and reports full-stack decodes,
+elapsed time, the traced (tracemalloc) allocation peak and the process's
+resident peak; one run per process. Apple M3 Max, 48 GiB RAM, macOS 26.1
+arm64, Python 3.13.9, NumPy 2.5.4, tifffile 2026.10.15, offscreen:
+
+| Stack | Version | Full-stack decodes | Time | Traced peak | Resident peak |
+| --- | --- | ---: | ---: | ---: | ---: |
+| 40 × 1024², 80 MiB | 2.6.3 | 40 | 2.2 s | 362 MiB | 1,112 MiB |
+| 60 × 2048², 480 MiB | 2.6.3 | 60 | 11.4 s | 1,811 MiB | 3,506 MiB |
+| 60 × 2048², 480 MiB | 2.6.3 | 1 | 5.0 s | 952 MiB | 2,438 MiB |
+
+2.6.3 reads the stack once and lets the sections share it read-only. Synthetic
+data on one machine; not a measurement of real-data registration or saving.
 
 ## Remaining gates for stable 2.0
 

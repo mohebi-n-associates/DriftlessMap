@@ -27,6 +27,7 @@ from PyQt6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPlainTextEdit,
+    QProgressDialog,
     QSizePolicy,
     QSplitter,
     QStackedWidget,
@@ -1138,11 +1139,33 @@ class V2Window(QMainWindow):
             box.addButton("One section per file", QMessageBox.ButtonRole.RejectRole)
             box.exec()
             pages = box.clickedButton() is each
+        # Progress for the batch, with a safe stop between sections (review F7).
+        progress = QProgressDialog("Adding sections…", "Stop after this section", 0,
+                                   len(paths), self)
+        progress.setWindowTitle("Add sections")
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.setMinimumDuration(400)
+        progress.setAutoClose(False)
+        progress.setAutoReset(False)
+        self.add_sections_progress = progress
+
+        def report(done, total, name):
+            if progress.wasCanceled():
+                return False
+            progress.setMaximum(total)
+            progress.setValue(done)
+            progress.setLabelText("Adding section {} of {}: {}".format(done + 1, total, name))
+            QApplication.processEvents()
+            return not progress.wasCanceled()
+
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         try:
-            engine.add_sections(paths, pages_as_sections=pages)
+            engine.add_sections(paths, pages_as_sections=pages, progress=report)
         finally:
             QApplication.restoreOverrideCursor()
+            progress.close()
+            progress.deleteLater()
+            self.add_sections_progress = None
         self.refresh()
 
     def open_new_window(self):
