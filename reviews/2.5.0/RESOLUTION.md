@@ -5,8 +5,8 @@ regression test; details are in [UpdateLog.md](../../UpdateLog.md).
 
 | ID | Resolution | Release |
 | --- | --- | --- |
-| B1 | Each section's registration fingerprint is kept when it is put away; results from a changed stored section stay out of date, also after save and reopen. | 2.5.3 |
-| B2 | A different atlas cannot replace the one a project's results were made with (an identical copy can); File > New window starts another project. | 2.5.5 |
+| B1 | Each section's registration fingerprint is kept when it is put away; results from a changed stored section stay out of date, also after save and reopen. Sections stored before 2.5.3 now show "not verified" (2.6.0 review F2). | 2.5.3, 2.6.1 |
+| B2 | A different atlas cannot replace the one a project's results were made with (an identical copy can); File > New window starts another project. Files changed in the loaded folder are refused too (2.6.0 review F1). | 2.5.5, 2.6.1 |
 | B3 | Rat atlas processing writes `atlas_axis_info.pkl`; checked by reprocessing the SWC download and building a probe. | 2.5.1 |
 | B4 | Unfinished outlines belong to their section; switching parks them, and they resume only on their section. | 2.5.4 |
 | B5 | The page, scene and planes of a multi-part image file are part of the registration fingerprint (single images unchanged). | 2.5.4 |

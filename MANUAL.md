@@ -1,7 +1,7 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 2.6.0**. Section 2 explains how to
-install it; `pip install driftlessmap` installs 2.6.0.
+This manual applies to **DriftlessMap 2.6.1**. Section 2 explains how to
+install it; `pip install driftlessmap` installs 2.6.1.
 
 DriftlessMap - Histological E-data Registration in Brain Space - is a desktop
 application for aligning rodent histology with a reference atlas, reconstructing
@@ -127,7 +127,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-DriftlessMap 2.6.0 requires:
+DriftlessMap 2.6.1 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -146,8 +146,8 @@ page. The macOS DMG (`-macOS-arm64.dmg`) is built for Apple Silicon; on an Intel
 Mac, use the developer installation below.
 The desktop builds include Python and all runtime dependencies. Windows users
 extract the entire ZIP and run `DriftlessMap.exe`; macOS users open the DMG and
-drag `DriftlessMap.app` to Applications. The 2.6.0 downloads are named
-`DriftlessMap-2.6.0-Windows-x64.zip` and `DriftlessMap-2.6.0-macOS-arm64.dmg`.
+drag `DriftlessMap.app` to Applications. The 2.6.1 downloads are named
+`DriftlessMap-2.6.1-Windows-x64.zip` and `DriftlessMap-2.6.1-macOS-arm64.dmg`.
 Release builds are unsigned unless the release notes say otherwise, so the first
 launch may require Windows SmartScreen confirmation or Control-clicking the
 macOS app and choosing **Open**.
@@ -196,7 +196,7 @@ python -m pip --version
 python -c "import driftlessmap; print(driftlessmap.__version__)"
 ```
 
-The final command prints the installed version, `2.6.0`.
+The final command prints the installed version, `2.6.1`.
 
 ### 2.5 Launching DriftlessMap
 
@@ -695,7 +695,10 @@ preferences. If that folder was moved, DriftlessMap asks for a new location.
 A project's landmarks, mappings and objects are in the coordinates and regions
 of the atlas they were made with. Once a project has any of them, loading a
 different atlas is refused (since 2.5.5); loading the same atlas again, or an
-identical copy of it from another folder, is allowed. To work with another
+identical copy of it from another folder, is allowed. If the loaded atlas's own
+files changed or disappeared after loading, nothing can be compared with
+them, so any replacement is refused (since 2.6.1); restore the files, or save
+and reopen the project, which checks the atlas by its saved checksum. To work with another
 atlas, save the project and start a new one: **File > New window** (Ctrl+N)
 in the 2.0 interface, or start DriftlessMap again.
 
@@ -1298,8 +1301,11 @@ section does not change a mapping, so a probe built from several sections is not
 flagged when the next section is loaded. A section that changed after mapping
 keeps its mappings out of date while another section is open, and after the
 project is saved and opened again (since 2.5.3); open it, update the mapping and
-build again. Sections saved by earlier versions are checked once they have been
-opened and put away again. Objects made before 2.0.0a8, imported
+build again. A stored section saved by 2.5.2 or earlier has no record of its
+registration, so results made from it show as **not verified** (in Results,
+the step list and exports; since 2.6.1) until you open that section once:
+then they are current or out of date as usual. A section removed with its
+results kept cannot change, and its results stay as mapped. Objects made before 2.0.0a8, imported
 objects and pieces made from marks placed on the atlas show *origin not
 recorded*. Out-of-date objects can still be exported; the exported file records
 `mapping_status`, and the export message names each one with the reason and the

@@ -115,6 +115,7 @@ from .mapping_records import (
     NOT_RECORDED,
     REGISTRATION_CHANGED,
     REMAPPED,
+    UNVERIFIED,
     MappingLedger,
     derivation,
     derivation_status,
@@ -5014,6 +5015,34 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
         return ["{}: {}.".format(self.object_ctrl.obj_name[i], self.out_of_date_reason(i))
                 for i in self.out_of_date_objects(indexes)]
 
+    def unverified_contribution(self, index):
+        """The first stored section object ``index`` was made from whose
+        registration is unknown, as its mapping record, or None."""
+        return next((record for record, status in self.object_contributions(index)
+                     if record is not None and status == UNVERIFIED), None)
+
+    def unverified_reason(self, index):
+        """Why object ``index`` cannot be confirmed current, or None."""
+        if self.object_mapping_status(index) != UNVERIFIED:
+            return None
+        names = []
+        for record, status in self.object_contributions(index):
+            if record is not None and status == UNVERIFIED:
+                name = self.section_name(record.section_id)
+                if name not in names:
+                    names.append(name)
+        return ("{} {} saved without a record of {} registration (DriftlessMap 2.5.2 or "
+                "earlier); open {} once (section bar above the images) to check whether "
+                "it changed after mapping".format(
+                    ", ".join(names), "was" if len(names) == 1 else "were",
+                    "its" if len(names) == 1 else "their",
+                    "it" if len(names) == 1 else "each"))
+
+    def unverified_lines(self, indexes):
+        """One "name: reason" line per object among ``indexes`` that is not verified."""
+        return ["{}: {}.".format(self.object_ctrl.obj_name[i], self.unverified_reason(i))
+                for i in indexes if self.object_mapping_status(i) == UNVERIFIED]
+
     def mapping_overview(self):
         """Statuses of the loaded section's records and of every object.
 
@@ -7958,9 +7987,27 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
         current = self.volume_atlas_path
         if current is None or not self.has_atlas_results():
             return None
+        loaded = self._loaded_atlas_signatures.get(os.path.abspath(current))
         if os.path.abspath(current) == os.path.abspath(atlas_folder) and signature is not None \
-                and signature == self._loaded_atlas_signatures.get(os.path.abspath(current)):
+                and signature == loaded:
             return None
+        # The comparison below reads the loaded atlas's folder again, so it can
+        # stand for what was loaded only while its files are unchanged.
+        try:
+            unchanged = loaded is not None and path_stat_signature(
+                current, included_names=ATLAS_IDENTITY_FILES) == loaded
+        except (OSError, ValueError):
+            unchanged = False
+        if not unchanged:
+            return ("The atlas files in {} changed (or went missing) after they were loaded, "
+                    "so {} cannot be checked against the atlas this project's results were "
+                    "made with; they were not replaced. Restore the original atlas files, or "
+                    "save and reopen the project (opening checks the atlas against its saved "
+                    "checksum and finds a moved copy), or start a new project for the changed "
+                    "atlas (File > New window).".format(
+                        os.path.basename(os.path.normpath(current)),
+                        os.path.basename(os.path.normpath(atlas_folder))))
+
         def sizes(folder):
             return sorted((name, os.path.getsize(os.path.join(folder, name)))
                           for name in ATLAS_IDENTITY_FILES
@@ -8301,6 +8348,10 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
         if stale:
             notes.append("These exported results are out of date; fix them before using them "
                          "as current results:\n" + "\n".join(stale))
+        unverified = self.unverified_lines(built)
+        if unverified:
+            notes.append("These exported results could not be verified as current (the files "
+                         "record \"not verified\"):\n" + "\n".join(unverified))
         old_probes = [i for i in built if o.obj_type[i] == "merged probe"
                       and "reconstruction" not in o.obj_data[i]]
         if old_probes:
@@ -8370,6 +8421,10 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
         if stale:
             self.print_message("Exported, but out of date (the files record this). "
                                + " ".join(stale), self.reminder_color)
+        unverified = self.unverified_lines(indexes)
+        if unverified:
+            self.print_message("Exported, but not verified as current (the files record "
+                               "this). " + " ".join(unverified), self.reminder_color)
 
     def save_current_object(self):
         if self.object_ctrl.current_obj_index is None:

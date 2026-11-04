@@ -31,6 +31,9 @@ OTHER_SECTION = "another section"
 REMAPPED = "mapped again since"
 BUILD_CHANGED = "build settings changed"
 NOT_RECORDED = "origin not recorded"
+# A stored section whose registration was not recorded when it was put away
+# (saved before 2.5.3, or a damaged value): it may have changed after mapping.
+UNVERIFIED = "not verified"
 
 _IDENTIFIER = re.compile(r"^[0-9a-f]{32}$")
 
@@ -135,11 +138,15 @@ class MappingRecord:
         had when they were put away. A record of another section is compared
         with that fingerprint: REGISTRATION_CHANGED if the section's landmarks,
         page or tilt changed after mapping, else OTHER_SECTION (current).
-        Without a known fingerprint (a section saved before 2.5.3, or one with
-        no stored image) it is OTHER_SECTION.
+        A stored section without a known fingerprint (saved before 2.5.3) is
+        UNVERIFIED; a section that is no longer in the project cannot change
+        and is OTHER_SECTION.
         """
         if section_id != self.section_id:
-            known = (stored or {}).get(self.section_id)
+            stored = stored or {}
+            if self.section_id in stored and stored[self.section_id] is None:
+                return UNVERIFIED
+            known = stored.get(self.section_id)
             if known is not None and known != self.registration:
                 return REGISTRATION_CHANGED
             return OTHER_SECTION
@@ -303,20 +310,21 @@ def is_out_of_date(status):
 
 
 def derivation_status(entries, ledger, section_id, registration, stored=None):
-    """CURRENT, NOT_RECORDED, or the first reason an object is out of date.
-
-    ``stored`` gives other sections' registration fingerprints (see
-    :meth:`MappingRecord.status`); parts from sections without one count as
-    current.
+    """CURRENT, NOT_RECORDED, the first reason an object is out of date, or
+    UNVERIFIED when nothing is out of date but a contributing stored section's
+    registration is unknown (see :meth:`MappingRecord.status`).
     """
     if not entries:
         return NOT_RECORDED
+    unverified = False
     for unit_id, revision in entries:
         record = ledger.by_unit(unit_id)
         if record is None:
             return NOT_RECORDED
         if record.revision != revision:
             return REMAPPED
-        if record.status(section_id, registration, stored) == REGISTRATION_CHANGED:
+        status = record.status(section_id, registration, stored)
+        if status == REGISTRATION_CHANGED:
             return REGISTRATION_CHANGED
-    return CURRENT
+        unverified = unverified or status == UNVERIFIED
+    return UNVERIFIED if unverified else CURRENT

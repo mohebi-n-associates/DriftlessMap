@@ -650,6 +650,24 @@ class SectionPersistenceTests(SectionEngineTests):
             shutil.copytree(original, copy)
             self.assertTrue(window.load_volume_atlas(str(copy)))
 
+            # 2.6.0 review F1: the loaded folder's files changed in place, or a
+            # copy of the changed files, or the folder is gone: refused.
+            changed_copy = root / "changed-copy"
+            time.sleep(0.01)
+            make_processed_atlas(copy, voxel_size=50)
+            shutil.copytree(copy, changed_copy)
+            for candidate in (copy, changed_copy):
+                self.assertFalse(window.load_volume_atlas(str(candidate)), candidate)
+                self.assertIn("changed (or went missing)", window.statusbar.currentMessage())
+                self.assertEqual(window.atlas_view.vox_size_um, 25)
+                self.assertEqual(window.object_ctrl.obj_type, ["merged fiber"])
+                # Exports do not describe the results with the changed files either.
+                with self.assertRaisesRegex(ValueError, "changed after they were loaded"):
+                    window.get_object_export_provenance()
+            shutil.rmtree(copy)
+            self.assertFalse(window.load_volume_atlas(original))
+            self.assertEqual(window.atlas_view.vox_size_um, 25)
+
             # Opening a project replaces the document, whatever its atlas.
             fresh = self.window_with_atlas(root / "fresh")
             self.write_section(root / "x.png", 90)
@@ -687,6 +705,59 @@ class SectionPersistenceTests(SectionEngineTests):
             self.assertTrue(window.save_project_called(portable=True, path=str(portable)))
             self.assertIn("rostral: its original source is unavailable",
                           window.statusbar.currentMessage())
+
+    @isolated_gui_test
+    def test_sections_without_a_recorded_registration_are_not_called_current(self):
+        # 2.6.0 review F2: an older stored section's results looked current.
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window, fiber, first_id, _raster = self.two_section_project(root)
+            second_id = window.section_id
+            self.assertTrue(window.build_implant(fiber.implant_id)[0])
+
+            def status():
+                built = window.implant_objects(fiber.implant_id, built=True)[0]
+                return window.object_mapping_status(built), built
+
+            self.assertEqual(status()[0], "current")
+            # As saved by 2.5.2 or earlier: the stored summary has no fingerprint.
+            window.sections.entry(first_id).summary.pop("registration")
+            state, built = status()
+            self.assertEqual(state, "not verified")
+            self.assertIn("rostral was saved without a record", window.unverified_reason(built))
+            exported, notes = window.export_all_results(str(root / "results"))
+            self.assertTrue(any("could not be verified" in note for note in notes), notes)
+            # Opening it is the check; put away again, it is recorded.
+            self.assertTrue(window.switch_section(first_id)[0])
+            self.assertEqual(status()[0], "current")
+            self.assertTrue(window.switch_section(second_id)[0])
+            self.assertEqual(status()[0], "current")
+
+            # Changed after mapping and unrecorded: not verified, then out of date.
+            self.assertTrue(window.switch_section(first_id)[0])
+            window.atlas_view.cpage_ctrl.set_val(window.atlas_view.current_coronal_index + 2)
+            self.assertTrue(window.switch_section(second_id)[0])
+            self.assertEqual(status()[0], "registration changed")
+            window.sections.entry(first_id).summary.pop("registration")
+            self.assertEqual(status()[0], "not verified")
+            self.assertTrue(window.switch_section(first_id)[0])
+            self.assertEqual(status()[0], "registration changed")
+            window.atlas_view.cpage_ctrl.set_val(window.atlas_view.current_coronal_index - 2)
+            self.assertTrue(window.switch_section(second_id)[0])
+
+            # A damaged fingerprint is unknown after saving and opening.
+            window.sections.entry(first_id).summary["registration"] = "not a fingerprint"
+            path = root / "old.dmap"
+            self.assertTrue(window.save_project_called(path=str(path)))
+            reopened, _payload = self.open_project(root, path)
+            built = reopened.implant_objects(fiber.implant_id, built=True)[0]
+            self.assertEqual(reopened.object_mapping_status(built), "not verified")
+
+            # A section removed with its results kept cannot change: as mapped.
+            ok, _message = reopened.remove_section(first_id)
+            self.assertTrue(ok)
+            built = reopened.implant_objects(fiber.implant_id, built=True)[0]
+            self.assertEqual(reopened.object_mapping_status(built), "current")
 
     @isolated_gui_test
     def test_every_section_round_trips_through_a_project(self):

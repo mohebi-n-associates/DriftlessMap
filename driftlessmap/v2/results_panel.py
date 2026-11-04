@@ -132,7 +132,11 @@ class ResultsPanel(StepPanel):
 
     def _affected(self):
         index = self._selected_index()
-        return None if index is None else self.engine.stale_contribution(index)
+        if index is None:
+            return None
+        # Out of date first; otherwise a section whose registration is unknown.
+        return (self.engine.stale_contribution(index)
+                or self.engine.unverified_contribution(index))
 
     def _open(self, record):
         if record.section_id != self.engine.section_id:
@@ -191,12 +195,16 @@ class ResultsPanel(StepPanel):
 
     def _sync_recovery(self, index):
         engine = self.engine
-        stale = index is not None and v2_state.is_out_of_date(
-            engine.object_mapping_status(index))
-        self.recovery.setVisible(stale)
-        if not stale:
+        status = engine.object_mapping_status(index) if index is not None else None
+        stale = v2_state.is_out_of_date(status)
+        unverified = status == v2_state.UNVERIFIED
+        self.recovery.setVisible(stale or unverified)
+        if not (stale or unverified):
             return
-        record = engine.stale_contribution(index)
+        # Not verified: opening the section is the check; nothing to update yet.
+        for widget in (self.update_button, self.rebuild_button):
+            widget.setVisible(stale)
+        record = self._affected()
         built = engine.object_ctrl.obj_type[index].startswith("merged")
         here = record is not None and record.section_id == engine.section_id
         name = engine.section_name(record.section_id) if record is not None else ""
@@ -206,7 +214,7 @@ class ResultsPanel(StepPanel):
                                     and engine.sections.entry(record.section_id) is not None)
         self.review_button.setEnabled(record is not None)
         self.update_button.setEnabled(record is not None)
-        self.rebuild_button.setVisible(built)
+        self.rebuild_button.setVisible(stale and built)
 
     def _contributions_text(self, index):
         engine = self.engine
@@ -215,9 +223,12 @@ class ResultsPanel(StepPanel):
             if record is None:
                 lines.append("a mapping that no longer exists")
                 continue
+            gone = status == v2_state.OTHER_SECTION and \
+                engine.sections.entry(record.section_id) is None
             lines.append("{}: {}; registration {}".format(
                 engine.section_name(record.section_id),
-                "current" if status in (v2_state.CURRENT, v2_state.OTHER_SECTION)
+                "as mapped (the section is not in the project, so it cannot change)" if gone
+                else "current" if status in (v2_state.CURRENT, v2_state.OTHER_SECTION)
                 else v2_state.mapping_status_text(status),
                 "reviewed" if record.review == "reviewed" else "not reviewed"))
         return "Made from: " + "; ".join(lines) + "." if lines else ""
@@ -233,12 +244,14 @@ class ResultsPanel(StepPanel):
         else:
             self.selected.setText("{} · {}".format(o.obj_name[index], o.obj_type[index]))
             status = self.engine.object_mapping_status(index)
-            kind = ("warn" if v2_state.is_out_of_date(status)
+            kind = ("warn" if v2_state.is_out_of_date(status) or status == v2_state.UNVERIFIED
                     else "good" if status == v2_state.CURRENT else None)
             text = "Mapping: " + v2_state.mapping_status_text(status)
             if v2_state.is_out_of_date(status):
                 reason = self.engine.out_of_date_reason(index)
                 text = "Mapping out of date: {}{}.".format(reason[:1].upper(), reason[1:])
+            elif status == v2_state.UNVERIFIED:
+                text = "Mapping not verified: {}.".format(self.engine.unverified_reason(index))
             set_status(self.origin, text, kind)
             # Per section, not the session's last mapping (review U3).
             self.mapping.setText(self._contributions_text(index))

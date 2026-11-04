@@ -1,6 +1,11 @@
 # Update Log
 
 ### 3rd November 2026
+##### DriftlessMap 2.6.1
+
+`reviews/2.6.0/REPORT.md` F1 and F2. F1: `atlas_replacement_problem` hashed the loaded folder and the candidate; with the loaded folder's files replaced in place it compared the new files with themselves (review probe: reload accepted, 25 → 50 µm, export reported 50 µm), and a copy of the changed files passed the same way. The loaded folder now stands for the loaded atlas only while its stat signature equals the load-time one; otherwise (changed or missing) every replacement is refused with the way out (restore, or save and reopen, which verifies by checksum). Test: changed in place and a copy of the changed files are refused and leave 25 µm and the built fiber (export provenance refuses the changed files); a missing original refuses too; unchanged relocation still loads. F2: a stored section without a recorded fingerprint gave OTHER_SECTION, counted current. New status `UNVERIFIED` ("not verified") for stored sections whose `summary["registration"]` is absent or invalid; `derivation_status` returns it when nothing is out of date; Results shows the reason (`unverified_reason`) and Open for that section, the step list counts it, Export all results and single exports note it, and exported files record it as `mapping_status`. Sections no longer in the project stay OTHER_SECTION (shown as "as mapped"). The review's probes now give "not verified" (was "current") and reject the reload. Test: unrecorded unchanged and changed sections, a damaged fingerprint after save and reopen, a removed section kept as mapped. Version 2.6.1.
+
+### 3rd November 2026
 ##### DriftlessMap 2.6.0
 
 Release of the usability work from `reviews/2.5.0/REPORT.md` (U1-U4, U7-U12 in the phases below; U5 and U6 were in 2.5.8). Version 2.6.0 (version.py, CITATION.cff, tests, README, MANUAL, agent guides, release_validation).

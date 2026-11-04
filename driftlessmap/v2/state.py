@@ -17,6 +17,7 @@ from ..mapping_records import (
     OTHER_SECTION,
     REGISTRATION_CHANGED,
     REMAPPED,
+    UNVERIFIED,
     is_out_of_date,
 )
 
@@ -177,6 +178,9 @@ def step_status(engine):
             stale_records, "" if stale_records == 1 else "s")
     if stale_objects:
         status["results"] += " · {} out of date".format(stale_objects)
+    unverified = sum(state == UNVERIFIED for state in object_states)
+    if unverified:
+        status["results"] += " · {} not verified".format(unverified)
     return status
 
 
@@ -186,6 +190,7 @@ STATUS_TEXT = {
     REGISTRATION_CHANGED: "out of date: registration changed",
     REMAPPED: "out of date: marks mapped again since",
     OTHER_SECTION: "from another section",
+    UNVERIFIED: "not verified: open its section once to check",
     NOT_RECORDED: "origin not recorded",
 }
 
