@@ -57,12 +57,17 @@ class PlanOverlay:
             return []
         plans = {plan.probe: plan for plan in engine.probe_plans.plans()}
         plans.update(engine.plan_previews)
+        # A proposal being inspected is drawn in white beside the plan.
+        for probe, candidate in engine.plan_candidates.items():
+            plans[probe + " (proposal)"] = candidate
         found = []
         for probe in sorted(plans):
             readout = engine.probe_plan_readout(plans[probe], others=False)
             if readout is None or readout["entry_um"] is None:
                 continue
-            found.append((probe, tuple(engine.plan_colours.get(probe, DEFAULT_COLOUR)),
+            colour = (255, 255, 255) if probe.endswith(" (proposal)") \
+                else engine.plan_colours.get(probe, DEFAULT_COLOUR)
+            found.append((probe, tuple(colour),
                           np.asarray(readout["entry_um"]) / atlas.vox_um,
                           np.asarray(plans[probe].tip_um) / atlas.vox_um))
         return found

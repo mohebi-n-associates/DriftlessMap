@@ -1,0 +1,38 @@
+CASE: atlas
+qt.qpa.fonts: Populating font family aliases took 116 ms. Replace uses of missing font family "Sans Serif" with one that exists to avoid this cost. 
+QOpenGLWidget is not supported on this platform.
+REVIEW_RESULT {"case": "atlas", "load_accepted": false, "before": 25, "after": 25, "objects": ["Fiber 1"], "export_voxel_um": "refused: Atlas files changed after they were loaded. Reload the atlas before saving so the pixels and checksum describe the same data."}
+
+CASE: legacy
+qt.qpa.fonts: Populating font family aliases took 82 ms. Replace uses of missing font family "Sans Serif" with one that exists to avoid this cost. 
+QOpenGLWidget is not supported on this platform.
+REVIEW_RESULT {"case": "legacy", "with_fingerprint": "registration changed", "old_summary_without_fingerprint": "not verified"}
+QOpenGLWidget is not supported on this platform.
+REVIEW_RESULT {"case": "legacy_reopen", "before_visiting_section": "not verified", "after_visiting_section": "registration changed"}
+
+CASE: checker
+qt.qpa.fonts: Populating font family aliases took 75 ms. Replace uses of missing font family "Sans Serif" with one that exists to avoid this cost. 
+QOpenGLWidget is not supported on this platform.
+REVIEW_RESULT {"case": "checker", "saved_matches_original": true, "saved_matches_checker": true, "changed_values": 0}
+REVIEW_RESULT {"case": "checker_reopen", "overlay_matches_original": true}
+
+CASE: repair
+qt.qpa.fonts: Populating font family aliases took 59 ms. Replace uses of missing font family "Sans Serif" with one that exists to avoid this cost. 
+QOpenGLWidget is not supported on this platform.
+REVIEW_RESULT {"case": "repair", "selected_type": "merged cells", "recovery_hidden": false, "all_types": ["merged cells", "cells piece"], "statuses": ["mapped again since", "current"]}
+REVIEW_RESULT {"case": "repair_after_build", "all_types": ["merged cells"], "statuses": ["current"]}
+
+CASE: multi_repair
+qt.qpa.fonts: Populating font family aliases took 56 ms. Replace uses of missing font family "Sans Serif" with one that exists to avoid this cost. 
+QOpenGLWidget is not supported on this platform.
+REVIEW_RESULT {"case": "multi_repair", "update_succeeded": true, "first": "84e8f5552cf2467d8e01f909c886317b", "second": "054572376ad34004904cd72157cc5ea9", "next_affected": "054572376ad34004904cd72157cc5ea9", "contributions": [["84e8f5552cf2467d8e01f909c886317b", "mapped again since"], ["054572376ad34004904cd72157cc5ea9", "registration changed"]]}
+
+CASE: review
+qt.qpa.fonts: Populating font family aliases took 73 ms. Replace uses of missing font family "Sans Serif" with one that exists to avoid this cost. 
+QOpenGLWidget is not supported on this platform.
+REVIEW_RESULT {"case": "review", "checklist": [false, false, false, false], "before": "not reviewed", "command_reason": "Tick each point of the checklist first.", "after": "not reviewed"}
+
+CASE: batch
+qt.qpa.fonts: Populating font family aliases took 70 ms. Replace uses of missing font family "Sans Serif" with one that exists to avoid this cost. 
+QOpenGLWidget is not supported on this platform.
+REVIEW_RESULT {"case": "batch", "sections_added": 4, "full_series_reads": 1, "shapes": [[4, 32, 24]]}

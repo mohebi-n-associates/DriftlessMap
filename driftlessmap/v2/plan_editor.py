@@ -13,7 +13,7 @@ brain surface, or steered with the keyboard.
 import html
 
 import numpy as np
-from PyQt6.QtCore import QEvent, QObject, Qt, QTimer
+from PyQt6.QtCore import QEvent, QObject, Qt
 from PyQt6.QtWidgets import (
     QAbstractSpinBox,
     QApplication,
@@ -46,7 +46,6 @@ from ..probe_utiles import Probe
 from .shank_view import ShankView
 from .widgets import Card, Disclosure, button, grid_of, hint_label, set_status, status_label
 
-BUILD_DELAY_MS = 500
 NP2_SHANKS = [-375.0, -125.0, 125.0, 375.0]
 PROBE_TYPES = ("Neuropixels 1.0", "Neuropixels 2.0, one shank",
                "Neuropixels 2.0, four shanks", "Current probe settings")
@@ -128,7 +127,17 @@ def _spin(minimum, maximum, step, decimals, suffix, tooltip):
     box.setKeyboardTracking(False)
     box.setToolTip(tooltip)
     box.setAccelerated(True)
+    # An explicit minimum keeps the Plan section within its column; the text
+    # still fits (review UI-4 of 2.8.3).
+    box.setMinimumWidth(72)
     return box
+
+
+def _narrow(combo, characters=3):
+    """A combo box that does not widen the column to its longest item."""
+    combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+    combo.setMinimumContentsLength(characters)
+    return combo
 
 
 class _Steering(QObject):
@@ -140,6 +149,11 @@ class _Steering(QObject):
 
     def eventFilter(self, watched, event):
         if event.type() != QEvent.Type.KeyPress:
+            return False
+        if not self.editor.isVisible():
+            # The Plan section is not shown (another step, the task column
+            # hidden, another document): steering ends (review R8 of 2.8.3).
+            self.editor._set_steering(False)
             return False
         app = QApplication.instance()
         if app.activeModalWidget() is not None or app.activeWindow() is not self.editor.window():
@@ -162,7 +176,6 @@ class PlanEditor(Card):
         self.probe = None
         self.clicking = False
         self._filling = False
-        self._pending = None
         self.step_index = 1
         self.hint = self.add(hint_label(
             "Plan where the probe goes before surgery: set the tip (or the entry and the "
@@ -228,18 +241,20 @@ class PlanEditor(Card):
         rows = ((self.ap_label, self.ap, self.first_angle_label, self.ap_tilt),
                 (self.ml_label, self.ml, self.second_angle_label, self.ml_tilt),
                 (self.dv_label, self.dv, QLabel("Roll"), self.roll),
-                (QLabel("Depth"), self.depth, QLabel("Angles"), self.angle_box))
+                (QLabel("Depth"), self.depth, None, None))
         for row, (label_a, box_a, label_b, box_b) in enumerate(rows, start=2):
             grid.addWidget(label_a, row, 0)
             grid.addWidget(box_a, row, 1)
-            grid.addWidget(label_b, row, 2)
-            grid.addWidget(box_b, row, 3)
+            if box_b is not None:
+                grid.addWidget(label_b, row, 2)
+                grid.addWidget(box_b, row, 3)
         self.hole_box = QComboBox()
         self.hole_box.setToolTip("The craniotomy this probe goes through; the readout warns "
-                                 "when the entry lies outside it")
+                                 "when any shank enters outside it")
         self.hole_box.activated.connect(self._hole_chosen)
-        grid.addWidget(QLabel("Craniotomy"), 6, 0)
-        grid.addWidget(self.hole_box, 6, 1, 1, 3)
+        for combo in (self.type_box, self.mode_box, self.bank_box, self.angle_box,
+                      self.hole_box):
+            _narrow(combo)
         arm = str(self.shell.settings.value("plan/angles", ANGLE_MODES[0]))
         self.angle_box.setCurrentIndex(ANGLE_MODES.index(arm) if arm in ANGLE_MODES else 0)
         self.angle_box.currentIndexChanged.connect(self._angles_changed)
@@ -249,6 +264,10 @@ class PlanEditor(Card):
         self.depth.valueChanged.connect(self._depth_changed)
         self.add(self.fields)
         self._label_fields()
+        # The readout follows the fields, so the plan's state stays in view.
+        self.readout = self.add(QLabel(""))
+        self.readout.setWordWrap(True)
+        self.readout.setTextFormat(Qt.TextFormat.RichText)
 
         self.click_button = button("Set from clicks", self.toggle_clicking, checkable=True,
                                    tooltip="Click the entry and then the tip on an atlas "
@@ -279,27 +298,36 @@ class PlanEditor(Card):
             button("Snap tip to region…", self.snap_to_region,
                    tooltip="Move the tip to the centre of a region (on the tip's side of "
                            "the brain), keeping the tilts."),
+            button("Propose…", self.propose,
+                   tooltip="Propose plans that record chosen regions (and keep out of "
+                           "others) within the tilts the rig allows"),
             self.steer_button,
-            self.surface_button,
-            self.surgery_button,
             button("Show on atlas", self.show_on_atlas,
                    tooltip="Move the atlas pages through the tip"),
             button("Copy coordinates", self.copy_coordinates,
                    tooltip="Copy one line with the atlas, frame, entry, depth, tip, tilts, "
                            "recording window and regions"),
-            button("Propose…", self.propose,
-                   tooltip="Propose plans that record chosen regions (and keep out of "
-                           "others) within the tilts the rig allows"),
-            button("Region table…", self.region_table,
-                   tooltip="The planned probe's regions, contacts and coordinates"),
-            button("Show in 3D", lambda: self.shell.set_view("3d")),
         ], columns=2)
         self.add(self.actions)
         self.legend = self.add(hint_label(""))
         self.legend.setVisible(False)
-        self.readout = self.add(QLabel(""))
-        self.readout.setWordWrap(True)
-        self.readout.setTextFormat(Qt.TextFormat.RichText)
+        # Less frequent settings and actions fold away (review UI-4 of 2.8.3).
+        more = QWidget()
+        more_grid = QGridLayout(more)
+        more_grid.setContentsMargins(0, 0, 0, 0)
+        more_grid.setSpacing(6)
+        more_grid.addWidget(QLabel("Angles"), 0, 0)
+        more_grid.addWidget(self.angle_box, 0, 1)
+        more_grid.addWidget(QLabel("Craniotomy"), 1, 0)
+        more_grid.addWidget(self.hole_box, 1, 1)
+        more_grid.addWidget(grid_of([
+            self.surface_button,
+            self.surgery_button,
+            button("Region table…", self.region_table,
+                   tooltip="The planned probe's regions, contacts and coordinates"),
+            button("Show in 3D", lambda: self.shell.set_view("3d")),
+        ], columns=2), 2, 0, 1, 2)
+        self.more = self.add(Disclosure("Surgery and more", more, expanded=False))
         self.shank_view = ShankView(self.engine)
         self.shank = self.add(Disclosure("Shank and probe plane", self.shank_view,
                                          expanded=True))
@@ -308,10 +336,13 @@ class PlanEditor(Card):
                                     tooltip="Forget this probe's plan and its planned object; "
                                             "Undo mapping step brings it back.")
         self.add_row(self.remove_button, None)
-        self._timer = QTimer(self)
-        self._timer.setSingleShot(True)
-        self._timer.timeout.connect(self.commit)
         self._steering = _Steering(self)
+
+    def hideEvent(self, event):
+        # Leaving the Plan section ends steering (review R8 of 2.8.3).
+        if self.steer_button.isChecked():
+            self._set_steering(False)
+        super().hideEvent(event)
 
     # ------------------------------------------------------------- state
     def plan(self):
@@ -319,7 +350,9 @@ class PlanEditor(Card):
 
     def current(self):
         """The plan being edited, or the stored one."""
-        return self._pending or self.plan()
+        if self.probe is None:
+            return None
+        return self.engine.plan_previews.get(self.probe) or self.plan()
 
     def entry_mode(self):
         return self.mode_box.currentIndex() == 1
@@ -327,7 +360,6 @@ class PlanEditor(Card):
     def set_probe(self, probe):
         if probe != self.probe:
             self.commit()
-            self.engine.plan_previews.clear()
             self.clicking = False
             self.click_button.setChecked(False)
             self._set_steering(False)
@@ -354,7 +386,8 @@ class PlanEditor(Card):
         self.start_propose.setVisible(plan is None)
         self.start_propose.setEnabled(has_atlas)
         self.start_button.setToolTip("" if has_atlas else "Load a volume atlas first.")
-        for widget in (self.fields, self.actions, self.readout, self.remove_button, self.shank):
+        for widget in (self.fields, self.actions, self.readout, self.remove_button, self.shank,
+                       self.more):
             widget.setVisible(plan is not None)
         if self.clicking:
             self._take_clicks()
@@ -362,7 +395,8 @@ class PlanEditor(Card):
             self.readout.setText("")
             self._set_steering(False)
             return
-        if self._pending is None and not any(box.hasFocus() for box in self._boxes()):
+        staged = self.probe in self.engine.plan_previews
+        if not staged and not any(box.hasFocus() for box in self._boxes()):
             self._fill(plan)
         self._show_readout(plan)
 
@@ -477,8 +511,8 @@ class PlanEditor(Card):
             other = [p for p in closest["probes"] if p != plan.probe][0]
             lines.append("<b>Closest probe</b> {} at {:.2f} mm".format(
                 html.escape(other), closest["distance_um"] / 1000.0))
-        scale = readout.get("scale") or 1.0
-        if abs(scale - 1.0) > 1e-9 and readout["entry_um"] is not None:
+        scale = readout.get("scale", 1.0)
+        if scale is not None and abs(scale - 1.0) > 1e-9 and readout["entry_um"] is not None:
             entry = [v * scale for v in readout["entry_um"]]
             lines.append("<b>For this animal</b> (×{:.3f}) entry {} · depth {:.2f} mm".format(
                 scale, triple(entry), readout["depth_um"] * scale / 1000.0))
@@ -506,13 +540,12 @@ class PlanEditor(Card):
             return None
 
     def preview(self, plan):
-        """Show ``plan`` (readout, atlas, shank) and store it once editing settles."""
-        self._pending = plan
-        self.engine.plan_previews[plan.probe] = plan
-        self.engine.plan_colours[plan.probe] = self._colour()
+        """Show ``plan`` (readout, atlas, shank) at once; the engine stages it as
+        unsaved work and stores and builds it when edits settle, or before any
+        save, export, undo or other action (review R2 of 2.8.3)."""
+        self.engine.stage_probe_plan(plan, self._colour())
         self._show_readout(plan)
         self.engine.plan_overlay.refresh()
-        self._timer.start(BUILD_DELAY_MS)
 
     def _refill_derived(self, plan):
         """Show what follows from an edit (depth, or the entry's DV) without editing."""
@@ -691,6 +724,10 @@ class PlanEditor(Card):
         scale = self.engine.surgery_scale()
         if self.current() is not None:
             self._show_readout(self.current())
+        if scale is None:
+            self._say(False, "The atlas's Bregma–Lambda distance is unknown, so coordinates "
+                             "for this animal cannot be given; enter it too.")
+            return
         self._say(True, "Coordinates for this animal are scaled ×{:.3f}.".format(scale)
                   if abs(scale - 1.0) > 1e-9 else
                   "Coordinates are not scaled (set both distances to scale them).")
@@ -706,7 +743,7 @@ class PlanEditor(Card):
             return
         settings, offsets = probe_type_settings(index, self.engine)
         self.preview(self.current().copy(probe_settings=settings, shank_offsets_um=offsets))
-        self._fill_banks(self._pending)
+        self._fill_banks(self.current())
         self.commit()
 
     def _bank_changed(self, index):
@@ -720,15 +757,12 @@ class PlanEditor(Card):
             self.commit()
 
     def commit(self):
-        """Store and build the plan being edited (one undo step)."""
-        self._timer.stop()
-        plan, self._pending = self._pending, None
-        self.engine.plan_previews.pop(plan.probe if plan else None, None)
-        if plan is None or plan == self.engine.probe_plan(plan.probe):
-            return
-        ok, message = self.engine.set_probe_plan(plan, colour=self._colour())
-        self._say(ok, message)
-        self.shell.refresh()
+        """Store and build the staged edit now (one undo step)."""
+        results = self.engine.flush_plan_edits()
+        if results:
+            ok, message = results[-1]
+            self._say(ok, message)
+            self.shell.refresh()
 
     # ---------------------------------------------------------- steering
     def toggle_steering(self):
@@ -941,8 +975,6 @@ class PlanEditor(Card):
     def remove_plan(self):
         if self.probe is None:
             return
-        self._timer.stop()
-        self._pending = None
         self._set_steering(False)
         self.engine.plan_previews.pop(self.probe, None)
         with self.engine.undoable("Remove {} plan".format(self.probe)):

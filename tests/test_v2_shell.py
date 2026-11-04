@@ -1105,6 +1105,198 @@ class V2ShellTests(unittest.TestCase):
             self.assertIn("None of the target regions", seen["missing"])
             self.assertIsNone(engine.probe_plan("Probe 1"))
 
+    # ------------------------------------------------- review of 2.8.3
+    def planned_window(self, folder):
+        from tests.atlas_fixture import make_processed_atlas
+
+        window = self.make_window(folder)
+        engine = window.engine
+        self.assertTrue(engine.load_volume_atlas(str(make_processed_atlas(
+            Path(folder) / "atlas", shape=(80, 64, 64), axis_info=True))))
+        window.run("probe.plan")
+        window.refresh()
+        return window, engine, window.panels["annotate"].implants.probe_card.plan_editor
+
+    @isolated_gui_test
+    def test_review_r2_a_staged_edit_is_saved_counted_and_kept_to_its_document(self):
+        from unittest.mock import patch
+
+        from PyQt6.QtTest import QTest
+        from PyQt6.QtWidgets import QMessageBox
+
+        from driftlessmap import file_dialogs
+        from driftlessmap.persistence import load_driftlessmap_file
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window, engine, editor = self.planned_window(folder)
+            path = root / "base.dmap"
+            self.assertTrue(engine.save_project_called(path=str(path)))
+            window.mark_saved()
+            before = engine.probe_plan("Probe 1")
+            # A steering step is staged: shown and unsaved, not yet built.
+            self.assertTrue(editor.steer_key(Qt.Key.Key_W))
+            shown = editor.current().tip_um
+            self.assertEqual(shown[1] - before.tip_um[1], 50.0)
+            self.assertTrue(window.is_dirty())
+            # Saving within the settling time saves what is shown.
+            window.save_project()
+            data, error = load_driftlessmap_file(str(path), expected_kind="project")
+            self.assertIsNone(error)
+            self.assertEqual(data["probe_plans"][0]["tip_um"], shown)
+            self.assertFalse(window.is_dirty())
+            self.assertEqual(engine.plan_previews, {})
+            [built] = engine.plan_objects("Probe 1")
+            np.testing.assert_allclose(engine.object_ctrl.obj_data[built]["terminus_coords"],
+                                       shown, atol=1e-6)
+
+            # Undo within the settling time takes the staged step back, and no
+            # late timer brings it back.
+            saved = engine.probe_plan("Probe 1")
+            editor.steer_key(Qt.Key.Key_W)
+            self.assertTrue(engine.undo_mapping_step())
+            QTest.qWait(700)
+            self.assertEqual(engine.probe_plan("Probe 1"), saved)
+            self.assertIsNotNone(engine.undo_history.redo_label())
+
+            # A new project started within the settling time stays empty.
+            editor.steer_key(Qt.Key.Key_W)
+            self.answer_new_project(window, "Keep the atlas")
+            with patch("driftlessmap.v2.shell.QMessageBox.question",
+                       return_value=QMessageBox.StandardButton.Discard):
+                window.run("project.new")
+            QTest.qWait(700)
+            self.assertEqual(engine.probe_plans.to_list(), [])
+            self.assertEqual(engine.plan_previews, {})
+            self.assertEqual(engine.object_ctrl.obj_name, [])
+
+            # Opening another project within the settling time does not bring
+            # the staged plan into it.
+            window.run("probe.plan")
+            window.refresh()
+            editor.steer_key(Qt.Key.Key_W)
+            with patch.object(file_dialogs, "get_open_file_name",
+                              return_value=(str(path), "")), \
+                    patch("driftlessmap.v2.shell.QMessageBox.question",
+                          return_value=QMessageBox.StandardButton.Discard), \
+                    patch("driftlessmap.app.QMessageBox.question",
+                          return_value=QMessageBox.StandardButton.No):
+                window.run("project.open")
+            QTest.qWait(700)
+            self.assertEqual(engine.probe_plans.to_list(), data["probe_plans"])
+
+    @isolated_gui_test
+    def test_review_r3_a_failed_open_keeps_the_atlas_lambda_and_the_scale(self):
+        with tempfile.TemporaryDirectory() as folder:
+            window, engine, editor = self.planned_window(folder)
+            # The fixture atlas records no Lambda: the scale is unavailable,
+            # not 1.0, while an animal distance is set without an atlas one.
+            engine.set_surgery_settings(bregma_lambda_um=450.0)
+            self.assertIsNone(engine.surgery_scale())
+            readout = engine.probe_plan_readout("Probe 1")
+            self.assertTrue(any("no coordinates for the animal" in w
+                                for w in readout["warnings"]))
+            out = Path(folder) / "plans.csv"
+            engine.export_probe_plans(str(out))
+            import csv
+
+            with out.open() as stream:
+                row = next(csv.DictReader(stream))
+            self.assertEqual(row["bregma_lambda_scale"], "unavailable")
+            self.assertEqual(row["animal_depth_mm"], "")
+            # A Lambda recorded with the atlas, as the rat atlases do.
+            view = engine.atlas_view
+            view.atlas_lambda = view.origin_3d + np.array([0.0, 20.0, 0.0])
+            self.assertEqual(engine.atlas_bregma_lambda_um(), 500.0)
+            self.assertAlmostEqual(engine.surgery_scale(), 0.9)
+            line = engine.plan_coordinate_line("Probe 1")
+            payload = engine.project_payload()
+            payload["img_ctrl_data"] = {"current_img": np.zeros((0, 0, 3), np.uint8)}
+            self.assertFalse(engine.load_project(payload))
+            self.assertEqual(engine.atlas_bregma_lambda_um(), 500.0)
+            self.assertAlmostEqual(engine.surgery_scale(), 0.9)
+            self.assertEqual(engine.plan_coordinate_line("Probe 1"), line)
+            # An entered atlas distance survives the same way (it is document state).
+            engine.set_surgery_settings(bregma_lambda_um=450.0, atlas_bregma_lambda_um=4500.0)
+            self.assertFalse(engine.load_project(payload))
+            self.assertAlmostEqual(engine.surgery_scale(), 0.1)
+
+    @isolated_gui_test
+    def test_review_r7_changed_constraints_need_a_new_search(self):
+        from driftlessmap.v2.proposal_dialog import ProposalDialog
+
+        with tempfile.TemporaryDirectory() as folder:
+            window, engine, editor = self.planned_window(folder)
+            dialog = ProposalDialog(editor)
+            dialog._add(dialog.targets, 20)
+            dialog.max_ap.setValue(0)
+            dialog.max_ml.setValue(0)
+            dialog.midline.setValue(0)
+            dialog.find()
+            self.assertGreater(dialog.table.rowCount(), 0)
+            self.assertTrue(dialog.use_button.isEnabled())
+            # The selected proposal is shown on the atlas and in the shank view.
+            self.assertIn("Probe 1", engine.plan_candidates)
+            engine.plan_overlay.refresh()
+            self.assertIsNotNone(dialog.shank_view.readout)
+            self.assertIn("Checked on every shank", dialog.checks.text())
+            def reset():
+                dialog.avoid.clear()
+                dialog.side.setCurrentIndex(0)
+                dialog.midline.setValue(0)
+                dialog.max_ml.setValue(0)
+                dialog.find()
+
+            for change in (lambda: dialog.side.setCurrentIndex(1),
+                           lambda: dialog.midline.setValue(0.1),
+                           lambda: dialog.max_ml.setValue(10),
+                           lambda: dialog._add(dialog.avoid, 10)):
+                reset()
+                self.assertTrue(dialog.use_button.isEnabled())
+                change()
+                self.assertEqual(dialog.table.rowCount(), 0)
+                self.assertFalse(dialog.use_button.isEnabled())
+                self.assertIn("Find plans again", dialog.reasons.text())
+                dialog.use()
+                self.assertIsNone(dialog.chosen)
+                self.assertNotIn("Probe 1", engine.plan_candidates)
+            # A contradictory request is refused and leaves no results.
+            dialog.avoid.clear()
+            dialog._add(dialog.avoid, 20)
+            dialog.find()
+            self.assertEqual(dialog.table.rowCount(), 0)
+            self.assertIn("is also to be kept out of", dialog.reasons.text())
+            dialog.reject()
+            self.assertEqual(engine.plan_candidates, {})
+
+    @isolated_gui_test
+    def test_review_r8_steering_ends_when_the_plan_is_not_shown(self):
+        from PyQt6.QtTest import QTest
+
+        with tempfile.TemporaryDirectory() as folder:
+            window, engine, editor = self.planned_window(folder)
+            window.show()
+            window.activateWindow()
+            self.application.processEvents()
+            before = engine.probe_plan("Probe 1")
+            editor.steer_button.click()
+            self.assertTrue(editor.steer_button.isChecked())
+            window.go_to("project")
+            self.application.processEvents()
+            self.assertFalse(editor.steer_button.isChecked())
+            window.setFocus()
+            QTest.keyClick(window, Qt.Key.Key_W)
+            QTest.qWait(700)
+            self.assertEqual(engine.probe_plan("Probe 1"), before)
+            # Turned on again and the key reaches a hidden editor anyway (a
+            # filter left over): the key is not used and steering ends.
+            window.go_to("annotate")
+            self.application.processEvents()
+            editor.steer_button.click()
+            editor.hide()
+            self.application.processEvents()
+            self.assertFalse(editor.steer_button.isChecked())
+
     @isolated_gui_test
     def test_the_sections_card_adds_opens_renames_and_removes_sections(self):
         import cv2
@@ -2222,6 +2414,21 @@ class V2ShellTests(unittest.TestCase):
             # The view buttons keep their full names.
             for name, view_button in window.view_buttons.items():
                 self.assertGreaterEqual(view_button.width(), view_button.sizeHint().width(), name)
+            # Annotate with a planned probe and its readout (review UI-4 of 2.8.3),
+            # in the smallest window and at 1280 x 800.
+            window.run("probe.plan")
+            for size in ((window.minimumSize().width(), window.minimumSize().height()),
+                         (1280, 800)):
+                with self.subTest(size):
+                    window.resize(*size)
+                    window.go_to("annotate")
+                    window.refresh()
+                    self.application.processEvents()
+                    panel = window.panels["annotate"]
+                    self.assertTrue(panel.implants.probe_card.plan_editor.readout
+                                    .isVisibleTo(window))
+                    self.assertLessEqual(panel.widget().minimumSizeHint().width(),
+                                         panel.viewport().width())
 
     @isolated_gui_test
     def test_a_narrow_window_folds_the_objects_column_away(self):

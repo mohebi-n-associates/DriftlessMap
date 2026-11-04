@@ -1,0 +1,53 @@
+CASE: multi
+REVIEW_RESULT {"case": "multi", "proposals": 1, "reported_reached": 1, "coverage": [["A", 200.0]], "reasons": [], "actual_shanks": [{"hits_target": false, "hits_avoid": true, "entry_hole_distance_um": 406.97051490249265}, {"hits_target": false, "hits_avoid": false, "entry_hole_distance_um": 167.70509831248424}, {"hits_target": true, "hits_avoid": false, "entry_hole_distance_um": 125.0}, {"hits_target": false, "hits_avoid": false, "entry_hole_distance_um": 357.94552658190884}], "hole_radius_um": 100}
+
+CASE: pending_save
+qt.qpa.fonts: Populating font family aliases took 69 ms. Replace uses of missing font family "Sans Serif" with one that exists to avoid this cost. 
+QOpenGLWidget is not supported on this platform.
+REVIEW_RESULT {"case": "pending_save", "stage": "pending", "old": [500.0, 0.0, -668.7500000116415], "shown": [500.0, 50.0, -668.7500000116415], "dirty": false, "pending": true}
+REVIEW_RESULT {"case": "pending_save", "stage": "saved", "disk": [500.0, 0.0, -668.7500000116415], "shown": [500.0, 50.0, -668.7500000116415], "dirty": false}
+REVIEW_RESULT {"case": "pending_save", "stage": "settled", "stored": [500.0, 50.0, -668.7500000116415], "dirty": true}
+
+CASE: pending_new
+qt.qpa.fonts: Populating font family aliases took 77 ms. Replace uses of missing font family "Sans Serif" with one that exists to avoid this cost. 
+QOpenGLWidget is not supported on this platform.
+REVIEW_RESULT {"case": "pending_new", "stage": "pending", "old": [500.0, 0.0, -668.7500000116415], "shown": [500.0, 50.0, -668.7500000116415], "dirty": false, "pending": true}
+This plugin does not support propagateSizeHints()
+REVIEW_RESULT {"case": "pending_new", "stage": "new_document", "plans": [{"probe": "Probe 1", "tip_um": [500.0, 50.0, -668.7500000116415], "ap_tilt_deg": 0.0, "ml_tilt_deg": 0.0, "roll_deg": 0.0, "probe_settings": {"probe_type": 0, "probe_type_name": "NP1.0", "probe_thickness": 24, "probe_length": 10000, "tip_length": 175, "site_height": 20, "site_width": 16, "per_max_sites": [240, 240, 240, 240], "sites_distance": [40, 40, 40, 40], "x_bias": [-16, -8, 8, 16], "y_bias": [30, 10, 30, 10], "site_number_in_banks": [384, 384, 192], "multi_shanks": null, "faces": "Front"}, "shank_offsets_um": null, "bank": 0, "craniotomy": null, "targets": [], "avoid": []}], "editor_pending": false, "objects": ["Probe 1 plan"]}
+
+CASE: pending_undo
+qt.qpa.fonts: Populating font family aliases took 96 ms. Replace uses of missing font family "Sans Serif" with one that exists to avoid this cost. 
+QOpenGLWidget is not supported on this platform.
+REVIEW_RESULT {"case": "pending_undo", "stage": "pending", "old": [500.0, 0.0, -668.7500000116415], "shown": [500.0, 50.0, -668.7500000116415], "dirty": false, "pending": true}
+REVIEW_RESULT {"case": "pending_undo", "stage": "after_undo", "plans": [{"probe": "Probe 1", "tip_um": [500.0, 50.0, -668.7500000116415], "ap_tilt_deg": 0.0, "ml_tilt_deg": 0.0, "roll_deg": 0.0, "probe_settings": {"probe_type": 0, "probe_type_name": "NP1.0", "probe_thickness": 24, "probe_length": 10000, "tip_length": 175, "site_height": 20, "site_width": 16, "per_max_sites": [240, 240, 240, 240], "sites_distance": [40, 40, 40, 40], "x_bias": [-16, -8, 8, 16], "y_bias": [30, 10, 30, 10], "site_number_in_banks": [384, 384, 192], "multi_shanks": null, "faces": "Front"}, "shank_offsets_um": null, "bank": 0, "craniotomy": null, "targets": [], "avoid": []}], "redo": null}
+
+CASE: lambda
+qt.qpa.fonts: Populating font family aliases took 54 ms. Replace uses of missing font family "Sans Serif" with one that exists to avoid this cost. 
+QOpenGLWidget is not supported on this platform.
+REVIEW_RESULT {"case": "lambda", "invalid_project_loaded": false, "before_um": 500.0, "after_um": null, "before_scale": 0.9, "after_scale": 1.0}
+
+CASE: conflict
+REVIEW_RESULT {"case": "conflict", "requested_avoid": [40], "effective_avoid": [], "proposals": 1, "reasons": []}
+
+CASE: gap
+REVIEW_RESULT {"case": "gap", "proposals": 1, "reasons": [], "tip_region": "outside", "warnings": ["The tip is not inside the brain."], "coverage": [["A", 200.0]]}
+
+CASE: hierarchy
+REVIEW_RESULT {"case": "hierarchy", "targets": [10, 40], "reached": 1, "coverage": [2800.0, 0.0], "readout": [["brain", 2790.0000000229234], ["A", 0.0]]}
+REVIEW_RESULT {"case": "hierarchy", "targets": [40, 10], "reached": 2, "coverage": [200.0, 2600.0], "readout": [["A", 198.33333333486144], ["brain", 2591.666666688062]]}
+
+CASE: dialog_stale
+qt.qpa.fonts: Populating font family aliases took 78 ms. Replace uses of missing font family "Sans Serif" with one that exists to avoid this cost. 
+QOpenGLWidget is not supported on this platform.
+REVIEW_RESULT {"case": "dialog_stale", "requested_side": -1, "chosen_tip_ml": 887.5, "use_enabled": true}
+
+CASE: steering
+qt.qpa.fonts: Populating font family aliases took 63 ms. Replace uses of missing font family "Sans Serif" with one that exists to avoid this cost. 
+QOpenGLWidget is not supported on this platform.
+REVIEW_RESULT {"case": "steering", "editor_visible": false, "steering_checked": true, "before": [500.0, 0.0, -668.7500000116415], "after": [500.0, 50.0, -668.7500000116415]}
+
+CASE: ui
+qt.qpa.fonts: Populating font family aliases took 63 ms. Replace uses of missing font family "Sans Serif" with one that exists to avoid this cost. 
+QOpenGLWidget is not supported on this platform.
+This plugin does not support propagateSizeHints()
+REVIEW_RESULT {"case": "ui", "window_size": [1280, 800], "panel_width": 402, "panel_minimum": 419, "dialog_size": [760, 620]}

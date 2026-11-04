@@ -4640,6 +4640,9 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
             finally:
                 self._transaction_depth -= 1
             return
+        if not self._flushing_plans:
+            # A staged plan edit is its own step, before this one.
+            self.flush_plan_edits()
         before = self._transaction_signature()
         transaction = self.undo_history.prepare(label, self._transaction_state(copy_state=False))
         if transaction is None:
@@ -4677,9 +4680,13 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
             action.setEnabled(label is not None)
 
     def undo_mapping_step(self):
+        # A staged plan edit becomes a step first, so Undo takes it back and no
+        # late timer brings it back afterwards (review R2 of 2.8.3).
+        self.flush_plan_edits()
         return self._step_history(self.undo_history.undo, self.undo_history.undo_label(), "Undid")
 
     def redo_mapping_step(self):
+        self.flush_plan_edits()
         return self._step_history(self.undo_history.redo, self.undo_history.redo_label(), "Redid")
 
     def _step_history(self, step, label, verb):
@@ -8404,6 +8411,8 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
     def export_all_results(self, folder):
         """Export every available result into ``folder`` (created if needed).
 
+        Staged plan edits are stored and built first.
+
         Writes a copy of the project, each built object as ``.dmapobj``
         (``objects/``), the localisation CSVs of each probe (``probes/``),
         the implant table, every section's working image, landmarks and
@@ -8412,6 +8421,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
         written and what was left out and why. Raises OSError when the
         folder cannot be created.
         """
+        self.flush_plan_edits()
         os.makedirs(folder, exist_ok=True)
         paths, notes = [], []
         o = self.object_ctrl
@@ -9366,6 +9376,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
         copy (Export all results): the project keeps its own file and
         input references.
         """
+        self.flush_plan_edits()   # what is shown is what is saved
         path = path if isinstance(path, str) else None
         if getattr(self, "_project_recovery", None) is not None:
             self.print_message("Saving is disabled after an incomplete recovery. Reopen the "
@@ -9684,6 +9695,8 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
     _object_file_names = staticmethod(object_file_names)
 
     def _restore_project_payload(self, p_dict, runtime=None):
+        # Staged edits belong to the document being replaced.
+        self.discard_plan_edits()
         self.current_atlas_path = p_dict["atlas_path"]
         self.current_img_path = p_dict["img_path"]
         self.current_atlas = p_dict["current_atlas"]

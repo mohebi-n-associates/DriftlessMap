@@ -7,6 +7,8 @@ import numpy as np
 
 from driftlessmap.probe_plans import (
     MAX_TILT_DEG,
+    recording_sites as _recording_sites,
+    track_checks,
     ProposalRequest,
     propose_plans,
     target_coverage,
@@ -432,7 +434,7 @@ class ProposalTests(unittest.TestCase):
     def test_avoiding_a_region_above_the_target_needs_a_tilt(self):
         vertical = ProposalRequest([40], avoid=[42], max_ap_tilt_deg=0, max_ml_tilt_deg=0)
         proposals, reasons = propose_plans(self.atlas, vertical, self.plan)
-        self.assertTrue(any("cross a region to avoid" in r for r in reasons), reasons)
+        self.assertTrue(any("cross a region to keep out of" in r for r in reasons), reasons)
         tilted = ProposalRequest([40], avoid=[42], max_ap_tilt_deg=30, max_ml_tilt_deg=30)
         proposals, reasons = propose_plans(self.atlas, tilted, self.plan)
         self.assertEqual(reasons, [])
@@ -456,15 +458,15 @@ class ProposalTests(unittest.TestCase):
         short = self.plan.copy(probe_settings=dict(self.plan.probe_settings, probe_length=900))
         proposals, reasons = propose_plans(
             self.atlas, ProposalRequest([41], max_ap_tilt_deg=0, max_ml_tilt_deg=0), short)
-        self.assertTrue(any("deeper than the 0.9 mm shank" in r for r in reasons), reasons)
+        self.assertTrue(any("need more than the 0.9 mm shank" in r for r in reasons), reasons)
         # D is 0.3 mm lateral of B and 1 mm deeper; the blocks are 0.2 mm wide, so
         # a line through both needs about 7° (0.1 mm across 0.8 mm), more than 5°.
         proposals, reasons = propose_plans(
             self.atlas, ProposalRequest([41, 44], max_ap_tilt_deg=5, max_ml_tilt_deg=5),
             self.plan)
-        self.assertTrue(any("The best line reaches 1 of the 2 targets" in r for r in reasons),
+        self.assertTrue(any("The best line found reaches 1 of the 2 targets" in r for r in reasons),
                         reasons)
-        self.assertTrue(any("tilts of up to 10° would allow one" in r for r in reasons),
+        self.assertTrue(any("with tilts of up to 10°" in r for r in reasons),
                         reasons)
         wide = ProposalRequest([41, 44], max_ap_tilt_deg=10, max_ml_tilt_deg=10)
         proposals, reasons = propose_plans(self.atlas, wide, self.plan)
@@ -503,6 +505,129 @@ class ProposalTests(unittest.TestCase):
         self.assertAlmostEqual(abs(best["plan"].ml_tilt_deg), 30.0, delta=3.0)
         elevations = [math.degrees(math.acos(-p["plan"].direction[2])) for p in proposals]
         self.assertLess(min(elevations), 5.0)
+
+    # ------------------------------------------------- review of 2.8.3
+    def physical_shanks(self, plan, atlas, region):
+        """Each shank's own path (entry to tip) and window, measured independently."""
+        from driftlessmap.probe_plans import across_face, surface_entry
+
+        step = atlas.vox_um * 0.5
+        window = _recording_sites(plan)
+        tip_length = plan.probe_settings["tip_length"]
+        across = across_face(plan.direction, plan.normal)
+        out = []
+        for offset in plan.shank_offsets_um or [0.0]:
+            tip = np.asarray(plan.tip_um) + across * offset
+            entry, inside = surface_entry(atlas, tip, plan.direction)
+            path = np.linspace(entry, tip, 400)
+            heights = np.arange(window.min(), window.max() + step / 2, step) + tip_length
+            win = tip[None, :] - heights[:, None] * plan.direction[None, :]
+            path_labels = atlas.labels_at(atlas.to_vox(path))[0]
+            win_labels = atlas.labels_at(atlas.to_vox(win))[0]
+            out.append({"entry": entry, "tip_inside": inside, "labels": set(path_labels.tolist()),
+                        "recorded": float(np.count_nonzero(win_labels == region) * step)})
+        return out
+
+    def test_r1_every_shank_obeys_the_constraints_and_counts(self):
+        labels = self.labels.copy()
+        labels[58:64, 40:44, 55:64] = 42           # on an outer shank's path only
+        atlas = PlanAtlas(labels, self.atlas.label_info, VOX, self.atlas.bregma)
+        np2 = Probe()
+        np2.set_np2()
+        plan = self.plan.copy(probe_settings=np2.get_settings(),
+                              shank_offsets_um=[-375, -125, 125, 375])
+        hole = Craniotomy("hole", "small", [600, 100], 200)
+        # Four shanks 0.75 mm wide cannot all enter a 0.2 mm opening.
+        proposals, reasons = propose_plans(atlas, ProposalRequest(
+            [40], avoid=[42], max_ap_tilt_deg=0, max_ml_tilt_deg=0, craniotomy=hole), plan)
+        self.assertEqual(proposals, [])
+        self.assertTrue(any("outside the craniotomy" in r for r in reasons), reasons)
+        for roll in (0.0, 90.0, 30.0):
+            rolled = plan.copy(roll_deg=roll)
+            proposals, reasons = propose_plans(atlas, ProposalRequest(
+                [40], avoid=[42], max_ap_tilt_deg=10, max_ml_tilt_deg=10), rolled)
+            self.assertTrue(proposals, (roll, reasons))
+            for proposal in proposals:
+                shanks = self.physical_shanks(proposal["plan"], atlas, 40)
+                for shank in shanks:
+                    self.assertNotIn(42, shank["labels"], roll)
+                    self.assertTrue(shank["tip_inside"], roll)
+                # The stated coverage is what the shanks' windows record.
+                self.assertAlmostEqual(proposal["coverage"][0][1],
+                                       sum(s["recorded"] for s in shanks), delta=4 * VOX)
+                self.assertEqual(len(proposal["shank_coverage"]), 4)
+                hard, _soft = track_checks(proposal["plan"], atlas, [42])
+                self.assertEqual(hard, [])
+
+    def test_r1_the_readout_checks_every_shank(self):
+        plan = ProbePlan("P", [600, 100, -1000], probe_settings=Probe().get_settings(),
+                         shank_offsets_um=[-375, -125, 125, 375])
+        labels = self.labels.copy()
+        labels[58:64, 40:44, 55:64] = 42
+        atlas = PlanAtlas(labels, self.atlas.label_info, VOX, self.atlas.bregma)
+        hard, _soft = track_checks(plan, atlas, [42])
+        self.assertEqual(len(hard), 1)
+        # Roll 0: offsets run towards the animal's left, so shank 1 is the right one.
+        self.assertIn("Shank 1 passes through X", hard[0])
+        readout = plan_readout(plan.copy(avoid=[42]), atlas)
+        self.assertTrue(any("Shank 1 passes through X" in w for w in readout["warnings"]))
+        hole = Craniotomy("hole", "small", [600, 100], 200)
+        hard, _soft = track_checks(plan, atlas, craniotomy=hole)
+        self.assertEqual(len(hard), 4)              # every shank enters outside it
+
+    def test_r4_contradictory_regions_are_refused(self):
+        same = ProposalRequest([40], avoid=[40], max_ap_tilt_deg=0, max_ml_tilt_deg=0)
+        self.assertEqual(same.avoid, [40])          # kept as given, not filtered
+        proposals, reasons = propose_plans(self.atlas, same, self.plan)
+        self.assertEqual(proposals, [])
+        self.assertIn("A is to be recorded but is also to be kept out of", reasons[0])
+        inside = ProposalRequest([40], avoid=[10], max_ap_tilt_deg=0, max_ml_tilt_deg=0)
+        proposals, reasons = propose_plans(self.atlas, inside, self.plan)
+        self.assertEqual(proposals, [])
+        self.assertIn("A is to be recorded but lies in brain", reasons[0])
+        # Keeping out of a part of a target is allowed: the rest is recorded.
+        part = ProposalRequest([10], avoid=[40], max_ap_tilt_deg=0, max_ml_tilt_deg=0)
+        proposals, reasons = propose_plans(self.atlas, part, self.plan)
+        self.assertTrue(proposals, reasons)
+        for proposal in proposals:
+            self.assertNotIn(40, self.physical_shanks(proposal["plan"], self.atlas,
+                                                      10)[0]["labels"])
+
+    def test_r5_no_tip_in_a_gap_and_the_gap_is_disclosed(self):
+        labels = self.labels.copy()
+        labels[10:70, 10:70, 44:50] = 0             # a gap just below A
+        atlas = PlanAtlas(labels, self.atlas.label_info, VOX, self.atlas.bregma)
+        proposals, reasons = propose_plans(atlas, ProposalRequest(
+            [40], max_ap_tilt_deg=0, max_ml_tilt_deg=0), self.plan)
+        self.assertTrue(proposals, reasons)
+        for proposal in proposals:
+            readout = plan_readout(proposal["plan"], atlas)
+            self.assertNotEqual(readout["tip_region"][0], "outside")
+            self.assertFalse(any("not inside" in w for w in readout["warnings"]))
+        self.assertTrue(any("leaves the atlas's labelled brain for 0.30 mm" in w
+                            for w in proposals[0]["warnings"]), proposals[0]["warnings"])
+        # The readout says the same for a hand-made plan through the gap.
+        through = self.plan.copy(tip_um=proposals[0]["plan"].tip_um)
+        self.assertTrue(any("labelled brain" in w for w in
+                            plan_readout(through, atlas)["warnings"]))
+
+    def test_r6_parent_and_child_targets_do_not_depend_on_order(self):
+        results = {}
+        for targets in ([10, 40], [40, 10]):
+            request = ProposalRequest(targets, max_ap_tilt_deg=0, max_ml_tilt_deg=0)
+            proposals, reasons = propose_plans(self.atlas, request, self.plan)
+            self.assertEqual(reasons, [])
+            best = proposals[0]
+            self.assertEqual(best["reached"], 2)
+            results[tuple(targets)] = dict(best["coverage"])
+            readout = plan_readout(best["plan"], self.atlas)
+            covered = dict(target_coverage(best["plan"], readout, self.atlas))
+            self.assertGreaterEqual(covered["A"], 150.0)
+            self.assertGreater(covered["brain"], covered["A"])
+        self.assertEqual(results[(10, 40)].keys(), results[(40, 10)].keys())
+        for name in ("A", "brain"):
+            self.assertAlmostEqual(results[(10, 40)][name], results[(40, 10)][name],
+                                   delta=VOX)
 
     def test_targets_and_avoid_are_saved_with_the_plan(self):
         plan = self.plan.copy(targets=[40, 41], avoid=[42])
