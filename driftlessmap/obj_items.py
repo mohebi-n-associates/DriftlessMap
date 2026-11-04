@@ -23,10 +23,24 @@ def create_plot_points_in_3d(data_dict):
     return vis_points
 
 
+HARDWARE_GRAY = (0.62, 0.62, 0.66, 0.85)
+
+
 def create_probe_line_in_3d(data_dict):
     pos = np.stack([data_dict['insertion_coords_3d'], data_dict['terminus_coords_3d']], axis=0)
     vis_color = get_object_vis_color(data_dict['vis_color'])
     probe_line = gl.GLLinePlotItem(pos=pos, color=vis_color, width=2, mode='line_strip')
+    # A planned Neuropixels probe's base, flex, headstage and dovetail, gray
+    # (2.8.6), as a child of the track so they show and hide with it.
+    probe_line.hardware = None
+    if isinstance(data_dict.get('hardware'), dict):
+        from .implants import model_mesh
+
+        vertices, faces = model_mesh(data_dict['hardware'])
+        probe_line.hardware = gl.GLMeshItem(vertexes=vertices, faces=faces, smooth=False,
+                                            shader='balloon', glOptions='translucent',
+                                            color=HARDWARE_GRAY)
+        probe_line.hardware.setParentItem(probe_line)
     return probe_line
 
 

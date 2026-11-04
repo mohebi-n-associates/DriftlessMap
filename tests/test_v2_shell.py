@@ -942,7 +942,7 @@ class V2ShellTests(unittest.TestCase):
         import csv
         from unittest.mock import patch
 
-        from driftlessmap.probe_plans import ProbePlan, arm_from_tilts
+        from driftlessmap.probe_plans import ProbePlan, arm_from_tilts, clearances
         from driftlessmap.v2 import plan_editor
         from tests.atlas_fixture import make_processed_atlas
 
@@ -989,9 +989,15 @@ class V2ShellTests(unittest.TestCase):
             first = engine.probe_plan("Probe 1")
             engine.set_probe_plan(ProbePlan(second, [first.tip_um[0] - 200.0] + first.tip_um[1:],
                                             probe_settings=first.probe_settings))
+            # Their 6.2 mm NP1.0 bases collide above the brain (2.8.6) ...
             for probe in ("Probe 1", second):
                 warnings = engine.probe_plan_readout(probe)["warnings"]
-                self.assertTrue(any("passes 0.20 mm from" in w for w in warnings), probe)
+                self.assertTrue(any("touches" in w and "above the brain" in w
+                                    for w in warnings), probe)
+            # ... and the shanks themselves are 0.2 mm apart.
+            bare = [engine.probe_plan(p).copy(probe_settings=None) for p in ("Probe 1", second)]
+            pairs = clearances([(p, engine.probe_plan_readout(p, others=False)) for p in bare])
+            self.assertAlmostEqual(pairs[0]["distance_um"], 200.0, places=3)
             window.panels["annotate"].implants._select_probe("Probe 1")
 
             # Arm angles: entered as azimuth and elevation, stored as tilts.
@@ -1339,6 +1345,37 @@ class V2ShellTests(unittest.TestCase):
             engine.set_surgery_settings(bregma_lambda_um=450.0, atlas_bregma_lambda_um=4500.0)
             self.assertFalse(engine.load_project(payload))
             self.assertAlmostEqual(engine.surgery_scale(), 0.1)
+
+    @isolated_gui_test
+    def test_a_planned_neuropixels_probe_shows_its_hardware(self):
+        with tempfile.TemporaryDirectory() as folder:
+            window, engine, editor = self.planned_window(folder)
+            editor.type_box.setCurrentIndex(2)          # Neuropixels 2.0, four shanks
+            editor.commit()
+            o = engine.object_ctrl
+            built = engine.plan_objects("Probe 1")
+            self.assertEqual(len(built), 4)
+            with_parts = [i for i in built if o.obj_data[i].get("hardware")]
+            self.assertEqual(len(with_parts), 1)          # drawn once, with shank 1
+            names = [b["name"] for b in o.obj_data[with_parts[0]]["hardware"]["boxes"]]
+            self.assertEqual(names.count("Shank"), 4)
+            self.assertIn("Headstage", names)
+            item = engine.object_3d_list[with_parts[0]]
+            self.assertIs(item.hardware.parentItem(), item)
+            self.assertIsNotNone(engine.probe_plan_readout("Probe 1")["hardware"])
+            # The switch hides it everywhere and is remembered.
+            editor.more.button.setChecked(True)
+            self.assertTrue(editor.hardware_box.isVisibleTo(window))
+            editor.hardware_box.setChecked(False)
+            self.assertFalse(item.hardware.visible())
+            self.assertIsNone(engine.probe_plan_readout("Probe 1")["hardware"])
+            self.assertEqual(window.settings.value("plan/hardware"), "false")
+            editor.hardware_box.setChecked(True)
+            self.assertTrue(item.hardware.visible())
+            # A fiber's plan section has no such switch.
+            window.run("fiber.plan")
+            implants = window.panels["annotate"].implants
+            self.assertFalse(implants.plan_editor.hardware_box.isVisibleTo(window))
 
     @isolated_gui_test
     def test_implants_are_filled_in_3d_and_regions_can_be_see_through(self):

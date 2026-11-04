@@ -248,3 +248,24 @@ are planned; a prism defaults to 1.5 × 1.5 × 3 mm with a 45° bottom.
   changing those does not put a built implant out of date.
 * Not done: a fiber's light cone (NA and power), proposals for fibers and
   prisms, and the prism's reach into the skull.
+
+## 7. Probe hardware (2.8.6)
+
+Requested on 4 November 2026: show the connectors, dovetail and the rest
+above a planned Neuropixels probe, as Pinpoint does.
+
+* Pinpoint's probe and adapter models are GPL-3.0, so they are measured, not
+  copied. Its NP1.0 and NP2.0 models are flat outlines (10 mm shank, then a
+  body 6 or 3 mm wide and 10 mm tall); its NP1.0 prefab stacks a base, PCB,
+  flex and connector board to about 6 cm, and a 7 mm rod; its adapters are
+  8 × 8 × 55 mm.
+* DriftlessMap draws boxes sized from imec's datasheets where they give the
+  size (shanks, bases, flex width and thickness, NP2.0 flex length and
+  headstage) and from Pinpoint otherwise (NP1.0 flex length and connector
+  board, the dovetail adapter). The flex is drawn straight up the probe and
+  the adapter on the back of the base; real mountings vary.
+* The parts are in clearances (lines with radii), so collisions between
+  plans above the brain are reported; a flat part's distance can read up to
+  0.25 mm long.
+* Not done: the headstage cable, rig and manipulator models, and NP1.0 and
+  NP2.0 variants (NHP, 2.0 alpha).

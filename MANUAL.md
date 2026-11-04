@@ -1,7 +1,7 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 2.8.5**. Section 2 explains how to
-install it; `pip install driftlessmap` installs 2.8.5.
+This manual applies to **DriftlessMap 2.8.6**. Section 2 explains how to
+install it; `pip install driftlessmap` installs 2.8.6.
 
 DriftlessMap - Histological E-data Registration in Brain Space - is a desktop
 application for aligning rodent histology with a reference atlas, reconstructing
@@ -1733,6 +1733,30 @@ compared.
 
 Positions are relative to the atlas's Bregma, which for the Allen CCFv3 is an
 estimate; real brains differ from the atlas.
+
+#### Probe hardware (since 2.8.6)
+
+A planned Neuropixels 1.0 or 2.0 probe is drawn, as in Pinpoint, with what
+sits above its shank, in gray: the whole shank, the probe base, the flex
+cable, the connector board (1.0) or headstage (2.0) at the flex's end, and
+the dovetail adapter on the back of the base. They follow the plan's tilts
+and roll (the base lies behind the contacts). Distances between plans include
+them, so probes whose bases or adapters collide above the brain are reported
+("touches"); for these flat parts the distance can be up to 0.25 mm more
+than the true gap. **Show probe hardware** (Surgery and more) turns them off.
+A probe of another design (Current probe settings) has none.
+
+| Part | NP1.0 (mm) | NP2.0 (mm) | Source |
+| --- | --- | --- | --- |
+| Shank | 10 × 0.07 × 0.024 | 10 × 0.07 × 0.024 each | imec datasheets |
+| Probe base | 10.7 × 6.2 × 1.2 | 7.8 × 3.5 × 1.28 | imec datasheets |
+| Flex cable | 30 × 4.3 × 0.08 | 42 × 3.5 × 0.08 | width imec; NP1.0 length Pinpoint |
+| Connector board / headstage | 11.4 × 10.9 × 1.0 | 14 × 10 × 3.7 | Pinpoint / imec |
+| Dovetail adapter | 55 × 8 × 8 | 55 × 8 × 8 | Pinpoint |
+
+Lengths run up the probe from the top of the shank; the flex is drawn
+straight. How a rig mounts the flex, headstage and adapter varies; treat
+them as a guide, and the shank and base as accurate.
 
 #### Planning an optical fiber or a microprism (since 2.8.5)
 

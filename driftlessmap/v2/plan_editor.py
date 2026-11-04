@@ -17,6 +17,7 @@ from PyQt6.QtCore import QEvent, QObject, Qt
 from PyQt6.QtWidgets import (
     QAbstractSpinBox,
     QApplication,
+    QCheckBox,
     QComboBox,
     QDoubleSpinBox,
     QGridLayout,
@@ -341,6 +342,16 @@ class PlanEditor(Card):
         more_grid.addWidget(self.angle_box, 0, 1)
         more_grid.addWidget(QLabel("Craniotomy"), 1, 0)
         more_grid.addWidget(self.hole_box, 1, 1)
+        # The probe base, flex, headstage and dovetail (2.8.6), remembered.
+        self.hardware_box = QCheckBox("Show probe hardware")
+        self.hardware_box.setToolTip("Draw a planned Neuropixels probe's base, flex cable, "
+                                     "headstage or connector and dovetail adapter (gray), and "
+                                     "include them in the distances between plans")
+        shown = str(self.shell.settings.value("plan/hardware", "true")).lower() != "false"
+        self.hardware_box.setChecked(shown)
+        self.engine.set_probe_hardware_shown(shown)
+        self.hardware_box.toggled.connect(self._hardware_toggled)
+        more_grid.addWidget(self.hardware_box, 3, 0, 1, 2)
         more_grid.addWidget(grid_of([
             self.surface_button,
             self.surgery_button,
@@ -360,6 +371,13 @@ class PlanEditor(Card):
         self.add_row(self.remove_button, None)
         self._steering = _Steering(self)
 
+    def _hardware_toggled(self, shown):
+        self.shell.settings.setValue("plan/hardware", "true" if shown else "false")
+        self.engine.set_probe_hardware_shown(shown)
+        plan = self.current()
+        if plan is not None:
+            self._show_readout(plan)
+
     def _keep(self, name, widget):
         setattr(self, name, widget)
         return widget
@@ -375,7 +393,7 @@ class PlanEditor(Card):
             "Give the {} a plan: 1 mm right of Bregma, vertical, in the brain; then move it."
             .format(kind))
         for widget in (self.type_label, self.type_box, self.bank_label, self.bank_box,
-                       self.propose_button):
+                       self.propose_button, self.hardware_box):
             widget.setVisible(probe)
         self.roll_label.setVisible(kind != "fiber")
         self.roll.setVisible(kind != "fiber")

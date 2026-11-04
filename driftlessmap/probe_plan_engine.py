@@ -46,6 +46,7 @@ from .probe_plans import (
     region_summary,
 )
 from .implants import describe_specs
+from .probe_hardware import hardware_model
 from .probe_utiles import calculate_probe_info, probe_error_message
 
 PLAN_SUFFIX = " plan"
@@ -121,6 +122,9 @@ class ProbePlanEngineMixin:
         self.plan_previews = {}
         self.plan_candidates = {}   # probe -> proposal under inspection (display only)
         self.plan_colours = {}      # probe -> colour of its track on the atlas
+        # A planned Neuropixels probe's base, flex, headstage and dovetail are
+        # drawn (2.8.6); a display choice, not saved with the project.
+        self.show_probe_hardware = True
         self._flushing_plans = False
         from PyQt6.QtCore import QTimer
 
@@ -268,6 +272,8 @@ class ProbePlanEngineMixin:
                 "distance in Surgery > Bregma-Lambda distance).")
         readout["targets"] = target_coverage(plan, readout, atlas)
         readout["model"] = planned_model(plan, readout, atlas.vox_um)
+        readout["hardware"] = hardware_model(plan, atlas.vox_um) \
+            if self.show_probe_hardware else None
         return readout
 
     # ------------------------------------------------------------ proposals
@@ -553,6 +559,9 @@ class ProbePlanEngineMixin:
                     name, probe_error_message(error_index))
             info["plan_of"] = probe
             info["plan"] = plan.to_dict()
+            if shank == 0:
+                # Drawn once, with the first shank (probe_hardware).
+                info["hardware"] = hardware_model(plan, atlas.vox_um)
             built.append((name, info))
         if earlier:
             o.delete_objects(earlier)
@@ -595,6 +604,16 @@ class ProbePlanEngineMixin:
             self._colour_object(len(o.obj_name) - 1, colour)
         o.current_obj_index = len(o.obj_name) - 1
         return True, "Planned {}.".format(plan.probe)
+
+    def set_probe_hardware_shown(self, shown):
+        """Show or hide planned probes' hardware in 3D and on the atlas views."""
+        self.show_probe_hardware = bool(shown)
+        for item in getattr(self, "object_3d_list", []):
+            hardware = getattr(item, "hardware", None)
+            if hardware is not None:
+                hardware.setVisible(self.show_probe_hardware)
+        if getattr(self, "plan_overlay", None) is not None:
+            self.plan_overlay.refresh()
 
     def _colour_object(self, index, colour):
         from PyQt6.QtGui import QColor
