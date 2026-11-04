@@ -20,7 +20,6 @@ from PyQt6.QtWidgets import (
     QComboBox,
     QDoubleSpinBox,
     QGridLayout,
-    QInputDialog,
     QLabel,
     QLineEdit,
     QMenu,
@@ -960,19 +959,15 @@ class PlanEditor(Card):
             if not regions:
                 self._say(False, "The atlas has no region names.")
                 return
-            items = ["{} · {}".format(a, n) for a, n, _i in regions]
+            from .region_picker import pick_region
+
             current = self.engine.atlas_view.label_tree.tree.currentItem()
-            start = 0
-            if current is not None and getattr(current, "id", None) is not None:
-                ids = [i for _a, _n, i in regions]
-                if int(current.id) in ids:
-                    start = ids.index(int(current.id))
-            choice, ok = QInputDialog.getItem(self, "Snap tip to region",
-                                              "Region (the tip goes to its centre):",
-                                              items, start, True)
-            if not ok or choice not in items:
+            start = int(current.id) if current is not None \
+                and getattr(current, "id", None) is not None else None
+            region_id = pick_region(self, regions, "Snap tip to region",
+                                    "Region (the tip goes to its centre):", start)
+            if region_id is None:
                 return
-            region_id = regions[items.index(choice)][2]
         side = 1 if plan.tip_um[0] >= 0 else -1
         centre = self.engine.region_centre_um(region_id, side=side) \
             or self.engine.region_centre_um(region_id)
@@ -982,6 +977,8 @@ class PlanEditor(Card):
         new = plan.copy(tip_um=centre)
         ok, message = self.engine.set_probe_plan(new, colour=self._colour())
         self.engine.show_plan_on_atlas(self.probe)
+        # The region is checked, so it is drawn on the atlas views and in 3D.
+        self.engine.atlas_view.label_tree.show_labels([region_id])
         self._fill(new)
         self._say(ok, message)
 

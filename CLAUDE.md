@@ -173,7 +173,12 @@ or important workflows change.
   `plan_kind`, `default_plan`, `plan_removed`): `ProbeControls`, and the
   Implants card for fibers and prisms. The start screen's Plan a probe/fiber/
   prism (`start_probe_plan(kind)`, commands `probe.plan`, `fiber.plan`,
-  `prism.plan`) ask for the atlas folder when none is loaded.
+  `prism.plan`) ask for the atlas folder when none is loaded. A prism's
+  imaging window (`imaging_window_um`: width × depth / tan(bevel)) is drawn
+  in the Imaging face view and must lie in the brain. Regions: the Regions
+  tree has a Find box (`LabelTree.filter_labels`, `show_labels` checks
+  regions so the atlas and 3D show them); `v2/region_picker.pick_region`
+  for Snap tip to region and Propose's Add…, whose regions are shown.
 - `driftlessmap/project_session.py`: `ProjectSessionMixin.project_payload` is the
   shared saved-state collector. `load_project` snapshots the active document and
   restores it on failure, including its original reader, in-memory atlas and undo

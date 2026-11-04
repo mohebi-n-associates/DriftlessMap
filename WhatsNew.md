@@ -20,6 +20,11 @@ screen that gets you to a plan.
   too short for its depth. **Face** turns the imaging face.
 - Planned fibers and prisms are outlined on the atlas views wherever a page
   cuts them, and listed in `probe_plans.csv`.
+- **Find regions by typing**: a search box above the Regions tree, and in
+  Snap tip to region and Propose's Add… a list that narrows as you type.
+- **Regions you plan with are shown**: snapping to a region or adding it to
+  Record or Keep out of checks it, so it is drawn on the atlas views and in
+  3D.
 - **The start screen's planning works before an atlas is loaded**: Plan a
   probe…, Plan a fiber… and Plan a prism… ask for the atlas folder and then
   open the plan. Before, the button only said to load an atlas, and the start

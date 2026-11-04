@@ -1341,6 +1341,55 @@ class V2ShellTests(unittest.TestCase):
             self.assertAlmostEqual(engine.surgery_scale(), 0.1)
 
     @isolated_gui_test
+    def test_regions_are_found_by_typing_and_planning_shows_the_ones_it_uses(self):
+        from unittest.mock import patch
+
+        from driftlessmap.v2 import region_picker
+        from driftlessmap.v2.proposal_dialog import ProposalDialog
+        from driftlessmap.v2.region_picker import RegionPicker, region_matches
+
+        regions = [("CH", "child", 10), ("GC", "grandchild", 20), ("CHx", "other", 30)]
+        self.assertEqual([r[2] for r in region_matches(regions, "ch")], [10, 30, 20])
+        self.assertEqual([r[2] for r in region_matches(regions, "grand")], [20])
+        self.assertEqual(region_matches(regions, "nothing"), [])
+        with tempfile.TemporaryDirectory() as folder:
+            window, engine, editor = self.planned_window(folder)
+            tree = engine.atlas_view.label_tree
+            # The Regions tree narrows to what is typed, with the parents.
+            tree.search.setText("grand")
+            hidden = {tree.labels_by_id[i]['item'].text(0): tree.labels_by_id[i]['item']
+                      .isHidden() for i in tree.labels_by_id}
+            self.assertEqual(hidden, {"root": False, "CH": False, "GC": False})
+            tree.search.setText("nothing")
+            self.assertTrue(all(rec['item'].isHidden() for rec in tree.labels_by_id.values()))
+            tree.search.setText("CH")
+            tree.select_first_match()
+            self.assertEqual(tree.tree.currentItem().id, 10)
+            tree.search.clear()
+            self.assertFalse(any(rec['item'].isHidden() for rec in tree.labels_by_id.values()))
+            # The picker narrows its list the same way.
+            picker = RegionPicker(editor, editor._regions())
+            picker.search.setText("grandchild")
+            self.assertEqual(picker.list.count(), 1)
+            picker.accept()
+            self.assertEqual(picker.chosen, 20)
+            # Snapping to a region shows it (checked: atlas views and 3D).
+            self.assertEqual(tree.checked, set())
+            with patch.object(region_picker, "pick_region", return_value=20):
+                editor.snap_to_region()
+            self.assertEqual(tree.checked, {20})
+            lut = tree.lookup_table()
+            self.assertTrue(lut[tree.display_index_by_id[20]].any())
+            self.assertTrue(engine.show_child_mesh)
+            # Regions to record or keep out of are shown too.
+            dialog = ProposalDialog(editor)
+            with patch.object(region_picker, "pick_region", return_value=10):
+                dialog.add_region(dialog.avoid)
+            self.assertEqual(dialog.regions(dialog.avoid), [10])
+            self.assertIn(10, tree.checked)
+            dialog.reject()
+
+    @isolated_gui_test
     def test_review_r7_changed_constraints_need_a_new_search(self):
         from driftlessmap.v2.proposal_dialog import ProposalDialog
 

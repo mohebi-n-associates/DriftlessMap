@@ -515,7 +515,9 @@ The window has four areas:
   above the image.
 - **Objects, Layers and Regions** on the right. Checked regions are
   highlighted in the atlas and, with **Show checked regions in 3D** (on by
-  default), drawn in the 3D view.
+  default), drawn in the 3D view. Type in **Find a region** above the tree
+  to narrow it to the regions whose acronym or name holds every word you
+  type (with their parents); Enter selects the best match (since 2.8.5).
 - **The status line** at the bottom: the last message, the atlas and section,
   and whether there are unsaved changes. Changing views, zooming or selecting
   never counts as a change; adding a probe, even before marking it, does.
@@ -1570,8 +1572,11 @@ Add or Build step.
      where that line meets the brain.
    - **Snap tip to region…**: the tip moves to a region's centre on the tip's
      side of the brain (a region and its sub-regions, for example PL and its
-     layers), keeping the angles. The list starts at the region selected in
-     the Regions tree.
+     layers), keeping the angles. Type part of the acronym or name to find
+     it (the list starts at the region selected in the Regions tree). The
+     region is then checked in the Regions tree, so it is shown on the atlas
+     views and in 3D; so are the regions added to Record and Keep out of in
+     Propose… (since 2.8.5). Uncheck them in the tree to hide them.
 3. Read the plan as it changes: **Entry** (where the probe first touches the
    brain, from Bregma), **Depth** along the probe from that entry (what you
    advance after zeroing at the brain surface), **Tip** and its region, the
