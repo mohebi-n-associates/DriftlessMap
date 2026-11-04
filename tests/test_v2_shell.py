@@ -921,6 +921,122 @@ class V2ShellTests(unittest.TestCase):
             self.assertIsNone(view.describe(-5, -5))
 
     @isolated_gui_test
+    def test_plans_for_surgery_craniotomy_clearance_arm_angles_and_scaling(self):
+        import csv
+        from unittest.mock import patch
+
+        from driftlessmap.probe_plans import ProbePlan, arm_from_tilts
+        from driftlessmap.v2 import plan_editor
+        from tests.atlas_fixture import make_processed_atlas
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window = self.make_window(folder)
+            engine = window.engine
+            self.assertTrue(engine.load_volume_atlas(str(make_processed_atlas(
+                root / "atlas", shape=(80, 64, 64), axis_info=True))))
+            window.run("probe.plan")
+            window.refresh()
+            card = window.panels["annotate"].implants.probe_card
+            editor = card.plan_editor
+            editor.snap_to_region(10)
+
+            # A craniotomy centred on the entry; the probe goes through it.
+            hole = editor.new_craniotomy(diameter_um=800.0)
+            plan = engine.probe_plan("Probe 1")
+            self.assertEqual(plan.craniotomy, hole.craniotomy_id)
+            entry = engine.probe_plan_readout("Probe 1")["entry_um"]
+            np.testing.assert_allclose(hole.centre_um, entry[:2], atol=1e-6)
+            self.assertEqual(editor.hole_box.currentText(), hole.name)
+            self.assertIn("Craniotomy", editor.readout.text())
+            # Moving the entry 0.5 mm away puts it outside the 0.8 mm opening.
+            editor.mode_box.setCurrentIndex(1)
+            editor.ap.setValue(round((entry[1] + 500.0) / 1000.0, 3))
+            editor.commit()
+            readout = engine.probe_plan_readout("Probe 1")
+            self.assertTrue(any("outside its 0.80 mm opening" in w
+                                for w in readout["warnings"]))
+            # Fit the craniotomy to its probe: the entry is inside again.
+            editor.fit_craniotomy()
+            hole = engine.craniotomies.get(hole.craniotomy_id)
+            readout = engine.probe_plan_readout("Probe 1")
+            self.assertFalse(any("opening" in w for w in readout["warnings"]))
+            np.testing.assert_allclose(hole.centre_um, readout["entry_um"][:2], atol=1e-6)
+            self.assertAlmostEqual(hole.diameter_um, 500.0)   # the minimum
+            engine.show_plan_on_atlas("Probe 1")
+            engine.plan_overlay.refresh()
+            self.assertEqual(engine.plan_overlay.holes_drawn(), 1)
+
+            # A second probe 0.2 mm away is reported for both.
+            second = card.new_probe()
+            first = engine.probe_plan("Probe 1")
+            engine.set_probe_plan(ProbePlan(second, [first.tip_um[0] - 200.0] + first.tip_um[1:],
+                                            probe_settings=first.probe_settings))
+            for probe in ("Probe 1", second):
+                warnings = engine.probe_plan_readout(probe)["warnings"]
+                self.assertTrue(any("passes 0.20 mm from" in w for w in warnings), probe)
+            window.panels["annotate"].implants._select_probe("Probe 1")
+
+            # Arm angles: entered as azimuth and elevation, stored as tilts.
+            editor.mode_box.setCurrentIndex(0)
+            editor.angle_box.setCurrentIndex(1)
+            self.assertEqual(editor.first_angle_label.text(), "Azimuth")
+            self.assertEqual(window.settings.value("plan/angles"), "Arm angles")
+            editor.ap_tilt.setValue(90.0)
+            editor.ml_tilt.setValue(10.0)
+            editor.commit()
+            plan = engine.probe_plan("Probe 1")
+            self.assertAlmostEqual(plan.ap_tilt_deg, 0.0, places=6)
+            self.assertAlmostEqual(plan.ml_tilt_deg, 10.0, places=6)
+            azimuth, elevation = arm_from_tilts(plan.ap_tilt_deg, plan.ml_tilt_deg)
+            self.assertAlmostEqual(azimuth, 90.0, places=6)
+            self.assertIn("Arm", editor.readout.text())
+            editor.angle_box.setCurrentIndex(0)
+            self.assertAlmostEqual(editor.ml_tilt.value(), 10.0, places=1)
+
+            # Bregma-Lambda: this atlas records no Lambda, so both are entered.
+            self.assertIsNone(engine.atlas_bregma_lambda_um())
+            with patch.object(plan_editor, "bregma_lambda_dialog",
+                              return_value={"bregma_lambda_um": 3990.0,
+                                            "atlas_bregma_lambda_um": 4200.0}):
+                editor.edit_bregma_lambda()
+            self.assertAlmostEqual(engine.surgery_scale(), 0.95)
+            self.assertIn("For this animal", editor.readout.text())
+            editor.copy_coordinates()
+            line = QApplication.clipboard().text()
+            self.assertIn("Bregma-Lambda scale x0.950", line)
+            self.assertIn("through " + hole.name, line)
+            self.assertIn("arm azimuth 90.0°", line)
+            out = root / "plans.csv"
+            engine.export_probe_plans(str(out))
+            with out.open() as stream:
+                rows = {row["probe"]: row for row in csv.DictReader(stream)}
+            readout = engine.probe_plan_readout("Probe 1")
+            self.assertAlmostEqual(float(rows["Probe 1"]["animal_depth_mm"]),
+                                   readout["depth_um"] * 0.95 / 1000.0, places=3)
+            self.assertEqual(rows["Probe 1"]["craniotomy"], hole.name)
+            self.assertEqual(rows["Probe 1"]["closest_probe"], second)
+            self.assertAlmostEqual(float(rows["Probe 1"]["arm_azimuth_deg"]), 90.0)
+
+            # Saved and reopened; undo takes back the scaling and the craniotomy.
+            path = str(root / "surgery.dmap")
+            self.assertTrue(engine.save_project_called(path=path))
+            from driftlessmap.persistence import load_driftlessmap_file
+
+            payload, error = load_driftlessmap_file(path, expected_kind="project")
+            self.assertIsNone(error)
+            self.assertEqual(payload["craniotomies"], engine.craniotomies.to_list())
+            self.assertEqual(payload["surgery_settings"]["bregma_lambda_um"], 3990.0)
+            self.assertTrue(engine.undo_mapping_step())     # the scaling
+            self.assertEqual(engine.surgery_scale(), 1.0)
+            editor.remove_craniotomy()
+            self.assertIsNone(engine.probe_plan("Probe 1").craniotomy)
+            self.assertEqual(len(engine.craniotomies), 0)
+            self.assertTrue(engine.undo_mapping_step())
+            self.assertEqual(len(engine.craniotomies), 1)
+            self.assertEqual(engine.probe_plan("Probe 1").craniotomy, hole.craniotomy_id)
+
+    @isolated_gui_test
     def test_the_sections_card_adds_opens_renames_and_removes_sections(self):
         import cv2
         from unittest.mock import patch

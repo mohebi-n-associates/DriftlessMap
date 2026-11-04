@@ -14,6 +14,7 @@ import json
 import numpy as np
 import pyqtgraph as pg
 from PyQt6.QtCore import QTimer, Qt
+from PyQt6.QtWidgets import QGraphicsEllipseItem
 
 NEAR_UM = 100.0
 SAMPLES = 200
@@ -58,7 +59,7 @@ class PlanOverlay:
         plans.update(engine.plan_previews)
         found = []
         for probe in sorted(plans):
-            readout = engine.probe_plan_readout(plans[probe])
+            readout = engine.probe_plan_readout(plans[probe], others=False)
             if readout is None or readout["entry_um"] is None:
                 continue
             found.append((probe, tuple(engine.plan_colours.get(probe, DEFAULT_COLOUR)),
@@ -74,9 +75,11 @@ class PlanOverlay:
                 self.clear()
             return
         tracks = self.tracks()
+        holes = [c.to_dict() for c in self.engine.craniotomies.craniotomies()]
         key = (view.current_coronal_index, view.current_sagital_index,
                view.current_horizontal_index, json.dumps(view.get_atlas_angles()),
-               json.dumps([(p, c, e.tolist(), t.tolist()) for p, c, e, t in tracks]))
+               json.dumps([(p, c, e.tolist(), t.tolist()) for p, c, e, t in tracks]),
+               json.dumps(holes))
         if key == self._key:
             return
         self._key = key
@@ -93,6 +96,24 @@ class PlanOverlay:
             frame = np.column_stack([axis_x, axis_y, normal])
             for _probe, colour, entry, tip in tracks:
                 self._draw(plane, stack, origin, frame, entry, tip, colour, vox_um)
+            if plane == "horizontal":
+                for hole in holes:
+                    self._draw_hole(stack, origin, frame, hole, vox_um)
+
+    def _draw_hole(self, stack, origin, frame, hole, vox_um):
+        """A craniotomy as a dashed circle on the horizontal view."""
+        centre = np.array([hole["centre_um"][0] / vox_um, hole["centre_um"][1] / vox_um,
+                           origin[2]])
+        u, v, _w = np.linalg.solve(frame, centre - origin)
+        radius = hole["diameter_um"] / 2.0 / vox_um / np.linalg.norm(frame[:, 0])
+        item = QGraphicsEllipseItem(u - radius, v - radius, 2 * radius, 2 * radius)
+        pen = pg.mkPen(255, 255, 255, width=1.5, style=Qt.PenStyle.DashLine)
+        pen.setCosmetic(True)
+        item.setPen(pen)
+        item.setZValue(54)
+        item.setToolTip(hole["name"])
+        stack.vb.addItem(item)
+        self._items["horizontal"].append((stack, item))
 
     def _draw(self, plane, stack, origin, frame, entry, tip, colour, vox_um):
         points = entry + np.linspace(0.0, 1.0, SAMPLES)[:, None] * (tip - entry)
@@ -125,6 +146,11 @@ class PlanOverlay:
             for stack, item in items:
                 stack.vb.removeItem(item)
             items.clear()
+
+    def holes_drawn(self):
+        """Number of craniotomies drawn on the horizontal view (for tests)."""
+        return sum(1 for _stack, item in self._items["horizontal"]
+                   if isinstance(item, QGraphicsEllipseItem))
 
     def drawn(self, plane):
         """Number of tracks drawn on ``plane``'s view (for tests)."""

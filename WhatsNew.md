@@ -3,6 +3,27 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.8.2
+
+Release, 4 November 2026: the third part of the new probe planning, for
+surgery.
+
+- **Craniotomies.** Make a craniotomy at a probe's entry, tie probes to it,
+  and fit it to hold all their entries. The plan warns when its entry lies
+  outside its craniotomy; craniotomies are drawn on the horizontal view.
+- **Clearance between probes.** Every planned probe is checked against the
+  others from 3 mm above the brain to the tip; closer than 0.3 mm is a
+  warning, otherwise the closest probe is named.
+- **Arm angles.** Enter the tilts as azimuth and elevation instead of AP and
+  ML tilts.
+- **Bregma–Lambda scaling.** Enter the animal's measured Bregma–Lambda
+  distance (and the atlas's, when the atlas does not record Lambda) to see the
+  entry and depth scaled to the animal.
+- The copied coordinates and `probe_plans.csv` include the arm angles, the
+  craniotomy, the closest probe and the scaled coordinates.
+- On the Allen 10 µm atlas, probes to the left and right prelimbic cortex are
+  0.90 mm apart; their fitted craniotomy is 1.40 mm across.
+
 ## DriftlessMap 2.8.1
 
 Release, 4 November 2026: the second part of the new probe planning.

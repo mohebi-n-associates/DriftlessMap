@@ -24,7 +24,12 @@ DEFAULT_DEPTH_UM = 3000.0
 SUMMARY_MIN_UM = 50.0
 
 PLAN_FIELDS = ("probe", "tip_um", "ap_tilt_deg", "ml_tilt_deg", "roll_deg",
-               "probe_settings", "shank_offsets_um", "bank")
+               "probe_settings", "shank_offsets_um", "bank", "craniotomy")
+# Clearance between planned probes: checked from this far above each entry
+# down to the tip, and reported when closer than CLEARANCE_UM.
+CLEARANCE_ABOVE_UM = 3000.0
+CLEARANCE_UM = 300.0
+CRANIOTOMY_MARGIN_UM = 250.0
 CHANNELS_PER_BANK = 384
 
 
@@ -99,7 +104,7 @@ class ProbePlan:
     """One planned probe (see the module docstring for the frame)."""
 
     def __init__(self, probe, tip_um, ap_tilt_deg=0.0, ml_tilt_deg=0.0, roll_deg=0.0,
-                 probe_settings=None, shank_offsets_um=None, bank=0):
+                 probe_settings=None, shank_offsets_um=None, bank=0, craniotomy=None):
         self.probe = str(probe)
         self.tip_um = [float(v) for v in tip_um]
         self.ap_tilt_deg = float(ap_tilt_deg)
@@ -111,6 +116,9 @@ class ProbePlan:
         # Recording window: the bank of channels counted from the tip (0 is
         # the lowest 384), or None for every site (2.8.1; absent means 0).
         self.bank = None if bank is None else int(bank)
+        # The craniotomy the probe goes through (an id in the project's
+        # CraniotomyBook), or None (2.10.0; absent means None).
+        self.craniotomy = None if craniotomy is None else str(craniotomy)
         self.validate()
 
     def validate(self):
@@ -168,6 +176,7 @@ class ProbePlan:
             "shank_offsets_um": (list(self.shank_offsets_um)
                                  if self.shank_offsets_um else None),
             "bank": self.bank,
+            "craniotomy": self.craniotomy,
         }
 
     @classmethod
@@ -179,7 +188,7 @@ class ProbePlan:
                 data["probe"], data["tip_um"],
                 data.get("ap_tilt_deg", 0.0), data.get("ml_tilt_deg", 0.0),
                 data.get("roll_deg", 0.0), data.get("probe_settings"),
-                data.get("shank_offsets_um"), data.get("bank", 0))
+                data.get("shank_offsets_um"), data.get("bank", 0), data.get("craniotomy"))
         except (KeyError, TypeError) as exc:
             raise ValueError("incomplete plan ({})".format(exc)) from None
 
@@ -609,6 +618,8 @@ def coordinate_line(plan, readout, atlas_name=""):
         "tip {}".format(triple(readout["tip_um"])),
         "AP tilt {:+.1f}°, ML tilt {:+.1f}° ({})".format(
             plan.ap_tilt_deg, plan.ml_tilt_deg, readout.get("tilt", "")),
+        "arm azimuth {:.1f}°, elevation {:.1f}°".format(*readout["arm"])
+        if readout.get("arm") else "",
         "roll {:.0f}° (contacts face {})".format(plan.roll_deg, readout.get("face", "")),
         "probe {}".format(settings.get("probe_type_name")) if settings.get("probe_type_name") else "",
     ]
@@ -618,6 +629,16 @@ def coordinate_line(plan, readout, atlas_name=""):
     window = window_text(plan, readout)
     if window:
         parts.append(window)
+    craniotomy = readout.get("craniotomy")
+    if craniotomy:
+        parts.append("through {} (centre AP {:+.3f}, ML {:+.3f} mm, {:.2f} mm across)".format(
+            craniotomy["name"], craniotomy["centre_um"][1] / 1000.0,
+            craniotomy["centre_um"][0] / 1000.0, craniotomy["diameter_um"] / 1000.0))
+    scale = readout.get("scale") or 1.0
+    if abs(scale - 1.0) > 1e-9 and readout.get("entry_um") is not None:
+        parts.append("for this animal (Bregma-Lambda scale x{:.3f}): entry {}, depth {:.3f} "
+                     "mm".format(scale, triple(np.asarray(readout["entry_um"]) * scale),
+                                 readout["depth_um"] * scale / 1000.0))
     return "; ".join(p for p in parts if p).replace(":;", ":")
 
 
@@ -707,3 +728,270 @@ def region_centre(atlas, region_id, side=None, max_voxels=8_000_000):
     centre = vox.mean(axis=0)
     nearest = vox[np.argmin(np.sum((vox - centre) ** 2, axis=1))]
     return atlas.to_um(nearest).tolist()
+
+
+# ------------------------------------------------------------- arm angles
+def arm_from_tilts(ap_tilt_deg, ml_tilt_deg):
+    """(azimuth, elevation) of a probe from its AP and ML tilts.
+
+    Elevation is the angle from vertical; azimuth is the direction the tip
+    leans towards in the horizontal plane, from anterior (0) towards the
+    animal's right (90). A vertical probe has azimuth 0.
+    """
+    lean_ml = math.tan(math.radians(ml_tilt_deg))
+    lean_ap = math.tan(math.radians(ap_tilt_deg))
+    lean = math.hypot(lean_ml, lean_ap)
+    elevation = math.degrees(math.atan(lean))
+    azimuth = math.degrees(math.atan2(lean_ml, lean_ap)) % 360.0 if lean > 1e-12 else 0.0
+    return azimuth, elevation
+
+
+def tilts_from_arm(azimuth_deg, elevation_deg):
+    """(AP tilt, ML tilt) of a probe from its azimuth and elevation (exact inverse)."""
+    lean = math.tan(math.radians(elevation_deg))
+    return (math.degrees(math.atan(lean * math.cos(math.radians(azimuth_deg)))),
+            math.degrees(math.atan(lean * math.sin(math.radians(azimuth_deg)))))
+
+
+# ------------------------------------------------------------- craniotomies
+class Craniotomy:
+    """A circular opening in the skull: centre (ML, AP from Bregma) and diameter, in um."""
+
+    def __init__(self, craniotomy_id, name, centre_um, diameter_um):
+        self.craniotomy_id = str(craniotomy_id)
+        self.name = " ".join(str(name).split())
+        self.centre_um = [float(v) for v in centre_um]
+        self.diameter_um = float(diameter_um)
+        if not self.craniotomy_id or not self.name:
+            raise ValueError("a craniotomy needs an id and a name")
+        if len(self.centre_um) != 2 or not all(math.isfinite(v) for v in self.centre_um):
+            raise ValueError("a craniotomy's centre needs ML and AP")
+        if not (math.isfinite(self.diameter_um) and 0 < self.diameter_um <= 20000):
+            raise ValueError("a craniotomy's diameter must lie between 0 and 20 mm")
+
+    def distance_um(self, point_um):
+        """Distance in the horizontal plane from the centre to ``point_um``."""
+        return math.hypot(point_um[0] - self.centre_um[0], point_um[1] - self.centre_um[1])
+
+    def to_dict(self):
+        return {"id": self.craniotomy_id, "name": self.name, "centre_um": list(self.centre_um),
+                "diameter_um": self.diameter_um}
+
+    @classmethod
+    def from_dict(cls, data):
+        if not isinstance(data, dict):
+            raise ValueError("a craniotomy must be a dictionary")
+        try:
+            return cls(data["id"], data["name"], data["centre_um"], data["diameter_um"])
+        except (KeyError, TypeError) as exc:
+            raise ValueError("incomplete craniotomy ({})".format(exc)) from None
+
+    def __eq__(self, other):
+        return isinstance(other, Craniotomy) and self.to_dict() == other.to_dict()
+
+
+class CraniotomyBook:
+    def __init__(self):
+        self._items = {}
+
+    def __len__(self):
+        return len(self._items)
+
+    def get(self, craniotomy_id):
+        return self._items.get(craniotomy_id)
+
+    def craniotomies(self):
+        return sorted(self._items.values(), key=lambda c: c.name)
+
+    def add(self, craniotomy):
+        self._items[craniotomy.craniotomy_id] = craniotomy
+        return craniotomy
+
+    def remove(self, craniotomy_id):
+        return self._items.pop(craniotomy_id, None)
+
+    def new_name(self):
+        names = {c.name for c in self._items.values()}
+        number = 1
+        while "Craniotomy {}".format(number) in names:
+            number += 1
+        return "Craniotomy {}".format(number)
+
+    def to_list(self):
+        return [c.to_dict() for c in self.craniotomies()]
+
+    @classmethod
+    def from_list(cls, items):
+        book, problems = cls(), []
+        if items is None:
+            return book, problems
+        if not isinstance(items, list):
+            return book, ["the saved craniotomies are not a list"]
+        for item in items:
+            try:
+                craniotomy = Craniotomy.from_dict(item)
+            except ValueError as exc:
+                problems.append(str(exc))
+                continue
+            if book.get(craniotomy.craniotomy_id) is not None:
+                problems.append("{} is saved twice".format(craniotomy.name))
+                continue
+            book.add(craniotomy)
+        return book, problems
+
+
+def craniotomy_warning(craniotomy, entry_um):
+    """A warning when the entry lies outside the craniotomy, else None."""
+    if craniotomy is None or entry_um is None:
+        return None
+    distance = craniotomy.distance_um(entry_um)
+    if distance <= craniotomy.diameter_um / 2.0:
+        return None
+    return "The entry is {:.2f} mm from the centre of {}, outside its {:.2f} mm opening.".format(
+        distance / 1000.0, craniotomy.name, craniotomy.diameter_um / 1000.0)
+
+
+def _enclosing_circle(points):
+    """The smallest circle holding every point (exact; for a few dozen points)."""
+    def holds(centre, radius):
+        return np.all(np.sum((points - centre) ** 2, axis=1) <= (radius + 1e-6) ** 2)
+
+    if len(points) == 1:
+        return points[0], 0.0
+    best = None
+    count = len(points)
+    for i in range(count):
+        for j in range(i + 1, count):
+            centre = (points[i] + points[j]) / 2.0
+            radius = float(np.linalg.norm(points[i] - centre))
+            if (best is None or radius < best[1]) and holds(centre, radius):
+                best = (centre, radius)
+            for k in range(j + 1, count):
+                a, b, c = points[i], points[j], points[k]
+                d = 2.0 * (a[0] * (b[1] - c[1]) + b[0] * (c[1] - a[1]) + c[0] * (a[1] - b[1]))
+                if abs(d) < 1e-12:
+                    continue
+                ux = ((a @ a) * (b[1] - c[1]) + (b @ b) * (c[1] - a[1])
+                      + (c @ c) * (a[1] - b[1])) / d
+                uy = ((a @ a) * (c[0] - b[0]) + (b @ b) * (a[0] - c[0])
+                      + (c @ c) * (b[0] - a[0])) / d
+                centre = np.array([ux, uy])
+                radius = float(np.linalg.norm(a - centre))
+                if (best is None or radius < best[1]) and holds(centre, radius):
+                    best = (centre, radius)
+    return best
+
+
+def fit_craniotomy(entries_um, margin_um=CRANIOTOMY_MARGIN_UM, minimum_um=500.0):
+    """(centre, diameter) of the smallest circle holding every entry, with
+    ``margin_um`` to spare and at least ``minimum_um`` across."""
+    points = np.asarray([e[:2] for e in entries_um], dtype=float)
+    if not len(points):
+        raise ValueError("there are no entries to fit")
+    centre, radius = _enclosing_circle(points)
+    return np.asarray(centre, dtype=float).tolist(), max(minimum_um, 2.0 * (radius + margin_um))
+
+
+# ---------------------------------------------------------------- clearance
+def _segment_distance(p0, p1, q0, q1):
+    """Shortest distance between segments p0-p1 and q0-q1, and the points."""
+    u, v, w = p1 - p0, q1 - q0, p0 - q0
+    a, b, c, d, e = u @ u, u @ v, v @ v, u @ w, v @ w
+    denominator = a * c - b * b
+    s_n, s_d, t_n, t_d = 0.0, denominator, 0.0, denominator
+    if denominator < 1e-12:
+        s_n, s_d, t_n, t_d = 0.0, 1.0, e, c
+    else:
+        s_n, t_n = b * e - c * d, a * e - b * d
+        if s_n < 0:
+            s_n, t_n, t_d = 0.0, e, c
+        elif s_n > s_d:
+            s_n, t_n, t_d = s_d, e + b, c
+    if t_n < 0:
+        t_n = 0.0
+        s_n, s_d = (0.0, s_d) if -d < 0 else ((s_d, s_d) if -d > a else (-d, a))
+    elif t_n > t_d:
+        t_n = t_d
+        s_n, s_d = (0.0, s_d) if (-d + b) < 0 else ((s_d, s_d) if (-d + b) > a else (-d + b, a))
+    s = 0.0 if abs(s_n) < 1e-12 else s_n / s_d
+    t = 0.0 if abs(t_n) < 1e-12 else t_n / t_d
+    first, second = p0 + s * u, q0 + t * v
+    return float(np.linalg.norm(first - second)), first, second
+
+
+def plan_segments(plan, readout, above_um=CLEARANCE_ABOVE_UM):
+    """Each shank as a segment (um) from ``above_um`` above the entry to the tip."""
+    if readout is None or readout.get("entry_um") is None:
+        return []
+    direction = plan.direction
+    across = across_face(direction, plan.normal)
+    top = np.asarray(readout["entry_um"], dtype=float) - direction * above_um
+    tip = np.asarray(plan.tip_um, dtype=float)
+    return [(top + across * offset, tip + across * offset)
+            for offset in plan.shank_offsets_um or [0.0]]
+
+
+def clearances(planned, above_um=CLEARANCE_ABOVE_UM):
+    """Closest approach of every pair of planned probes.
+
+    ``planned`` is a list of ``(plan, readout)``. Returns dicts with
+    ``probes`` (two names), ``distance_um`` and ``depth_um`` (the closest point's
+    depth below the first probe's entry; negative above the brain), closest
+    first.
+    """
+    found = []
+    for i in range(len(planned)):
+        for j in range(i + 1, len(planned)):
+            plan_a, read_a = planned[i]
+            plan_b, read_b = planned[j]
+            best = None
+            for a0, a1 in plan_segments(plan_a, read_a, above_um):
+                for b0, b1 in plan_segments(plan_b, read_b, above_um):
+                    distance, point, _other = _segment_distance(a0, a1, b0, b1)
+                    if best is None or distance < best[0]:
+                        best = (distance, point)
+            if best is None:
+                continue
+            depth = float(np.dot(best[1] - np.asarray(read_a["entry_um"]), plan_a.direction))
+            found.append({"probes": (plan_a.probe, plan_b.probe), "distance_um": best[0],
+                          "depth_um": depth})
+    return sorted(found, key=lambda item: item["distance_um"])
+
+
+def clearance_warning(probe, pairs, limit_um=CLEARANCE_UM):
+    """A warning naming the closest probe within ``limit_um`` of ``probe``, else None."""
+    for pair in pairs:
+        if probe in pair["probes"] and pair["distance_um"] < limit_um:
+            other = pair["probes"][1] if pair["probes"][0] == probe else pair["probes"][0]
+            where = ("{:.2f} mm deep".format(pair["depth_um"] / 1000.0) if pair["depth_um"] >= 0
+                     else "{:.2f} mm above the brain".format(-pair["depth_um"] / 1000.0))
+            return "{} passes {:.2f} mm from {} ({}).".format(
+                probe, pair["distance_um"] / 1000.0, other, where)
+    return None
+
+
+# -------------------------------------------------------- Bregma-Lambda scale
+def bregma_lambda_scale(measured_um, atlas_um):
+    """Scale from atlas to animal coordinates (measured / atlas), or 1.0 when unset."""
+    if not measured_um or not atlas_um:
+        return 1.0
+    measured_um, atlas_um = float(measured_um), float(atlas_um)
+    if not (math.isfinite(measured_um) and math.isfinite(atlas_um)
+            and measured_um > 0 and atlas_um > 0):
+        raise ValueError("Bregma-Lambda distances must be positive")
+    return measured_um / atlas_um
+
+
+def validated_surgery_settings(data):
+    """The project's surgery settings, cleaned; unusable values become None."""
+    data = data if isinstance(data, dict) else {}
+    out = {}
+    for key in ("bregma_lambda_um", "atlas_bregma_lambda_um"):
+        value = data.get(key)
+        try:
+            value = float(value)
+        except (TypeError, ValueError):
+            value = None
+        out[key] = value if value is not None and math.isfinite(value) and 0 < value < 50000 \
+            else None
+    return out

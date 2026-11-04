@@ -1,7 +1,7 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 2.8.1**. Section 2 explains how to
-install it; `pip install driftlessmap` installs 2.8.1.
+This manual applies to **DriftlessMap 2.8.2**. Section 2 explains how to
+install it; `pip install driftlessmap` installs 2.8.2.
 
 DriftlessMap - Histological E-data Registration in Brain Space - is a desktop
 application for aligning rodent histology with a reference atlas, reconstructing
@@ -131,7 +131,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-DriftlessMap 2.8.1 requires:
+DriftlessMap 2.8.2 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -150,8 +150,8 @@ page. The macOS DMG (`-macOS-arm64.dmg`) is built for Apple Silicon; on an Intel
 Mac, use the developer installation below.
 The desktop builds include Python and all runtime dependencies. Windows users
 extract the entire ZIP and run `DriftlessMap.exe`; macOS users open the DMG and
-drag `DriftlessMap.app` to Applications. The 2.8.1 downloads are named
-`DriftlessMap-2.8.1-Windows-x64.zip` and `DriftlessMap-2.8.1-macOS-arm64.dmg`.
+drag `DriftlessMap.app` to Applications. The 2.8.2 downloads are named
+`DriftlessMap-2.8.2-Windows-x64.zip` and `DriftlessMap-2.8.2-macOS-arm64.dmg`.
 Release builds are unsigned unless the release notes say otherwise, so the first
 launch may require Windows SmartScreen confirmation or Control-clicking the
 macOS app and choosing **Open**.
@@ -200,7 +200,7 @@ python -m pip --version
 python -c "import driftlessmap; print(driftlessmap.__version__)"
 ```
 
-The final command prints the installed version, `2.8.1`.
+The final command prints the installed version, `2.8.2`.
 
 ### 2.5 Launching DriftlessMap
 
@@ -1607,6 +1607,34 @@ Since 2.8.1:
 - **Tip to surface** puts the tip on the brain surface along the probe, or
   straight down at the same AP and ML; then set the depth to go in. Until it
   has a depth the plan is not built.
+
+Since 2.8.2 (surgery):
+
+- **Craniotomies.** Surgery > New craniotomy at this entry makes a 1 mm
+  opening centred on the probe's entry and puts the probe through it; the
+  **Craniotomy** list ties any probe to any craniotomy (or none). The readout
+  gives the entry's distance from the centre and warns when it lies outside
+  the opening. Surgery > Fit the craniotomy to its probes centres and sizes it
+  to hold every entry (every shank) with 0.25 mm to spare (at least 0.5 mm
+  across); Edit and Remove are in the same menu (removing it keeps the probes
+  where they are). Craniotomies are drawn as dashed circles on the horizontal
+  view.
+- **Clearance.** Each planned probe is checked against every other, from 3 mm
+  above its entry down to its tip, shank by shank. Closer than 0.3 mm is a
+  warning naming the other probe and where they come closest (in the brain or
+  above it); otherwise the readout names the closest probe and its distance.
+- **Angles** chooses how the tilts are entered: AP/ML tilts, or arm angles,
+  azimuth (the direction the tip leans, from anterior, 0°, towards the
+  animal's right, 90°) and elevation (from vertical). Both describe the same
+  probe; the choice is remembered.
+- **Bregma–Lambda distance…** (Surgery menu) scales the coordinates to the
+  animal: enter its measured Bregma–Lambda distance and the atlas's. Atlases
+  that record Lambda (the rat atlases) fill in the atlas's distance; for others
+  (the Allen atlas) enter it from the atlas's documentation. The readout then
+  adds the entry and depth for this animal (the atlas coordinates times the
+  ratio); the plan itself stays in atlas coordinates.
+- The copied line and `probe_plans.csv` add the arm angles, the craniotomy,
+  the closest probe and, when scaled, the coordinates for this animal.
 
 Each change is stored and built once you stop changing it (half a second, or
 Enter); Edit > Undo mapping step takes it back one change at a time. The
