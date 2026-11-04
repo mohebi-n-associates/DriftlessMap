@@ -2,7 +2,7 @@
 
 Stable release: **2.0.0**, 29 October 2026 (PyPI, and a GitHub release with
 Windows and macOS builds), after release candidates 2.0.0rc1 (published) to
-2.0.0rc16. Current release: 2.8.0, 4 November 2026 (probe planning by pose; not yet published: 2.7.0, 3 November 2026, is the latest on PyPI and GitHub); the waiver below
+2.0.0rc16. Current release: 2.9.0, 4 November 2026 (probe planning, Phases 1-2; not yet published: 2.7.0, 3 November 2026, is the latest on PyPI and GitHub); the waiver below
 applies to it as well. Passing automated tests does not satisfy the native-installation or
 user-evaluation gates.
 

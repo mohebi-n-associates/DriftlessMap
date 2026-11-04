@@ -820,6 +820,107 @@ class V2ShellTests(unittest.TestCase):
             self.assertEqual(engine.plan_objects(), [])
 
     @isolated_gui_test
+    def test_a_plan_is_steered_by_entry_depth_keys_and_shown_along_its_shank(self):
+        from tests.atlas_fixture import make_processed_atlas
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window = self.make_window(folder)
+            engine = window.engine
+            self.assertTrue(engine.load_volume_atlas(str(make_processed_atlas(
+                root / "atlas", shape=(80, 64, 64), axis_info=True))))
+            window.run("probe.plan")
+            window.refresh()
+            editor = window.panels["annotate"].implants.probe_card.plan_editor
+            editor.snap_to_region(10)
+
+            # Edit by entry and depth: the entry is on the surface at AP/ML.
+            editor.mode_box.setCurrentIndex(1)
+            self.assertEqual(editor.ap_label.text(), "Entry AP")
+            self.assertFalse(editor.dv.isEnabled())
+            editor.ap.setValue(0.5)
+            editor.ml.setValue(0.3)
+            editor.depth.setValue(0.6)
+            editor.commit()
+            readout = engine.probe_plan_readout("Probe 1")
+            np.testing.assert_allclose(readout["entry_um"][:2], [300.0, 500.0], atol=1e-6)
+            self.assertAlmostEqual(readout["depth_um"], 600.0, places=6)
+            surface = readout["entry_um"][2]
+            self.assertAlmostEqual(editor.dv.value(), round(surface / 1000.0, 3), places=3)
+            # The tilts now turn about the entry, which stays put.
+            editor.ap_tilt.setValue(12.0)
+            editor.commit()
+            tilted = engine.probe_plan_readout("Probe 1")
+            np.testing.assert_allclose(tilted["entry_um"], readout["entry_um"], atol=1e-6)
+            self.assertAlmostEqual(tilted["depth_um"], 600.0, places=6)
+            self.assertEqual(engine.probe_plan("Probe 1").ap_tilt_deg, 12.0)
+
+            # The recording window: NP1 has three banks; Every site records all 960.
+            self.assertEqual(editor.bank_box.count(), 4)
+            self.assertEqual(tilted["window_sites"], 384)
+            editor.bank_box.setCurrentIndex(3)
+            self.assertIsNone(engine.probe_plan("Probe 1").bank)
+            self.assertEqual(engine.probe_plan_readout("Probe 1")["window_sites"], 960)
+            self.assertIn("Recording", editor.readout.text())
+            editor.bank_box.setCurrentIndex(0)
+            self.assertEqual(engine.probe_plan("Probe 1").bank, 0)
+            editor.copy_coordinates()
+            self.assertIn("recording bank 0", QApplication.clipboard().text())
+
+            # Keyboard steering: W moves the tip anterior by the step, + makes
+            # the step larger, Shift takes the largest, I tilts, Esc stops.
+            editor.mode_box.setCurrentIndex(0)
+            before = engine.probe_plan("Probe 1")
+            editor.steer_button.click()
+            self.assertTrue(editor.legend.isVisibleTo(window))
+            self.assertTrue(editor.steer_key(Qt.Key.Key_W))
+            self.assertTrue(editor.steer_key(Qt.Key.Key_Plus))
+            self.assertTrue(editor.steer_key(Qt.Key.Key_D))
+            self.assertTrue(editor.steer_key(Qt.Key.Key_A, Qt.KeyboardModifier.ShiftModifier))
+            self.assertTrue(editor.steer_key(Qt.Key.Key_I))
+            self.assertFalse(editor.steer_key(Qt.Key.Key_F))
+            self.assertTrue(editor.steer_key(Qt.Key.Key_Escape))
+            self.assertFalse(editor.steer_button.isChecked())
+            steered = engine.probe_plan("Probe 1")
+            np.testing.assert_allclose(
+                np.subtract(steered.tip_um, before.tip_um), [100 - 500, 50, 0], atol=1e-9)
+            self.assertEqual(steered.ap_tilt_deg, before.ap_tilt_deg + 5)
+            self.assertTrue(engine.undo_mapping_step())
+            self.assertEqual(engine.probe_plan("Probe 1"), before)
+            self.assertTrue(engine.redo_mapping_step())
+
+            # Tip to the surface along the probe: the tip goes to the entry and
+            # the plan is not built until it has a depth; undo brings it back.
+            entry = engine.probe_plan_readout("Probe 1")["entry_um"]
+            editor.tip_to_surface(True)
+            np.testing.assert_allclose(engine.probe_plan("Probe 1").tip_um, entry, atol=1e-6)
+            self.assertEqual(engine.plan_objects("Probe 1"), [])
+            self.assertTrue(any("surface" in w for w in
+                                engine.probe_plan_readout("Probe 1")["warnings"]))
+            self.assertTrue(engine.undo_mapping_step())
+            self.assertEqual(engine.probe_plan("Probe 1"), steered)
+            self.assertTrue(engine.plan_objects("Probe 1"))
+            straight = editor.tip_to_surface(False)
+            self.assertIsNone(straight)
+            tip = engine.probe_plan("Probe 1").tip_um
+            self.assertAlmostEqual(tip[2], surface, places=6)
+
+            # The shank view draws the plan and names what lies under the mouse.
+            editor.depth.setValue(0.8)
+            editor.commit()
+            view = editor.shank_view
+            view.resize(400, 320)
+            self.assertIsNotNone(view.readout)
+            _plane, strip = view._areas()
+            text = view.describe(strip.center().x(), strip.center().y())
+            self.assertIn("mm deep", text)
+            first = view.readout["regions"][0]
+            self.assertTrue(text.startswith(first["name"]) or any(
+                text.startswith(r["name"]) for r in view.readout["regions"]))
+            self.assertFalse(view.grab().isNull())
+            self.assertIsNone(view.describe(-5, -5))
+
+    @isolated_gui_test
     def test_the_sections_card_adds_opens_renames_and_removes_sections(self):
         import cv2
         from unittest.mock import patch

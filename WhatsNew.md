@@ -3,6 +3,31 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.9.0
+
+Feature release, 4 November 2026: the second part of the new probe planning.
+
+- **Entry and depth.** Edit a plan by its entry on the brain surface (AP and
+  ML) and its depth, as a stereotaxic frame is set; the tilts then turn the
+  probe about the entry. Editing by the tip turns it about the tip.
+- **Recording window.** Choose the bank of 384 channels a Neuropixels probe
+  records (counted from the tip) or every site; the readout gives the
+  window's depth range, its sites in the brain, and the length and sites in
+  each region.
+- **The shank to scale.** Shank and probe plane shows the atlas in the plane
+  of the shank's face with the probe drawn in it, and beside it the shank
+  from the entry down with its regions, contacts and recording window. Hover
+  for names and depths.
+- **Steer with keys.** W/S, A/D and Q/E move the tip; Z/X go deeper or
+  shallower along the probe; I/K, J/L and U/O turn it; − and + change the
+  step; Esc stops.
+- **Tip to surface** along the probe or straight down, to set the depth from
+  there.
+- The copied coordinates and `probe_plans.csv` include the recording window.
+- On the Allen 10 µm atlas a probe to prelimbic cortex, 10° medial, 1.97 mm
+  deep, records MOs1, MOs2/3, MOs5, ACAd5 and 0.72 mm of PL5 with bank 0 (178
+  of its 384 sites in the brain).
+
 ## DriftlessMap 2.8.0
 
 Feature release, 4 November 2026: the first part of a new way to plan probes

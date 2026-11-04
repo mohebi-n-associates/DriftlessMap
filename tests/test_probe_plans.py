@@ -13,8 +13,14 @@ from driftlessmap.probe_plans import (
     coordinate_line,
     direction_from_tilts,
     face_normal,
+    bank_count,
+    column_surface,
     plan_from_entry_depth,
     plan_from_points,
+    plan_from_surface,
+    recording_sites,
+    site_offsets_um,
+    tip_to_surface,
     plan_readout,
     region_centre,
     region_summary,
@@ -210,16 +216,80 @@ class ReadoutTests(unittest.TestCase):
         np.testing.assert_allclose(tips[:, 0], [0] * 4, atol=1e-9)
 
 
+class WindowAndSurfaceTests(unittest.TestCase):
+    def setUp(self):
+        self.atlas, self.labels, self.info = make_atlas()
+        self.np1 = Probe().get_settings()
+
+    def test_neuropixels_banks_count_from_the_tip(self):
+        offsets = site_offsets_um(self.np1)
+        self.assertEqual(len(offsets), 960)
+        self.assertEqual(bank_count(self.np1), 3)
+        # NP1: two sites per 20 um row, lowest 10 um above the tip's base.
+        self.assertEqual(offsets[0], 10.0)
+        bank0 = recording_sites(ProbePlan("P", [0, 0, -1000], probe_settings=self.np1))
+        self.assertEqual(len(bank0), 384)
+        self.assertAlmostEqual(bank0.max() - bank0.min(), 3820.0)
+        bank2 = recording_sites(ProbePlan("P", [0, 0, -1000], probe_settings=self.np1, bank=2))
+        self.assertEqual(len(bank2), 192)
+        every = recording_sites(ProbePlan("P", [0, 0, -1000], probe_settings=self.np1,
+                                          bank=None))
+        self.assertEqual(len(every), 960)
+
+    def test_the_window_lies_above_the_tip_and_covers_regions(self):
+        settings = dict(self.np1)
+        plan = ProbePlan("P", [-500, 0, -1400], probe_settings=settings)
+        readout = plan_readout(plan, self.atlas)
+        top, bottom = readout["window_um"]
+        # The lowest site is the 175 um tip plus 10 um above the tip's end.
+        self.assertAlmostEqual(bottom, 1400 - 175 - 10)
+        self.assertAlmostEqual(bottom - top, 3820.0)
+        self.assertLess(readout["window_sites_in_brain"], readout["window_sites"])
+        cover = {r["acronym"]: r for r in readout["window_regions"]}
+        self.assertAlmostEqual(cover["GC"]["length_um"], 500.0, delta=0.5 * VOX)
+        self.assertAlmostEqual(cover["CH"]["length_um"], bottom - 500.0, delta=0.5 * VOX)
+        self.assertEqual(cover["GC"]["sites"] + cover["CH"]["sites"],
+                         readout["window_sites_in_brain"])
+        self.assertTrue(all(0 <= d <= readout["depth_um"] for d in readout["contacts_um"]))
+
+    def test_entry_and_depth_and_tip_to_surface(self):
+        surface = column_surface(self.atlas, 300, -200)
+        np.testing.assert_allclose(surface, [300, -200, 0], atol=1e-6)
+        self.assertIsNone(column_surface(self.atlas, 2000, 0))
+        plan = ProbePlan("P", [0, 0, -1000], ap_tilt_deg=15)
+        moved = plan_from_surface(plan, self.atlas, 300, -200, 800)
+        readout = plan_readout(moved, self.atlas)
+        np.testing.assert_allclose(readout["entry_um"], [300, -200, 0], atol=1e-6)
+        self.assertAlmostEqual(readout["depth_um"], 800, places=6)
+        self.assertEqual(moved.ap_tilt_deg, 15)
+        with self.assertRaises(ValueError):
+            plan_from_surface(plan, self.atlas, 2000, 0, 800)
+        along = tip_to_surface(moved, self.atlas, along_probe=True)
+        np.testing.assert_allclose(along.tip_um, readout["entry_um"], atol=1e-6)
+        down = tip_to_surface(moved, self.atlas, along_probe=False)
+        np.testing.assert_allclose(down.tip_um, [moved.tip_um[0], moved.tip_um[1], 0],
+                                   atol=1e-6)
+
+
 class PersistenceTests(unittest.TestCase):
     def test_book_round_trip_rename_and_invalid_entries(self):
         book = PlanBook()
-        book.set(ProbePlan("A", [1, 2, 3], 5, -6, 370, {"probe_length": 10000}, [-10, 10]))
+        book.set(ProbePlan("A", [1, 2, 3], 5, -6, 370, {"probe_length": 10000}, [-10, 10],
+                           bank=None))
         book.set(ProbePlan("B", [0, 0, -100]))
         data = book.to_list()
         again, problems = PlanBook.from_list(data)
         self.assertEqual(problems, [])
         self.assertEqual(again.to_list(), data)
         self.assertEqual(again.get("A").roll_deg, 10.0)
+        self.assertIsNone(again.get("A").bank)
+        self.assertEqual(again.get("B").bank, 0)
+        # A 2.8.0 plan (no bank) opens with the lowest bank.
+        old = dict(data[1])
+        old.pop("bank")
+        self.assertEqual(ProbePlan.from_dict(old).bank, 0)
+        with self.assertRaises(ValueError):
+            ProbePlan("X", [0, 0, 0], bank=99)
         self.assertEqual(again.rename("A", "C").probe, "C")
         self.assertIsNone(again.get("A"))
         self.assertEqual(again.get("C").tip_um, [1.0, 2.0, 3.0])

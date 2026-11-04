@@ -275,7 +275,8 @@ class ProbePlanEngineMixin:
     PLAN_COLUMNS = ("probe", "atlas", "entry_ap_mm", "entry_ml_mm", "entry_dv_mm",
                     "depth_mm", "tip_ap_mm", "tip_ml_mm", "tip_dv_mm", "ap_tilt_deg",
                     "ml_tilt_deg", "roll_deg", "contacts_face", "probe_type", "shanks",
-                    "regions", "warnings", "coordinates")
+                    "bank", "window_top_mm", "window_bottom_mm", "window_sites_in_brain",
+                    "window_regions", "regions", "warnings", "coordinates")
 
     def plan_table_rows(self):
         """One row per plan (millimetres from Bregma; ML + is the animal's right)."""
@@ -302,6 +303,15 @@ class ProbePlanEngineMixin:
                 "contacts_face": readout.get("face", ""),
                 "probe_type": (plan.probe_settings or {}).get("probe_type_name", ""),
                 "shanks": len(plan.shank_offsets_um or [0]),
+                "bank": "all" if plan.bank is None else plan.bank,
+                "window_top_mm": "" if not readout.get("window_um")
+                else round(max(readout["window_um"][0], 0.0) / 1000.0, 4),
+                "window_bottom_mm": "" if not readout.get("window_um")
+                else round(readout["window_um"][1] / 1000.0, 4),
+                "window_sites_in_brain": readout.get("window_sites_in_brain", ""),
+                "window_regions": " | ".join("{} {:.0f} um ({} sites)".format(
+                    r["acronym"], r["length_um"], r["sites"])
+                    for r in readout.get("window_regions") or []),
                 "regions": " | ".join("{} {:.0f}-{:.0f} um".format(
                     r["acronym"], r["start_um"], r["end_um"])
                     for r in readout.get("regions") or [] if r["id"] != 0),
