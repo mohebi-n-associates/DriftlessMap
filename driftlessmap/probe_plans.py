@@ -24,7 +24,8 @@ DEFAULT_DEPTH_UM = 3000.0
 SUMMARY_MIN_UM = 50.0
 
 PLAN_FIELDS = ("probe", "tip_um", "ap_tilt_deg", "ml_tilt_deg", "roll_deg",
-               "probe_settings", "shank_offsets_um")
+               "probe_settings", "shank_offsets_um", "bank")
+CHANNELS_PER_BANK = 384
 
 
 # --------------------------------------------------------------- geometry
@@ -98,7 +99,7 @@ class ProbePlan:
     """One planned probe (see the module docstring for the frame)."""
 
     def __init__(self, probe, tip_um, ap_tilt_deg=0.0, ml_tilt_deg=0.0, roll_deg=0.0,
-                 probe_settings=None, shank_offsets_um=None):
+                 probe_settings=None, shank_offsets_um=None, bank=0):
         self.probe = str(probe)
         self.tip_um = [float(v) for v in tip_um]
         self.ap_tilt_deg = float(ap_tilt_deg)
@@ -107,6 +108,9 @@ class ProbePlan:
         self.probe_settings = copy.deepcopy(probe_settings) if probe_settings else None
         self.shank_offsets_um = ([float(v) for v in shank_offsets_um]
                                  if shank_offsets_um else None)
+        # Recording window: the bank of channels counted from the tip (0 is
+        # the lowest 384), or None for every site (2.8.1; absent means 0).
+        self.bank = None if bank is None else int(bank)
         self.validate()
 
     def validate(self):
@@ -126,6 +130,8 @@ class ProbePlan:
             length = self.probe_settings.get("probe_length")
             if length is not None and not (isinstance(length, (int, float)) and length > 0):
                 raise ValueError("the probe length must be positive")
+        if self.bank is not None and not 0 <= self.bank < 64:
+            raise ValueError("the bank must lie between 0 and 63")
         if self.shank_offsets_um is not None:
             if not all(math.isfinite(v) for v in self.shank_offsets_um):
                 raise ValueError("shank offsets must be finite")
@@ -161,6 +167,7 @@ class ProbePlan:
             "probe_settings": copy.deepcopy(self.probe_settings),
             "shank_offsets_um": (list(self.shank_offsets_um)
                                  if self.shank_offsets_um else None),
+            "bank": self.bank,
         }
 
     @classmethod
@@ -172,7 +179,7 @@ class ProbePlan:
                 data["probe"], data["tip_um"],
                 data.get("ap_tilt_deg", 0.0), data.get("ml_tilt_deg", 0.0),
                 data.get("roll_deg", 0.0), data.get("probe_settings"),
-                data.get("shank_offsets_um"))
+                data.get("shank_offsets_um"), data.get("bank", 0))
         except (KeyError, TypeError) as exc:
             raise ValueError("incomplete plan ({})".format(exc)) from None
 
@@ -202,6 +209,44 @@ def plan_from_entry_depth(plan, entry_um, depth_um):
     """``plan`` moved so the probe enters at ``entry_um`` and goes ``depth_um`` deep."""
     tip = np.asarray(entry_um, dtype=float) + plan.direction * float(depth_um)
     return plan.copy(tip_um=tip.tolist())
+
+
+def column_surface(atlas, ml_um, ap_um):
+    """The brain surface straight down at (ML, AP): a point in um, or None."""
+    bottom = -atlas.bregma[2] * atlas.vox_um
+    entry, _inside = surface_entry(atlas, [ml_um, ap_um, bottom], np.array([0.0, 0.0, -1.0]))
+    return entry
+
+
+def plan_from_surface(plan, atlas, ml_um, ap_um, depth_um):
+    """``plan`` entering the brain at (ML, AP) on the surface, ``depth_um`` deep.
+
+    The entry is the surface straight below (ML, AP); the tilts are kept.
+    Raises ValueError when there is no brain at that point.
+    """
+    surface = column_surface(atlas, ml_um, ap_um)
+    if surface is None:
+        raise ValueError("there is no brain at AP {:.2f}, ML {:.2f} mm".format(
+            ap_um / 1000.0, ml_um / 1000.0))
+    return plan_from_entry_depth(plan, surface, depth_um)
+
+
+def tip_to_surface(plan, atlas, along_probe=True):
+    """``plan`` with its tip moved to the brain surface.
+
+    Along the probe: back up the probe to where it enters the brain. Straight
+    down: to the surface directly above or below the tip (same AP and ML).
+    Raises ValueError when there is no surface to move to.
+    """
+    if along_probe:
+        entry, _inside = surface_entry(atlas, plan.tip_um, plan.direction)
+        if entry is None:
+            raise ValueError("the probe does not meet the brain")
+        return plan.copy(tip_um=list(entry))
+    surface = column_surface(atlas, plan.tip_um[0], plan.tip_um[1])
+    if surface is None:
+        raise ValueError("there is no brain above or below the tip")
+    return plan.copy(tip_um=list(surface))
 
 
 class PlanBook:
@@ -395,6 +440,66 @@ def regions_along(atlas, entry_um, tip_um):
     return runs
 
 
+def site_offsets_um(settings):
+    """Distance of every site of the full shank above the tip's base, sorted.
+
+    Uses the engine's site layout (``get_sites_loc_related_to_base_center``);
+    a tetrode has its four sites at the tip.
+    """
+    from .probe_utiles import get_sites_loc_related_to_base_center
+
+    settings = settings or {}
+    if settings.get("probe_type_name") == "Tetrode" or not settings.get("probe_length"):
+        return np.zeros(1)
+    shank = float(settings["probe_length"]) - float(settings.get("tip_length") or 0.0)
+    columns = get_sites_loc_related_to_base_center(settings, shank)
+    offsets = np.concatenate([np.asarray(column, dtype=float)[:, 0] for column in columns
+                              if len(column)]) if columns else np.zeros(0)
+    return np.sort(offsets)
+
+
+def bank_count(settings):
+    settings = settings or {}
+    if not settings.get("site_number_in_banks"):
+        return 1
+    return max(1, int(math.ceil(len(site_offsets_um(settings)) / CHANNELS_PER_BANK)))
+
+
+def recording_sites(plan):
+    """Offsets (above the tip's base) of the sites in the plan's recording window."""
+    settings = plan.probe_settings or {}
+    offsets = site_offsets_um(settings)
+    if plan.bank is None or not settings.get("site_number_in_banks"):
+        return offsets
+    bank = min(plan.bank, bank_count(settings) - 1)
+    return offsets[bank * CHANNELS_PER_BANK:(bank + 1) * CHANNELS_PER_BANK]
+
+
+def window_coverage(runs, top_um, bottom_um, site_depths=None):
+    """Length (and sites) of each region inside the depth window [top, bottom]."""
+    found = {}
+    order = []
+    for number, run in enumerate(runs):
+        overlap = min(run["end_um"], bottom_um) - max(run["start_um"], top_um)
+        if overlap < 0 or run["id"] == 0 or (overlap == 0 and site_depths is None):
+            continue
+        if run["id"] not in found:
+            found[run["id"]] = {"id": run["id"], "acronym": run["acronym"],
+                                "name": run["name"], "colour": run["colour"],
+                                "length_um": 0.0, "sites": 0}
+            order.append(run["id"])
+        found[run["id"]]["length_um"] += overlap
+        if site_depths is not None:
+            # Runs are half open, [start, end), except the last one, which ends
+            # at the tip; the window includes both its ends.
+            last = number == len(runs) - 1
+            below = site_depths <= run["end_um"] if last else site_depths < run["end_um"]
+            inside = (site_depths >= run["start_um"]) & below & \
+                (site_depths >= top_um) & (site_depths <= bottom_um)
+            found[run["id"]]["sites"] += int(np.count_nonzero(inside))
+    return [found[key] for key in order if found[key]["length_um"] > 0 or found[key]["sites"]]
+
+
 def plan_readout(plan, atlas):
     """Everything a plan gives, as a plain dictionary (see the design, 2.3)."""
     direction = plan.direction
@@ -416,6 +521,11 @@ def plan_readout(plan, atlas):
         "tip_region": atlas.name(atlas.labels_at(tip_vox[None, :])[0][0]),
         "warnings": warnings,
         "reachable": False,
+        "contacts_um": [],
+        "window_um": None,
+        "window_regions": [],
+        "window_sites": 0,
+        "window_sites_in_brain": 0,
     }
     if np.any(tip_vox < 0) or np.any(tip_vox > atlas.shape - 1):
         warnings.append("The tip lies outside the atlas.")
@@ -430,6 +540,7 @@ def plan_readout(plan, atlas):
     readout["regions"] = regions_along(atlas, entry, tip)
     length = plan.shank_length_um
     readout["reachable"] = True
+    _add_window(readout, plan, depth)
     if depth < atlas.vox_um:
         readout["reachable"] = False
         warnings.append("The tip is at the brain surface; move it deeper.")
@@ -440,6 +551,29 @@ def plan_readout(plan, atlas):
     if entry[0] * tip[0] < 0 and min(abs(entry[0]), abs(tip[0])) > atlas.vox_um:
         warnings.append("The probe crosses the midline.")
     return readout
+
+
+def _add_window(readout, plan, depth):
+    """Contacts and the recording window along the shank, as depths from the entry."""
+    settings = plan.probe_settings or {}
+    tip_length = float(settings.get("tip_length") or 0.0)
+    above_tip = depth - tip_length
+    every = site_offsets_um(settings)
+    window = recording_sites(plan)
+    readout["contacts_um"] = (above_tip - every[every <= above_tip]).tolist()
+    in_brain = window[window <= above_tip]
+    readout["window_sites"] = int(len(window))
+    readout["window_sites_in_brain"] = int(len(in_brain))
+    if not len(window):
+        readout["window_um"] = None
+        readout["window_regions"] = []
+        return
+    top = above_tip - float(window.max())
+    bottom = above_tip - float(window.min())
+    readout["window_um"] = [top, bottom]
+    depths = above_tip - window
+    readout["window_regions"] = window_coverage(readout["regions"], max(top, 0.0), bottom,
+                                                depths)
 
 
 def region_summary(readout, limit=6):
@@ -481,7 +615,24 @@ def coordinate_line(plan, readout, atlas_name=""):
     regions = region_summary(readout)
     if regions:
         parts.append("regions {}".format(regions))
+    window = window_text(plan, readout)
+    if window:
+        parts.append(window)
     return "; ".join(p for p in parts if p).replace(":;", ":")
+
+
+def window_text(plan, readout):
+    """The recording window in words, or ""."""
+    if not readout.get("window_um"):
+        return ""
+    top, bottom = readout["window_um"]
+    which = "every site" if plan.bank is None or bank_count(plan.probe_settings) <= 1 \
+        else "bank {}".format(plan.bank)
+    cover = ", ".join("{} {:.2f}".format(r["acronym"], r["length_um"] / 1000.0)
+                      for r in readout.get("window_regions") or [])
+    return "recording {} {:.2f}-{:.2f} mm deep ({} of {} sites in the brain){}".format(
+        which, max(top, 0.0) / 1000.0, bottom / 1000.0, readout["window_sites_in_brain"],
+        readout["window_sites"], ": " + cover + " (mm)" if cover else "")
 
 
 def shank_lines(plan, readout, atlas):
@@ -502,6 +653,33 @@ def shank_lines(plan, readout, atlas):
         shift = across * offset
         lines.append(np.vstack([entry + shift, tip + shift]) / atlas.vox_um)
     return lines
+
+
+def probe_plane(atlas, plan, readout, half_width_um=1500.0, margin_um=500.0,
+                max_pixels=360):
+    """The atlas in the plane of the shank's face, around the probe.
+
+    Rows run along the probe from ``margin_um`` above the entry to
+    ``margin_um`` below the tip; columns run across the face (``across_face``)
+    over ``±half_width_um``. Returns ``(labels, extent)``: an integer label image
+    (0 outside the brain) and ``(top, bottom, left, right)`` in um (depth from
+    the entry and distance across the face), or None without an entry.
+    """
+    entry = readout.get("entry_um")
+    if entry is None:
+        return None
+    depth = float(readout["depth_um"])
+    top, bottom = -margin_um, depth + margin_um
+    pixel = max(atlas.vox_um, (bottom - top) / max_pixels, 2 * half_width_um / max_pixels)
+    rows = np.arange(top + pixel / 2, bottom, pixel)
+    cols = np.arange(-half_width_um + pixel / 2, half_width_um, pixel)
+    direction = plan.direction
+    across = across_face(direction, plan.normal)
+    points = (np.asarray(entry, dtype=float)[None, None, :]
+              + rows[:, None, None] * direction[None, None, :]
+              + cols[None, :, None] * across[None, None, :])
+    labels, _inside = atlas.labels_at(atlas.to_vox(points.reshape(-1, 3)))
+    return labels.reshape(len(rows), len(cols)), (top, bottom, -half_width_um, half_width_um)
 
 
 def region_centre(atlas, region_id, side=None, max_voxels=8_000_000):

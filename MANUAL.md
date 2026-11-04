@@ -1,7 +1,7 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 2.8.0**. Section 2 explains how to
-install it; `pip install driftlessmap` installs 2.8.0.
+This manual applies to **DriftlessMap 2.8.1**. Section 2 explains how to
+install it; `pip install driftlessmap` installs 2.8.1.
 
 DriftlessMap - Histological E-data Registration in Brain Space - is a desktop
 application for aligning rodent histology with a reference atlas, reconstructing
@@ -131,7 +131,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-DriftlessMap 2.8.0 requires:
+DriftlessMap 2.8.1 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -150,8 +150,8 @@ page. The macOS DMG (`-macOS-arm64.dmg`) is built for Apple Silicon; on an Intel
 Mac, use the developer installation below.
 The desktop builds include Python and all runtime dependencies. Windows users
 extract the entire ZIP and run `DriftlessMap.exe`; macOS users open the DMG and
-drag `DriftlessMap.app` to Applications. The 2.8.0 downloads are named
-`DriftlessMap-2.8.0-Windows-x64.zip` and `DriftlessMap-2.8.0-macOS-arm64.dmg`.
+drag `DriftlessMap.app` to Applications. The 2.8.1 downloads are named
+`DriftlessMap-2.8.1-Windows-x64.zip` and `DriftlessMap-2.8.1-macOS-arm64.dmg`.
 Release builds are unsigned unless the release notes say otherwise, so the first
 launch may require Windows SmartScreen confirmation or Control-clicking the
 macOS app and choosing **Open**.
@@ -200,7 +200,7 @@ python -m pip --version
 python -c "import driftlessmap; print(driftlessmap.__version__)"
 ```
 
-The final command prints the installed version, `2.8.0`.
+The final command prints the installed version, `2.8.1`.
 
 ### 2.5 Launching DriftlessMap
 
@@ -1581,7 +1581,32 @@ Add or Build step.
    regions, contacts and coordinates, and it is exported with the other
    probes. **Show on atlas** moves the pages through the tip.
 5. **Copy coordinates** copies one line naming the atlas, the frame, the
-   entry, depth, tip, angles, roll, probe and regions, for surgery notes.
+   entry, depth, tip, angles, roll, probe, regions and recording window, for
+   surgery notes.
+
+Since 2.8.1:
+
+- **Edit by: Entry and depth** shows the entry on the brain surface instead of
+  the tip. Type its AP and ML (its DV follows from the surface) and the depth;
+  the tilts then turn the probe about the entry, as a stereotaxic arm does.
+  **Edit by: Tip** turns them about the tip.
+- **Record** chooses the recording window: a bank of 384 channels counted from
+  the tip (Neuropixels: Bank 0 at the tip, Bank 1, Bank 2) or Every site. The
+  readout gives the window's depth range, how many of its sites are in the
+  brain, and the length and sites in each region.
+- **Shank and probe plane** draws the plan to scale: left, the atlas in the
+  plane of the shank's face, with each shank, the entry (open circle), the
+  tip and the window (yellow); right, the shank from the entry down, its
+  regions, contacts (ticks) and window (bracket). Hover over either side for
+  the region and the depth.
+- **Steer with keys** moves the plan with the keyboard while it is on: W/S AP,
+  A/D ML, Q/E DV, Z/X deeper or shallower along the probe, I/K AP tilt, J/L
+  ML tilt, U/O roll. The step (10, 50, 100 or 500 µm; 1° or 5°) is shown and
+  changed with − and +; Shift takes the largest step; Esc stops. Keys typed
+  into a field are left to the field.
+- **Tip to surface** puts the tip on the brain surface along the probe, or
+  straight down at the same AP and ML; then set the depth to go in. Until it
+  has a depth the plan is not built.
 
 Each change is stored and built once you stop changing it (half a second, or
 Enter); Edit > Undo mapping step takes it back one change at a time. The

@@ -33,8 +33,15 @@ class ImplantOverlay:
         for control in (view.crotation_ctrl, view.srotation_ctrl, view.hrotation_ctrl):
             control.sig_slice_rotated.connect(lambda *_args: self.refresh())
         self._timer = QTimer(view)
-        self._timer.timeout.connect(self.refresh)
+        self._timer.timeout.connect(self._poll)
         self._timer.start(POLL_MS)
+
+    def _poll(self):
+        try:
+            self.refresh()
+        except RuntimeError:
+            # The atlas views were deleted (the window is closing): stop.
+            self._timer.stop()
 
     # ----------------------------------------------------------- geometry
     def _views(self):

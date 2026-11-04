@@ -1,7 +1,7 @@
 # Probe planning design: a planned probe is a pose
 
 Status: approved 4 November 2026 for implementation in four phases,
-2.8.0 (Phase 1) to 2.11.0 (Phase 4). Builds on the pre-surgical probe
+2.8.0 (Phase 1) to 2.8.3 (Phase 4), all in the 2.8 series. Builds on the pre-surgical probe
 plan (MANUAL Section 11), `probe_utiles.calculate_probe_info`, the named
 probes of the V2 Annotate step (`v2/probes.py`) and the undo history
 (`phase3_mapping_design.md`).
@@ -152,7 +152,7 @@ is computed once per loaded atlas and reused.
 * Plan a probe on this atlas (Project step and Ctrl/Cmd+K) creates a probe
   with a plan at Bregma, 3 mm deep, so the readout is filled from the start.
 
-### Phase 2, 2.9.0: see and steer
+### Phase 2, 2.8.1: see and steer
 
 * A **shank strip**: the regions along the shank drawn to scale with the
   contacts and the chosen recording window (bank), region names beside
@@ -168,7 +168,7 @@ is computed once per loaded atlas and reused.
   the probe or straight down in DV, then set the depth.
 * Recording window coverage per region in the readout.
 
-### Phase 3, 2.10.0: surgery
+### Phase 3, 2.8.2: surgery
 
 * **Craniotomies**: named circles (AP, ML, diameter) belonging to the
   project; a plan can be tied to one; a warning when the entry lies outside
@@ -184,7 +184,7 @@ is computed once per loaded atlas and reused.
   (and ML/DV proportionally) for the exported surgical coordinates; the atlas
   coordinates stay as they are; the copied line names the scaling.
 
-### Phase 4, 2.11.0: propose a plan
+### Phase 4, 2.8.3: propose a plan
 
 * Per probe: **Targets** (regions, in order from dorsal to ventral when
   that matters) and **Avoid** (regions, plus a margin from the midline);
