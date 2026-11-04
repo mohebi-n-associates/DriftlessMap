@@ -29,6 +29,7 @@ from PyQt6.QtWidgets import (
     QPlainTextEdit,
     QProgressDialog,
     QSizePolicy,
+    QSpacerItem,
     QSplitter,
     QStackedWidget,
     QTabWidget,
@@ -208,6 +209,7 @@ class V2Window(QMainWindow):
         header.setObjectName("CanvasHeader")
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(10, 6, 10, 6)
+        self._header_layout = header_layout
         header_layout.setSpacing(0)
         # Show or hide the step list and step panel (left) and the objects,
         # layers and regions column (right) from beside the images.
@@ -219,7 +221,9 @@ class V2Window(QMainWindow):
         self.task_toggle.setToolTip("Show or hide the steps and the step panel on the left")
         self.task_toggle.clicked.connect(lambda _checked: self.run("view.task_column"))
         header_layout.addWidget(self.task_toggle)
-        header_layout.addSpacing(10)
+        # Gaps that narrow windows give back to the view names.
+        self._header_gaps = [QSpacerItem(10, 0), QSpacerItem(16, 0)]
+        header_layout.addItem(self._header_gaps[0])
         self.view_group = QButtonGroup(self)
         self.view_buttons = {}
         for key, title, tip in VIEWS:
@@ -229,10 +233,12 @@ class V2Window(QMainWindow):
             view_button.setToolTip(tip)
             view_button.setCheckable(True)
             view_button.clicked.connect(lambda _checked, k=key: self.set_view(k))
+            # Never narrower than its name: the canvas keeps room for it.
+            view_button.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
             self.view_group.addButton(view_button)
             self.view_buttons[key] = view_button
             header_layout.addWidget(view_button)
-        header_layout.addSpacing(16)
+        header_layout.addItem(self._header_gaps[1])
         self.plane_label = QLabel("")
         self.plane_label.setObjectName("Muted")
         # On a narrow canvas the view buttons keep their names; this label
@@ -1297,6 +1303,11 @@ class V2Window(QMainWindow):
         # Narrow: the side-column buttons give their room to the view names.
         self.task_toggle.setText("◧" if compact else "Steps")
         self.inspector_toggle.setText("◨" if compact else "Objects")
+        for gap, width in zip(self._header_gaps, (10, 16)):
+            gap.changeSize(2 if compact else width, 0)
+        side = 4 if compact else 10
+        self._header_layout.setContentsMargins(side, 6, side, 6)
+        self._header_layout.invalidate()
         self._sync_rail_tooltips()
 
     def _sync_rail_tooltips(self):
