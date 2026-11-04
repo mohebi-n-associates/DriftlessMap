@@ -23,6 +23,7 @@ from PyQt6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
+    QSlider,
     QLineEdit,
     QMainWindow,
     QMessageBox,
@@ -342,6 +343,19 @@ class V2Window(QMainWindow):
         self.regions_in_3d.toggled.connect(engine.show_small_area_in_3d)
         engine.show_small_area_in_3d(True)
         regions_layout.addWidget(self.regions_in_3d)
+        # Lower it to see probe tracks and implants inside the regions (2.8.5).
+        opacity_row = QHBoxLayout()
+        opacity_row.addWidget(QLabel("Region opacity in 3D"))
+        self.region_opacity = QSlider(Qt.Orientation.Horizontal)
+        self.region_opacity.setRange(5, 100)
+        self.region_opacity.setValue(100)
+        self.region_opacity.setToolTip("Below 100% the checked regions are see-through in "
+                                       "the 3D view, so tracks and implants inside show")
+        self.region_opacity_value = QLabel("100%")
+        self.region_opacity.valueChanged.connect(self._region_opacity_changed)
+        opacity_row.addWidget(self.region_opacity, 1)
+        opacity_row.addWidget(self.region_opacity_value)
+        regions_layout.addLayout(opacity_row)
         regions_layout.addWidget(engine.atlas_view.label_tree)
         self.inspector_tabs.addTab(regions, "Regions")
         inspector_layout.addWidget(self.inspector_tabs)
@@ -433,6 +447,10 @@ class V2Window(QMainWindow):
         label = QLabel(text)
         label.setObjectName("CardTitle")
         return label
+
+    def _region_opacity_changed(self, value):
+        self.region_opacity_value.setText("{}%".format(value))
+        self.engine.set_region_opacity(value / 100.0)
 
     def start_probe_plan(self, kind="probe"):
         """Open a probe, fiber or prism to plan on the atlas: one without a plan or

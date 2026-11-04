@@ -297,6 +297,9 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
         self.atlas_img_path = None
 
         self.small_mesh_list = {}
+        # Opacity of the checked regions' meshes in 3D (0-1; 2.8.5): lower it to
+        # see probes and implants inside them.
+        self.region_opacity = 1.0
 
         self.img_lasso_is_closure = False
         self.atlas_lasso_is_closure = False
@@ -6716,6 +6719,19 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
                 mesh.setVisible(key in wanted)
         self.previous_checked_label = list(checked)
 
+    def set_region_opacity(self, opacity):
+        """Draw the region meshes at ``opacity`` (0-1); below 1 they are
+        translucent, so tracks and implants inside them show."""
+        self.region_opacity = float(min(max(opacity, 0.0), 1.0))
+        for mesh in self.small_mesh_list.values():
+            colour = mesh.opts.get("color", (0.5, 0.5, 0.5, 1.0))
+            self._set_region_mesh_colour(mesh, colour)
+
+    def _set_region_mesh_colour(self, mesh, colour):
+        opacity = getattr(self, "region_opacity", 1.0)
+        mesh.setColor((colour[0], colour[1], colour[2], 0.8 if opacity >= 0.999 else opacity))
+        mesh.setGLOptions("opaque" if opacity >= 0.999 else "translucent")
+
     def composition_3d_changed(self):
         if self.atlas_view.atlas_data is None:
             return
@@ -6749,9 +6765,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
         all_keys = self.small_mesh_list.keys()
         if label_id not in all_keys:
             return
-        self.small_mesh_list[label_id].setColor(
-            (col_to_set[0], col_to_set[1], col_to_set[2], col_to_set[3])
-        )
+        self._set_region_mesh_colour(self.small_mesh_list[label_id], col_to_set)
 
     def sig_reset_labels(self):
         lut = self.atlas_view.label_tree.lookup_table()
@@ -6763,9 +6777,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
         valid_id = list(self.small_mesh_list.keys())
         for label_id in valid_id:
             col_to_set = self.atlas_view.label_tree.color_for_label(label_id) / 255
-            self.small_mesh_list[label_id].setColor(
-                (col_to_set[0], col_to_set[1], col_to_set[2], col_to_set[3])
-            )
+            self._set_region_mesh_colour(self.small_mesh_list[label_id], col_to_set)
 
     # ------------------------------------------------------------------
     #
@@ -8042,7 +8054,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
                     color=(color_to_set[0], color_to_set[1], color_to_set[2], 0.8),
                     shader="balloon",
                 )
-                mesh.setGLOptions("opaque")
+                self._set_region_mesh_colour(mesh, color_to_set)
                 mesh.translate(-mesh_origin[0], -mesh_origin[1], -mesh_origin[2])
                 self.small_mesh_list[str(id)] = mesh
                 self.small_mesh_list[str(id)].setVisible(False)

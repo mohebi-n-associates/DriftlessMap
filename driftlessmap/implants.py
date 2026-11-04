@@ -702,6 +702,44 @@ def model_segments(model):
     return np.asarray([corners[i] for edge in edges for i in edge])
 
 
+def model_mesh(model, segments=32):
+    """The model as a closed triangle mesh ``(vertices (N, 3), faces (M, 3))``,
+    to draw it filled in 3D (2.8.5)."""
+    if model["type"] == "cylinder":
+        top, bottom = np.asarray(model["top"], float), np.asarray(model["bottom"], float)
+        axis = bottom - top
+        length = np.linalg.norm(axis)
+        axis = axis / length if length else np.array([0.0, 0.0, -1.0])
+        helper = np.array([1.0, 0.0, 0.0]) if abs(axis[0]) < 0.9 else np.array([0.0, 1.0, 0.0])
+        a = np.cross(axis, helper)
+        a /= np.linalg.norm(a)
+        b = np.cross(axis, a)
+        angles = np.linspace(0, 2 * np.pi, segments, endpoint=False)
+        ring = (np.cos(angles)[:, None] * a + np.sin(angles)[:, None] * b) * model["radius_vox"]
+        vertices = np.vstack([top + ring, bottom + ring, top, bottom])
+        n = segments
+        faces = []
+        for k in range(n):
+            j = (k + 1) % n
+            faces += [(k, j, n + k), (j, n + j, n + k),       # side
+                      (2 * n, j, k), (2 * n + 1, n + k, n + j)]   # caps
+        return vertices, np.asarray(faces, dtype=np.int32)
+    if model["type"] == "prism":
+        corners = _prism_corners(model)
+    else:
+        bottom = np.asarray(model["bottom"], float)
+        up, face, across = (np.asarray(model[k], float) for k in ("up", "face_normal", "across"))
+        corners = np.asarray([bottom + h * up + d * model["half_depth_vox"] * face
+                              + w * model["half_width_vox"] * across
+                              for h in (0.0, model["height_vox"])
+                              for d, w in ((-1, -1), (1, -1), (1, 1), (-1, 1))])
+    # Corners 0-3 run round the bottom, 4-7 round the top in the same order.
+    quads = [(0, 1, 2, 3), (4, 7, 6, 5), (0, 4, 5, 1), (1, 5, 6, 2), (2, 6, 7, 3),
+             (3, 7, 4, 0)]
+    faces = [tri for a, b, c, d in quads for tri in ((a, b, c), (a, c, d))]
+    return corners, np.asarray(faces, dtype=np.int32)
+
+
 def _prism_corners(model):
     """The eight corners of a planned prism: the bottom (face edge, then the
     raised back edge), then the top, each corner by ``(behind, across)``."""

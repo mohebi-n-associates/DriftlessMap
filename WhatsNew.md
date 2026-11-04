@@ -20,6 +20,9 @@ screen that gets you to a plan.
   too short for its depth. **Face** turns the imaging face.
 - Planned fibers and prisms are outlined on the atlas views wherever a page
   cuts them, and listed in `probe_plans.csv`.
+- **Fibers and prisms are filled in 3D**, and **Region opacity in 3D** (Regions
+  tab) makes the checked regions see-through, so tracks and implants inside
+  them show.
 - **Find regions by typing**: a search box above the Regions tree, and in
   Snap tip to region and Propose's Add… a list that narrows as you type.
 - **Regions you plan with are shown**: snapping to a region or adding it to

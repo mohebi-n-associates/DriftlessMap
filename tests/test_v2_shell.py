@@ -1341,6 +1341,48 @@ class V2ShellTests(unittest.TestCase):
             self.assertAlmostEqual(engine.surgery_scale(), 0.1)
 
     @isolated_gui_test
+    def test_implants_are_filled_in_3d_and_regions_can_be_see_through(self):
+        from driftlessmap.implants import model_mesh
+        from driftlessmap.obj_items import IMPLANT_FILL_ALPHA, ImplantItem
+
+        with tempfile.TemporaryDirectory() as folder:
+            window, engine, _editor = self.planned_window(folder)
+            window.run("prism.plan")
+            window.run("fiber.plan")
+            o = engine.object_ctrl
+            for name in ("Prism 1 plan", "Fiber 1 plan"):
+                index = o.obj_name.index(name)
+                item = engine.object_3d_list[index]
+                self.assertIsInstance(item, ImplantItem)
+                self.assertIs(item.lines.parentItem(), item)
+                # Colour, opacity and width from the object list reach both parts.
+                o.current_obj_index = index
+                engine.obj_opacity_changed(50)
+                self.assertAlmostEqual(item.opts["color"][3], 0.5 * IMPLANT_FILL_ALPHA)
+                self.assertAlmostEqual(item.lines.color[3], 0.5)
+                engine.obj_size_changed((o.obj_type[index], 4))
+                self.assertEqual(item.lines.width, 4)
+            # A closed mesh: every edge is shared by exactly two faces.
+            for model in (o.obj_data[o.obj_name.index("Prism 1 plan")]["report"]["model"],
+                          o.obj_data[o.obj_name.index("Fiber 1 plan")]["report"]["model"]):
+                _vertices, faces = model_mesh(model)
+                edges = {}
+                for face in faces:
+                    for a, b in ((face[0], face[1]), (face[1], face[2]), (face[2], face[0])):
+                        key = (min(a, b), max(a, b))
+                        edges[key] = edges.get(key, 0) + 1
+                self.assertEqual(set(edges.values()), {2})
+            # Region meshes: opaque at 100%, see-through below.
+            self.assertTrue(engine.small_mesh_list)
+            window.region_opacity.setValue(30)
+            self.assertEqual(window.region_opacity_value.text(), "30%")
+            for mesh in engine.small_mesh_list.values():
+                self.assertAlmostEqual(mesh.opts["color"][3], 0.3)
+            window.region_opacity.setValue(100)
+            for mesh in engine.small_mesh_list.values():
+                self.assertAlmostEqual(mesh.opts["color"][3], 0.8)
+
+    @isolated_gui_test
     def test_regions_are_found_by_typing_and_planning_shows_the_ones_it_uses(self):
         from unittest.mock import patch
 

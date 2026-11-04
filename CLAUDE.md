@@ -179,6 +179,9 @@ or important workflows change.
   tree has a Find box (`LabelTree.filter_labels`, `show_labels` checks
   regions so the atlas and 3D show them); `v2/region_picker.pick_region`
   for Snap tip to region and Propose's Add…, whose regions are shown.
+  Fibers and prisms are filled in 3D (`implants.model_mesh`,
+  `obj_items.ImplantItem`, which takes `setData(color=, width=)`);
+  `set_region_opacity` (Regions tab slider) makes region meshes translucent.
 - `driftlessmap/project_session.py`: `ProjectSessionMixin.project_payload` is the
   shared saved-state collector. `load_project` snapshots the active document and
   restores it on failure, including its original reader, in-memory atlas and undo

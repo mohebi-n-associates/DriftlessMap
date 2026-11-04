@@ -518,6 +518,8 @@ The window has four areas:
   default), drawn in the 3D view. Type in **Find a region** above the tree
   to narrow it to the regions whose acronym or name holds every word you
   type (with their parents); Enter selects the best match (since 2.8.5).
+  **Region opacity in 3D** below it makes the checked regions see-through, so
+  probe tracks and implants inside them show (100% draws them solid).
 - **The status line** at the bottom: the last message, the atlas and section,
   and whether there are unsaved changes. Changing views, zooming or selecting
   never counts as a change; adding a probe, even before marking it, does.
@@ -1761,7 +1763,8 @@ proposals do not apply.
   settings. The readout gives its entry, depth, tip region and the regions
   along it (the light cone is not estimated).
 
-The plan is drawn on the atlas views as the device's cross-section (dashed)
+Fibers and prisms, planned or built, are drawn filled (see-through) in the
+3D view with their edges. The plan is drawn on the atlas views as the device's cross-section (dashed)
 wherever a page cuts it, and built as the object *"<name> plan"* (a planned
 fiber or prism; its information window is its report), apart from the fiber
 or prism built from mapped sections. Renaming the implant renames its plan,
