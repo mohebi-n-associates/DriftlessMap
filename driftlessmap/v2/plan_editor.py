@@ -536,6 +536,9 @@ class PlanEditor(Card):
             " · contacts face {}".format(html.escape(readout["face"])) if kind == "probe"
             else " · imaging face looks {}".format(html.escape(readout["face"]))
             if kind == "prism" else ""))
+        if readout.get("ferrule_gap_um") is not None and readout["ferrule_gap_um"] >= 0:
+            lines.append("<b>Ferrule</b> its bottom {:.2f} mm above the brain surface, "
+                         "along the fiber".format(readout["ferrule_gap_um"] / 1000.0))
         if readout.get("imaging"):
             width, height = readout["imaging_window_um"]
             lines.append("<b>Face looks into</b> {} (the {:.2f} × {:.2f} mm imaging window "

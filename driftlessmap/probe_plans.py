@@ -595,6 +595,7 @@ def plan_readout(plan, atlas):
         "imaging": [],
         "imaging_height_um": 0.0,
         "imaging_window_um": None,
+        "ferrule_gap_um": None,
         "regions": [],
         "tip_region": atlas.name(atlas.labels_at(tip_vox[None, :])[0][0]),
         "warnings": warnings,
@@ -634,6 +635,15 @@ def plan_readout(plan, atlas):
         warnings.append("The tip is at the brain surface; move it deeper.")
     if plan.kind == PRISM:
         _add_prism(readout, plan, atlas)
+    if plan.kind == FIBER:
+        # How far the ferrule's bottom stays above the brain, along the fiber.
+        gap = plan.specs["fiber_length_um"] - depth
+        readout["ferrule_gap_um"] = gap
+        if gap < -atlas.vox_um:
+            warnings.append("The ferrule would go {:.2f} mm into the brain: the fiber "
+                            "sticks out {:.2f} mm below it and goes {:.2f} mm deep.".format(
+                                -gap / 1000.0, plan.specs["fiber_length_um"] / 1000.0,
+                                depth / 1000.0))
     if length is not None and depth > length:
         readout["reachable"] = False
         warnings.append("The tip is {:.2f} mm deep, deeper than the {:.1f} mm shank "
@@ -1075,14 +1085,26 @@ def _segment_distance(p0, p1, q0, q1):
 
 
 def plan_segments(plan, readout, above_um=CLEARANCE_ABOVE_UM):
-    """Each shank as a segment (um) from ``above_um`` above the entry to the tip."""
+    """The device as segments (um) with a radius: ``[(start, end, radius)]``.
+
+    A probe's shanks run from ``above_um`` above the entry to the tip (radius
+    0, as before); a prism's outer lines likewise, with its bevel. A fiber is
+    its axis from the ferrule's bottom to the tip, with its radius, and the
+    ferrule's axis up its length, with the ferrule's radius (2.8.5), so the
+    distance between two devices is between their surfaces.
+    """
     if readout is None or readout.get("entry_um") is None:
         return []
     direction = plan.direction
     top = np.asarray(readout["entry_um"], dtype=float) - direction * above_um
     tip = np.asarray(plan.tip_um, dtype=float)
-    # An implant's outer lines, so the distance is between its surfaces.
-    return [(top + offset, tip + offset - direction * raised)
+    if plan.kind == FIBER:
+        specs = plan.specs
+        bottom = tip - direction * specs["fiber_length_um"]
+        ferrule_top = bottom - direction * specs["ferrule_length_um"]
+        return [(bottom, tip, specs["diameter_um"] / 2.0),
+                (ferrule_top, bottom, specs["ferrule_diameter_um"] / 2.0)]
+    return [(top + offset, tip + offset - direction * raised, 0.0)
             for _name, offset, raised in device_lines(plan, outline=True)]
 
 
@@ -1100,9 +1122,10 @@ def clearances(planned, above_um=CLEARANCE_ABOVE_UM):
             plan_a, read_a = planned[i]
             plan_b, read_b = planned[j]
             best = None
-            for a0, a1 in plan_segments(plan_a, read_a, above_um):
-                for b0, b1 in plan_segments(plan_b, read_b, above_um):
+            for a0, a1, ra in plan_segments(plan_a, read_a, above_um):
+                for b0, b1, rb in plan_segments(plan_b, read_b, above_um):
                     distance, point, _other = _segment_distance(a0, a1, b0, b1)
+                    distance = max(0.0, distance - ra - rb)    # 0: they overlap
                     if best is None or distance < best[0]:
                         best = (distance, point)
             if best is None:
@@ -1120,6 +1143,8 @@ def clearance_warning(probe, pairs, limit_um=CLEARANCE_UM):
             other = pair["probes"][1] if pair["probes"][0] == probe else pair["probes"][0]
             where = ("{:.2f} mm deep".format(pair["depth_um"] / 1000.0) if pair["depth_um"] >= 0
                      else "{:.2f} mm above the brain".format(-pair["depth_um"] / 1000.0))
+            if pair["distance_um"] <= 0.0:
+                return "{} touches {} ({}).".format(probe, other, where)
             return "{} passes {:.2f} mm from {} ({}).".format(
                 probe, pair["distance_um"] / 1000.0, other, where)
     return None
@@ -1300,14 +1325,16 @@ def planned_model(plan, readout, vox_um):
     direction = plan.direction
     tip = np.asarray(plan.tip_um, dtype=float)
     if plan.kind == FIBER:
-        entry = (readout or {}).get("entry_um")
-        top = np.asarray(entry, dtype=float) if entry is not None \
-            else tip - direction * 1000.0
-        if np.dot(tip - top, direction) < vox_um:
-            top = tip - direction * vox_um
-        return {"type": "cylinder", "top": (top / vox_um).tolist(),
+        # The bare fiber up to the ferrule's bottom, then the ferrule.
+        specs = plan.specs
+        bottom = tip - direction * specs["fiber_length_um"]
+        top = bottom - direction * specs["ferrule_length_um"]
+        return {"type": "cylinder", "top": (bottom / vox_um).tolist(),
                 "bottom": (tip / vox_um).tolist(),
-                "radius_vox": plan.specs["diameter_um"] / 2.0 / vox_um}
+                "radius_vox": specs["diameter_um"] / 2.0 / vox_um,
+                "ferrule": {"type": "cylinder", "top": (top / vox_um).tolist(),
+                            "bottom": (bottom / vox_um).tolist(),
+                            "radius_vox": specs["ferrule_diameter_um"] / 2.0 / vox_um}}
     from .implants import prism_rise
 
     normal = plan.normal

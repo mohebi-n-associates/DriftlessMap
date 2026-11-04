@@ -69,6 +69,18 @@ class ImplantDialog(QDialog):
             spin.setSingleStep(50)
             spin.setDecimals(0)
             spin.setSuffix(" µm")
+        self.fiber_length, self.ferrule_diameter, self.ferrule_length = (
+            QDoubleSpinBox(), QDoubleSpinBox(), QDoubleSpinBox())
+        for spin, (low, high), tip in (
+                (self.fiber_length, (100, 30000),
+                 "Bare fiber sticking out below the ferrule's end"),
+                (self.ferrule_diameter, (100, 5000), "Ferrule diameter (1250 µm is standard)"),
+                (self.ferrule_length, (100, 30000), "Ferrule length")):
+            spin.setRange(low, high)
+            spin.setSingleStep(50)
+            spin.setDecimals(0)
+            spin.setSuffix(" µm")
+            spin.setToolTip(tip)
         self.length = QDoubleSpinBox()
         self.length.setRange(300, 20000)
         self.length.setSingleStep(100)
@@ -92,7 +104,10 @@ class ImplantDialog(QDialog):
         form.addRow("Type", self.kind)
         form.addRow("Name", self.name)
         self.rows = {
-            "fiber": [("Diameter (µm)", self.diameter), ("NA", self.na)],
+            "fiber": [("Diameter (µm)", self.diameter), ("NA", self.na),
+                      ("Fiber below ferrule", self.fiber_length),
+                      ("Ferrule diameter", self.ferrule_diameter),
+                      ("Ferrule length", self.ferrule_length)],
             "prism": [("Width along the face", self.width),
                       ("Depth away from the face", self.depth), ("Length", self.length),
                       ("Bottom angle", self.bevel), ("Imaging face", self.face)],
@@ -129,6 +144,9 @@ class ImplantDialog(QDialog):
             if each == model.FIBER:
                 self.diameter.setCurrentText("{:g}".format(values["diameter_um"]))
                 self.na.setCurrentText("{:g}".format(values["na"]))
+                self.fiber_length.setValue(values["fiber_length_um"])
+                self.ferrule_diameter.setValue(values["ferrule_diameter_um"])
+                self.ferrule_length.setValue(values["ferrule_length_um"])
             else:
                 self.width.setValue(values["width_um"])
                 self.depth.setValue(values["depth_um"])
@@ -146,7 +164,9 @@ class ImplantDialog(QDialog):
             for _label, widget in rows:
                 self.form.setRowVisible(widget, each == kind)
         self.note.setText({
-            "fiber": "NA is stored for a later light-cone estimate; the tip does not use it.",
+            "fiber": "NA is stored for a later light-cone estimate; the tip does not use it. "
+                     "The ferrule places a planned fiber; fits to mapped outlines do not "
+                     "use it.",
             "prism": "For a medial or lateral face, the depth is the prism's ML size. The "
                      "length and bottom angle place a planned prism; fits to mapped "
                      "outlines do not use them.",
@@ -162,7 +182,10 @@ class ImplantDialog(QDialog):
         if kind == model.FIBER:
             try:
                 specs = {"diameter_um": float(self.diameter.currentText()),
-                         "na": float(self.na.currentText())}
+                         "na": float(self.na.currentText()),
+                         "fiber_length_um": self.fiber_length.value(),
+                         "ferrule_diameter_um": self.ferrule_diameter.value(),
+                         "ferrule_length_um": self.ferrule_length.value()}
             except ValueError:
                 raise ValueError("Diameter and NA must be numbers.") from None
         else:

@@ -25,6 +25,7 @@ NEAR_UM = 100.0
 SAMPLES = 200
 POLL_MS = 400
 DEFAULT_COLOUR = (232, 72, 85)
+FERRULE_GRAY = (184, 184, 184)
 
 
 class PlanOverlay:
@@ -114,9 +115,15 @@ class PlanOverlay:
             for _probe, colour, entry, tip, model in tracks:
                 self._draw(plane, stack, origin, frame, entry, tip, colour, vox_um)
                 if model is not None:
-                    mask = model_section(model, origin, axis_x, axis_y, shape)
-                    if mask is not None:
-                        self._outline(plane, stack, mask, colour)
+                    # The device in its colour, a fiber's ferrule gray.
+                    ferrule = model.get("ferrule")
+                    body = {k: v for k, v in model.items() if k != "ferrule"}
+                    for part, tint in ((body, colour), (ferrule, FERRULE_GRAY)):
+                        if not isinstance(part, dict):
+                            continue
+                        mask = model_section(part, origin, axis_x, axis_y, shape)
+                        if mask is not None:
+                            self._outline(plane, stack, mask, tint)
             if plane == "horizontal":
                 for hole in holes:
                     self._draw_hole(stack, origin, frame, hole, vox_um)

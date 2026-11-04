@@ -13,6 +13,9 @@ screen that gets you to a plan.
   The device's own size is checked: a fiber's rim and a prism's whole
   footprint must keep out of the regions to keep out of and fit through the
   craniotomy, and the distance to other plans is measured to its surface.
+- **Fibers have a ferrule**: 3 mm of fiber below a 1.25 mm ferrule by
+  default, all set in Settings; it is drawn gray, its height above the brain is
+  given, and ferrules that touch each other are reported.
 - **Microprisms have a length and a bevelled bottom**: 1.5 × 1.5 × 3 mm by
   default with a 45° bottom, so the imaging window at the bottom of the face
   is 1.5 × 1.5 mm. A planned prism's readout lists what the window looks

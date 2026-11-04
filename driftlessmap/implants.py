@@ -33,7 +33,10 @@ FIBER_DIAMETERS_UM = (100.0, 105.0, 200.0, 400.0)
 FIBER_NAS = (0.22, 0.37, 0.39, 0.50)
 PRISM_FACES = ("medial", "lateral", "anterior", "posterior")
 DEFAULT_SPECS = {
-    FIBER: {"diameter_um": 200.0, "na": 0.39},
+    # A planned fiber sticks out fiber_length_um below a ferrule of
+    # ferrule_diameter_um x ferrule_length_um (2.8.5).
+    FIBER: {"diameter_um": 200.0, "na": 0.39, "fiber_length_um": 3000.0,
+            "ferrule_diameter_um": 1250.0, "ferrule_length_um": 6400.0},
     # width runs along the imaging face, depth away from it; length is the
     # imaging face's long edge, and the bottom is bevelled at bevel_deg to the
     # long edges (the mirror; 90 is a flat bottom), deepest at the face (2.8.5).
@@ -48,6 +51,9 @@ _SPEC_RANGES = {
     "width_um": (100.0, 5000.0),
     "depth_um": (100.0, 5000.0),
     "length_um": (300.0, 20000.0),
+    "fiber_length_um": (100.0, 30000.0),
+    "ferrule_diameter_um": (100.0, 5000.0),
+    "ferrule_length_um": (100.0, 30000.0),
     "bevel_deg": (20.0, 90.0),
 }
 PALETTE = [
@@ -109,7 +115,10 @@ def validated_specs(kind, specs):
 
 def describe_specs(kind, specs):
     if kind == FIBER:
-        return "Ø {:g} µm · NA {:g}".format(specs["diameter_um"], specs["na"])
+        specs = validated_specs(FIBER, specs)     # specs saved before 2.8.5 lack the ferrule
+        return "Ø {:g} µm · NA {:g} · {:g} mm below a Ø {:g} mm ferrule".format(
+            specs["diameter_um"], specs["na"], specs["fiber_length_um"] / 1000.0,
+            specs["ferrule_diameter_um"] / 1000.0)
     specs = validated_specs(PRISM, specs)    # specs saved before 2.8.5 lack the length
     return "{:g} × {:g} × {:g} µm · {:g}° bottom · {} face".format(
         specs["width_um"], specs["depth_um"], specs["length_um"], specs["bevel_deg"],
@@ -667,6 +676,9 @@ def _prism_model(specs, outlines, direction, bottom, top, face_axis, voxel_um):
 # -------------------------------------------------------------------- display
 def model_segments(model):
     """Line segments ``(2K, 3)`` drawing a fitted model in 3D."""
+    if len(model_parts(model)) > 1:
+        return np.vstack([model_segments({k: v for k, v in part.items() if k != "ferrule"})
+                          for part in model_parts(model)])
     if model["type"] == "cylinder":
         top, bottom = np.asarray(model["top"]), np.asarray(model["bottom"])
         axis = bottom - top
@@ -702,9 +714,25 @@ def model_segments(model):
     return np.asarray([corners[i] for edge in edges for i in edge])
 
 
+def model_parts(model):
+    """The model and the parts it carries (a planned fiber's ferrule, 2.8.5)."""
+    parts = [model]
+    if isinstance(model.get("ferrule"), dict):
+        parts.append(model["ferrule"])
+    return parts
+
+
 def model_mesh(model, segments=32):
     """The model as a closed triangle mesh ``(vertices (N, 3), faces (M, 3))``,
-    to draw it filled in 3D (2.8.5)."""
+    to draw it filled in 3D (2.8.5); a ferrule is a second closed mesh."""
+    if len(model_parts(model)) > 1:
+        vertices, faces, offset = [], [], 0
+        for part in model_parts(model):
+            v, f = model_mesh({k: v for k, v in part.items() if k != "ferrule"}, segments)
+            vertices.append(v)
+            faces.append(f + offset)
+            offset += len(v)
+        return np.vstack(vertices), np.vstack(faces)
     if model["type"] == "cylinder":
         top, bottom = np.asarray(model["top"], float), np.asarray(model["bottom"], float)
         axis = bottom - top
@@ -757,11 +785,18 @@ def _prism_corners(model):
 def model_section(model, origin, axis_x, axis_y, shape):
     """Pixels of a 2-D slice inside a fitted model, as a boolean mask or None.
 
+    A model with parts (a planned fiber's ferrule) gives their union.
+
     Pixel ``(row, col)`` of a slice of ``shape`` has its centre at
     ``origin + (col + 0.5) * axis_x + (row + 0.5) * axis_y`` in the model's
     frame (the frame the mapped outlines were made in). Returns None when the
     slice does not cut the model.
     """
+    if len(model_parts(model)) > 1:
+        masks = [model_section({k: v for k, v in part.items() if k != "ferrule"},
+                               origin, axis_x, axis_y, shape) for part in model_parts(model)]
+        masks = [m for m in masks if m is not None]
+        return np.logical_or.reduce(masks) if masks else None
     origin, axis_x, axis_y = (np.asarray(v, dtype=float) for v in (origin, axis_x, axis_y))
     normal = np.cross(axis_x, axis_y)
     length = np.linalg.norm(normal)

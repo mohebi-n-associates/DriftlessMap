@@ -1343,7 +1343,7 @@ class V2ShellTests(unittest.TestCase):
     @isolated_gui_test
     def test_implants_are_filled_in_3d_and_regions_can_be_see_through(self):
         from driftlessmap.implants import model_mesh
-        from driftlessmap.obj_items import IMPLANT_FILL_ALPHA, ImplantItem
+        from driftlessmap.obj_items import FERRULE_GRAY, IMPLANT_FILL_ALPHA, ImplantItem
 
         with tempfile.TemporaryDirectory() as folder:
             window, engine, _editor = self.planned_window(folder)
@@ -1362,6 +1362,11 @@ class V2ShellTests(unittest.TestCase):
                 self.assertAlmostEqual(item.lines.color[3], 0.5)
                 engine.obj_size_changed((o.obj_type[index], 4))
                 self.assertEqual(item.lines.width, 4)
+            # The fiber's ferrule is gray, whatever the fiber's colour.
+            fibre_item = engine.object_3d_list[o.obj_name.index("Fiber 1 plan")]
+            self.assertIsNotNone(fibre_item.ferrule)
+            self.assertEqual(tuple(fibre_item.ferrule.opts["color"][:3]), FERRULE_GRAY)
+            self.assertIsNone(engine.object_3d_list[o.obj_name.index("Prism 1 plan")].ferrule)
             # A closed mesh: every edge is shared by exactly two faces.
             for model in (o.obj_data[o.obj_name.index("Prism 1 plan")]["report"]["model"],
                           o.obj_data[o.obj_name.index("Fiber 1 plan")]["report"]["model"]):

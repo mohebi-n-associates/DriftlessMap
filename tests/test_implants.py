@@ -61,7 +61,9 @@ def fiber_section(plane, offset, centre_ml, centre_ap, radius, tip_dv, top_dv=0.
 
 class DefinitionTests(unittest.TestCase):
     def test_specs_are_completed_and_checked(self):
-        self.assertEqual(validated_specs(FIBER, {}), {"diameter_um": 200.0, "na": 0.39})
+        self.assertEqual(validated_specs(FIBER, {}),
+                         {"diameter_um": 200.0, "na": 0.39, "fiber_length_um": 3000.0,
+                          "ferrule_diameter_um": 1250.0, "ferrule_length_um": 6400.0})
         self.assertEqual(validated_specs(PRISM, {"width_um": 1000})["depth_um"], 1500.0)
         for kind, bad in ((FIBER, {"diameter_um": -1}), (FIBER, {"na": "x"}),
                           (FIBER, {"colour": 1}), (PRISM, {"face": "up"}),

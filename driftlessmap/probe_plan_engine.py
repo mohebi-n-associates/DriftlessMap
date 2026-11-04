@@ -38,6 +38,7 @@ from .probe_plans import (
     surface_entry,
 )
 from .probe_plans import (
+    FIBER,
     PRISM,
     device_lines,
     imaging_summary,
@@ -215,6 +216,12 @@ class ProbePlanEngineMixin:
         plan = ProbePlan(implant.name, probe.tip_um, kind=implant.kind, specs=implant.specs,
                          implant_id=implant.implant_id)
         atlas = self.plan_atlas()
+        if implant.kind == FIBER and atlas is not None:
+            # Keep the ferrule 0.5 mm above the brain.
+            readout = plan_readout(plan, atlas)
+            limit = implant.specs["fiber_length_um"] - 500.0
+            if readout["entry_um"] is not None and readout["depth_um"] > limit:
+                plan = plan_from_entry_depth(plan, readout["entry_um"], max(limit, 250.0))
         if implant.kind == PRISM:
             side = 1.0 if plan.tip_um[0] >= 0 else -1.0
             # Roll: 0 faces anterior, 90 the animal's right.

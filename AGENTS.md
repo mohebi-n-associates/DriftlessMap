@@ -182,6 +182,9 @@ or important workflows change.
   Fibers and prisms are filled in 3D (`implants.model_mesh`,
   `obj_items.ImplantItem`, which takes `setData(color=, width=)`);
   `set_region_opacity` (Regions tab slider) makes region meshes translucent.
+  Fibers have a ferrule (`fiber_length_um`, `ferrule_diameter_um`,
+  `ferrule_length_um`; model part `ferrule`, `model_parts`); `plan_segments`
+  carries radii and `clearances` subtracts them.
   `region_meshes.region_surface` builds one smooth surface per checked
   region (with sub-regions) in the segmentation frame (`atlas_label`
   reordered back); `sync_region_meshes` draws it instead of the parts'

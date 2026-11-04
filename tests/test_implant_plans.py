@@ -1,5 +1,6 @@
 """Planned optical fibers and microprisms (2.8.5): geometry, checks and saving."""
 
+import math
 import unittest
 
 import numpy as np
@@ -8,6 +9,7 @@ from driftlessmap.implants import (
     DEFAULT_SPECS,
     PRISM,
     describe_specs,
+    model_mesh,
     model_section,
     model_segments,
     prism_rise,
@@ -34,8 +36,9 @@ SMALL_PRISM = {"width_um": 400.0, "depth_um": 400.0, "length_um": 2000.0,
                "bevel_deg": 45.0, "face": "lateral"}
 
 
-def fiber(tip, diameter=400.0, **keep):
-    return ProbePlan("Fiber 1", tip, kind="fiber", specs={"diameter_um": diameter},
+def fiber(tip, diameter=400.0, fiber_length_um=3000.0, **keep):
+    return ProbePlan("Fiber 1", tip, kind="fiber",
+                     specs={"diameter_um": diameter, "fiber_length_um": fiber_length_um},
                      implant_id="f" * 32, **keep)
 
 
@@ -203,10 +206,41 @@ class ReadoutTests(unittest.TestCase):
                                 "brain between the surface and its tip."])
 
     def test_clearance_is_measured_to_the_fiber_surface(self):
-        planned = [fiber([-300.0, 0.0, -1000.0]),
+        # A long fiber keeps its ferrule above the probe's checked 3 mm.
+        planned = [fiber([-300.0, 0.0, -1000.0], fiber_length_um=5000.0),
                    ProbePlan("Probe 1", [100.0, 0.0, -1000.0])]
         [pair] = clearances([(plan, plan_readout(plan, self.atlas)) for plan in planned])
         self.assertAlmostEqual(pair["distance_um"], 200.0, places=6)
+
+    def test_the_ferrule(self):
+        from driftlessmap.probe_plans import clearance_warning
+
+        plan = fiber([0.0, 0.0, -1000.0])             # 3 mm below a 1.25 x 6.4 mm ferrule
+        self.assertEqual((plan.specs["fiber_length_um"], plan.specs["ferrule_diameter_um"],
+                          plan.specs["ferrule_length_um"]), (3000.0, 1250.0, 6400.0))
+        readout = plan_readout(plan, self.atlas)
+        self.assertAlmostEqual(readout["ferrule_gap_um"], 2000.0)
+        model = planned_model(plan, readout, 50.0)
+        np.testing.assert_allclose(model["top"], [0.0, 0.0, 40.0])          # DV +2 mm
+        np.testing.assert_allclose(model["ferrule"]["bottom"], [0.0, 0.0, 40.0])
+        np.testing.assert_allclose(model["ferrule"]["top"], [0.0, 0.0, 168.0])
+        self.assertAlmostEqual(model["ferrule"]["radius_vox"], 12.5)
+        vertices, _faces = model_mesh(model)
+        self.assertAlmostEqual(vertices[:, 2].max(), 168.0)
+        # A slice through the ferrule cuts it, not only the fiber.
+        mask = model_section(model, np.array([-20.0, -20.0, 100.0]), np.array([1.0, 0, 0]),
+                             np.array([0, 1.0, 0]), (40, 40))
+        self.assertAlmostEqual(mask.sum(), math.pi * 12.5 ** 2, delta=40)
+        # A fiber deeper than it sticks out puts the ferrule in the brain.
+        deep = plan_readout(fiber([0.0, 0.0, -1000.0], fiber_length_um=800.0), self.atlas)
+        self.assertIn("The ferrule would go 0.20 mm into the brain: the fiber sticks out "
+                      "0.80 mm below it and goes 1.00 mm deep.", deep["warnings"])
+        # Ferrules 0.8 mm apart overlap above the brain although the fibers are apart.
+        pair = clearances([(p, plan_readout(p, self.atlas)) for p in
+                           (plan, fiber([800.0, 0.0, -1000.0]).copy(probe="Fiber 2"))])
+        self.assertEqual(pair[0]["distance_um"], 0.0)
+        self.assertLess(pair[0]["depth_um"], 0.0)
+        self.assertIn("Fiber 1 touches Fiber 2 (", clearance_warning("Fiber 1", pair))
 
 
 if __name__ == "__main__":

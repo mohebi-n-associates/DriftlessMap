@@ -1765,7 +1765,13 @@ proposals do not apply.
   depth (its top would be below the brain surface).
 - **A fiber** is set by the middle of its tip; its diameter comes from its
   settings. The readout gives its entry, depth, tip region and the regions
-  along it (the light cone is not estimated).
+  along it (the light cone is not estimated). It is drawn with its
+  **ferrule**: by default 3 mm of fiber stick out below a ferrule 1.25 mm
+  across and 6.4 mm long (Settings: Fiber below ferrule, Ferrule diameter,
+  Ferrule length); the ferrule is drawn gray. The readout gives the ferrule's height above the brain
+  and warns when it would go into the brain; distances to other plans
+  include the ferrules, so ferrules that touch above the skull are reported.
+  A new fiber plan keeps its ferrule 0.5 mm above the brain.
 
 Fibers and prisms, planned or built, are drawn filled (see-through) in the
 3D view with their edges. The plan is drawn on the atlas views as the device's cross-section (dashed)

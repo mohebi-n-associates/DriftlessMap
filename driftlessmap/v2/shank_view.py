@@ -108,7 +108,16 @@ class ShankView(QWidget):
             # imaging face, which the plane contains).
             specs = self.plan.specs
             half = specs["diameter_um"] / 2.0 if kind == "fiber" else specs["width_um"] / 2.0
-            upper = top if kind == "fiber" else max(top, depth - specs["length_um"])
+            upper = max(top, depth - specs["length_um"]) if kind == "prism" else \
+                max(top, depth - specs["fiber_length_um"])
+            if kind == "fiber" and depth - specs["fiber_length_um"] > top:
+                # The ferrule, gray, where it shows in the plane.
+                ferrule = specs["ferrule_diameter_um"] / 2.0
+                gray = QColor(184, 184, 184)
+                painter.setPen(QPen(gray, 1))
+                painter.setBrush(QColor(184, 184, 184, 120))
+                painter.drawRect(QRectF(point(-ferrule, max(top, upper - specs[
+                    "ferrule_length_um"])), point(ferrule, upper)))
             fill = QColor(colour)
             fill.setAlpha(40)
             painter.setPen(QPen(colour, 1, Qt.PenStyle.DashLine))
