@@ -1363,15 +1363,32 @@ class V2ShellTests(unittest.TestCase):
             item = engine.object_3d_list[with_parts[0]]
             self.assertIs(item.hardware.parentItem(), item)
             self.assertIsNotNone(engine.probe_plan_readout("Probe 1")["hardware"])
-            # The switch hides it everywhere and is remembered.
+            self.assertIsNotNone(item.backend)
+            self.assertIs(item.backend.parentItem(), item)
+            # Probe only: shanks and base, no flex, headstage or dovetail.
             editor.more.button.setChecked(True)
             self.assertTrue(editor.hardware_box.isVisibleTo(window))
-            editor.hardware_box.setChecked(False)
-            self.assertFalse(item.hardware.visible())
-            self.assertIsNone(engine.probe_plan_readout("Probe 1")["hardware"])
-            self.assertEqual(window.settings.value("plan/hardware"), "false")
-            editor.hardware_box.setChecked(True)
+            editor.hardware_box.setCurrentIndex(editor.hardware_box.findData("probe"))
             self.assertTrue(item.hardware.visible())
+            self.assertFalse(item.backend.visible())
+            shown = {b["name"] for b in engine.probe_plan_readout("Probe 1")["hardware"]["boxes"]}
+            self.assertEqual(shown, {"Shank", "Probe base"})
+            self.assertEqual(window.settings.value("plan/hardware"), "probe")
+            # A rebuilt plan keeps the choice.
+            moved = engine.probe_plans.get("Probe 1")
+            engine.set_probe_plan(moved.copy(tip_um=[moved.tip_um[0] + 100.0] + list(moved.tip_um[1:])))
+            item = engine.object_3d_list[engine.plan_objects("Probe 1")[0]]
+            self.assertTrue(item.hardware.visible())
+            self.assertFalse(item.backend.visible())
+            # None hides it everywhere.
+            editor.hardware_box.setCurrentIndex(editor.hardware_box.findData("none"))
+            self.assertFalse(item.hardware.visible())
+            self.assertFalse(item.backend.visible())
+            self.assertIsNone(engine.probe_plan_readout("Probe 1")["hardware"])
+            self.assertEqual(window.settings.value("plan/hardware"), "none")
+            editor.hardware_box.setCurrentIndex(editor.hardware_box.findData("all"))
+            self.assertTrue(item.hardware.visible())
+            self.assertTrue(item.backend.visible())
             # A fiber's plan section has no such switch.
             window.run("fiber.plan")
             implants = window.panels["annotate"].implants

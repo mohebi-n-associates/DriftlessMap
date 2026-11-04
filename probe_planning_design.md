@@ -267,5 +267,7 @@ above a planned Neuropixels probe, as Pinpoint does.
 * The parts are in clearances (lines with radii), so collisions between
   plans above the brain are reported; a flat part's distance can read up to
   0.25 mm long.
+* What is drawn is a choice: the probe and its backend, the probe only
+  (shanks and base) or nothing; clearances always use every part.
 * Not done: the headstage cable, rig and manipulator models, and NP1.0 and
   NP2.0 variants (NHP, 2.0 alpha).

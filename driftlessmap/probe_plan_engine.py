@@ -46,7 +46,7 @@ from .probe_plans import (
     region_summary,
 )
 from .implants import describe_specs
-from .probe_hardware import hardware_model
+from .probe_hardware import ALL, NONE, hardware_model, shown_parts
 from .probe_utiles import calculate_probe_info, probe_error_message
 
 PLAN_SUFFIX = " plan"
@@ -124,7 +124,7 @@ class ProbePlanEngineMixin:
         self.plan_colours = {}      # probe -> colour of its track on the atlas
         # A planned Neuropixels probe's base, flex, headstage and dovetail are
         # drawn (2.8.6); a display choice, not saved with the project.
-        self.show_probe_hardware = True
+        self.show_probe_hardware = ALL     # probe_hardware.SHOWN
         self._flushing_plans = False
         from PyQt6.QtCore import QTimer
 
@@ -272,8 +272,7 @@ class ProbePlanEngineMixin:
                 "distance in Surgery > Bregma-Lambda distance).")
         readout["targets"] = target_coverage(plan, readout, atlas)
         readout["model"] = planned_model(plan, readout, atlas.vox_um)
-        readout["hardware"] = hardware_model(plan, atlas.vox_um) \
-            if self.show_probe_hardware else None
+        readout["hardware"] = hardware_model(plan, atlas.vox_um, self.show_probe_hardware)
         return readout
 
     # ------------------------------------------------------------ proposals
@@ -606,14 +605,22 @@ class ProbePlanEngineMixin:
         return True, "Planned {}.".format(plan.probe)
 
     def set_probe_hardware_shown(self, shown):
-        """Show or hide planned probes' hardware in 3D and on the atlas views."""
-        self.show_probe_hardware = bool(shown)
+        """Show planned probes' hardware in 3D and on the atlas views: ``none``,
+        ``probe`` (shanks and base) or ``all`` (with the flex, headstage and
+        dovetail); True and False mean all and none."""
+        self.show_probe_hardware = shown_parts(shown)
         for item in getattr(self, "object_3d_list", []):
-            hardware = getattr(item, "hardware", None)
-            if hardware is not None:
-                hardware.setVisible(self.show_probe_hardware)
+            self.show_hardware_of(item)
         if getattr(self, "plan_overlay", None) is not None:
             self.plan_overlay.refresh()
+
+    def show_hardware_of(self, item):
+        """Show or hide a 3D probe track's hardware children as chosen."""
+        shown = getattr(self, "show_probe_hardware", ALL)
+        for attr, visible in (("hardware", shown != NONE), ("backend", shown == ALL)):
+            part = getattr(item, attr, None)
+            if part is not None:
+                part.setVisible(visible)
 
     def _colour_object(self, index, colour):
         from PyQt6.QtGui import QColor

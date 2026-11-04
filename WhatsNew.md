@@ -13,7 +13,8 @@ Release, 4 November 2026: probe hardware, as in Pinpoint.
   them. Sizes come from imec's datasheets and Pinpoint's models.
 - **Collisions above the brain are reported**: distances between plans
   include the hardware, so bases or adapters that would touch are named.
-- **Show probe hardware** (Surgery and more) turns it off.
+- **Hardware** (Surgery and more) shows the probe and its backend, the
+  probe only (shanks and base), or nothing.
 
 ## DriftlessMap 2.8.5
 

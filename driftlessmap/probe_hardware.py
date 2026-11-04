@@ -18,6 +18,10 @@ dovetail adapter (8 x 8 x 55 mm) are read from Pinpoint's probe models
 (VirtualBrainLab/Pinpoint, measured, not copied); where they sit relative to
 the base is approximate, as each rig mounts them its own way.
 
+What is shown is a choice (``SHOWN``): nothing, the probe itself (its
+shanks and base, ``PROBE_PARTS``), or the probe and its backend (the flex,
+connector board or headstage and the dovetail adapter).
+
 Everything is GUI-free; ``hardware_model`` gives the boxes in Bregma-relative
 voxels for drawing (``implants.model_section``/``model_mesh``, type
 ``boxes``) and ``hardware_segments`` approximates them for clearances.
@@ -45,6 +49,33 @@ PARTS = {
 DOVETAIL = ("Dovetail adapter", 55000.0, 8000.0, 8000.0, "Pinpoint")
 GAP_UM = 100.0          # between the base's back and the adapter
 SHANK_WIDTH_UM, SHANK_THICKNESS_UM = 70.0, 24.0
+# What may be shown: nothing, the probe (shanks and base), or the probe and
+# its backend (flex, connector board or headstage, dovetail adapter).
+NONE, PROBE, ALL = "none", "probe", "all"
+SHOWN = {NONE: "None", PROBE: "Probe only", ALL: "Probe and backend"}
+PROBE_PARTS = ("Shank", "Probe base")
+
+
+def shown_parts(shown):
+    """``shown`` as one of ``SHOWN``: True (2.8.6's switch on) is ALL, False or
+    an unknown value NONE."""
+    if shown is True:
+        return ALL
+    return shown if shown in SHOWN else NONE
+
+
+def is_backend(box):
+    """Whether a box (or part name) is backend rather than the probe itself."""
+    name = box["name"] if isinstance(box, dict) else box
+    return name not in PROBE_PARTS
+
+
+def boxes_shown(boxes, shown):
+    """The boxes to draw for ``shown`` (see ``SHOWN``)."""
+    shown = shown_parts(shown)
+    if shown == NONE:
+        return []
+    return [box for box in boxes if shown == ALL or not is_backend(box)]
 
 
 def hardware_kind(plan):
@@ -102,10 +133,10 @@ def hardware_boxes(plan):
     return boxes
 
 
-def hardware_model(plan, vox_um):
+def hardware_model(plan, vox_um, shown=ALL):
     """The hardware as a display model in Bregma-relative voxels (type
-    ``boxes``), or None."""
-    boxes = hardware_boxes(plan)
+    ``boxes``), only the parts ``shown`` (see ``SHOWN``), or None."""
+    boxes = boxes_shown(hardware_boxes(plan), shown)
     if not boxes:
         return None
     return {"type": "boxes", "boxes": [

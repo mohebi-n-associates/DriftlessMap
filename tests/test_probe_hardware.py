@@ -6,11 +6,13 @@ import numpy as np
 
 from driftlessmap.implants import model_mesh, model_section
 from driftlessmap.probe_hardware import (
+    boxes_shown,
     box_corners,
     hardware_boxes,
     hardware_kind,
     hardware_model,
     hardware_segments,
+    shown_parts,
 )
 from driftlessmap.probe_plans import ProbePlan, clearances, plan_readout
 from driftlessmap.probe_utiles import Probe
@@ -95,6 +97,17 @@ class PartsTests(unittest.TestCase):
                              np.array([0, 1.0, 0]), (400, 200))
         self.assertIsNotNone(mask)
         self.assertAlmostEqual(mask.sum(), 124 * 24 + 160 * 160, delta=400)
+
+    def test_the_probe_alone_or_with_its_backend(self):
+        plan = np1([0.0, 0.0, -1000.0])
+        names = lambda shown: sorted(b["name"] for b in boxes_shown(hardware_boxes(plan), shown))
+        self.assertEqual(names("probe"), ["Probe base", "Shank"])
+        self.assertEqual(len(names("all")), 5)
+        self.assertEqual(names("none"), [])
+        self.assertEqual(shown_parts(True), "all")       # 2.8.6's switch
+        self.assertEqual(shown_parts(False), "none")
+        self.assertEqual(len(hardware_model(plan, 50.0, "probe")["boxes"]), 2)
+        self.assertIsNone(hardware_model(plan, 50.0, "none"))
 
 
 class ClearanceTests(unittest.TestCase):

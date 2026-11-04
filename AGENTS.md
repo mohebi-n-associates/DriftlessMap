@@ -190,8 +190,9 @@ or important workflows change.
   `hardware_model` of type `boxes`, `hardware_segments`) draws a planned
   NP1.0/NP2.0 probe's shank, base, flex, connector/headstage and dovetail
   (gray child of the 3D track, `PlanOverlay`) and adds them to
-  `plan_segments`; `show_probe_hardware`/`set_probe_hardware_shown` (Show
-  probe hardware). Pinpoint's GPL models were measured, never copied.
+  `plan_segments`; `show_probe_hardware`/`set_probe_hardware_shown`
+  (Hardware: `SHOWN` none, probe only (`PROBE_PARTS`, track child
+  `hardware`) or with the backend (child `backend`); `show_hardware_of`). Pinpoint's GPL models were measured, never copied.
   `region_meshes.region_surface` builds one smooth surface per checked
   region (with sub-regions) in the segmentation frame (`atlas_label`
   reordered back); `sync_region_meshes` draws it instead of the parts'

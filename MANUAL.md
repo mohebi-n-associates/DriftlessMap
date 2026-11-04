@@ -1743,7 +1743,10 @@ the dovetail adapter on the back of the base. They follow the plan's tilts
 and roll (the base lies behind the contacts). Distances between plans include
 them, so probes whose bases or adapters collide above the brain are reported
 ("touches"); for these flat parts the distance can be up to 0.25 mm more
-than the true gap. **Show probe hardware** (Surgery and more) turns them off.
+than the true gap. **Hardware** (Surgery and more) chooses what is drawn:
+**Probe and backend** (all of it, the default), **Probe only** (the shanks
+and base, without the flex, connector board or headstage and adapter) or
+**None**; the choice is remembered. Distances always include all of it.
 A probe of another design (Current probe settings) has none.
 
 | Part | NP1.0 (mm) | NP2.0 (mm) | Source |
