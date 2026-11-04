@@ -1,7 +1,7 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 2.8.3**. Section 2 explains how to
-install it; `pip install driftlessmap` installs 2.8.3.
+This manual applies to **DriftlessMap 2.8.4**. Section 2 explains how to
+install it; `pip install driftlessmap` installs 2.8.4.
 
 DriftlessMap - Histological E-data Registration in Brain Space - is a desktop
 application for aligning rodent histology with a reference atlas, reconstructing
@@ -131,7 +131,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-DriftlessMap 2.8.3 requires:
+DriftlessMap 2.8.4 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -150,8 +150,8 @@ page. The macOS DMG (`-macOS-arm64.dmg`) is built for Apple Silicon; on an Intel
 Mac, use the developer installation below.
 The desktop builds include Python and all runtime dependencies. Windows users
 extract the entire ZIP and run `DriftlessMap.exe`; macOS users open the DMG and
-drag `DriftlessMap.app` to Applications. The 2.8.3 downloads are named
-`DriftlessMap-2.8.3-Windows-x64.zip` and `DriftlessMap-2.8.3-macOS-arm64.dmg`.
+drag `DriftlessMap.app` to Applications. The 2.8.4 downloads are named
+`DriftlessMap-2.8.4-Windows-x64.zip` and `DriftlessMap-2.8.4-macOS-arm64.dmg`.
 Release builds are unsigned unless the release notes say otherwise, so the first
 launch may require Windows SmartScreen confirmation or Control-clicking the
 macOS app and choosing **Open**.
@@ -200,7 +200,7 @@ python -m pip --version
 python -c "import driftlessmap; print(driftlessmap.__version__)"
 ```
 
-The final command prints the installed version, `2.8.3`.
+The final command prints the installed version, `2.8.4`.
 
 ### 2.5 Launching DriftlessMap
 
@@ -1627,12 +1627,18 @@ Since 2.8.2 (surgery):
   azimuth (the direction the tip leans, from anterior, 0°, towards the
   animal's right, 90°) and elevation (from vertical). Both describe the same
   probe; the choice is remembered.
-- **Bregma–Lambda distance…** (Surgery menu) scales the coordinates to the
-  animal: enter its measured Bregma–Lambda distance and the atlas's. Atlases
-  that record Lambda (the rat atlases) fill in the atlas's distance; for others
-  (the Allen atlas) enter it from the atlas's documentation. The readout then
-  adds the entry and depth for this animal (the atlas coordinates times the
-  ratio); the plan itself stays in atlas coordinates.
+- **Bregma–Lambda distance…** (the Surgery menu, under **Surgery and more**)
+  scales the coordinates to the animal: enter its measured Bregma–Lambda
+  distance and the atlas's. Atlases that record Lambda (the rat atlases) fill
+  in the atlas's distance; for others (the Allen atlas) enter it from the
+  atlas's documentation. The readout then adds the entry and depth for this
+  animal (the atlas coordinates times the ratio); the plan itself stays in
+  atlas coordinates. If the animal's distance is set but the atlas's is not
+  known, no coordinates for the animal are given and the readout and exports
+  say so (since 2.8.4; before, they were silently left unscaled).
+- Since 2.8.4 the Angles and Craniotomy settings, Tip to surface, the Surgery
+  menu, Region table… and Show in 3D are under **Surgery and more**, folded
+  away, and the readout follows the fields.
 - The copied line and `probe_plans.csv` add the arm angles, the craniotomy,
   the closest probe and, when scaled, the coordinates for this animal.
 
@@ -1648,25 +1654,60 @@ Since 2.8.3 (proposals):
   the probe's craniotomy.
 - **Find plans** searches straight tracks through the targets within those
   tilts, sliding the probe's recording window (its bank) to the best depth on
-  each, and lists the best: entry, tilts, depth and the length of each target
-  in the window. Most targets recorded comes first, then the most of the
-  window in them, then the shallowest tip. **Use this plan** (or a double
-  click) makes it the probe's plan, which you can then adjust; Edit > Undo
-  mapping step takes it back.
-- When no track records every target the dialog says why: how many the best
-  track reaches; that no straight line passes through them within the tilt
-  limits (and the tilt that would allow one) or at any tilt (plan one probe
-  per target); or that the lines through them cross a region to avoid, come
-  too close to the midline, enter outside the craniotomy, are deeper than the
-  shank, or spread the targets over more than the recording window.
-- A plan keeps its targets and regions to avoid; the readout then gives
-  **Targets in the window**, the length of each target the window records
-  (marked missed below 0.1 mm), for proposed and hand-made plans alike.
+  each, and lists the best: entry, tilts, depth, the length of each target in
+  the window and the checks. A progress window shows the search; **Stop**
+  keeps the best found so far.
+- **Every shank counts** (since 2.8.4). For a four-shank probe each shank,
+  at the plan's roll, must enter through the craniotomy, keep out of the
+  regions to keep out of, stay on the chosen side and outside the midline
+  margin, and end in the brain; the length of each target is summed over the
+  shanks' recording windows (selecting a row lists it per shank).
+- **Ranking.** First the tracks recording the most targets; then the most of
+  the window in the targets, less 10 µm for every degree from vertical, so of
+  two nearly equal tracks the straighter comes first; then the shallowest tip.
+  The list also keeps the best track of each band of tilts (under 5°, 5-15°,
+  15-25°, 25° and over), so a straighter track may be listed below an angled
+  one that records more.
+- **Look before you use it.** Selecting a row draws that proposal on the atlas
+  in white (the pages move to its tip) and shows it in the shank view in the
+  dialog, with its checks: every candidate listed has passed them on every
+  shank; notes (for example, the track crossing a gap in the atlas's labels)
+  are listed too. **Use this plan** (or a double click) makes it the probe's
+  plan, which you can then adjust; Edit > Undo mapping step takes it back.
+- **Results belong to their search.** Changing any constraint (a region, the
+  side, the margin, a tilt limit, the craniotomy) clears the list; search
+  again before using a plan.
+- **Contradictions are refused.** A region both to record and to keep out of,
+  or a target inside a region to keep out of, stops the search with the
+  regions named. Keeping out of a part of a target is allowed (record HPF,
+  keep out of DG).
+- **Tips are in tissue.** No proposal ends where the atlas has no label; a
+  track may cross an unlabelled gap above its tip, and the note says how long.
+- When no track records every target the dialog says what this search found,
+  since it samples tracks and can miss some: how many targets the best track
+  found reaches; that no line through them was found within the tilt limits
+  (and the tilt at which one was found) or at any tilt up to 80° (consider one
+  probe per target); or that the lines it found through them cross a region to
+  keep out of, come too close to the midline, enter outside the craniotomy,
+  need more than the shank, or spread the targets over more than the
+  recording window.
+- A plan keeps its targets and regions to keep out of; the readout then gives
+  **Targets in the window**, the length of each target the windows record
+  (summed over the shanks; marked missed below 0.1 mm), and warns when any
+  shank passes through a region to keep out of, for proposed, edited and
+  hand-made plans alike. The side, the midline margin and the tilt limits are
+  search settings, not kept with the plan: after adjusting a proposal, search
+  again to check them.
 - The search uses the atlas only; check every plan against your own
   knowledge of the animal.
 
-Each change is stored and built once you stop changing it (half a second, or
-Enter); Edit > Undo mapping step takes it back one change at a time. The
+Each change shows at once and counts as unsaved work; it is stored and built
+once you stop changing it (half a second, or Enter), or at once when you save,
+export, undo, start another action or open another section, so what you see
+is what is saved (since 2.8.4). Starting a new project or opening another one
+drops a change not yet stored (after asking to save it). Edit > Undo mapping
+step takes changes back one at a time. Steer with keys ends when you leave the
+Plan section (another step, another probe, the task column hidden). The
 probe type (Neuropixels 1.0, 2.0 with one or four shanks, or the current
 probe settings, for a designed linear silicon probe) is chosen in the Plan
 section. Renaming a probe renames its plan; deleting it deletes the plan;

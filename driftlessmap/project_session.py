@@ -41,7 +41,10 @@ class ProjectSnapshot:
             volume = (
                 view.atlas_data, view.atlas_label,
                 [view.anterior_info, view.dorsal_info, view.right_info,
-                 {"vxsize": view.vox_size_um, "Bregma": view.origin_3d.copy()}],
+                 {"vxsize": view.vox_size_um, "Bregma": view.origin_3d.copy(),
+                  # Lambda too: animal scaling uses it (review R3 of 2.8.3).
+                  "Lambda": (None if getattr(view, "atlas_lambda", None) is None
+                             else np.asarray(view.atlas_lambda).copy())}],
                 view.label_info, view.atlas_boundary,
                 view.mesh.opts["meshdata"],
                 {key: mesh.opts["meshdata"] for key, mesh in engine.small_mesh_list.items()},

@@ -376,6 +376,7 @@ class SectionsMixin:
 
     def switch_section(self, section_id):
         """Open another section of the project; returns (ok, message)."""
+        self.flush_plan_edits()   # plans are document state; keep the staged edit
         history_note = self.history_cleared_note()
         self.sync_sections()
         book = self.sections

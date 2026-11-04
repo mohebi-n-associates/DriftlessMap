@@ -48,6 +48,9 @@ def scientific_digest(engine):
     interface = payload.pop("interface_state", {})
     implants = interface.get("implants", {})
     payload["drafts"] = {key: implants.get(key) for key in ("probes", "drawing")}
+    # A plan edit staged but not yet stored is unsaved work (review R2 of 2.8.3).
+    payload["staged_plans"] = {probe: plan.to_dict()
+                               for probe, plan in sorted(engine.plan_previews.items())}
     return state_digest(payload)
 
 

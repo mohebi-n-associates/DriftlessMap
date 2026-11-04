@@ -8,8 +8,8 @@ or important workflows change.
 
 ## Project identity
 
-- Current release: DriftlessMap 2.8.3 (4 November 2026; probe planning,
-  `probe_planning_design.md` Phases 1-4; not yet published; the owner
+- Current release: DriftlessMap 2.8.4 (4 November 2026; probe planning,
+  `probe_planning_design.md` Phases 1-4, and `reviews/2.8.3` R1-R8; not yet published; the owner
   numbers the probe-planning phases 2.8.0-2.8.3, one feature). Latest
   published: 2.7.0 (3 November 2026; the first release since 2.0.0, including
   2.0.1-2.3.0 and multi-section projects). 2.0.0
@@ -140,6 +140,22 @@ or important workflows change.
   thread). V2 `v2/proposal_dialog.ProposalDialog` (Record/Keep out of lists,
   `checked_regions`, side, midline, tilt limits, craniotomy, results table,
   reasons) from Propose… in `PlanEditor`.
+  2.8.4 (`reviews/2.8.3/RESOLUTION.md`): proposals check every shank at the
+  plan's roll (`_LineScorer` samples each shank; tips only in tissue on every
+  shank; coverage summed over shanks, ranking by the union) and final
+  candidates pass `track_checks` (exact voxel walk, `traverse`), whose
+  messages the readout shows too (plan.avoid, gaps); membership is per target
+  (`region_ids`, `_members`); `ProposalRequest.check` refuses a target equal
+  to or inside an avoided region; `propose_plans(progress=)` may stop
+  (`SearchStopped`). Staged plan edits live in the engine
+  (`stage_probe_plan`, `plan_previews`, `PLAN_SETTLE_MS`): counted by
+  `state.scientific_digest`, flushed by `flush_plan_edits` before save,
+  export, undo/redo, any `undoable` action and section switches, dropped by
+  `discard_plan_edits` in `_restore_project_payload`; never keep pose edits
+  only in the editor. `plan_candidates` (display only) draws a proposal
+  under inspection. `ProjectSnapshot` keeps the atlas Lambda;
+  `surgery_scale` is None (unavailable) when the animal distance is set but
+  the atlas's is unknown. Steering ends when the Plan section is hidden.
 - `driftlessmap/project_session.py`: `ProjectSessionMixin.project_payload` is the
   shared saved-state collector. `load_project` snapshots the active document and
   restores it on failure, including its original reader, in-memory atlas and undo

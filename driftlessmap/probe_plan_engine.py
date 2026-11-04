@@ -41,6 +41,9 @@ from .probe_plans import (
 from .probe_utiles import calculate_probe_info, probe_error_message
 
 PLAN_SUFFIX = " plan"
+# A staged plan edit is stored and built once edits settle for this long, or at
+# once before anything reads or replaces the document (review R2 of 2.8.3).
+PLAN_SETTLE_MS = 500
 
 
 def plan_object_name(probe, shank=None, shanks=1):
@@ -57,8 +60,19 @@ class ProbePlanEngineMixin:
         self._plan_atlas_key = None
         self._plan_metadata = None
         self._plan_metadata_key = None
-        self.plan_previews = {}     # probe -> plan being edited, drawn in its place
+        # probe -> staged edit, shown and counted as unsaved work; stored and
+        # built by flush_plan_edits (on settling, or before save, export, undo,
+        # another action or a section switch); dropped when the document is
+        # replaced.
+        self.plan_previews = {}
+        self.plan_candidates = {}   # probe -> proposal under inspection (display only)
         self.plan_colours = {}      # probe -> colour of its track on the atlas
+        self._flushing_plans = False
+        from PyQt6.QtCore import QTimer
+
+        self._plan_settle = QTimer(self)
+        self._plan_settle.setSingleShot(True)
+        self._plan_settle.timeout.connect(self.flush_plan_edits)
 
     # ---------------------------------------------------------------- atlas
     def _atlas_key(self):
@@ -156,11 +170,16 @@ class ProbePlanEngineMixin:
             if warning:
                 readout["warnings"].append(warning)
         readout["scale"] = self.surgery_scale()
+        if readout["scale"] is None:
+            readout["warnings"].append(
+                "Bregma-Lambda scaling is set, but the atlas's Bregma-Lambda distance is "
+                "unknown: no coordinates for the animal are given (enter the atlas's "
+                "distance in Surgery > Bregma-Lambda distance).")
         readout["targets"] = target_coverage(plan, readout, atlas)
         return readout
 
     # ------------------------------------------------------------ proposals
-    def propose_probe_plans(self, probe, request):
+    def propose_probe_plans(self, probe, request, progress=None):
         """Ranked proposals for ``probe`` (see ``probe_plans.propose_plans``),
         searched on a worker thread; ``(proposals, reasons)``. The probe's
         design, roll, bank and craniotomy are kept; each proposed plan
@@ -172,6 +191,9 @@ class ProbePlanEngineMixin:
         if atlas is None:
             return [], ["Load a volume atlas to propose a plan."]
         base = plan.copy(targets=request.targets, avoid=request.avoid)
+        if progress is not None:
+            # The caller shows progress and may stop the search (in steps).
+            return propose_plans(atlas, request, base, progress=progress)
         proposals, reasons = run_in_background(
             self, "Searching for probe plans...", propose_plans, atlas, request, base)
         return proposals, reasons
@@ -194,13 +216,19 @@ class ProbePlanEngineMixin:
 
     # -------------------------------------------------------------- surgery
     def surgery_scale(self):
+        """Atlas-to-animal scale: 1.0 when no animal distance is set (unscaled
+        by choice), None when one is set but the atlas's distance is unknown
+        (the scale is unavailable, not 1.0; review R3 of 2.8.3)."""
         settings = self.surgery_settings
-        try:
-            return bregma_lambda_scale(settings.get("bregma_lambda_um"),
-                                       settings.get("atlas_bregma_lambda_um")
-                                       or self.atlas_bregma_lambda_um())
-        except ValueError:
+        if not settings.get("bregma_lambda_um"):
             return 1.0
+        reference = settings.get("atlas_bregma_lambda_um") or self.atlas_bregma_lambda_um()
+        if not reference:
+            return None
+        try:
+            return bregma_lambda_scale(settings["bregma_lambda_um"], reference)
+        except ValueError:
+            return None
 
     def atlas_bregma_lambda_um(self):
         """The atlas's own Bregma-Lambda distance when it records Lambda, else None."""
@@ -279,6 +307,41 @@ class ProbePlanEngineMixin:
     def region_centre_um(self, region_id, side=None):
         atlas = self.plan_atlas()
         return None if atlas is None else region_centre(atlas, region_id, side=side)
+
+    # --------------------------------------------------------- staged edits
+    def stage_probe_plan(self, plan, colour=None):
+        """Show ``plan`` at once; it is stored and built when edits settle."""
+        plan.validate()
+        self.plan_previews[plan.probe] = plan
+        if colour is not None:
+            self.plan_colours[plan.probe] = tuple(colour[:3])
+        self._plan_settle.start(PLAN_SETTLE_MS)
+
+    def flush_plan_edits(self):
+        """Store and build every staged edit now (one undo step each).
+
+        Returns ``[(ok, message)]``, one per edit that changed a plan.
+        """
+        if self._flushing_plans:
+            return []
+        self._plan_settle.stop()
+        results = []
+        self._flushing_plans = True
+        try:
+            while self.plan_previews:
+                probe, plan = next(iter(self.plan_previews.items()))
+                del self.plan_previews[probe]
+                if plan != self.probe_plans.get(probe):
+                    results.append(self.set_probe_plan(plan, self.plan_colours.get(probe)))
+        finally:
+            self._flushing_plans = False
+        return results
+
+    def discard_plan_edits(self):
+        """Forget staged edits (the document they belong to is being replaced)."""
+        self._plan_settle.stop()
+        self.plan_previews.clear()
+        self.plan_candidates.clear()
 
     def set_probe_plan(self, plan, colour=None):
         """Store ``plan`` and build it; returns ``(ok, message)``."""
@@ -437,8 +500,9 @@ class ProbePlanEngineMixin:
             def mm(values, axis):
                 return "" if values is None else round(values[axis] / 1000.0, 4)
 
-            factor = readout.get("scale") or 1.0
-            animal_entry = None if entry is None else [v * factor for v in entry]
+            factor = readout.get("scale")
+            animal_entry = None if entry is None or factor is None \
+                else [v * factor for v in entry]
 
             rows.append({
                 "probe": plan.probe, "atlas": atlas_name,
@@ -469,12 +533,12 @@ class ProbePlanEngineMixin:
                     p for p in readout["closest"]["probes"] if p != plan.probe),
                 "closest_mm": "" if not readout.get("closest")
                 else round(readout["closest"]["distance_um"] / 1000.0, 4),
-                "bregma_lambda_scale": round(readout.get("scale") or 1.0, 6),
+                "bregma_lambda_scale": "unavailable" if factor is None else round(factor, 6),
                 "animal_entry_ap_mm": mm(animal_entry, 1),
                 "animal_entry_ml_mm": mm(animal_entry, 0),
                 "animal_entry_dv_mm": mm(animal_entry, 2),
-                "animal_depth_mm": "" if depth is None
-                else round(depth * (readout.get("scale") or 1.0) / 1000.0, 4),
+                "animal_depth_mm": "" if depth is None or factor is None
+                else round(depth * factor / 1000.0, 4),
                 "regions": " | ".join("{} {:.0f}-{:.0f} um".format(
                     r["acronym"], r["start_um"], r["end_um"])
                     for r in readout.get("regions") or [] if r["id"] != 0),
@@ -487,6 +551,7 @@ class ProbePlanEngineMixin:
     def export_probe_plans(self, path):
         import csv
 
+        self.flush_plan_edits()
         with open(path, "w", newline="", encoding="utf-8") as stream:
             writer = csv.DictWriter(stream, fieldnames=self.PLAN_COLUMNS)
             writer.writeheader()

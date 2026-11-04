@@ -561,6 +561,13 @@ def plan_readout(plan, atlas):
     length = plan.shank_length_um
     readout["reachable"] = True
     _add_window(readout, plan, depth)
+    # Every physical shank, against the plan's regions to keep out of; tissue
+    # gaps along the track are reported (review R1 and R5 of 2.8.3).
+    hard, soft = track_checks(plan, atlas, plan.avoid)
+    for message in hard + soft:
+        if message.startswith("The probe's tip") or message in warnings:
+            continue   # the tip is reported above for a single shank
+        warnings.append(message)
     if depth < atlas.vox_um:
         readout["reachable"] = False
         warnings.append("The tip is at the brain surface; move it deeper.")
@@ -645,8 +652,11 @@ def coordinate_line(plan, readout, atlas_name=""):
         parts.append("through {} (centre AP {:+.3f}, ML {:+.3f} mm, {:.2f} mm across)".format(
             craniotomy["name"], craniotomy["centre_um"][1] / 1000.0,
             craniotomy["centre_um"][0] / 1000.0, craniotomy["diameter_um"] / 1000.0))
-    scale = readout.get("scale") or 1.0
-    if abs(scale - 1.0) > 1e-9 and readout.get("entry_um") is not None:
+    scale = readout.get("scale", 1.0)
+    if scale is None:
+        parts.append("for this animal: unavailable (the atlas's Bregma-Lambda distance is "
+                      "unknown)")
+    elif abs(scale - 1.0) > 1e-9 and readout.get("entry_um") is not None:
         parts.append("for this animal (Bregma-Lambda scale x{:.3f}): entry {}, depth {:.3f} "
                      "mm".format(scale, triple(np.asarray(readout["entry_um"]) * scale),
                                  readout["depth_um"] * scale / 1000.0))
@@ -1015,6 +1025,7 @@ PROPOSAL_SCREEN_VOXELS = 4_000_000
 PROPOSAL_LINES_PER_DIRECTION = 12
 PROPOSAL_REFINE = 6
 PROPOSAL_KEEP = 8
+PROPOSAL_ABOVE_UM = 2000.0  # sampled above the centre entry, where outer shanks may enter
 PROPOSAL_EXTRA_UM = 5000.0  # looked at below the shank, to say how deep a target is
 REACHED_UM = 100.0          # a target counts as reached with this much of it in the window
 # Ranking: each degree from vertical costs this much window in the targets, so a
@@ -1031,13 +1042,15 @@ class ProposalRequest:
     ``side`` keeps the probe in one hemisphere (+1 right, -1 left, None
     either); ``midline_um`` keeps it this far from the midline;
     ``max_ap_tilt_deg``/``max_ml_tilt_deg`` bound the tilts (0 and 0: vertical);
-    ``craniotomy`` (a Craniotomy) must hold the entry.
+    ``craniotomy`` (a Craniotomy) must hold the entry of every shank. The
+    lists are kept as given: contradictions are refused by :meth:`check`, never
+    resolved silently (review R4 of 2.8.3).
     """
 
     def __init__(self, targets, avoid=(), side=None, midline_um=0.0, max_ap_tilt_deg=30.0,
                  max_ml_tilt_deg=30.0, craniotomy=None):
         self.targets = list(dict.fromkeys(int(t) for t in targets))
-        self.avoid = [int(a) for a in avoid if int(a) not in self.targets]
+        self.avoid = list(dict.fromkeys(int(a) for a in avoid))
         self.side = None if side is None else (1 if side >= 0 else -1)
         self.midline_um = max(0.0, float(midline_um))
         self.max_ap_tilt_deg = float(np.clip(max_ap_tilt_deg, 0.0, MAX_TILT_DEG))
@@ -1046,37 +1059,162 @@ class ProposalRequest:
         if not self.targets:
             raise ValueError("choose at least one target region")
 
+    def check(self, atlas):
+        """Raise ValueError naming a target that lies in a region to keep out of.
 
-def _region_index(atlas, regions):
-    """Sorted label ids and, for each, which of ``regions`` it belongs to."""
-    pairs = sorted({(label, number) for number, region in enumerate(regions)
-                    for label in atlas.descendants(region)})
-    ids = np.asarray([p[0] for p in pairs], dtype=np.int64)
-    owners = np.asarray([p[1] for p in pairs], dtype=np.int64)
-    return ids, owners
+        A region to keep out of that lies inside a target (record HPF, keep
+        out of DG) is allowed: those voxels are avoided, the rest recorded.
+        """
+        for target in self.targets:
+            for avoided in self.avoid:
+                if target == avoided or target in atlas.descendants(avoided):
+                    raise ValueError(
+                        "{} is to be recorded but {} to be kept out of; remove it from one "
+                        "of the lists".format(atlas.name(target)[0], "is also" if target ==
+                                              avoided else "lies in {}, which is".format(
+                                                  atlas.name(avoided)[0])))
+
+    def describe(self):
+        """The request as plain values, to tell whether results still match it."""
+        return (tuple(self.targets), tuple(self.avoid), self.side, self.midline_um,
+                self.max_ap_tilt_deg, self.max_ml_tilt_deg,
+                None if self.craniotomy is None else json_key(self.craniotomy.to_dict()))
 
 
-def _owner(labels, ids, owners):
-    """Which region (index) each label belongs to, -1 for none."""
+def json_key(value):
+    import json
+    return json.dumps(value, sort_keys=True)
+
+
+def region_ids(atlas, regions):
+    """Each region's label ids (the region and its sub-regions), sorted."""
+    return [np.asarray(sorted(atlas.descendants(region)), dtype=np.int64)
+            for region in regions]
+
+
+def _members(labels, ids_list):
+    """(samples, regions) booleans: whether each label lies in each region.
+
+    Membership is per region, so a label in a parent and in its child counts
+    for both (review R6 of 2.8.3).
+    """
     labels = np.asarray(labels, dtype=np.int64)
-    out = np.full(labels.shape, -1, dtype=np.int64)
-    if not len(ids):
-        return out
-    where = np.clip(np.searchsorted(ids, labels), 0, len(ids) - 1)
-    hit = ids[where] == labels
-    out[hit] = owners[where[hit]]
-    return out
+    if not ids_list:
+        return np.zeros(labels.shape + (0,), dtype=bool)
+    return np.stack([np.isin(labels, ids) for ids in ids_list], axis=-1)
+
+
+def shank_offsets(plan):
+    return plan.shank_offsets_um or [0.0]
+
+
+def traverse(atlas, start_um, end_um):
+    """Every voxel the segment passes through, in order, exactly.
+
+    Returns ``(labels, lengths_um, entry_points_um)``: the label of each voxel
+    crossed (0 outside the volume), the length of segment inside it and where
+    the segment enters it. A 3-D grid walk (Amanatides and Woo), so a line
+    grazing a voxel's corner is not missed between samples.
+    """
+    start = atlas.to_vox(start_um)
+    end = atlas.to_vox(end_um)
+    delta = end - start
+    length = float(np.linalg.norm(delta))
+    if length == 0:
+        label = atlas.labels_at(start[None, :])[0][0]
+        return np.array([label]), np.array([0.0]), np.asarray([start_um], dtype=float)
+    voxel = np.floor(start).astype(int)
+    step = np.sign(delta).astype(int)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        t_delta = np.where(delta != 0, np.abs(1.0 / delta), np.inf)
+        next_edge = voxel + (step > 0)
+        t_max = np.where(delta != 0, (next_edge - start) / delta, np.inf)
+    t = 0.0
+    visited, spans, starts = [], [], []
+    shape = atlas.shape
+    while t < 1.0:
+        axis = int(np.argmin(t_max))
+        t_next = min(1.0, float(t_max[axis]))
+        if t_next > t:
+            inside = np.all(voxel >= 0) and np.all(voxel < shape)
+            visited.append(int(atlas.labels[voxel[0], voxel[1], voxel[2]]) if inside else 0)
+            spans.append((t_next - t) * length * atlas.vox_um)
+            starts.append(t)
+        voxel[axis] += step[axis]
+        t = t_next
+        t_max[axis] += t_delta[axis]
+    points = (np.asarray(start_um, dtype=float)[None, :]
+              + np.asarray(starts)[:, None] * (np.asarray(end_um, float) - start_um)[None, :])
+    return np.asarray(visited), np.asarray(spans), points
+
+
+def track_checks(plan, atlas, avoid=(), side=None, midline_um=0.0, craniotomy=None):
+    """Problems with every physical shank of ``plan``, as (hard, soft) messages.
+
+    Each shank runs parallel to the centre line, offset across the face, from
+    its own surface entry to its own tip. Hard problems make the plan break a
+    constraint: a shank's tip outside the brain, a shank in a region to keep
+    out of, on the wrong side or within the midline margin, or entering
+    outside the craniotomy. Soft ones are shown: the track leaving the
+    labelled brain between entry and tip (a gap in the atlas).
+    """
+    hard, soft = [], []
+    direction = plan.direction
+    across = across_face(direction, plan.normal)
+    tip = np.asarray(plan.tip_um, dtype=float)
+    avoid_ids = region_ids(atlas, avoid)
+    shanks = shank_offsets(plan)
+    for number, offset in enumerate(shanks):
+        name = "Shank {}".format(number + 1) if len(shanks) > 1 else "The probe"
+        shank_tip = tip + across * offset
+        entry, tip_inside = surface_entry(atlas, shank_tip, direction)
+        if entry is None or not tip_inside:
+            hard.append("{}'s tip is not inside the brain.".format(name))
+            if entry is None:
+                continue
+        length = float(np.dot(shank_tip - np.asarray(entry), direction))
+        if length <= 0:
+            continue
+        # Every voxel on the shank's path, exactly (not samples).
+        labels, spans, starts = traverse(atlas, entry, shank_tip)
+        points = np.vstack([starts, shank_tip[None, :]])
+        tissue = labels != 0
+        tissue_points = np.append(tissue, True)
+        if avoid_ids:
+            crossed = _members(labels, avoid_ids).any(axis=0)
+            for region, hit in zip(avoid, crossed):
+                if hit:
+                    hard.append("{} passes through {}, which is to be kept out of.".format(
+                        name, atlas.name(region)[0]))
+        if side is not None and np.any(tissue_points & (points[:, 0] * side < 0)):
+            hard.append("{} crosses to the other side of the midline.".format(name))
+        if midline_um > 0 and np.any(tissue_points & (np.abs(points[:, 0]) < midline_um)):
+            hard.append("{} comes within {:.2f} mm of the midline.".format(
+                name, midline_um / 1000.0))
+        if craniotomy is not None and \
+                craniotomy.distance_um(entry) > craniotomy.diameter_um / 2.0 + 1e-6:
+            hard.append("{} enters {:.2f} mm from the centre of {}, outside its opening."
+                        .format(name, craniotomy.distance_um(entry) / 1000.0, craniotomy.name))
+        gap = float(spans[~tissue].sum())
+        if gap > 1e-6:
+            soft.append("{} leaves the atlas's labelled brain for {:.2f} mm between its "
+                        "entry and its tip.".format(name, gap / 1000.0))
+    return hard, soft
 
 
 class _LineScorer:
-    """Scores lines through the atlas for one request and one probe design."""
+    """Scores probe positions for one request and one probe design.
+
+    Every shank is sampled (review R1 of 2.8.3): constraints apply to each,
+    and the recording window is counted on each, summed over the shanks.
+    """
 
     def __init__(self, atlas, request, plan):
         self.atlas = atlas
         self.request = request
         self.plan = plan
-        self.target_ids, self.target_owner = _region_index(atlas, request.targets)
-        self.avoid_ids, self.avoid_owner = _region_index(atlas, request.avoid)
+        self.target_ids = region_ids(atlas, request.targets)
+        self.avoid_ids = region_ids(atlas, request.avoid)
         settings = plan.probe_settings or {}
         self.shank_um = float(settings.get("probe_length") or 10000.0)
         self.tip_um = float(settings.get("tip_length") or 0.0)
@@ -1084,19 +1222,23 @@ class _LineScorer:
         self.window_low = float(window.min()) if len(window) else 0.0
         self.window_high = float(window.max()) if len(window) else 0.0
         self.step_um = atlas.vox_um * SAMPLE_STEP_VOX
-        self.count = int((self.shank_um + PROPOSAL_EXTRA_UM) / self.step_um) + 1
-        self.depths = np.arange(self.count) * self.step_um
+        # Depths along the probe from the centre line's entry; negative above it.
+        self.depths = np.arange(-PROPOSAL_ABOVE_UM, self.shank_um + PROPOSAL_EXTRA_UM,
+                                self.step_um)
+        self.count = len(self.depths)
+        self.offsets = shank_offsets(plan)
         # Why lines through every target could not be used.
         self.reasons = {"avoid": 0, "midline": 0, "too_deep": 0, "craniotomy": 0,
-                        "window": 0}
+                        "window": 0, "tip": 0}
         self.through_all = 0
         self.deepest_needed_um = []
 
     def evaluate(self, direction, through_um):
-        """The best tip along the line through ``through_um`` (um) along ``direction``.
+        """The best tip for the probe whose centre line runs through ``through_um``.
 
         Returns a dict (tip_um, entry_um, depth_um, coverage_um per target,
-        reached, total_um) or None when nothing on the line is usable.
+        shank_coverage_um, reached, total_um, elevation_deg) or None when no
+        position on the line is usable.
         """
         atlas, request = self.atlas, self.request
         far = np.asarray(through_um, dtype=float) + direction * self.shank_um
@@ -1104,61 +1246,102 @@ class _LineScorer:
         if entry is None:
             return None
         entry = np.asarray(entry)
-        points = entry[None, :] + self.depths[:, None] * direction[None, :]
-        labels, _inside = atlas.labels_at(atlas.to_vox(points))
-        owner = _owner(labels, self.target_ids, self.target_owner)
-        avoided = _owner(labels, self.avoid_ids, self.avoid_owner) >= 0
-        near_midline = np.zeros(self.count, dtype=bool)
-        if request.midline_um > 0:
-            near_midline |= np.abs(points[:, 0]) < request.midline_um
-        if request.side is not None:
-            near_midline |= points[:, 0] * request.side < 0
-        blocked = avoided | near_midline
+        across = across_face(direction, face_normal(direction, self.plan.roll_deg))
         n = len(request.targets)
-        hits = [np.flatnonzero(owner == k) for k in range(n)]
-        through_all = all(len(h) for h in hits)
-        needed = max(int(h[0]) for h in hits) if through_all else None
-        outside_hole = request.craniotomy is not None and \
-            request.craniotomy.distance_um(entry) > request.craniotomy.diameter_um / 2.0
-        first_blocked = int(np.argmax(blocked)) if np.any(blocked) else self.count
-        shank_end = int(self.shank_um / self.step_um)
+        centre = entry[None, :] + self.depths[:, None] * direction[None, :]
+        members, tissue, avoided, near_midline, shank_entries = [], [], [], [], []
+        for offset in self.offsets:
+            points = centre + across[None, :] * offset
+            labels, _inside = atlas.labels_at(atlas.to_vox(points))
+            in_tissue = labels != 0
+            first = np.flatnonzero(in_tissue)
+            if not len(first):
+                return None
+            shank_entries.append(int(first[0]))
+            members.append(_members(labels, self.target_ids))
+            tissue.append(in_tissue)
+            avoided.append(_members(labels, self.avoid_ids).any(axis=1) if self.avoid_ids
+                           else np.zeros(self.count, dtype=bool))
+            close = np.zeros(self.count, dtype=bool)
+            if request.midline_um > 0:
+                close |= in_tissue & (np.abs(points[:, 0]) < request.midline_um)
+            if request.side is not None:
+                close |= in_tissue & (points[:, 0] * request.side < 0)
+            near_midline.append(close)
+        tissue = np.stack(tissue)            # (shanks, samples)
+        avoided = np.stack(avoided).any(axis=0)
+        near_midline = np.stack(near_midline).any(axis=0)
+        members = np.stack(members)          # (shanks, samples, targets)
+        outside_hole = False
+        if request.craniotomy is not None:
+            for offset, index in zip(self.offsets, shank_entries):
+                point = centre[index] + across * offset
+                if request.craniotomy.distance_um(point) > request.craniotomy.diameter_um / 2.0:
+                    outside_hole = True
+        # Shallowest sample where some shank meets a stop; the tip must stay above it.
+        stops = np.flatnonzero(avoided | near_midline)
+        first_blocked = int(stops[0]) if len(stops) else self.count
+        first_avoided = int(np.argmax(avoided)) if avoided.any() else self.count
+        # The longest shank inside the brain may be no longer than the shank.
+        top_entry = min(shank_entries)
+        shank_end = min(self.count - 1, top_entry + int(self.shank_um / self.step_um))
+        hits = members.any(axis=0)           # (samples, targets): on any shank
+        through_all = bool(np.all(hits.any(axis=0)))
+        needed = int(max(np.flatnonzero(hits[:, k])[0] for k in range(n))) \
+            if through_all else None
         if through_all:
             self.through_all += 1
-            self.deepest_needed_um.append(self.depths[needed])
+            self.deepest_needed_um.append(self.depths[needed] - self.depths[top_entry])
             if outside_hole:
                 self.reasons["craniotomy"] += 1
             elif first_blocked <= needed:
-                self.reasons["avoid" if avoided[:needed + 1].any() else "midline"] += 1
+                self.reasons["avoid" if first_avoided <= needed else "midline"] += 1
             elif needed > shank_end:
                 self.reasons["too_deep"] += 1
         if outside_hole:
             return None
-        inside = np.flatnonzero(labels[:shank_end + 1] != 0)
-        limit = min(first_blocked - 1, int(inside[-1]) if len(inside) else 0, shank_end)
-        if limit < 1:
+        limit = min(first_blocked - 1, shank_end)
+        # A tip is admissible only where every shank's tip is in labelled tissue
+        # (review R5 of 2.8.3), below every shank's entry.
+        lowest_entry = max(shank_entries)
+        tips = np.arange(lowest_entry + 1, limit + 1)
+        if not len(tips):
             return None
-        # Window coverage of each target for every tip position (cumulative sums).
-        one_hot = np.stack([owner == k for k in range(n)], axis=1).astype(float)
-        cumulative = np.vstack([np.zeros((1, n)), np.cumsum(one_hot, axis=0)])
-        tips = np.arange(1, limit + 1)
+        tips = tips[tissue[:, tips].all(axis=0)]
+        if not len(tips):
+            if through_all and first_blocked > needed:
+                self.reasons["tip"] += 1
+            return None
+        # Window coverage of each target, and of any target, summed over shanks.
         tip_depth = self.depths[tips]
         top = np.clip(np.searchsorted(self.depths, tip_depth - self.tip_um - self.window_high),
                       0, self.count)
         bottom = np.clip(np.searchsorted(self.depths, tip_depth - self.tip_um - self.window_low,
                                          side="right"), 0, self.count)
-        cover = (cumulative[bottom] - cumulative[top]) * self.step_um
+        cover = np.zeros((len(tips), n))
+        union = np.zeros(len(tips))
+        per_shank = []
+        for shank in range(len(self.offsets)):
+            member = members[shank].astype(float)
+            cumulative = np.vstack([np.zeros((1, n)), np.cumsum(member, axis=0)])
+            shank_cover = (cumulative[bottom] - cumulative[top]) * self.step_um
+            any_target = np.concatenate([[0.0], np.cumsum(members[shank].any(axis=1))])
+            union += (any_target[bottom] - any_target[top]) * self.step_um
+            cover += shank_cover
+            per_shank.append(shank_cover)
         reached = (cover >= REACHED_UM).sum(axis=1)
-        total = cover.sum(axis=1)
-        # Most targets reached, then most of the window in them, then shallowest.
-        best = int(np.lexsort((tip_depth, -total, -reached))[0])
+        # Most targets reached, then most window in them, then shallowest.
+        best = int(np.lexsort((tip_depth, -union, -reached))[0])
         if reached[best] == 0:
             return None
         if through_all and reached[best] < n and first_blocked > needed \
                 and needed <= shank_end:
             self.reasons["window"] += 1
-        return {"tip_um": points[tips[best]].tolist(), "entry_um": entry.tolist(),
+        tip = entry + direction * tip_depth[best]
+        return {"tip_um": tip.tolist(), "entry_um": entry.tolist(),
                 "depth_um": float(tip_depth[best]), "coverage_um": cover[best].tolist(),
-                "reached": int(reached[best]), "total_um": float(total[best]),
+                "shank_coverage_um": [s[best].tolist() for s in per_shank],
+                "reached": int(reached[best]), "total_um": float(union[best]),
                 "elevation_deg": math.degrees(math.acos(float(np.clip(-direction[2], -1, 1))))}
 
 
@@ -1169,27 +1352,34 @@ def _directions(max_ap, max_ml, step):
 
 
 def _target_voxels(atlas, request, sample, stride):
-    """Positions (um) and target indexes of the strided target voxels."""
-    found = np.argwhere(sample >= 0)
-    owner = sample[found[:, 0], found[:, 1], found[:, 2]]
+    """Positions (um) and target memberships of the strided target voxels."""
+    found = np.argwhere(sample.any(axis=-1))
+    member = sample[found[:, 0], found[:, 1], found[:, 2]]
     um = atlas.to_um(found * stride + stride / 2.0)
     if request.side is not None:
         keep_side = um[:, 0] * request.side > 0
-        um, owner = um[keep_side], owner[keep_side]
-    return um, owner, stride
+        um, member = um[keep_side], member[keep_side]
+    return um, member, stride
 
 
-def _screen_lines(atlas, request, voxels, direction, keep):
-    """Lines along ``direction`` through the most target voxels (a coarse projection).
+def _screen_lines(atlas, request, voxels, direction, keep, plan=None):
+    """Centre lines along ``direction`` that put a shank through the most target voxels.
 
     ``voxels`` (from ``_target_voxels``) are the target voxels of a strided
-    copy of the atlas. Each is projected along ``direction`` onto the plane
-    across it; cells holding voxels of the most targets, then the most voxels,
-    are the lines worth evaluating exactly. Returns points (um) on those lines.
+    copy of the atlas. For each shank offset, each voxel is moved to where the
+    centre line would pass for that shank to go through it, then projected
+    along ``direction`` onto the plane across it; cells holding voxels of the
+    most targets, then the most voxels, are the lines worth evaluating
+    exactly. Returns points (um) on those centre lines.
     """
-    um, owner, stride = voxels
+    um, member, stride = voxels
     if not len(um):
         return []
+    offsets = shank_offsets(plan) if plan is not None else [0.0]
+    if len(offsets) > 1:
+        across = across_face(direction, face_normal(direction, plan.roll_deg))
+        um = np.vstack([um - across * offset for offset in offsets])
+        member = np.vstack([member] * len(offsets))
     helper = np.array([1.0, 0.0, 0.0]) if abs(direction[0]) < 0.9 else np.array([0, 1.0, 0])
     first = np.cross(direction, helper)
     first /= np.linalg.norm(first)
@@ -1199,82 +1389,122 @@ def _screen_lines(atlas, request, voxels, direction, keep):
     keys = keys.astype(np.int64)
     cells, inverse = np.unique(keys, axis=0, return_inverse=True)
     inverse = np.ravel(inverse)
-    targets = len(request.targets)
+    targets = member.shape[1]
     present = np.zeros((len(cells), targets), dtype=bool)
-    present[inverse, owner] = True
-    voxels = np.bincount(inverse, minlength=len(cells))
-    order = np.lexsort((-voxels, -present.sum(axis=1)))[:keep]
-    points = []
-    for index in order:
-        members = um[inverse == index]
-        points.append(members.mean(axis=0))
-    return points
+    for k in range(targets):
+        present[inverse[member[:, k]], k] = True
+    voxel_count = np.bincount(inverse, minlength=len(cells))
+    order = np.lexsort((-voxel_count, -present.sum(axis=1)))[:keep]
+    return [um[inverse == index].mean(axis=0) for index in order]
+
+
+class SearchStopped(Exception):
+    """Raised inside the search when its progress callback asks it to stop."""
 
 
 def propose_plans(atlas, request, plan, progress=None):
     """Ranked plans for ``plan``'s probe that best record ``request.targets``.
 
-    Searches lines over the allowed tilts on a coarse copy of the atlas,
-    evaluates the promising ones at full resolution (sliding the recording
-    window to its best depth on each), and refines the best. Returns
-    ``(proposals, reasons)``: proposals are dicts with ``plan`` (a ProbePlan
-    keeping the probe's settings, roll, bank and craniotomy), ``entry_um``,
-    ``depth_um``, ``coverage`` ([(acronym, um)] per target), ``reached`` and
-    ``score``; ``reasons`` explain, in words, why no proposal records every
+    Searches centre lines over the allowed tilts on a coarse copy of the
+    atlas, evaluates the promising ones at full resolution on every shank
+    (sliding the recording window to its best depth), refines the best, and
+    checks the final ones with ``track_checks`` exactly as the readout does.
+    ``progress(done, total, stage)`` may return False to stop; the best found
+    so far are then returned with a reason saying so.
+
+    Returns ``(proposals, reasons)``: proposals are dicts with ``plan`` (a
+    ProbePlan keeping the probe's settings, roll, bank and craniotomy and
+    carrying the request's targets and regions to avoid), ``entry_um``,
+    ``depth_um``, ``coverage`` ([(acronym, um)] per target, summed over the
+    shanks), ``shank_coverage``, ``reached``, ``score`` and ``warnings`` (soft
+    checks); ``reasons`` explain, in words, why no proposal records every
     target (empty when one does).
     """
+    try:
+        request.check(atlas)
+    except ValueError as exc:
+        return [], [str(exc)[0].upper() + str(exc)[1:] + "."]
+    plan = plan.copy(targets=request.targets, avoid=request.avoid)
     scorer = _LineScorer(atlas, request, plan)
     size = int(np.prod(atlas.shape))
     stride = max(1, int(math.ceil((size / PROPOSAL_SCREEN_VOXELS) ** (1.0 / 3.0))))
-    coarse = np.asarray(atlas.labels[::stride, ::stride, ::stride])
-    sample = _owner(coarse, scorer.target_ids, scorer.target_owner)
-    if not np.any(sample >= 0):
+    sample = _members(np.asarray(atlas.labels[::stride, ::stride, ::stride]),
+                      scorer.target_ids)
+    if not sample.any():
         # Regions smaller than the coarse grid: look at every voxel instead.
         stride = 1
-        sample = _owner(np.asarray(atlas.labels), scorer.target_ids, scorer.target_owner)
-        if not np.any(sample >= 0):
+        sample = _members(np.asarray(atlas.labels), scorer.target_ids)
+        if not sample.any():
             return [], ["None of the target regions is in this atlas volume."]
-    candidates = []
     voxels = _target_voxels(atlas, request, sample, stride)
     directions = _directions(request.max_ap_tilt_deg, request.max_ml_tilt_deg,
                              PROPOSAL_TILT_STEP_DEG)
-    for number, (ap, ml) in enumerate(directions):
-        direction = direction_from_tilts(ap, ml)
-        for point in _screen_lines(atlas, request, voxels, direction,
-                                   PROPOSAL_LINES_PER_DIRECTION):
-            result = scorer.evaluate(direction, point)
-            if result is not None:
-                candidates.append((ap, ml, result))
-        if progress is not None and progress(number + 1, len(directions)) is False:
+    total = len(directions) + PROPOSAL_REFINE
+    candidates = []
+    stopped = False
+
+    def tick(done, stage):
+        if progress is not None and progress(done, total, stage) is False:
+            raise SearchStopped()
+
+    try:
+        for number, (ap, ml) in enumerate(directions):
+            direction = direction_from_tilts(ap, ml)
+            for point in _screen_lines(atlas, request, voxels, direction,
+                                       PROPOSAL_LINES_PER_DIRECTION, plan):
+                result = scorer.evaluate(direction, point)
+                if result is not None:
+                    candidates.append((ap, ml, result))
+            tick(number + 1, "Searching the allowed tilts")
+        ranked = _rank(candidates, atlas)
+        # Refine the best: finer tilts, at full resolution.
+        refined = []
+        for number, (ap, ml, result) in enumerate(ranked[:PROPOSAL_REFINE]):
+            best = (ap, ml, result)
+            for d_ap in (-2, -1, 0, 1, 2):
+                for d_ml in (-2, -1, 0, 1, 2):
+                    new_ap = float(np.clip(ap + d_ap * PROPOSAL_FINE_STEP_DEG,
+                                           -request.max_ap_tilt_deg, request.max_ap_tilt_deg))
+                    new_ml = float(np.clip(ml + d_ml * PROPOSAL_FINE_STEP_DEG,
+                                           -request.max_ml_tilt_deg, request.max_ml_tilt_deg))
+                    trial = scorer.evaluate(direction_from_tilts(new_ap, new_ml),
+                                            result["tip_um"])
+                    if trial is not None and _key(trial) < _key(best[2]):
+                        best = (new_ap, new_ml, trial)
+            refined.append(best)
+            tick(len(directions) + number + 1, "Refining the best")
+        ranked = _rank(refined + ranked[PROPOSAL_REFINE:], atlas)
+    except SearchStopped:
+        stopped = True
+        ranked = _rank(candidates, atlas)
+    proposals, rejected = [], 0
+    for ap, ml, result in ranked:
+        if len(proposals) == PROPOSAL_KEEP:
             break
-    ranked = _rank(candidates, atlas)
-    # Refine the best: finer tilts and small shifts, at full resolution.
-    refined = []
-    for ap, ml, result in ranked[:PROPOSAL_REFINE]:
-        best = (ap, ml, result)
-        for d_ap in (-2, -1, 0, 1, 2):
-            for d_ml in (-2, -1, 0, 1, 2):
-                new_ap = float(np.clip(ap + d_ap * PROPOSAL_FINE_STEP_DEG,
-                                       -request.max_ap_tilt_deg, request.max_ap_tilt_deg))
-                new_ml = float(np.clip(ml + d_ml * PROPOSAL_FINE_STEP_DEG,
-                                       -request.max_ml_tilt_deg, request.max_ml_tilt_deg))
-                direction = direction_from_tilts(new_ap, new_ml)
-                trial = scorer.evaluate(direction, result["tip_um"])
-                if trial is not None and _key(trial) < _key(best[2]):
-                    best = (new_ap, new_ml, trial)
-        refined.append(best)
-    ranked = _rank(refined + ranked[PROPOSAL_REFINE:], atlas)
-    proposals = []
-    for ap, ml, result in ranked[:PROPOSAL_KEEP]:
         proposed = plan.copy(tip_um=result["tip_um"], ap_tilt_deg=ap, ml_tilt_deg=ml)
+        hard, soft = track_checks(proposed, atlas, request.avoid, request.side,
+                                  request.midline_um, request.craniotomy)
+        readout = plan_readout(proposed, atlas)
+        hard += [w for w in readout["warnings"] if "deeper than" in w or "outside the atlas"
+                 in w]
+        if hard:
+            rejected += 1
+            continue
+        soft += [w for w in readout["warnings"] if w not in soft and "not inside" not in w]
         proposals.append({
             "plan": proposed, "entry_um": result["entry_um"], "depth_um": result["depth_um"],
             "coverage": [(atlas.name(region)[0], length) for region, length
                          in zip(request.targets, result["coverage_um"])],
-            "reached": result["reached"], "score": result["total_um"]})
+            "shank_coverage": result["shank_coverage_um"],
+            "reached": result["reached"], "score": result["total_um"], "warnings": soft})
     reasons = []
+    if stopped:
+        reasons.append("The search was stopped; these are the best found so far.")
     if not proposals or proposals[0]["reached"] < len(request.targets):
-        reasons = _reasons(scorer, request, atlas, voxels, proposals)
+        reasons += _reasons(scorer, request, atlas, voxels, proposals, plan)
+    if rejected and not proposals:
+        reasons.append("{} candidate(s) failed the final check of every shank.".format(
+            rejected))
     return proposals, reasons
 
 
@@ -1314,14 +1544,18 @@ def _rank(candidates, atlas, apart_um=500.0, apart_deg=5.0):
     return sorted(chosen, key=lambda item: _key(item[2])) + rest
 
 
-def _reasons(scorer, request, atlas, voxels, proposals):
-    """Why no proposal records every target, in words."""
+def _reasons(scorer, request, atlas, voxels, proposals, plan):
+    """Why no proposal records every target, in words.
+
+    The search samples lines; its failures say what this search found, not
+    that no plan exists (review UI-5 of 2.8.3).
+    """
     reasons = []
     n = len(request.targets)
     names = [atlas.name(t)[0] for t in request.targets]
     best = proposals[0]["reached"] if proposals else 0
     if n > 1:
-        reasons.append("The best line reaches {} of the {} targets ({}).".format(
+        reasons.append("The best line found reaches {} of the {} targets ({}).".format(
             best, n, ", ".join(names)))
     if scorer.through_all == 0:
         wider = None
@@ -1331,35 +1565,35 @@ def _reasons(scorer, request, atlas, voxels, proposals):
                     continue
                 for ap, ml in _directions(limit, limit, PROPOSAL_TILT_STEP_DEG):
                     lines = _screen_lines(atlas, request, voxels,
-                                          direction_from_tilts(ap, ml), 1)
+                                          direction_from_tilts(ap, ml), 1, plan)
                     if lines and _line_spans_targets(scorer, ap, ml, lines[0]):
                         wider = limit
                         break
                 if wider is not None:
                     break
         if wider is not None:
-            reasons.append("No straight line within the tilt limits passes through every "
-                           "target; tilts of up to {:.0f}° would allow one.".format(wider))
+            reasons.append("No line through every target was found within the tilt limits; "
+                           "the search found one with tilts of up to {:.0f}°.".format(wider))
         elif n > 1:
-            reasons.append("No straight line the {:.1f} mm shank can follow passes through "
-                           "every target at any tilt: plan one probe per target or "
-                           "group.".format(scorer.shank_um / 1000.0))
+            reasons.append("No line the {:.1f} mm shank can follow through every target was "
+                           "found at any tilt up to {:.0f}°: consider one probe per target or "
+                           "group.".format(scorer.shank_um / 1000.0, MAX_TILT_DEG))
         return reasons
     words = {
-        "craniotomy": "lines through every target enter the brain outside the craniotomy",
-        "avoid": "lines through every target cross a region to avoid",
-        "midline": "lines through every target come too close to the midline or cross it",
-        "too_deep": "the targets lie deeper than the {:.1f} mm shank reaches (the deepest "
-                    "line needs {:.1f} mm)".format(scorer.shank_um / 1000.0,
-                                                   min(scorer.deepest_needed_um) / 1000.0
-                                                   if scorer.deepest_needed_um else 0.0),
-        "window": "the targets are spread over more than the {:.2f} mm recording window; "
-                  "record every site or choose another bank".format(
+        "craniotomy": "enter the brain outside the craniotomy (some shank)",
+        "avoid": "cross a region to keep out of (some shank)",
+        "midline": "come too close to the midline or cross it (some shank)",
+        "too_deep": "need more than the {:.1f} mm shank (the shallowest needs {:.1f} mm)".format(
+            scorer.shank_um / 1000.0,
+            min(scorer.deepest_needed_um) / 1000.0 if scorer.deepest_needed_um else 0.0),
+        "window": "spread the targets over more than the {:.2f} mm recording window; record "
+                  "every site or choose another bank".format(
                       (scorer.window_high - scorer.window_low) / 1000.0),
+        "tip": "end where no shank tip can be in the labelled brain",
     }
     for reason, count in sorted(scorer.reasons.items(), key=lambda item: -item[1]):
         if count:
-            reasons.append("Of the lines through every target, {} {}.".format(
+            reasons.append("Of the lines found through every target, {} {}.".format(
                 count, words[reason]))
     return reasons
 
@@ -1371,29 +1605,39 @@ def _line_spans_targets(scorer, ap, ml, point):
     span = np.linspace(-15000.0, 15000.0, int(30000.0 / scorer.step_um) + 1)
     points = np.asarray(point, dtype=float)[None, :] + span[:, None] * direction[None, :]
     labels, _inside = atlas.labels_at(atlas.to_vox(points))
-    owner = _owner(labels, scorer.target_ids, scorer.target_owner)
-    hits = [span[np.flatnonzero(owner == k)] for k in range(len(scorer.request.targets))]
+    member = _members(labels, scorer.target_ids)
     tissue = span[np.flatnonzero(labels != 0)]
-    if not all(len(h) for h in hits) or not len(tissue):
+    if not member.any(axis=0).all() or not len(tissue):
         return False
     # Touching every target: from where the line enters the brain down to the
     # first voxel of the deepest target (positions grow along the probe).
-    needed = max(h.min() for h in hits) - tissue.min()
+    needed = max(span[np.flatnonzero(member[:, k])].min() for k in range(member.shape[1])) \
+        - tissue.min()
     return needed <= scorer.shank_um - scorer.tip_um
 
 
 def target_coverage(plan, readout, atlas):
-    """Length of each of the plan's targets inside its recording window (um)."""
+    """Length of each of the plan's targets inside its recording window (um),
+    summed over the shanks; each target counted on its own, so a parent and
+    its child are both measured, whatever their order (review R6 of 2.8.3)."""
     if not plan.targets or readout.get("window_um") is None:
         return []
-    ids, owners = _region_index(atlas, plan.targets)
-    lengths = [0.0] * len(plan.targets)
-    top, bottom = readout["window_um"]
-    for run in readout.get("regions") or []:
-        overlap = min(run["end_um"], bottom) - max(run["start_um"], max(top, 0.0))
-        if overlap <= 0:
-            continue
-        owner = int(_owner(np.array([run["id"]]), ids, owners)[0])
-        if owner >= 0:
-            lengths[owner] += overlap
-    return [(atlas.name(t)[0], length) for t, length in zip(plan.targets, lengths)]
+    ids = region_ids(atlas, plan.targets)
+    lengths = np.zeros(len(plan.targets))
+    settings = plan.probe_settings or {}
+    tip_length = float(settings.get("tip_length") or 0.0)
+    window = recording_sites(plan)
+    if not len(window):
+        return [(atlas.name(t)[0], 0.0) for t in plan.targets]
+    direction = plan.direction
+    across = across_face(direction, plan.normal)
+    step = atlas.vox_um * SAMPLE_STEP_VOX
+    tip = np.asarray(plan.tip_um, dtype=float)
+    for offset in shank_offsets(plan):
+        shank_tip = tip + across * offset
+        # Window: from the highest to the lowest recording site above the tip.
+        heights = np.arange(window.min(), window.max() + step / 2, step) + tip_length
+        points = shank_tip[None, :] - heights[:, None] * direction[None, :]
+        labels, _inside = atlas.labels_at(atlas.to_vox(points))
+        lengths += _members(labels, ids).sum(axis=0) * step
+    return [(atlas.name(t)[0], float(length)) for t, length in zip(plan.targets, lengths)]

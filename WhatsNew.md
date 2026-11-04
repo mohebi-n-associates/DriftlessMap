@@ -3,6 +3,35 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.8.4
+
+Fix release, 4 November 2026: the eight findings of the 2.8.3 review
+(`reviews/2.8.3`), all fixed.
+
+- **Proposals check every shank.** For four-shank probes each shank must
+  enter through the craniotomy, keep out of the regions to keep out of, stay
+  on its side and end in the brain, and the recorded length is the shanks'
+  windows together. The final check walks each shank's path voxel by voxel.
+- **What you see is what is saved.** A plan change shows at once and counts
+  as unsaved work; saving, exporting, undoing or another action stores it
+  first, and a new or opened project no longer picks up a change from the one
+  before.
+- **A failed open keeps the atlas's Lambda**, so the Bregma–Lambda scale does
+  not change; when the atlas's distance is unknown, coordinates for the
+  animal are reported unavailable instead of unscaled.
+- **Contradictions are refused**: a region both to record and to keep out of
+  (or a target inside an avoided region) is named, not dropped silently.
+- **No tip in a gap**: proposals end in labelled tissue, and gaps the track
+  crosses are listed before you use the plan.
+- **Parent and child targets** are measured the same in any order.
+- **Search results belong to their constraints**: changing one clears them.
+- **Steering ends** when you leave the Plan section.
+- **Look before you use a proposal**: the selected row is drawn on the atlas
+  and in a shank view, with its checks; the search shows progress and can be
+  stopped.
+- The Plan section is narrower and shorter: settings used less often fold
+  under Surgery and more.
+
 ## DriftlessMap 2.8.3
 
 Release, 4 November 2026: the last part of the new probe planning, proposals.
