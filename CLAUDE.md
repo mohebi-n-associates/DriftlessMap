@@ -10,11 +10,11 @@ or important workflows change.
 
 - Current release: DriftlessMap 2.8.6 (4 November 2026; probe planning,
   `probe_planning_design.md` Phases 1-4, `reviews/2.8.3` R1-R8, planned
-  fibers and prisms (its section 6) and probe hardware (section 7); not yet
-  published; the owner
-  numbers the probe-planning phases 2.8.0-2.8.3, one feature). Latest
-  published: 2.7.0 (3 November 2026; the first release since 2.0.0, including
-  2.0.1-2.3.0 and multi-section projects). 2.0.0
+  fibers and prisms (its section 6) and probe hardware (section 7); the owner
+  numbers the probe-planning phases 2.8.0-2.8.3, one feature), published on
+  PyPI and GitHub with 2.8.0-2.8.5. Before it: 2.7.0 (3 November 2026; the
+  first release since 2.0.0, including 2.0.1-2.3.0 and multi-section
+  projects). 2.0.0
   (29 October 2026) followed the 2.0.0aN previews and 2.0.0rc1-rc16. The owner released it with the
   `release_validation.md` gates still pending (recorded there as waived); keep
   recording evidence for them. Later fixes become 2.0.N, features 2.N.0.
