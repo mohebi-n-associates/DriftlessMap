@@ -1513,6 +1513,20 @@ class ObjectControl(QObject):
     def obj_clicked(self, clicked_id):
         self.set_active_layer_to_current(clicked_id)
 
+    def index_of_id(self, obj_id):
+        """Row of the object with ``obj_id``, or None if it no longer exists."""
+        rows = np.where(np.ravel(self.obj_id) == obj_id)[0] if len(self.obj_id) else []
+        return int(rows[0]) if len(rows) else None
+
+    def select_object(self, index):
+        """Make row ``index`` the selected object, as a click on it does."""
+        if index is None or not 0 <= index < len(self.obj_list):
+            return
+        for row, item in enumerate(self.obj_list):
+            item.set_checked(row == index)
+        self.current_obj_index = index
+        self.set_slider_combo_to_current()
+
     def obj_info_on_click(self):
         da_data = self.obj_data[self.current_obj_index]
         da_name = self.obj_name[self.current_obj_index]

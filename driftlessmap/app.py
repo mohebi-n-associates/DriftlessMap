@@ -4997,8 +4997,11 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
             if record is None:
                 rows.append((None, NOT_RECORDED))
                 continue
-            status = REMAPPED if record.revision != revision else record.status(
-                self.section_id, fingerprint, stored)
+            status = record.status(self.section_id, fingerprint, stored)
+            if record.revision != revision and status != REGISTRATION_CHANGED:
+                # A changed registration needs mapping again even when the
+                # object was also made from an earlier mapping (review F5).
+                status = REMAPPED
             rows.append((record, status))
         order = {sid: n for n, sid in enumerate(e.section_id for e in self.sections.entries())}
         rows.sort(key=lambda row: order.get(row[0].section_id, len(order)) if row[0] else
@@ -5006,9 +5009,28 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
         return rows
 
     def stale_contribution(self, index):
-        """The first mapping that makes object ``index`` out of date, or None."""
+        """The mapping to repair next for object ``index``, or None: the first
+        section whose registration changed since mapping; once none is left,
+        the first other out-of-date mapping (a build fixes those)."""
+        plan = self.repair_plan(index)
+        if plan["remap"]:
+            return plan["remap"][0]
         return next((record for record, status in self.object_contributions(index)
                      if record is not None and is_out_of_date(status)), None)
+
+    def repair_plan(self, index):
+        """What object ``index`` needs to be current again (review F5 of 2.6.0).
+
+        ``remap``: the mapping records, in section order, whose section's
+        registration changed since mapping; update these first, one by one.
+        ``rebuild``: True when the object is out of date and only a build is
+        left (parts mapped again since, mappings that no longer exist, or
+        changed implant settings).
+        """
+        remap = [record for record, status in self.object_contributions(index)
+                 if record is not None and status == REGISTRATION_CHANGED]
+        stale = is_out_of_date(self.object_mapping_status(index))
+        return {"remap": remap, "rebuild": stale and not remap}
 
     def out_of_date_lines(self, indexes):
         """One "name: reason" line per out-of-date object among ``indexes``."""

@@ -8,7 +8,7 @@ or important workflows change.
 
 ## Project identity
 
-- Current stable release: DriftlessMap 2.6.1 (3 November 2026; 2.4.0 plus
+- Current stable release: DriftlessMap 2.6.2 (3 November 2026; 2.4.0 plus
   fixes and the rat atlas downloads, the first release since 2.0.0, including 2.0.1-2.3.0 and multi-section
   projects). 2.0.0
   (29 October 2026) followed the 2.0.0aN previews and 2.0.0rc1-rc16. The owner released it with the
@@ -53,9 +53,13 @@ or important workflows change.
   U items): `v2/section_bar.SectionBar` above the canvas switches sections in
   place (`section.previous/next`); `v2.state.annotation_pipeline` drives
   Annotate's one next-step button; Results repairs a stale object
-  (`object_contributions`, `stale_contribution`, `rebuild_selected`); Register
-  gates Mark review complete on a checklist and offers Blink/Checkerboard
-  (`checkerboard`); the Section table has All/None per column (`tick_all`);
+  (`object_contributions`, `repair_plan`: changed sections are remapped one by
+  one in section order, then one build; `stale_contribution` follows it; the
+  object stays selected by `obj_id`, `ObjectControl.select_object`); Register
+  gates Mark review complete on a checklist, also for the `register.review`
+  command (`needs_review_checks`), and offers Blink/Checkerboard
+  (`checkerboard`), drawn on `RegisterPanel.compare_item`, never on the
+  overlay item that saves and exports read; leaving the step ends them; the Section table has All/None per column (`tick_all`);
   Edit > Mapping history (`TransactionHistory.labels`); `add_sections` adds
   files in natural order or TIFF pages as sections; the empty canvas offers
   three starts (`start_probe_plan`).

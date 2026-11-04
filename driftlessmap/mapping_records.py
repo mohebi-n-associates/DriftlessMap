@@ -310,21 +310,28 @@ def is_out_of_date(status):
 
 
 def derivation_status(entries, ledger, section_id, registration, stored=None):
-    """CURRENT, NOT_RECORDED, the first reason an object is out of date, or
+    """CURRENT, NOT_RECORDED, the reason an object is out of date, or
     UNVERIFIED when nothing is out of date but a contributing stored section's
     registration is unknown (see :meth:`MappingRecord.status`).
+
+    Every entry is checked: a changed registration (which needs mapping again)
+    comes before parts mapped again since (which need a build), and both come
+    before a mapping that no longer exists, so a missing origin cannot hide a
+    section that changed (review F5 of 2.6.0).
     """
     if not entries:
         return NOT_RECORDED
-    unverified = False
+    found = set()
     for unit_id, revision in entries:
         record = ledger.by_unit(unit_id)
         if record is None:
-            return NOT_RECORDED
-        if record.revision != revision:
-            return REMAPPED
+            found.add(NOT_RECORDED)
+            continue
         status = record.status(section_id, registration, stored)
         if status == REGISTRATION_CHANGED:
             return REGISTRATION_CHANGED
-        unverified = unverified or status == UNVERIFIED
-    return UNVERIFIED if unverified else CURRENT
+        found.add(REMAPPED if record.revision != revision else status)
+    for status in (REMAPPED, NOT_RECORDED, UNVERIFIED):
+        if status in found:
+            return status
+    return CURRENT

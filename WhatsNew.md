@@ -3,6 +3,26 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.6.2
+
+Fix release, 3 November 2026; more fixes from the 2.6.0 review.
+
+- **Checkerboard no longer changes the saved preview.** With Checkerboard on,
+  saving the project or exporting the layer stored the checkerboard instead of
+  the warped section. Blink and Checkerboard now only change what is shown;
+  they end when you leave the Register step.
+- **Repair keeps the object selected.** In Results, Update mapping selected
+  the remade part instead of the object being repaired, which hid Build again.
+  The object now stays selected through every repair step, also when the
+  section changes.
+- **Repair moves from section to section.** When several sections changed,
+  Update mapping kept returning to the first one. It now takes each changed
+  section once, in order, says which is next and how many are left, and offers
+  Build again when all are mapped again. A part whose mapping no longer exists
+  no longer hides a section that changed.
+- **The review checklist applies everywhere.** Mark review complete from the
+  command palette no longer skips the checklist.
+
 ## DriftlessMap 2.6.1
 
 Fix release, 3 November 2026; the first fixes from the 2.6.0 review.
