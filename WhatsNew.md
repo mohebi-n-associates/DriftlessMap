@@ -3,6 +3,20 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.6.1
+
+Fix release, 3 November 2026; the first fixes from the 2.6.0 review.
+
+- **A changed atlas folder cannot replace the loaded atlas.** If the loaded
+  atlas's files were replaced in their folder, loading that folder again
+  accepted the new files under the project's results (they were compared with
+  themselves). Now nothing replaces the loaded atlas once its own files have
+  changed or gone; restore them, or save and reopen the project.
+- **Results from older stored sections are "not verified", not "current".** A
+  section stored by 2.5.2 or earlier has no record of its registration, so its
+  results were shown as current. They are now marked not verified, in Results,
+  the step list and exports, until you open that section once.
+
 ## DriftlessMap 2.6.0
 
 Feature release, 3 November 2026: the usability improvements from the 2.5.0

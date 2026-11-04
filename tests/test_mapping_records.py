@@ -81,7 +81,10 @@ class MappingLedgerTests(unittest.TestCase):
         self.assertEqual(record.status(elsewhere, FIRST, {self.section: FIRST}), OTHER_SECTION)
         self.assertEqual(record.status(elsewhere, FIRST, {self.section: SECOND}),
                          REGISTRATION_CHANGED)
-        self.assertEqual(record.status(elsewhere, FIRST, {self.section: None}), OTHER_SECTION)
+        # Stored but unrecorded (saved before 2.5.3): not verified, never current.
+        self.assertEqual(record.status(elsewhere, FIRST, {self.section: None}), "not verified")
+        self.assertEqual(derivation_status(derivation([record]), self.ledger, elsewhere, FIRST,
+                                           {self.section: None}), "not verified")
         entries = derivation([record])
         self.assertEqual(derivation_status(entries, self.ledger, elsewhere, FIRST,
                                            {self.section: SECOND}), REGISTRATION_CHANGED)

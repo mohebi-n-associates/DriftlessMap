@@ -1,0 +1,48 @@
+CASE: atlas
+qt.qpa.fonts: Populating font family aliases took 229 ms. Replace uses of missing font family "Sans Serif" with one that exists to avoid this cost. 
+QOpenGLWidget is not supported on this platform.
+REVIEW_RESULT {"case": "atlas", "load_accepted": true, "before": 25, "after": 50, "objects": ["Fiber 1"], "export_voxel_um": 50.0}
+
+CASE: legacy
+qt.qpa.fonts: Populating font family aliases took 139 ms. Replace uses of missing font family "Sans Serif" with one that exists to avoid this cost. 
+QOpenGLWidget is not supported on this platform.
+REVIEW_RESULT {"case": "legacy", "with_fingerprint": "registration changed", "old_summary_without_fingerprint": "current"}
+QOpenGLWidget is not supported on this platform.
+REVIEW_RESULT {"case": "legacy_reopen", "before_visiting_section": "current", "after_visiting_section": "registration changed"}
+
+CASE: checker
+qt.qpa.fonts: Populating font family aliases took 236 ms. Replace uses of missing font family "Sans Serif" with one that exists to avoid this cost. 
+QOpenGLWidget is not supported on this platform.
+REVIEW_RESULT {"case": "checker", "saved_matches_original": false, "saved_matches_checker": true, "changed_values": 1440}
+REVIEW_RESULT {"case": "checker_reopen", "overlay_matches_original": false}
+
+CASE: repair
+qt.qpa.fonts: Populating font family aliases took 225 ms. Replace uses of missing font family "Sans Serif" with one that exists to avoid this cost. 
+QOpenGLWidget is not supported on this platform.
+REVIEW_RESULT {"case": "repair", "selected_type": "cells piece", "recovery_hidden": true, "all_types": ["merged cells", "cells piece"], "statuses": ["mapped again since", "current"]}
+REVIEW_RESULT {"case": "repair_after_build", "all_types": ["merged cells", "cells piece"], "statuses": ["mapped again since", "current"]}
+
+CASE: multi_repair
+qt.qpa.fonts: Populating font family aliases took 111 ms. Replace uses of missing font family "Sans Serif" with one that exists to avoid this cost. 
+QOpenGLWidget is not supported on this platform.
+REVIEW_RESULT {"case": "multi_repair", "update_succeeded": true, "first": "fec717c3e75d4d5ebc649f06075dcc5b", "second": "29b2b62f1c15466dab89b8adc3ac9320", "next_affected": "fec717c3e75d4d5ebc649f06075dcc5b", "contributions": [["fec717c3e75d4d5ebc649f06075dcc5b", "mapped again since"], ["29b2b62f1c15466dab89b8adc3ac9320", "registration changed"]]}
+
+CASE: review
+qt.qpa.fonts: Populating font family aliases took 210 ms. Replace uses of missing font family "Sans Serif" with one that exists to avoid this cost. 
+QOpenGLWidget is not supported on this platform.
+REVIEW_RESULT {"case": "review", "checklist": [false, false, false, false], "before": "not reviewed", "command_reason": null, "after": "reviewed"}
+
+CASE: batch
+qt.qpa.fonts: Populating font family aliases took 97 ms. Replace uses of missing font family "Sans Serif" with one that exists to avoid this cost. 
+QOpenGLWidget is not supported on this platform.
+REVIEW_RESULT {"case": "batch", "sections_added": 4, "full_series_reads": 4, "shapes": [[4, 32, 24], [4, 32, 24], [4, 32, 24], [4, 32, 24]]}
+
+CASE: ui
+qt.qpa.fonts: Populating font family aliases took 90 ms. Replace uses of missing font family "Sans Serif" with one that exists to avoid this cost. 
+QOpenGLWidget is not supported on this platform.
+REVIEW_RESULT {"case": "layout", "step": "project", "width": 1280, "height": 800, "panel": 412, "views": 706, "inspector_visible": false}
+REVIEW_RESULT {"case": "layout", "step": "section", "width": 1280, "height": 800, "panel": 412, "views": 706, "inspector_visible": false}
+REVIEW_RESULT {"case": "layout", "step": "match", "width": 1280, "height": 800, "panel": 412, "views": 706, "inspector_visible": false}
+REVIEW_RESULT {"case": "layout", "step": "register", "width": 1280, "height": 800, "panel": 412, "views": 706, "inspector_visible": false}
+REVIEW_RESULT {"case": "layout", "step": "annotate", "width": 1280, "height": 800, "panel": 412, "views": 706, "inspector_visible": false}
+REVIEW_RESULT {"case": "layout", "step": "results", "width": 1280, "height": 800, "panel": 412, "views": 706, "inspector_visible": false}
