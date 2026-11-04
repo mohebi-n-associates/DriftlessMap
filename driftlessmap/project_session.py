@@ -12,6 +12,7 @@ import tempfile
 import numpy as np
 import pyqtgraph.opengl as gl
 
+from .mapping_records import new_identifier
 from .project_io import PROJECT_SCHEMA_VERSION
 from .persistence import save_driftlessmap_file
 from .version import __version__
@@ -212,7 +213,62 @@ class ProjectSessionMixin:
         self.image_view.clear_image_stacks()
         self.layer_ctrl.clear_all()
 
-    def load_project(self, p_dict, *, project_path=None):
+    # Engine attributes that name the loaded atlas; a new project that keeps
+    # the atlas keeps them.
+    ATLAS_METADATA = ("volume_atlas_path", "slice_atlas_path", "volume_atlas_axis_info",
+                      "_loaded_atlas_signatures")
+    ATLAS_FIELDS = ("atlas_path", "current_atlas", "atlas_control", "atlas_provenance")
+
+    def remember_empty_document(self):
+        """Keep the document as it is at start-up, for ``start_new_project``."""
+        self._empty_document = ProjectSnapshot(self)
+
+    def can_keep_atlas(self):
+        """True when a loaded volume atlas can stay for a new project (a
+        slice atlas plate is read again from its file)."""
+        return self.current_atlas == "volume" and self.atlas_view.atlas_data is not None
+
+    def start_new_project(self, keep_atlas=True):
+        """Replace the document with an empty, unsaved one in this window.
+
+        With ``keep_atlas`` the loaded atlas stays (a volume atlas is not read
+        again); every section, mark, object, layer, implant and probe goes, and
+        so does the undo history. Callers ask about unsaved work first. On
+        failure the current document is restored, as when opening a project.
+        """
+        empty = self._empty_document
+        payload = snapshot_metadata(empty.payload)
+        keep = bool(keep_atlas) and self.can_keep_atlas()
+        runtime = None
+        if keep:
+            current = self.project_payload()
+            for name in self.ATLAS_FIELDS:
+                payload[name] = snapshot_metadata(current.get(name))
+            runtime = {"keep_atlas": True}
+        # A new document: a new section identity and no saved sections.
+        payload["section_id"] = new_identifier()
+        payload["sections"] = None
+        payload["interface_state"] = {}
+        if not self.load_project(payload, runtime=runtime, message=None):
+            return False
+        for name, value in empty.metadata.items():
+            if keep and name in self.ATLAS_METADATA:
+                continue
+            setattr(self, name, snapshot_metadata(value))
+        self.project_created_at = None
+        if keep:
+            # The empty document's registration frame has no atlas; give the
+            # atlas its frame, as loading it does.
+            self.reset_tri_points_atlas()
+        self.triangulation_registration = None
+        self.sync_mapping_undo_actions()
+        self.refresh_kept_marks()
+        self.print_message("New project{}. Nothing is saved until you save it.".format(
+            " with the same atlas" if keep else ""), self.normal_color)
+        return True
+
+    def load_project(self, p_dict, *, project_path=None, runtime=None,
+                     message="Project loaded successfully."):
         """Replace the document atomically; restore the current work on failure."""
         try:
             snapshot = getattr(self, "_project_recovery", None) or ProjectSnapshot(self)
@@ -230,7 +286,7 @@ class ProjectSessionMixin:
             self._clear_project_objects()
             if project_path is not None:
                 self.current_project_path = project_path
-            self._restore_project_payload(p_dict)
+            self._restore_project_payload(p_dict, runtime=runtime)
         except Exception as exc:
             try:
                 snapshot.restore(self)
@@ -262,7 +318,8 @@ class ProjectSessionMixin:
             self._project_loading = False
         self.__dict__.pop("_project_recovery", None)
         self.__dict__.pop("_project_recovery_path", None)
-        self.print_message("Project loaded successfully.", self.normal_color)
+        if message:
+            self.print_message(message, self.normal_color)
         # After the message above, so a section left out is what is shown.
         self.restore_sections(p_dict)
         if callable(self.on_project_loaded):

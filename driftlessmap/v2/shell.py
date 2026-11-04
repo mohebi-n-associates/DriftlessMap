@@ -29,6 +29,7 @@ from PyQt6.QtWidgets import (
     QPlainTextEdit,
     QProgressDialog,
     QSizePolicy,
+    QSpacerItem,
     QSplitter,
     QStackedWidget,
     QTabWidget,
@@ -43,6 +44,7 @@ from ..interfaces import start_interface
 from ..version import __version__
 from . import adopted, state
 from .annotate_panel import AnnotatePanel
+from .channel_strip import ChannelStrip
 from .commands import Command, CommandPalette, CommandRegistry
 from .match_panel import MatchPanel
 from .project_panel import ProjectPanel
@@ -207,7 +209,21 @@ class V2Window(QMainWindow):
         header.setObjectName("CanvasHeader")
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(10, 6, 10, 6)
+        self._header_layout = header_layout
         header_layout.setSpacing(0)
+        # Show or hide the step list and step panel (left) and the objects,
+        # layers and regions column (right) from beside the images.
+        self.task_toggle = QToolButton()
+        self.task_toggle.setObjectName("Segment")
+        self.task_toggle.setText("Steps")
+        self.task_toggle.setCheckable(True)
+        self.task_toggle.setChecked(True)
+        self.task_toggle.setToolTip("Show or hide the steps and the step panel on the left")
+        self.task_toggle.clicked.connect(lambda _checked: self.run("view.task_column"))
+        header_layout.addWidget(self.task_toggle)
+        # Gaps that narrow windows give back to the view names.
+        self._header_gaps = [QSpacerItem(10, 0), QSpacerItem(16, 0)]
+        header_layout.addItem(self._header_gaps[0])
         self.view_group = QButtonGroup(self)
         self.view_buttons = {}
         for key, title, tip in VIEWS:
@@ -217,10 +233,12 @@ class V2Window(QMainWindow):
             view_button.setToolTip(tip)
             view_button.setCheckable(True)
             view_button.clicked.connect(lambda _checked, k=key: self.set_view(k))
+            # Never narrower than its name: the canvas keeps room for it.
+            view_button.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
             self.view_group.addButton(view_button)
             self.view_buttons[key] = view_button
             header_layout.addWidget(view_button)
-        header_layout.addSpacing(16)
+        header_layout.addItem(self._header_gaps[1])
         self.plane_label = QLabel("")
         self.plane_label.setObjectName("Muted")
         # On a narrow canvas the view buttons keep their names; this label
@@ -239,6 +257,15 @@ class V2Window(QMainWindow):
                 QKeySequence("Ctrl+Shift+F").toString(QKeySequence.SequenceFormat.NativeText)))
         self.focus_button.clicked.connect(lambda _checked: self.run("view.focus"))
         header_layout.addWidget(self.focus_button)
+        self.inspector_toggle = QToolButton()
+        self.inspector_toggle.setObjectName("Segment")
+        self.inspector_toggle.setText("Objects")
+        self.inspector_toggle.setCheckable(True)
+        self.inspector_toggle.setChecked(True)
+        self.inspector_toggle.setToolTip(
+            "Show or hide the objects, layers and regions panel on the right")
+        self.inspector_toggle.clicked.connect(lambda _checked: self.run("view.inspector"))
+        header_layout.addWidget(self.inspector_toggle)
         canvas_layout.addWidget(header)
         # Which section is open, and switching sections, beside the images.
         self.section_bar = SectionBar(self)
@@ -261,6 +288,16 @@ class V2Window(QMainWindow):
         toolbar.show()
         options_layout.addWidget(toolbar, 1)
         canvas_layout.addWidget(self.tool_options)
+
+        # Per-channel brightness at the top of the histology view.
+        self.channel_strip = ChannelStrip(self)
+        grid = engine.image_view_layout
+        for widget in (engine.image_view.img_stacks, engine.image_view.page_ctrl):
+            grid.removeWidget(widget)
+        grid.addWidget(self.channel_strip, 0, 0, 1, 1)
+        grid.addWidget(engine.image_view.img_stacks, 1, 0, 1, 1)
+        grid.addWidget(engine.image_view.page_ctrl, 2, 0, 1, 1)
+        grid.setRowStretch(1, 1)
 
         views = engine.splitter_3
         views.setParent(canvas)
@@ -392,14 +429,22 @@ class V2Window(QMainWindow):
         return label
 
     def start_probe_plan(self):
-        """Go to the probe controls; planning needs an atlas (and no section)."""
-        if self.engine.atlas_view.atlas_data is None:
-            self.message("Load an atlas folder first (or download one); then plan the probe "
-                         "in Annotate › Implants: Add implant…, Probe.", "warn")
+        """Open a probe to plan on the atlas: the one without points, or a new one."""
+        engine = self.engine
+        if engine.atlas_view.atlas_data is None:
+            self.message("Load an atlas folder first (or download one); then Plan a probe "
+                         "(Project step, Atlas card) opens a probe to plan.", "warn")
             return
         self.go_to("annotate")
-        self.message("Add implant… › Probe, then Mark track and click the entry point and the "
-                     "tip on the atlas.")
+        self.set_view("atlas" if engine.image_view.current_img is None else "compare")
+        card = self.panels["annotate"].implants
+        book = card.probe_card.book
+        unplanned = [name for name in book.names()
+                     if not book.parts(name) and not book.built(name)]
+        probe = unplanned[0] if unplanned else card.probe_card.new_probe()
+        card._select_probe(probe)
+        self.message("{}: switch on Mark track, click the entry point and then the tip on "
+                     "the atlas, add the points to the probe, then build it.".format(probe))
 
     def _name_undo_steps(self):
         history = self.engine.undo_history
@@ -701,8 +746,16 @@ class V2Window(QMainWindow):
                                 "several sections"), "Ctrl+Shift+I"))
         add(Command("section.load_one", "Add one section…", engine.actionSingle_Image.trigger,
                     "Project", ("load image", "single image")))
+        add(Command("project.new", "New project", self.new_project, "Project",
+                    ("start again", "empty project", "clear everything", "close project"),
+                    "Ctrl+N"))
         add(Command("project.new_window", "New window", self.open_new_window, "Project",
-                    ("new project", "start again", "another atlas"), "Ctrl+N"))
+                    ("another project", "another atlas", "second window"), "Ctrl+Shift+N"))
+        add(Command("probe.plan", "Plan a probe on the atlas", self.start_probe_plan,
+                    "Annotate", ("probe planning", "plan track", "neuropixels", "surgery",
+                                 "trajectory"),
+                    available=lambda: None if self.engine.atlas_view.atlas_data is not None
+                    else "Load a volume atlas first."))
         add(Command("project.open", "Open project…", self.open_project, "Project",
                     ("load project",), "Ctrl+O"))
         add(Command("project.save", "Save project", self.save_project, "Project",
@@ -835,6 +888,12 @@ class V2Window(QMainWindow):
         for key, title, tip in VIEWS:
             add(Command("view." + key, "{} view".format(title), lambda k=key: self.set_view(k),
                         "View", (tip.lower(),)))
+        add(Command("view.task_column", "Show or hide the steps (left)",
+                    lambda: self.toggle_task_item.toggle(), "View",
+                    ("left panel", "step panel", "sidebar", "hide steps", "show steps")))
+        add(Command("view.inspector", "Show or hide objects, layers and regions (right)",
+                    lambda: self.toggle_inspector_item.toggle(), "View",
+                    ("right panel", "inspector", "sidebar", "hide objects", "show objects")))
         add(Command("view.focus", "Focus on images (hide side panels)", self.toggle_focus,
                     "View", ("full screen", "hide panels", "maximise", "maximize", "sidebars"),
                     "Ctrl+Shift+F"))
@@ -862,6 +921,7 @@ class V2Window(QMainWindow):
             return action
 
         file_menu = bar.addMenu("&File")
+        item(file_menu, "project.new")
         item(file_menu, "project.new_window")
         for command_id in ("project.open", "atlas.load", "section.load"):
             item(file_menu, command_id)
@@ -1168,6 +1228,48 @@ class V2Window(QMainWindow):
             self.add_sections_progress = None
         self.refresh()
 
+    def new_project(self):
+        """Start an empty project in this window, keeping the atlas if the
+        user chooses (it is not read again)."""
+        engine = self.engine
+        if engine.image_view.current_img is None and not engine.can_keep_atlas() \
+                and not self.is_dirty():
+            self.message("This is already a new, empty project.")
+            return
+        if not self.confirm_discard("start a new project"):
+            return
+        keep = False
+        if engine.can_keep_atlas():
+            box = QMessageBox(self)
+            box.setWindowTitle("New project")
+            box.setIcon(QMessageBox.Icon.Question)
+            box.setText("Start a new project with the same atlas?")
+            box.setInformativeText(
+                "Every section, landmark, mark, object, layer, implant and probe of the "
+                "current project is closed. Keeping the atlas saves loading it again.")
+            keep_button = box.addButton("Keep the atlas", QMessageBox.ButtonRole.AcceptRole)
+            box.addButton("Close the atlas too", QMessageBox.ButtonRole.DestructiveRole)
+            cancel = box.addButton(QMessageBox.StandardButton.Cancel)
+            box.setDefaultButton(keep_button)
+            self.new_project_box = box
+            box.exec()
+            self.new_project_box = None
+            if box.clickedButton() is cancel or box.clickedButton() is None:
+                return
+            keep = box.clickedButton() is keep_button
+        if engine.start_new_project(keep_atlas=keep):
+            self.clear_tools()
+            self.go_to("project")
+            self.set_view("compare" if keep else "atlas")
+            self.mark_saved()
+            self.refresh()
+            self.message("New project{}. Add sections to start; Save asks where to save "
+                         "it.".format(" with the same atlas" if keep else ""), "good")
+        else:
+            self.message("A new project could not be started; the current project is "
+                         "unchanged.", "bad")
+        QTimer.singleShot(0, self._balance_views)
+
     def open_new_window(self):
         """Start another 2.0 window (an empty document) in its own process."""
         if start_interface("preview"):
@@ -1198,6 +1300,14 @@ class V2Window(QMainWindow):
             number, title = self._step_titles[key]
             rail_button.setText(str(number) if compact else "{}  {}".format(number, title))
         self._rail_compact = compact
+        # Narrow: the side-column buttons give their room to the view names.
+        self.task_toggle.setText("◧" if compact else "Steps")
+        self.inspector_toggle.setText("◨" if compact else "Objects")
+        for gap, width in zip(self._header_gaps, (10, 16)):
+            gap.changeSize(2 if compact else width, 0)
+        side = 4 if compact else 10
+        self._header_layout.setContentsMargins(side, 6, side, 6)
+        self._header_layout.invalidate()
         self._sync_rail_tooltips()
 
     def _sync_rail_tooltips(self):
@@ -1224,8 +1334,8 @@ class V2Window(QMainWindow):
         if compact and item.isChecked():
             item.setChecked(False)
             self._inspector_auto_hidden = True
-            self.message("The window is narrow, so objects and layers are hidden; View > "
-                         "Show objects and layers shows them.")
+            self.message("The window is narrow, so objects and layers are hidden; the "
+                         "Objects button (top right) shows them.")
         elif not compact and getattr(self, "_inspector_auto_hidden", False):
             item.setChecked(True)
 
@@ -1255,6 +1365,10 @@ class V2Window(QMainWindow):
         focused = self.is_focused()
         self.focus_button.setChecked(focused)
         self.focus_item.setChecked(focused)
+        self.task_toggle.setChecked(self.toggle_task_item.isChecked())
+        self.inspector_toggle.setChecked(self.toggle_inspector_item.isChecked())
+        # The canvas width changes once the columns are laid out again.
+        QTimer.singleShot(0, self._balance_views)
 
     def open_palette(self):
         palette = CommandPalette(self.registry, self)
@@ -1318,6 +1432,7 @@ class V2Window(QMainWindow):
             current.apply_gates()
         self.plane_label.setText(state.plane_summary(engine))
         self.section_bar.refresh()
+        self.channel_strip.refresh()
         tool = engine.current_checked_tool
         self.tool_options.setVisible(tool is not None)
         self.tool_label.setText("{} options".format({

@@ -808,6 +808,8 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
         redo_shortcut = QShortcut(QKeySequence("Ctrl+Shift+Z"), self)
         redo_shortcut.activated.connect(self.redo_called)
 
+        # The empty document, which File > New project returns to.
+        self.remember_empty_document()
         self.print_message("Ready", self.normal_color)
 
     def sidebar_tab_state(self, tab_num):

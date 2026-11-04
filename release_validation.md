@@ -2,7 +2,7 @@
 
 Stable release: **2.0.0**, 29 October 2026 (PyPI, and a GitHub release with
 Windows and macOS builds), after release candidates 2.0.0rc1 (published) to
-2.0.0rc16. Current release: 2.6.3, 3 November 2026 (2.4.0 plus fixes and the rat atlas downloads; the first published since 2.0.0); the waiver below
+2.0.0rc16. Current release: 2.7.0, 3 November 2026 (2.4.0 plus fixes and the rat atlas downloads; the first published since 2.0.0); the waiver below
 applies to it as well. Passing automated tests does not satisfy the native-installation or
 user-evaluation gates.
 
@@ -93,8 +93,8 @@ arm64, Python 3.13.9, NumPy 2.5.4, tifffile 2026.10.15, offscreen:
 
 | Stack | Version | Full-stack decodes | Time | Traced peak | Resident peak |
 | --- | --- | ---: | ---: | ---: | ---: |
-| 40 × 1024², 80 MiB | 2.6.3 | 40 | 2.2 s | 362 MiB | 1,112 MiB |
-| 60 × 2048², 480 MiB | 2.6.3 | 60 | 11.4 s | 1,811 MiB | 3,506 MiB |
+| 40 × 1024², 80 MiB | 2.6.2 | 40 | 2.2 s | 362 MiB | 1,112 MiB |
+| 60 × 2048², 480 MiB | 2.6.2 | 60 | 11.4 s | 1,811 MiB | 3,506 MiB |
 | 60 × 2048², 480 MiB | 2.6.3 | 1 | 5.0 s | 952 MiB | 2,438 MiB |
 
 2.6.3 reads the stack once and lets the sections share it read-only. Synthetic
