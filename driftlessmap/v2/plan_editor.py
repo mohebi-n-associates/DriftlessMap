@@ -20,7 +20,6 @@ from PyQt6.QtWidgets import (
     QComboBox,
     QDoubleSpinBox,
     QGridLayout,
-    QInputDialog,
     QLabel,
     QLineEdit,
     QMenu,
@@ -31,6 +30,8 @@ from PyQt6.QtWidgets import (
 
 from ..probe_plans import (
     CLEARANCE_UM,
+    FACE_LOOK_UM,
+    imaging_summary,
     MAX_TILT_DEG,
     ProbePlan,
     arm_from_tilts,
@@ -163,8 +164,28 @@ class _Steering(QObject):
         return self.editor.steer_key(event.key(), event.modifiers())
 
 
+HINTS = {
+    "probe": "Plan where the probe goes before surgery: set the tip (or the entry and the "
+             "depth) and the tilts, click the entry and the tip on the atlas, snap the tip to "
+             "a region, or steer it with the keys. Positions are from Bregma; ML + is the "
+             "animal's right.",
+    "fiber": "Plan where the fiber goes before surgery: set its tip (or the entry and the "
+             "depth) and the tilts, click the entry and the tip on the atlas, snap the tip to "
+             "a region, or steer it with the keys. Its outline is drawn on the atlas.",
+    "prism": "Plan where the prism goes before surgery: the tip is the middle of the imaging "
+             "face's bottom edge (its deepest point); Face turns the imaging face (0° looks "
+             "anterior, 90° the animal's right). The readout lists what the face looks into.",
+}
+
+
 class PlanEditor(Card):
-    """Edit the selected probe's plan; ``controls`` is the ProbeControls owner."""
+    """Edit the selected probe's, fiber's or prism's plan.
+
+    ``controls`` owns the editor and answers for the device: ``plan_colour``,
+    ``use_colour``, ``default_plan``, ``plan_removed``, ``plan_kind`` and
+    ``sync`` (``ProbeControls`` for probes, the Implants card for fibers and
+    prisms, since 2.8.5).
+    """
 
     def __init__(self, shell, controls):
         super().__init__("Plan")
@@ -177,11 +198,8 @@ class PlanEditor(Card):
         self.clicking = False
         self._filling = False
         self.step_index = 1
-        self.hint = self.add(hint_label(
-            "Plan where the probe goes before surgery: set the tip (or the entry and the "
-            "depth) and the tilts, click the entry and the tip on the atlas, snap the tip to "
-            "a region, or steer it with the keys. Positions are from Bregma; ML + is the "
-            "animal's right."))
+        self.kind = "probe"
+        self.hint = self.add(hint_label(HINTS["probe"]))
         self.start_button = button("Plan this probe", self.start_plan, primary=True,
                                    tooltip="Give the probe a plan: 1 mm right of Bregma, "
                                            "3 mm deep, vertical; then move it.")
@@ -210,11 +228,12 @@ class PlanEditor(Card):
         self.bank_box.setToolTip("The sites recorded at once: a bank of 384 channels counted "
                                  "from the tip (Bank 0 is the lowest), or every site")
         self.bank_box.currentIndexChanged.connect(self._bank_changed)
-        grid.addWidget(QLabel("Probe"), 0, 0)
+        self.type_label, self.bank_label = QLabel("Probe"), QLabel("Record")
+        grid.addWidget(self.type_label, 0, 0)
         grid.addWidget(self.type_box, 0, 1, 1, 3)
         grid.addWidget(QLabel("Edit by"), 1, 0)
         grid.addWidget(self.mode_box, 1, 1)
-        grid.addWidget(QLabel("Record"), 1, 2)
+        grid.addWidget(self.bank_label, 1, 2)
         grid.addWidget(self.bank_box, 1, 3)
         self.ap = _spin(-20, 20, 0.05, 3, " mm", "")
         self.ml = _spin(-20, 20, 0.05, 3, " mm", "")
@@ -238,9 +257,10 @@ class PlanEditor(Card):
                                   "an arm is set: azimuth (the direction the tip leans, from "
                                   "anterior towards the animal's right) and elevation (from "
                                   "vertical)")
+        self.roll_label = QLabel("Roll")
         rows = ((self.ap_label, self.ap, self.first_angle_label, self.ap_tilt),
                 (self.ml_label, self.ml, self.second_angle_label, self.ml_tilt),
-                (self.dv_label, self.dv, QLabel("Roll"), self.roll),
+                (self.dv_label, self.dv, self.roll_label, self.roll),
                 (QLabel("Depth"), self.depth, None, None))
         for row, (label_a, box_a, label_b, box_b) in enumerate(rows, start=2):
             grid.addWidget(label_a, row, 0)
@@ -298,9 +318,10 @@ class PlanEditor(Card):
             button("Snap tip to region…", self.snap_to_region,
                    tooltip="Move the tip to the centre of a region (on the tip's side of "
                            "the brain), keeping the tilts."),
-            button("Propose…", self.propose,
-                   tooltip="Propose plans that record chosen regions (and keep out of "
-                           "others) within the tilts the rig allows"),
+            self._keep("propose_button", button(
+                "Propose…", self.propose,
+                tooltip="Propose plans that record chosen regions (and keep out of "
+                        "others) within the tilts the rig allows")),
             self.steer_button,
             button("Show on atlas", self.show_on_atlas,
                    tooltip="Move the atlas pages through the tip"),
@@ -323,8 +344,9 @@ class PlanEditor(Card):
         more_grid.addWidget(grid_of([
             self.surface_button,
             self.surgery_button,
-            button("Region table…", self.region_table,
-                   tooltip="The planned probe's regions, contacts and coordinates"),
+            self._keep("table_button", button(
+                "Region table…", self.region_table,
+                tooltip="The planned probe's regions, contacts and coordinates")),
             button("Show in 3D", lambda: self.shell.set_view("3d")),
         ], columns=2), 2, 0, 1, 2)
         self.more = self.add(Disclosure("Surgery and more", more, expanded=False))
@@ -337,6 +359,36 @@ class PlanEditor(Card):
                                             "Undo mapping step brings it back.")
         self.add_row(self.remove_button, None)
         self._steering = _Steering(self)
+
+    def _keep(self, name, widget):
+        setattr(self, name, widget)
+        return widget
+
+    def _apply_kind(self, kind):
+        """Show what this kind of device has: a probe's design, recording window
+        and proposals; a prism's imaging face (its roll); a fiber neither."""
+        self.kind = kind
+        probe = kind == "probe"
+        self.hint.setText(HINTS[kind])
+        self.start_button.setText("Plan this {}".format(kind))
+        self.start_button.setToolTip(
+            "Give the {} a plan: 1 mm right of Bregma, vertical, in the brain; then move it."
+            .format(kind))
+        for widget in (self.type_label, self.type_box, self.bank_label, self.bank_box,
+                       self.propose_button):
+            widget.setVisible(probe)
+        self.roll_label.setVisible(kind != "fiber")
+        self.roll.setVisible(kind != "fiber")
+        self.roll_label.setText("Face" if kind == "prism" else "Roll")
+        self.roll.setToolTip(
+            "Turn the imaging face about the prism's axis: 0 = it looks anterior, 90 = "
+            "the animal's right" if kind == "prism" else
+            "Turn about the shank: 0 = contacts face anterior, 90 = they face the animal's "
+            "right")
+        self.table_button.setText("Region table…" if probe else "Report…")
+        self.shank.button.setText({"probe": "Shank and probe plane",
+                                   "fiber": "Fiber and its plane",
+                                   "prism": "Imaging face"}[kind])
 
     def hideEvent(self, event):
         # Leaving the Plan section ends steering (review R8 of 2.8.3).
@@ -368,7 +420,7 @@ class PlanEditor(Card):
         self.sync()
 
     def _colour(self):
-        return self.controls.book.colour(self.probe) if self.probe else None
+        return self.controls.plan_colour(self.probe) if self.probe else None
 
     def _say(self, ok, message):
         set_status(self.status, message, "good" if ok else "warn")
@@ -381,9 +433,13 @@ class PlanEditor(Card):
         plan = self.current()
         self.setVisible(self.probe is not None)
         has_atlas = atlas is not None
+        kind = plan.kind if plan is not None else (
+            self.controls.plan_kind(self.probe) if self.probe else "probe")
+        if kind != self.kind:
+            self._apply_kind(kind)
         self.start_button.setVisible(plan is None)
         self.start_button.setEnabled(has_atlas)
-        self.start_propose.setVisible(plan is None)
+        self.start_propose.setVisible(plan is None and kind == "probe")
         self.start_propose.setEnabled(has_atlas)
         self.start_button.setToolTip("" if has_atlas else "Load a volume atlas first.")
         for widget in (self.fields, self.actions, self.readout, self.remove_button, self.shank,
@@ -467,17 +523,32 @@ class PlanEditor(Card):
                 values[1] / 1000.0, values[0] / 1000.0, values[2] / 1000.0)
 
         lines = []
+        kind = plan.kind
         if readout["entry_um"] is not None:
             lines.append("<b>Entry</b> {}".format(triple(readout["entry_um"])))
-            lines.append("<b>Depth</b> {:.2f} mm along the probe".format(
-                readout["depth_um"] / 1000.0))
-        lines.append("<b>Tip</b> {} · in {}".format(
+            lines.append("<b>Depth</b> {:.2f} mm along the {}".format(
+                readout["depth_um"] / 1000.0, kind))
+        lines.append("<b>{}</b> {} · in {}".format(
+            "Bottom" if kind == "prism" else "Tip",
             triple(readout["tip_um"]), html.escape(readout["tip_region"][0])))
-        lines.append("<b>Tilt</b> {} · contacts face {}".format(
-            html.escape(readout["tilt"]), html.escape(readout["face"])))
+        lines.append("<b>Tilt</b> {}{}".format(
+            html.escape(readout["tilt"]),
+            " · contacts face {}".format(html.escape(readout["face"])) if kind == "probe"
+            else " · imaging face looks {}".format(html.escape(readout["face"]))
+            if kind == "prism" else ""))
+        if readout.get("ferrule_gap_um") is not None and readout["ferrule_gap_um"] >= 0:
+            lines.append("<b>Ferrule</b> its bottom {:.2f} mm above the brain surface, "
+                         "along the fiber".format(readout["ferrule_gap_um"] / 1000.0))
+        if readout.get("imaging"):
+            width, height = readout["imaging_window_um"]
+            lines.append("<b>Face looks into</b> {} (the {:.2f} × {:.2f} mm imaging window "
+                         "at the bottom of the face, tissue within {:.1f} mm of it)".format(
+                             html.escape(imaging_summary(readout)), width / 1000.0,
+                             height / 1000.0, FACE_LOOK_UM / 1000.0))
         regions = region_summary(readout, limit=8)
         if regions:
-            lines.append("<b>Along the shank</b> {}".format(html.escape(regions)))
+            lines.append("<b>Along the {}</b> {}".format(
+                "shank" if kind == "probe" else "axis", html.escape(regions)))
         if readout.get("window_um"):
             top, bottom = readout["window_um"]
             cover = ", ".join("{} {:.2f} mm ({} sites)".format(
@@ -509,7 +580,7 @@ class PlanEditor(Card):
         closest = readout.get("closest")
         if closest and closest["distance_um"] >= CLEARANCE_UM:
             other = [p for p in closest["probes"] if p != plan.probe][0]
-            lines.append("<b>Closest probe</b> {} at {:.2f} mm".format(
+            lines.append("<b>Closest plan</b> {} at {:.2f} mm".format(
                 html.escape(other), closest["distance_um"] / 1000.0))
         scale = readout.get("scale", 1.0)
         if scale is not None and abs(scale - 1.0) > 1e-9 and readout["entry_um"] is not None:
@@ -819,7 +890,7 @@ class PlanEditor(Card):
         if probe is None or self.engine.plan_atlas() is None:
             self._say(False, "Load a volume atlas first.")
             return
-        ok, message = self.engine.set_probe_plan(self.engine.default_probe_plan(probe),
+        ok, message = self.engine.set_probe_plan(self.controls.default_plan(probe),
                                                  colour=self._colour())
         self.engine.show_plan_on_atlas(probe)
         self._say(ok, message if not ok else
@@ -834,7 +905,7 @@ class PlanEditor(Card):
         if self.clicking:
             engine.clear_atlas_probe_marks()
             if not tool.isChecked():
-                self.controls.book.use_colour(self.probe)
+                self.controls.use_colour(self.probe)
                 self.shell.toggle_tool("probe")
             self.shell.message("Click the entry and then the tip on an atlas view.")
         elif tool.isChecked():
@@ -848,13 +919,17 @@ class PlanEditor(Card):
             return
         plan = self.plan()
         try:
-            if plan is None:
+            through = plan_from_points(self.probe, points[0], points[1])
+            # Everything but the pose is kept (the device, its design and window).
+            if plan is not None:
+                base = plan
+            elif self.kind == "probe":
                 settings, offsets = probe_type_settings(0, engine)
-                keep = {"probe_settings": settings, "shank_offsets_um": offsets}
+                base = through.copy(probe_settings=settings, shank_offsets_um=offsets)
             else:
-                keep = {"roll_deg": plan.roll_deg, "probe_settings": plan.probe_settings,
-                        "shank_offsets_um": plan.shank_offsets_um, "bank": plan.bank}
-            new = plan_from_points(self.probe, points[0], points[1], **keep)
+                base = self.controls.default_plan(self.probe)
+            new = base.copy(tip_um=through.tip_um, ap_tilt_deg=through.ap_tilt_deg,
+                            ml_tilt_deg=through.ml_tilt_deg)
         except ValueError as exc:
             engine.clear_atlas_probe_marks()
             self._say(False, "Those two points cannot make a plan: {}.".format(exc))
@@ -887,19 +962,15 @@ class PlanEditor(Card):
             if not regions:
                 self._say(False, "The atlas has no region names.")
                 return
-            items = ["{} · {}".format(a, n) for a, n, _i in regions]
+            from .region_picker import pick_region
+
             current = self.engine.atlas_view.label_tree.tree.currentItem()
-            start = 0
-            if current is not None and getattr(current, "id", None) is not None:
-                ids = [i for _a, _n, i in regions]
-                if int(current.id) in ids:
-                    start = ids.index(int(current.id))
-            choice, ok = QInputDialog.getItem(self, "Snap tip to region",
-                                              "Region (the tip goes to its centre):",
-                                              items, start, True)
-            if not ok or choice not in items:
+            start = int(current.id) if current is not None \
+                and getattr(current, "id", None) is not None else None
+            region_id = pick_region(self, regions, "Snap tip to region",
+                                    "Region (the tip goes to its centre):", start)
+            if region_id is None:
                 return
-            region_id = regions[items.index(choice)][2]
         side = 1 if plan.tip_um[0] >= 0 else -1
         centre = self.engine.region_centre_um(region_id, side=side) \
             or self.engine.region_centre_um(region_id)
@@ -909,6 +980,8 @@ class PlanEditor(Card):
         new = plan.copy(tip_um=centre)
         ok, message = self.engine.set_probe_plan(new, colour=self._colour())
         self.engine.show_plan_on_atlas(self.probe)
+        # The region is checked, so it is drawn on the atlas views and in 3D.
+        self.engine.atlas_view.label_tree.show_labels([region_id])
         self._fill(new)
         self._say(ok, message)
 
@@ -979,9 +1052,7 @@ class PlanEditor(Card):
         self.engine.plan_previews.pop(self.probe, None)
         with self.engine.undoable("Remove {} plan".format(self.probe)):
             self.engine.remove_probe_plan(self.probe)
-        book = self.controls.book
-        if self.probe not in book.names():
-            book._empty.append(self.probe)     # the probe stays listed
+        self.controls.plan_removed(self.probe)
         self._say(True, "Removed the plan of {}.".format(self.probe))
         self.shell.refresh()
 

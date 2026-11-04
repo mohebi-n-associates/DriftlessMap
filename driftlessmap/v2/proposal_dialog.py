@@ -22,7 +22,6 @@ from PyQt6.QtWidgets import (
     QGridLayout,
     QHBoxLayout,
     QHeaderView,
-    QInputDialog,
     QLabel,
     QListWidget,
     QListWidgetItem,
@@ -175,6 +174,9 @@ class ProposalDialog(QDialog):
         item = QListWidgetItem(self._name(region))
         item.setData(Qt.ItemDataRole.UserRole, region)
         widget.addItem(item)
+        # Regions to record or keep out of are checked, so they are drawn on
+        # the atlas views and in 3D (2.8.5).
+        self.engine.atlas_view.label_tree.show_labels([region])
 
     @staticmethod
     def regions(widget):
@@ -182,13 +184,14 @@ class ProposalDialog(QDialog):
                 for i in range(widget.count())]
 
     def add_region(self, widget):
+        from .region_picker import pick_region
+
         regions = self.editor._regions()
-        items = ["{} · {}".format(a, n) for a, n, _i in regions]
-        if not items:
+        if not regions:
             return
-        choice, ok = QInputDialog.getItem(self, "Add a region", "Region:", items, 0, True)
-        if ok and choice in items:
-            self._add(widget, regions[items.index(choice)][2])
+        region = pick_region(self, regions, "Add a region", "Region:")
+        if region is not None:
+            self._add(widget, region)
 
     def add_checked(self, widget):
         for region in checked_regions(self.engine.atlas_view.label_tree):

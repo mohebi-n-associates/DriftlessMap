@@ -8,8 +8,9 @@ or important workflows change.
 
 ## Project identity
 
-- Current release: DriftlessMap 2.8.4 (4 November 2026; probe planning,
-  `probe_planning_design.md` Phases 1-4, and `reviews/2.8.3` R1-R8; not yet published; the owner
+- Current release: DriftlessMap 2.8.5 (4 November 2026; probe planning,
+  `probe_planning_design.md` Phases 1-4, `reviews/2.8.3` R1-R8 and planned
+  fibers and prisms (its section 6); not yet published; the owner
   numbers the probe-planning phases 2.8.0-2.8.3, one feature). Latest
   published: 2.7.0 (3 November 2026; the first release since 2.0.0, including
   2.0.1-2.3.0 and multi-section projects). 2.0.0
@@ -156,6 +157,38 @@ or important workflows change.
   under inspection. `ProjectSnapshot` keeps the atlas Lambda;
   `surgery_scale` is None (unavailable) when the animal distance is set but
   the atlas's is unknown. Steering ends when the Plan section is hidden.
+  2.8.5: `ProbePlan.kind` (`probe`/`fiber`/`prism`) with `specs` and
+  `implant_id` (written only for implant plans; kept under the implant's
+  name; probe and implant names exclude each other); `device_lines` (shanks,
+  fiber axis and rim, prism footprint grid with the bevel's `prism_rise`)
+  drive `track_checks`, `clearances` and the craniotomy fit; `planned_model`
+  (cylinder, new `prism` model type in `implants.model_section`),
+  `face_view` (what a prism's imaging face looks into), prism length check.
+  Prism specs gain `length_um` (3000) and `bevel_deg` (45); `FIT_SPECS` are
+  the settings fits use (others never put a built implant out of date).
+  Engine `implant_plan`, `default_implant_plan`, `_build_implant_plan`
+  (`merged fiber`/`merged prism` `"<name> plan"`, `plan_of`, no
+  `implant_id`); rename/settings/delete of an implant carry its plan.
+  `PlanEditor` gets its device from its owner (`plan_colour`, `use_colour`,
+  `plan_kind`, `default_plan`, `plan_removed`): `ProbeControls`, and the
+  Implants card for fibers and prisms. The start screen's Plan a probe/fiber/
+  prism (`start_probe_plan(kind)`, commands `probe.plan`, `fiber.plan`,
+  `prism.plan`) ask for the atlas folder when none is loaded. A prism's
+  imaging window (`imaging_window_um`: width × depth / tan(bevel)) is drawn
+  in the Imaging face view and must lie in the brain. Regions: the Regions
+  tree has a Find box (`LabelTree.filter_labels`, `show_labels` checks
+  regions so the atlas and 3D show them); `v2/region_picker.pick_region`
+  for Snap tip to region and Propose's Add…, whose regions are shown.
+  Fibers and prisms are filled in 3D (`implants.model_mesh`,
+  `obj_items.ImplantItem`, which takes `setData(color=, width=)`);
+  `set_region_opacity` (Regions tab slider) makes region meshes translucent.
+  Fibers have a ferrule (`fiber_length_um`, `ferrule_diameter_um`,
+  `ferrule_length_um`; model part `ferrule`, `model_parts`); `plan_segments`
+  carries radii and `clearances` subtracts them.
+  `region_meshes.region_surface` builds one smooth surface per checked
+  region (with sub-regions) in the segmentation frame (`atlas_label`
+  reordered back); `sync_region_meshes` draws it instead of the parts'
+  meshes.
 - `driftlessmap/project_session.py`: `ProjectSessionMixin.project_payload` is the
   shared saved-state collector. `load_project` snapshots the active document and
   restores it on failure, including its original reader, in-memory atlas and undo
@@ -505,7 +538,9 @@ or important workflows change.
   The optional `interface_state` (where the user left off) needs no schema
   bump: it is absent in older files and dropped when unusable.
   The optional `probe_plans` (2.8.0), `craniotomies` and `surgery_settings`
-  (2.8.2), all document state, need none either:
+  (2.8.2) and `implant_plans` (2.8.5: fiber and prism plans, kept apart so
+  older versions do not read them as probes), all document state, need none
+  either:
   absent means no plans; invalid plans are left out with a message; older
   versions ignore it and keep the built plan objects as ordinary probes.
   Schemas 1 and 2 load with Legacy registration input.

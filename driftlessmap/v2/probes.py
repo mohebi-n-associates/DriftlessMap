@@ -47,11 +47,13 @@ class ProbeBook:
 
     def _plans(self):
         plans = getattr(self.engine, "probe_plans", None)
-        return {plan.probe for plan in plans.plans()} if plans is not None else set()
+        return {plan.probe for plan in plans.plans_of(implants=False)} \
+            if plans is not None else set()
 
     def plan(self, probe):
         plans = getattr(self.engine, "probe_plans", None)
-        return plans.get(probe) if plans is not None else None
+        plan = plans.get(probe) if plans is not None else None
+        return plan if plan is not None and plan.is_probe else None
 
     def names(self):
         found = {probe_of(group_of(name)) for _i, name, kind in self._objects()
@@ -132,8 +134,12 @@ class ProbeBook:
             raise ValueError("Probe names cannot end in 'shank' and a number.")
         return name
 
+    def _implant_names(self):
+        implants = getattr(self.engine, "implants", None)
+        return {i.name for i in implants.implants()} if implants is not None else set()
+
     def new(self):
-        existing = set(self.names())
+        existing = set(self.names()) | self._implant_names()
         number = 1
         while "Probe {}".format(number) in existing:
             number += 1
@@ -151,6 +157,9 @@ class ProbeBook:
         new = self.check_name(new)
         if new != old and new in self.names():
             raise ValueError("There is already a probe called {}.".format(new))
+        if new != old and new in self._implant_names():
+            # Plans are kept by name (2.8.5): a probe and an implant cannot share one.
+            raise ValueError("There is already an implant called {}.".format(new))
         ledger = getattr(self.engine, "mapping_ledger", None)
         if ledger is not None:
             ledger.rename_probe(old, new)

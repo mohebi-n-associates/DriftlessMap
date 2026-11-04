@@ -1,6 +1,7 @@
 import numpy as np
 from PyQt6.QtWidgets import (
     QHeaderView,
+    QLineEdit,
     QPushButton,
     QTreeWidget,
     QTreeWidgetItem,
@@ -81,6 +82,15 @@ class LabelTree(QWidget):
         self.root_item = []
         self.root_acronym = []
         
+        # Typing narrows the tree to the regions whose acronym or name holds
+        # every word, with their parents; Enter selects the first (2.8.5).
+        self.search = QLineEdit(self)
+        self.search.setPlaceholderText("Find a region (acronym or name)")
+        self.search.setClearButtonEnabled(True)
+        self.search.textChanged.connect(self.filter_labels)
+        self.search.returnPressed.connect(self.select_first_match)
+        self.layout.addWidget(self.search)
+        self.layout.addSpacing(4)
         self.tree = QTreeWidget(self)
         self.layout.addWidget(self.tree)
         self.tree.header().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
@@ -168,6 +178,73 @@ class LabelTree(QWidget):
         self.labels_by_id[label_id] = {'item': item, 'btn': btn, 'parent': parent}
         item.id = label_id
         self.labels_by_acronym[acronym] = self.labels_by_id[label_id]
+
+    # ------------------------------------------------------------- finding
+    @staticmethod
+    def _matches(item, words):
+        text = "{} {}".format(item.text(0), item.text(1)).lower()
+        return all(word in text for word in words)
+
+    def matching_labels(self, text):
+        """Ids of the regions whose acronym or name holds every word of ``text``."""
+        words = text.lower().split()
+        return [label_id for label_id, rec in self.labels_by_id.items()
+                if words and self._matches(rec['item'], words)]
+
+    def filter_labels(self, text):
+        """Show only the matching regions and their parents (all for no text)."""
+        words = text.lower().split()
+        if not words:
+            for rec in self.labels_by_id.values():
+                rec['item'].setHidden(False)
+            return
+        shown = set()
+        for label_id in self.matching_labels(text):
+            item = self.labels_by_id[label_id]['item']
+            while item is not None and id(item) not in shown:
+                shown.add(id(item))
+                item = item.parent()
+        for rec in self.labels_by_id.values():
+            item = rec['item']
+            item.setHidden(id(item) not in shown)
+            if id(item) in shown and not self._matches(item, words):
+                item.setExpanded(True)       # a parent on the way to a match
+
+    def select_first_match(self):
+        found = self.matching_labels(self.search.text())
+        if not found:
+            return
+        # The shortest acronym first: typing "PL" finds PL before PL1.
+        best = min(found, key=lambda i: (len(self.labels_by_id[i]['item'].text(0)),
+                                         self.labels_by_id[i]['item'].text(0)))
+        self.reveal_label(best)
+
+    def reveal_label(self, label_id):
+        """Expand the tree down to a region, select it and scroll to it."""
+        rec = self.labels_by_id.get(label_id)
+        if rec is None:
+            return False
+        item = rec['item']
+        parent = item.parent()
+        while parent is not None:
+            parent.setExpanded(True)
+            parent = parent.parent()
+        item.setHidden(False)
+        self.tree.setCurrentItem(item)
+        self.tree.scrollToItem(item)
+        return True
+
+    def show_labels(self, label_ids):
+        """Check regions (and so their subregions), so they are drawn on the
+        atlas views and in 3D, and reveal the first; returns those found."""
+        found = [int(i) for i in label_ids if int(i) in self.labels_by_id]
+        for label_id in found:
+            item = self.labels_by_id[label_id]['item']
+            if item.checkState(0) != Qt.CheckState.Checked:
+                item.setCheckState(0, Qt.CheckState.Checked)   # item_change does the rest
+        if found:
+            self.reveal_label(found[0])
+        return found
 
     def clear_labels(self):
         root = self.tree.invisibleRootItem()

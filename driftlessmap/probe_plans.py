@@ -25,7 +25,17 @@ SUMMARY_MIN_UM = 50.0
 
 PLAN_FIELDS = ("probe", "tip_um", "ap_tilt_deg", "ml_tilt_deg", "roll_deg",
                "probe_settings", "shank_offsets_um", "bank", "craniotomy", "targets",
-               "avoid")
+               "avoid", "kind", "specs", "implant_id")
+# What a plan places (2.8.5): a probe, or an optical fiber or microprism of
+# the project's implants. Implant plans keep a copy of the implant's specs.
+PROBE, FIBER, PRISM = "probe", "fiber", "prism"
+KINDS = (PROBE, FIBER, PRISM)
+# A prism's footprint and a fiber's rim are checked along lines parallel to
+# the axis, at most this far apart.
+LINE_SPACING_UM = 375.0
+FIBER_RIM_LINES = 8
+# The tissue a prism's imaging face looks into: this far in front of it.
+FACE_LOOK_UM = 200.0
 # Clearance between planned probes: checked from this far above each entry
 # down to the tip, and reported when closer than CLEARANCE_UM.
 CLEARANCE_ABOVE_UM = 3000.0
@@ -106,8 +116,21 @@ class ProbePlan:
 
     def __init__(self, probe, tip_um, ap_tilt_deg=0.0, ml_tilt_deg=0.0, roll_deg=0.0,
                  probe_settings=None, shank_offsets_um=None, bank=0, craniotomy=None,
-                 targets=None, avoid=None):
+                 targets=None, avoid=None, kind=PROBE, specs=None, implant_id=None):
+        # ``probe`` is the name the plan is kept under: the probe's, or the
+        # implant's for a fiber or prism (2.8.5).
         self.probe = str(probe)
+        self.kind = str(kind)
+        if self.kind not in KINDS:
+            raise ValueError("unknown kind of plan: {!r}".format(kind))
+        if self.kind == PROBE:
+            self.specs = None
+        else:
+            from .implants import validated_specs
+
+            self.specs = validated_specs(self.kind, specs)
+        self.implant_id = None if implant_id is None or self.kind == PROBE \
+            else str(implant_id)
         self.tip_um = [float(v) for v in tip_um]
         self.ap_tilt_deg = float(ap_tilt_deg)
         self.ml_tilt_deg = float(ml_tilt_deg)
@@ -125,11 +148,16 @@ class ProbePlan:
         # absent means none). Proposals search for them; the readout scores them.
         self.targets = [int(t) for t in targets or []]
         self.avoid = [int(a) for a in avoid or []]
+        if self.kind != PROBE:
+            # An implant has no probe design, shanks or recording window.
+            self.probe_settings = self.shank_offsets_um = self.bank = None
         self.validate()
 
     def validate(self):
         if not self.probe.strip():
             raise ValueError("a plan needs its probe's name")
+        if self.kind not in KINDS:
+            raise ValueError("unknown kind of plan: {!r}".format(self.kind))
         if len(self.tip_um) != 3 or not all(math.isfinite(v) for v in self.tip_um):
             raise ValueError("the tip needs three finite coordinates")
         for name in ("ap_tilt_deg", "ml_tilt_deg", "roll_deg"):
@@ -157,6 +185,15 @@ class ProbePlan:
     @property
     def direction(self):
         return direction_from_tilts(self.ap_tilt_deg, self.ml_tilt_deg)
+
+    @property
+    def is_probe(self):
+        return self.kind == PROBE
+
+    @property
+    def device(self):
+        """What the plan places, in words ("probe", "fiber", "prism")."""
+        return self.kind
 
     @property
     def normal(self):
@@ -187,7 +224,9 @@ class ProbePlan:
             "craniotomy": self.craniotomy,
             "targets": list(self.targets),
             "avoid": list(self.avoid),
-        }
+        } | ({} if self.kind == PROBE else {
+            # Only implant plans carry these, so probe plans read as in 2.8.4.
+            "kind": self.kind, "specs": dict(self.specs), "implant_id": self.implant_id})
 
     @classmethod
     def from_dict(cls, data):
@@ -199,7 +238,8 @@ class ProbePlan:
                 data.get("ap_tilt_deg", 0.0), data.get("ml_tilt_deg", 0.0),
                 data.get("roll_deg", 0.0), data.get("probe_settings"),
                 data.get("shank_offsets_um"), data.get("bank", 0), data.get("craniotomy"),
-                data.get("targets"), data.get("avoid"))
+                data.get("targets"), data.get("avoid"), data.get("kind", PROBE),
+                data.get("specs"), data.get("implant_id"))
         except (KeyError, TypeError) as exc:
             raise ValueError("incomplete plan ({})".format(exc)) from None
 
@@ -302,28 +342,42 @@ class PlanBook:
             self._plans[new] = plan
         return plan
 
-    def to_list(self):
-        return [plan.to_dict() for plan in self.plans()]
+    def plans_of(self, implants=False):
+        """The probe plans, or (``implants``) the fiber and prism plans."""
+        return [plan for plan in self.plans() if plan.is_probe != bool(implants)]
+
+    def to_list(self, implants=False):
+        """Saved form of the probe plans (``probe_plans``), or with ``implants``
+        of the fiber and prism plans (``implant_plans``, 2.8.5): kept apart so
+        older versions, which read every plan as a probe, ignore them."""
+        return [plan.to_dict() for plan in self.plans_of(implants)]
 
     @classmethod
-    def from_list(cls, items):
+    def from_list(cls, items, implant_items=None):
         """Plans from saved data and a list of problems with the invalid ones."""
         book, problems = cls(), []
-        if items is None:
-            return book, problems
-        if not isinstance(items, list):
-            return book, ["the saved probe plans are not a list"]
-        for item in items:
-            try:
-                plan = ProbePlan.from_dict(item)
-            except ValueError as exc:
-                name = item.get("probe") if isinstance(item, dict) else None
-                problems.append("{}: {}".format(name or "a plan", exc))
+        for group, implants in ((items, False), (implant_items, True)):
+            if group is None:
                 continue
-            if plan.probe in book:
-                problems.append("{}: planned twice; the first plan was kept".format(plan.probe))
+            if not isinstance(group, list):
+                problems.append("the saved {} plans are not a list".format(
+                    "implant" if implants else "probe"))
                 continue
-            book.set(plan)
+            for item in group:
+                try:
+                    plan = ProbePlan.from_dict(item)
+                    if plan.is_probe == implants:
+                        raise ValueError("a {} plan is saved with the {} plans".format(
+                            plan.kind, "implant" if implants else "probe"))
+                except ValueError as exc:
+                    name = item.get("probe") if isinstance(item, dict) else None
+                    problems.append("{}: {}".format(name or "a plan", exc))
+                    continue
+                if plan.probe in book:
+                    problems.append("{}: planned twice; the first plan was kept".format(
+                        plan.probe))
+                    continue
+                book.set(plan)
         return book, problems
 
 
@@ -537,6 +591,11 @@ def plan_readout(plan, atlas):
         "roll_deg": plan.roll_deg,
         "tilt": tilt_words(plan, entry),
         "face": face_words(plan.normal),
+        "kind": plan.kind,
+        "imaging": [],
+        "imaging_height_um": 0.0,
+        "imaging_window_um": None,
+        "ferrule_gap_um": None,
         "regions": [],
         "tip_region": atlas.name(atlas.labels_at(tip_vox[None, :])[0][0]),
         "warnings": warnings,
@@ -560,17 +619,31 @@ def plan_readout(plan, atlas):
     readout["regions"] = regions_along(atlas, entry, tip)
     length = plan.shank_length_um
     readout["reachable"] = True
-    _add_window(readout, plan, depth)
+    if plan.is_probe:
+        _add_window(readout, plan, depth)
     # Every physical shank, against the plan's regions to keep out of; tissue
     # gaps along the track are reported (review R1 and R5 of 2.8.3).
     hard, soft = track_checks(plan, atlas, plan.avoid)
     for message in hard + soft:
         if message.startswith("The probe's tip") or message in warnings:
             continue   # the tip is reported above for a single shank
+        if not plan.is_probe and not tip_inside and message.startswith("Part of"):
+            continue   # the whole tip is reported above
         warnings.append(message)
     if depth < atlas.vox_um:
         readout["reachable"] = False
         warnings.append("The tip is at the brain surface; move it deeper.")
+    if plan.kind == PRISM:
+        _add_prism(readout, plan, atlas)
+    if plan.kind == FIBER:
+        # How far the ferrule's bottom stays above the brain, along the fiber.
+        gap = plan.specs["fiber_length_um"] - depth
+        readout["ferrule_gap_um"] = gap
+        if gap < -atlas.vox_um:
+            warnings.append("The ferrule would go {:.2f} mm into the brain: the fiber "
+                            "sticks out {:.2f} mm below it and goes {:.2f} mm deep.".format(
+                                -gap / 1000.0, plan.specs["fiber_length_um"] / 1000.0,
+                                depth / 1000.0))
     if length is not None and depth > length:
         readout["reachable"] = False
         warnings.append("The tip is {:.2f} mm deep, deeper than the {:.1f} mm shank "
@@ -578,6 +651,57 @@ def plan_readout(plan, atlas):
     if entry[0] * tip[0] < 0 and min(abs(entry[0]), abs(tip[0])) > atlas.vox_um:
         warnings.append("The probe crosses the midline.")
     return readout
+
+
+def _add_prism(readout, plan, atlas):
+    """A planned prism's imaging face and whether it is long enough."""
+    readout["face"] = side_words(plan.normal, plan.tip_um)
+    height, readout["imaging"] = face_view(plan, atlas)
+    readout["imaging_height_um"] = height
+    readout["imaging_window_um"] = [plan.specs["width_um"], height]
+    length = plan.specs["length_um"]
+    direction = plan.direction
+    tip = np.asarray(plan.tip_um, dtype=float)
+    # The imaging window (the face's bottom, as high as the bevel reflects)
+    # must lie in the brain along the whole bottom edge of the face.
+    shallowest = None
+    for _name, offset, raised in device_lines(plan):
+        if raised != 0.0 or abs(float(np.dot(offset, plan.normal))) > 1e-6:
+            continue                       # only lines on the face itself
+        bottom = tip + offset
+        entry, _inside = surface_entry(atlas, bottom, direction)
+        depth = 0.0 if entry is None else float(np.dot(bottom - np.asarray(entry), direction))
+        shallowest = depth if shallowest is None else min(shallowest, depth)
+    if height > 0 and shallowest is not None and height - shallowest > atlas.vox_um:
+        readout["warnings"].append(
+            "The imaging window ({:.2f} × {:.2f} mm) reaches {:.2f} mm above the brain "
+            "surface: put the bottom of the face at least {:.2f} mm deep.".format(
+                plan.specs["width_um"] / 1000.0, height / 1000.0,
+                (height - shallowest) / 1000.0, height / 1000.0))
+    # Each line's own depth below the surface, against the length the prism
+    # has above that line's bottom.
+    worst = 0.0
+    for _name, offset, raised in device_lines(plan, outline=True):
+        bottom = tip + offset - direction * raised
+        entry, _inside = surface_entry(atlas, bottom, direction)
+        if entry is None:
+            continue
+        worst = max(worst, float(np.dot(bottom - np.asarray(entry), direction))
+                    - (length - raised))
+    if worst > atlas.vox_um:
+        readout["warnings"].append(
+            "The prism is {:.2f} mm long: its top would be {:.2f} mm below the brain "
+            "surface.".format(length / 1000.0, worst / 1000.0))
+
+
+def side_words(normal, point_um):
+    """The way a horizontal direction points, medial or lateral at ``point_um``."""
+    normal = np.asarray(normal, dtype=float)
+    words = face_words(normal)
+    if abs(normal[0]) >= abs(normal[1]) and abs(point_um[0]) > 1e-6:
+        lateral = (normal[0] > 0) == (point_um[0] > 0)
+        return "{} ({})".format("lateral" if lateral else "medial", words)
+    return words
 
 
 def _add_window(readout, plan, depth):
@@ -626,24 +750,37 @@ def coordinate_line(plan, readout, atlas_name=""):
             values[1] / 1000.0, values[0] / 1000.0, values[2] / 1000.0)
 
     settings = plan.probe_settings or {}
+    if plan.is_probe:
+        device = ["roll {:.0f}° (contacts face {})".format(plan.roll_deg, readout.get("face", "")),
+                  "probe {}".format(settings.get("probe_type_name"))
+                  if settings.get("probe_type_name") else ""]
+    else:
+        from .implants import TYPE_NAMES, describe_specs
+
+        device = ["{} {}".format(TYPE_NAMES[plan.kind].lower(),
+                                 describe_specs(plan.kind, plan.specs))]
+        if plan.kind == PRISM:
+            device.insert(0, "imaging face looks {} (turned {:.0f}° from anterior)".format(
+                readout.get("face", ""), plan.roll_deg))
+    lowest = "bottom of the imaging face" if plan.kind == PRISM else "tip"
     parts = [
         "{}:".format(plan.probe),
         "atlas {}".format(atlas_name) if atlas_name else "",
         "(from Bregma; ML + = animal's right, DV + = dorsal)",
         "entry {}".format(triple(readout["entry_um"])) if readout.get("entry_um") else "entry: none",
-        "depth {:.3f} mm along the probe".format(readout["depth_um"] / 1000.0)
+        "depth {:.3f} mm along the {}".format(readout["depth_um"] / 1000.0, plan.kind)
         if readout.get("depth_um") is not None else "",
-        "tip {}".format(triple(readout["tip_um"])),
+        "{} {}".format(lowest, triple(readout["tip_um"])),
         "AP tilt {:+.1f}°, ML tilt {:+.1f}° ({})".format(
             plan.ap_tilt_deg, plan.ml_tilt_deg, readout.get("tilt", "")),
         "arm azimuth {:.1f}°, elevation {:.1f}°".format(*readout["arm"])
         if readout.get("arm") else "",
-        "roll {:.0f}° (contacts face {})".format(plan.roll_deg, readout.get("face", "")),
-        "probe {}".format(settings.get("probe_type_name")) if settings.get("probe_type_name") else "",
-    ]
+    ] + device
     regions = region_summary(readout)
     if regions:
         parts.append("regions {}".format(regions))
+    if readout.get("imaging"):
+        parts.append("face looks into {}".format(imaging_summary(readout)))
     window = window_text(plan, readout)
     if window:
         parts.append(window)
@@ -661,6 +798,13 @@ def coordinate_line(plan, readout, atlas_name=""):
                      "mm".format(scale, triple(np.asarray(readout["entry_um"]) * scale),
                                  readout["depth_um"] * scale / 1000.0))
     return "; ".join(p for p in parts if p).replace(":;", ":")
+
+
+def imaging_summary(readout, limit=5, minimum=0.02):
+    """The regions a prism's imaging face looks into, as one short line."""
+    parts = ["{} {:.0f}%".format(r["acronym"], 100.0 * r["fraction"])
+             for r in readout.get("imaging") or [] if r["fraction"] >= minimum][:limit]
+    return ", ".join(parts)
 
 
 def window_text(plan, readout):
@@ -941,15 +1085,27 @@ def _segment_distance(p0, p1, q0, q1):
 
 
 def plan_segments(plan, readout, above_um=CLEARANCE_ABOVE_UM):
-    """Each shank as a segment (um) from ``above_um`` above the entry to the tip."""
+    """The device as segments (um) with a radius: ``[(start, end, radius)]``.
+
+    A probe's shanks run from ``above_um`` above the entry to the tip (radius
+    0, as before); a prism's outer lines likewise, with its bevel. A fiber is
+    its axis from the ferrule's bottom to the tip, with its radius, and the
+    ferrule's axis up its length, with the ferrule's radius (2.8.5), so the
+    distance between two devices is between their surfaces.
+    """
     if readout is None or readout.get("entry_um") is None:
         return []
     direction = plan.direction
-    across = across_face(direction, plan.normal)
     top = np.asarray(readout["entry_um"], dtype=float) - direction * above_um
     tip = np.asarray(plan.tip_um, dtype=float)
-    return [(top + across * offset, tip + across * offset)
-            for offset in plan.shank_offsets_um or [0.0]]
+    if plan.kind == FIBER:
+        specs = plan.specs
+        bottom = tip - direction * specs["fiber_length_um"]
+        ferrule_top = bottom - direction * specs["ferrule_length_um"]
+        return [(bottom, tip, specs["diameter_um"] / 2.0),
+                (ferrule_top, bottom, specs["ferrule_diameter_um"] / 2.0)]
+    return [(top + offset, tip + offset - direction * raised, 0.0)
+            for _name, offset, raised in device_lines(plan, outline=True)]
 
 
 def clearances(planned, above_um=CLEARANCE_ABOVE_UM):
@@ -966,9 +1122,10 @@ def clearances(planned, above_um=CLEARANCE_ABOVE_UM):
             plan_a, read_a = planned[i]
             plan_b, read_b = planned[j]
             best = None
-            for a0, a1 in plan_segments(plan_a, read_a, above_um):
-                for b0, b1 in plan_segments(plan_b, read_b, above_um):
+            for a0, a1, ra in plan_segments(plan_a, read_a, above_um):
+                for b0, b1, rb in plan_segments(plan_b, read_b, above_um):
                     distance, point, _other = _segment_distance(a0, a1, b0, b1)
+                    distance = max(0.0, distance - ra - rb)    # 0: they overlap
                     if best is None or distance < best[0]:
                         best = (distance, point)
             if best is None:
@@ -986,6 +1143,8 @@ def clearance_warning(probe, pairs, limit_um=CLEARANCE_UM):
             other = pair["probes"][1] if pair["probes"][0] == probe else pair["probes"][0]
             where = ("{:.2f} mm deep".format(pair["depth_um"] / 1000.0) if pair["depth_um"] >= 0
                      else "{:.2f} mm above the brain".format(-pair["depth_um"] / 1000.0))
+            if pair["distance_um"] <= 0.0:
+                return "{} touches {} ({}).".format(probe, other, where)
             return "{} passes {:.2f} mm from {} ({}).".format(
                 probe, pair["distance_um"] / 1000.0, other, where)
     return None
@@ -1108,6 +1267,122 @@ def shank_offsets(plan):
     return plan.shank_offsets_um or [0.0]
 
 
+def device_lines(plan, outline=False):
+    """Lines parallel to the axis that the planned device occupies (2.8.5).
+
+    Returns ``[(name, offset_um, raise_um)]``; a line's own tip is
+    ``tip + offset - direction * raise``. A probe has one line per shank
+    (offset across its face, as the engine lays shanks out). A fiber has its
+    axis and ``FIBER_RIM_LINES`` lines on its rim. A prism has a grid over its
+    cross-section at most ``LINE_SPACING_UM`` apart (its boundary only, with
+    ``outline``): its tip is the middle of the imaging face's bottom edge, the
+    face looks along ``plan.normal``, and behind the face the bevelled bottom
+    rises by ``prism_rise`` per µm.
+    """
+    direction = plan.direction
+    normal = plan.normal
+    across = across_face(direction, normal)
+    if plan.kind == PROBE:
+        offsets = shank_offsets(plan)
+        return [("Shank {}".format(number + 1) if len(offsets) > 1 else "The probe",
+                 across * offset, 0.0) for number, offset in enumerate(offsets)]
+    if plan.kind == FIBER:
+        radius = plan.specs["diameter_um"] / 2.0
+        lines = [] if outline else [("The fiber", np.zeros(3), 0.0)]
+        for k in range(FIBER_RIM_LINES):
+            angle = 2.0 * math.pi * k / FIBER_RIM_LINES
+            lines.append(("The fiber", radius * (math.cos(angle) * across
+                                                 + math.sin(angle) * normal), 0.0))
+        return lines
+    from .implants import prism_rise
+
+    width, depth = plan.specs["width_um"], plan.specs["depth_um"]
+    rise = prism_rise(plan.specs)
+    behind = np.linspace(0.0, depth, max(2, int(math.ceil(depth / LINE_SPACING_UM)) + 1))
+    sideways = np.linspace(-width / 2.0, width / 2.0,
+                           max(2, int(math.ceil(width / LINE_SPACING_UM)) + 1))
+    lines = []
+    for x in behind:
+        for w in sideways:
+            if outline and 0 < x < depth and -width / 2.0 < w < width / 2.0:
+                continue
+            lines.append(("The prism", -normal * x + across * w, float(x * rise)))
+    return lines
+
+
+def device_words(plan):
+    """(the device, its lowest point) in words, for messages."""
+    return {PROBE: ("The probe", "tip"), FIBER: ("The fiber", "tip"),
+            PRISM: ("The prism", "bottom")}[plan.kind]
+
+
+def planned_model(plan, readout, vox_um):
+    """The planned fiber (cylinder) or prism as a display model in
+    Bregma-relative voxels (``implants.model_section``/``model_segments``), or
+    None for a probe."""
+    if plan.kind == PROBE:
+        return None
+    direction = plan.direction
+    tip = np.asarray(plan.tip_um, dtype=float)
+    if plan.kind == FIBER:
+        # The bare fiber up to the ferrule's bottom, then the ferrule.
+        specs = plan.specs
+        bottom = tip - direction * specs["fiber_length_um"]
+        top = bottom - direction * specs["ferrule_length_um"]
+        return {"type": "cylinder", "top": (bottom / vox_um).tolist(),
+                "bottom": (tip / vox_um).tolist(),
+                "radius_vox": specs["diameter_um"] / 2.0 / vox_um,
+                "ferrule": {"type": "cylinder", "top": (top / vox_um).tolist(),
+                            "bottom": (bottom / vox_um).tolist(),
+                            "radius_vox": specs["ferrule_diameter_um"] / 2.0 / vox_um}}
+    from .implants import prism_rise
+
+    normal = plan.normal
+    return {"type": "prism", "bottom": (tip / vox_um).tolist(),
+            "up": (-direction).tolist(), "face_normal": normal.tolist(),
+            "across": across_face(direction, normal).tolist(),
+            "length_vox": plan.specs["length_um"] / vox_um,
+            "depth_vox": plan.specs["depth_um"] / vox_um,
+            "half_width_vox": plan.specs["width_um"] / 2.0 / vox_um,
+            "rise": prism_rise(plan.specs)}
+
+
+def face_view(plan, atlas, reach_um=FACE_LOOK_UM):
+    """What a planned prism's imaging face looks into.
+
+    The mirror sends the view out of the face from its bottom edge up to the
+    bevel's height (``depth * prism_rise``), across its width; the tissue is
+    sampled from one voxel to ``reach_um`` in front of the face. Returns
+    ``(height_um, regions)``, regions as dicts (id, acronym, name, fraction of
+    the samples) largest first, or ``(0.0, [])`` for a flat bottom.
+    """
+    from .implants import prism_rise
+
+    height = plan.specs["depth_um"] * prism_rise(plan.specs)
+    if plan.kind != PRISM or height <= 0:
+        return 0.0, []
+    step = max(atlas.vox_um, 20.0)
+    direction, normal = plan.direction, plan.normal
+    across = across_face(direction, normal)
+    width = plan.specs["width_um"]
+    ups = np.arange(step / 2.0, height, step)
+    sides = np.arange(-width / 2.0 + step / 2.0, width / 2.0, step)
+    outs = np.linspace(atlas.vox_um, max(reach_um, atlas.vox_um), 4)
+    tip = np.asarray(plan.tip_um, dtype=float)
+    points = (tip[None, None, None, :]
+              - ups[:, None, None, None] * direction
+              + sides[None, :, None, None] * across
+              + outs[None, None, :, None] * normal).reshape(-1, 3)
+    labels, _inside = atlas.labels_at(atlas.to_vox(points))
+    values, counts = np.unique(labels, return_counts=True)
+    regions = []
+    for value, count in sorted(zip(values, counts), key=lambda item: -item[1]):
+        acronym, name, _colour = atlas.name(value)
+        regions.append({"id": int(value), "acronym": acronym, "name": name,
+                        "fraction": float(count) / len(labels)})
+    return float(height), regions
+
+
 def traverse(atlas, start_um, end_um):
     """Every voxel the segment passes through, in order, exactly.
 
@@ -1160,16 +1435,22 @@ def track_checks(plan, atlas, avoid=(), side=None, midline_um=0.0, craniotomy=No
     """
     hard, soft = [], []
     direction = plan.direction
-    across = across_face(direction, plan.normal)
     tip = np.asarray(plan.tip_um, dtype=float)
     avoid_ids = region_ids(atlas, avoid)
-    shanks = shank_offsets(plan)
-    for number, offset in enumerate(shanks):
-        name = "Shank {}".format(number + 1) if len(shanks) > 1 else "The probe"
-        shank_tip = tip + across * offset
+    device, lowest = device_words(plan)
+
+    def add(found, message):
+        if message not in found:      # an implant's lines share one name
+            found.append(message)
+
+    widest_gap = 0.0
+    for name, offset, raised in device_lines(plan):
+        shank_tip = tip + offset - direction * raised
         entry, tip_inside = surface_entry(atlas, shank_tip, direction)
         if entry is None or not tip_inside:
-            hard.append("{}'s tip is not inside the brain.".format(name))
+            add(hard, "{}'s tip is not inside the brain.".format(name) if plan.is_probe
+                else "Part of {}'s {} is not inside the brain.".format(
+                    device.lower(), lowest))
             if entry is None:
                 continue
         length = float(np.dot(shank_tip - np.asarray(entry), direction))
@@ -1184,21 +1465,32 @@ def track_checks(plan, atlas, avoid=(), side=None, midline_um=0.0, craniotomy=No
             crossed = _members(labels, avoid_ids).any(axis=0)
             for region, hit in zip(avoid, crossed):
                 if hit:
-                    hard.append("{} passes through {}, which is to be kept out of.".format(
+                    add(hard, "{} passes through {}, which is to be kept out of.".format(
                         name, atlas.name(region)[0]))
         if side is not None and np.any(tissue_points & (points[:, 0] * side < 0)):
-            hard.append("{} crosses to the other side of the midline.".format(name))
+            add(hard, "{} crosses to the other side of the midline.".format(name))
         if midline_um > 0 and np.any(tissue_points & (np.abs(points[:, 0]) < midline_um)):
-            hard.append("{} comes within {:.2f} mm of the midline.".format(
+            add(hard, "{} comes within {:.2f} mm of the midline.".format(
                 name, midline_um / 1000.0))
         if craniotomy is not None and \
                 craniotomy.distance_um(entry) > craniotomy.diameter_um / 2.0 + 1e-6:
-            hard.append("{} enters {:.2f} mm from the centre of {}, outside its opening."
-                        .format(name, craniotomy.distance_um(entry) / 1000.0, craniotomy.name))
+            if plan.is_probe:
+                add(hard, "{} enters {:.2f} mm from the centre of {}, outside its opening."
+                    .format(name, craniotomy.distance_um(entry) / 1000.0, craniotomy.name))
+            else:
+                add(hard, "{} does not fit through {} ({:.2f} mm across).".format(
+                    name, craniotomy.name, craniotomy.diameter_um / 1000.0))
         gap = float(spans[~tissue].sum())
         if gap > 1e-6:
-            soft.append("{} leaves the atlas's labelled brain for {:.2f} mm between its "
-                        "entry and its tip.".format(name, gap / 1000.0))
+            if plan.is_probe:
+                add(soft, "{} leaves the atlas's labelled brain for {:.2f} mm between its "
+                    "entry and its tip.".format(name, gap / 1000.0))
+            else:
+                widest_gap = max(widest_gap, gap)
+    if widest_gap > 0:
+        # One message for the whole device, not one per line along it.
+        soft.append("{} crosses up to {:.2f} mm outside the atlas's labelled brain between "
+                    "the surface and its {}.".format(device, widest_gap / 1000.0, lowest))
     return hard, soft
 
 
@@ -1620,7 +1912,7 @@ def target_coverage(plan, readout, atlas):
     """Length of each of the plan's targets inside its recording window (um),
     summed over the shanks; each target counted on its own, so a parent and
     its child are both measured, whatever their order (review R6 of 2.8.3)."""
-    if not plan.targets or readout.get("window_um") is None:
+    if not plan.is_probe or not plan.targets or readout.get("window_um") is None:
         return []
     ids = region_ids(atlas, plan.targets)
     lengths = np.zeros(len(plan.targets))

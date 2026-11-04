@@ -187,6 +187,7 @@ class ProjectSessionMixin:
             "implants": self.implants.to_list(),
             "implant_outlines": self.implant_outlines,
             "probe_plans": self.probe_plans.to_list(),
+            "implant_plans": self.probe_plans.to_list(implants=True),
             "craniotomies": self.craniotomies.to_list(),
             "surgery_settings": dict(self.surgery_settings),
             "sections": self.sections_index(),
@@ -344,6 +345,7 @@ class ProjectSessionMixin:
         for mesh in self.small_mesh_list.values():
             self.view3d.removeItem(mesh)
         self.small_mesh_list.clear()
+        self.clear_region_surfaces()
         view.mesh.setMeshData(meshdata=gl.MeshData())
         view.mesh.resetTransform()
         view.atlas_data = view.atlas_label = view.slice_image_data = None

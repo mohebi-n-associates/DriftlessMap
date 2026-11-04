@@ -6,20 +6,26 @@ the slice, solid within ``NEAR_UM`` of it, with the entry (open circle) and
 the tip (filled) marked. Slices are mapped to 3-D with the same functions
 that placed clicked points (``AtlasView.get_*_3d``), so tilted slices are
 handled. A plan being edited (``engine.plan_previews``) is drawn in place of
-its stored version.
+its stored version. A planned fiber or prism (2.8.5) is also outlined, dashed,
+wherever the slice cuts it.
 """
 
 import json
 
+import cv2
 import numpy as np
 import pyqtgraph as pg
-from PyQt6.QtCore import QTimer, Qt
-from PyQt6.QtWidgets import QGraphicsEllipseItem
+from PyQt6.QtCore import QPointF, QTimer, Qt
+from PyQt6.QtGui import QBrush, QColor, QPolygonF
+from PyQt6.QtWidgets import QGraphicsEllipseItem, QGraphicsPolygonItem
+
+from .implants import model_section
 
 NEAR_UM = 100.0
 SAMPLES = 200
 POLL_MS = 400
 DEFAULT_COLOUR = (232, 72, 85)
+FERRULE_GRAY = (184, 184, 184)
 
 
 class PlanOverlay:
@@ -50,7 +56,9 @@ class PlanOverlay:
                 "horizontal": (view.himg, view.get_horizontal_3d)}
 
     def tracks(self):
-        """(probe, colour, entry, tip) in Bregma-relative voxels for each plan."""
+        """(probe, colour, entry, tip, model) for each plan: entry and tip in
+        Bregma-relative voxels; model the planned fiber or prism to outline
+        (``implants.model_section``), or None for a probe."""
         engine = self.engine
         atlas = engine.plan_atlas()
         if atlas is None:
@@ -65,11 +73,14 @@ class PlanOverlay:
             readout = engine.probe_plan_readout(plans[probe], others=False)
             if readout is None or readout["entry_um"] is None:
                 continue
+            plan = plans[probe]
+            implant = engine.implants.get(plan.implant_id) if plan.implant_id else None
             colour = (255, 255, 255) if probe.endswith(" (proposal)") \
-                else engine.plan_colours.get(probe, DEFAULT_COLOUR)
+                else engine.plan_colours.get(probe, implant.colour if implant is not None
+                                             else DEFAULT_COLOUR)
             found.append((probe, tuple(colour),
                           np.asarray(readout["entry_um"]) / atlas.vox_um,
-                          np.asarray(plans[probe].tip_um) / atlas.vox_um))
+                          np.asarray(plan.tip_um) / atlas.vox_um, readout.get("model")))
         return found
 
     def refresh(self):
@@ -83,7 +94,8 @@ class PlanOverlay:
         holes = [c.to_dict() for c in self.engine.craniotomies.craniotomies()]
         key = (view.current_coronal_index, view.current_sagital_index,
                view.current_horizontal_index, json.dumps(view.get_atlas_angles()),
-               json.dumps([(p, c, e.tolist(), t.tolist()) for p, c, e, t in tracks]),
+               json.dumps([(p, c, e.tolist(), t.tolist(), m) for p, c, e, t, m in tracks],
+                          default=float),
                json.dumps(holes))
         if key == self._key:
             return
@@ -99,11 +111,51 @@ class PlanOverlay:
                 continue
             normal /= np.linalg.norm(normal)
             frame = np.column_stack([axis_x, axis_y, normal])
-            for _probe, colour, entry, tip in tracks:
+            shape = self._shape(plane)
+            for _probe, colour, entry, tip, model in tracks:
                 self._draw(plane, stack, origin, frame, entry, tip, colour, vox_um)
+                if model is not None:
+                    # The device in its colour, a fiber's ferrule gray.
+                    ferrule = model.get("ferrule")
+                    body = {k: v for k, v in model.items() if k != "ferrule"}
+                    for part, tint in ((body, colour), (ferrule, FERRULE_GRAY)):
+                        if not isinstance(part, dict):
+                            continue
+                        mask = model_section(part, origin, axis_x, axis_y, shape)
+                        if mask is not None:
+                            self._outline(plane, stack, mask, tint)
             if plane == "horizontal":
                 for hole in holes:
                     self._draw_hole(stack, origin, frame, hole, vox_um)
+
+    def _shape(self, plane):
+        size = self.engine.atlas_view.atlas_size
+        return {"coronal": (size[0], size[1]), "sagittal": (size[0], size[2]),
+                "horizontal": (size[1], size[2])}[plane]
+
+    def _outline(self, plane, stack, mask, colour):
+        """A planned fiber's or prism's cross-section on the slice, as the
+        built implants are drawn (``ImplantOverlay``), with a lighter fill."""
+        contours, _ = cv2.findContours(mask.astype(np.uint8), cv2.RETR_EXTERNAL,
+                                       cv2.CHAIN_APPROX_SIMPLE)
+        pen = pg.mkPen(*colour[:3], width=2, style=Qt.PenStyle.DashLine)
+        pen.setCosmetic(True)
+        fill = QColor(*colour[:3])
+        fill.setAlpha(45)
+        for contour in contours:
+            points = contour.reshape(-1, 2).astype(float)
+            item = QGraphicsPolygonItem(QPolygonF([QPointF(x + 0.5, y + 0.5)
+                                                   for x, y in points]))
+            item.setPen(pen)
+            item.setBrush(QBrush(fill))
+            item.setZValue(53)
+            stack.vb.addItem(item)
+            self._items[plane].append((stack, item))
+
+    def outlines_drawn(self, plane):
+        """Number of planned implant outlines on ``plane``'s view (for tests)."""
+        return sum(1 for _stack, item in self._items[plane]
+                   if isinstance(item, QGraphicsPolygonItem))
 
     def _draw_hole(self, stack, origin, frame, hole, vox_um):
         """A craniotomy as a dashed circle on the horizontal view."""

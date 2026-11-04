@@ -3,6 +3,41 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.8.5
+
+Release, 4 November 2026: plan optical fibers and microprisms, and a start
+screen that gets you to a plan.
+
+- **Plan a fiber or a prism** as you plan a probe: tip (or entry and depth),
+  tilts, clicks, snapping, steering, craniotomies and the copied coordinates.
+  The device's own size is checked: a fiber's rim and a prism's whole
+  footprint must keep out of the regions to keep out of and fit through the
+  craniotomy, and the distance to other plans is measured to its surface.
+- **Fibers have a ferrule**: 3 mm of fiber below a 1.25 mm ferrule by
+  default, all set in Settings; it is drawn gray, its height above the brain is
+  given, and ferrules that touch each other are reported.
+- **Microprisms have a length and a bevelled bottom**: 1.5 × 1.5 × 3 mm by
+  default with a 45° bottom, so the imaging window at the bottom of the face
+  is 1.5 × 1.5 mm. A planned prism's readout lists what the window looks
+  into, and warns when the window reaches above the brain or the prism is
+  too short for its depth. **Face** turns the imaging face.
+- Planned fibers and prisms are outlined on the atlas views wherever a page
+  cuts them, and listed in `probe_plans.csv`.
+- **Fibers and prisms are filled in 3D**, and **Region opacity in 3D** (Regions
+  tab) makes the checked regions see-through, so tracks and implants inside
+  them show.
+- **Smooth regions in 3D**: a checked region is one smooth surface around
+  it and its sub-regions, not its layers' coarse meshes drawn over each other.
+- **Find regions by typing**: a search box above the Regions tree, and in
+  Snap tip to region and Propose's Add… a list that narrows as you type.
+- **Regions you plan with are shown**: snapping to a region or adding it to
+  Record or Keep out of checks it, so it is drawn on the atlas views and in
+  3D.
+- **The start screen's planning works before an atlas is loaded**: Plan a
+  probe…, Plan a fiber… and Plan a prism… ask for the atlas folder and then
+  open the plan. Before, the button only said to load an atlas, and the start
+  screen was gone once you had.
+
 ## DriftlessMap 2.8.4
 
 Fix release, 4 November 2026: the eight findings of the 2.8.3 review

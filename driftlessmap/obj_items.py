@@ -57,17 +57,55 @@ def create_contour_line_in_3d(data_dict):
     return contour_obj
 
 
-def create_implant_in_3d(data_dict):
-    """The fitted fiber or prism with the mapped outlines it was fitted to."""
-    from .implants import model_segments
+IMPLANT_FILL_ALPHA = 0.45
+FERRULE_GRAY = (0.72, 0.72, 0.72)
 
-    segments = [model_segments(data_dict['report']['model'])]
+
+class ImplantItem(gl.GLMeshItem):
+    """A fiber or prism drawn filled (translucent) with its edges and the
+    mapped outlines as lines (2.8.5). ``setData`` takes the object list's
+    ``color`` and ``width`` as the line items it replaces did."""
+
+    def __init__(self, vertices, faces, lines, color, width=2, ferrule=None):
+        super().__init__(vertexes=vertices, faces=faces, smooth=False, shader='balloon',
+                         glOptions='translucent')
+        self.lines = gl.GLLinePlotItem(pos=lines, width=width, mode='lines')
+        self.lines.setParentItem(self)
+        # A planned fiber's ferrule, gray whatever the fiber's colour.
+        self.ferrule = None
+        if ferrule is not None:
+            self.ferrule = gl.GLMeshItem(vertexes=ferrule[0], faces=ferrule[1], smooth=True,
+                                         shader='balloon', glOptions='translucent')
+            self.ferrule.setParentItem(self)
+        self.setData(color=color)
+
+    def setData(self, color=None, width=None, **_ignored):
+        if color is not None:
+            color = tuple(color)
+            self.lines.setData(color=color)
+            self.setColor(color[:3] + (color[3] * IMPLANT_FILL_ALPHA,))
+            if self.ferrule is not None:
+                self.ferrule.setColor(FERRULE_GRAY + (color[3] * 0.9,))
+        if width is not None:
+            self.lines.setData(width=width)
+
+
+def create_implant_in_3d(data_dict):
+    """The fitted fiber or prism, filled, with the mapped outlines it was fitted to."""
+    from .implants import model_mesh, model_segments
+
+    model = data_dict['report']['model']
+    ferrule = model.get('ferrule')
+    model = {k: v for k, v in model.items() if k != 'ferrule'}
+    segments = [model_segments(model)]
     for piece in data_dict['data']:
         outline = np.asarray(piece['outline'], dtype=float)
         closed = np.vstack([outline, outline[:1]])
         segments.append(np.repeat(closed, 2, axis=0)[1:-1])
-    vis_color = get_object_vis_color(data_dict['vis_color'])
-    return gl.GLLinePlotItem(pos=np.vstack(segments), color=vis_color, width=2, mode='lines')
+    vertices, faces = model_mesh(model)
+    return ImplantItem(vertices, faces, np.vstack(segments),
+                       get_object_vis_color(data_dict['vis_color']),
+                       ferrule=model_mesh(ferrule) if isinstance(ferrule, dict) else None)
 
 
 def make_3d_gl_widget(data_dict, obj_type):

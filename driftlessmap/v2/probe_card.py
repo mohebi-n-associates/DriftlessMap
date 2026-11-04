@@ -66,6 +66,23 @@ class ProbeControls(Card):
             "Probe type, site face and multi-shank layout appear in Tool options above "
             "the image while Mark track is on."))
 
+    # ------------------------------------------- the plan editor's device
+    def plan_colour(self, probe):
+        return self.book.colour(probe)
+
+    def use_colour(self, probe):
+        self.book.use_colour(probe)
+
+    def plan_kind(self, _probe):
+        return "probe"
+
+    def default_plan(self, probe):
+        return self.engine.default_probe_plan(probe)
+
+    def plan_removed(self, probe):
+        if probe not in self.book.names():
+            self.book._empty.append(probe)     # the probe stays listed
+
     # ----------------------------------------------------------- helpers
     def current(self):
         return self.probe

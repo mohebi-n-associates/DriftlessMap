@@ -23,6 +23,7 @@ from PyQt6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
+    QSlider,
     QLineEdit,
     QMainWindow,
     QMessageBox,
@@ -342,6 +343,19 @@ class V2Window(QMainWindow):
         self.regions_in_3d.toggled.connect(engine.show_small_area_in_3d)
         engine.show_small_area_in_3d(True)
         regions_layout.addWidget(self.regions_in_3d)
+        # Lower it to see probe tracks and implants inside the regions (2.8.5).
+        opacity_row = QHBoxLayout()
+        opacity_row.addWidget(QLabel("Region opacity in 3D"))
+        self.region_opacity = QSlider(Qt.Orientation.Horizontal)
+        self.region_opacity.setRange(5, 100)
+        self.region_opacity.setValue(100)
+        self.region_opacity.setToolTip("Below 100% the checked regions are see-through in "
+                                       "the 3D view, so tracks and implants inside show")
+        self.region_opacity_value = QLabel("100%")
+        self.region_opacity.valueChanged.connect(self._region_opacity_changed)
+        opacity_row.addWidget(self.region_opacity, 1)
+        opacity_row.addWidget(self.region_opacity_value)
+        regions_layout.addLayout(opacity_row)
         regions_layout.addWidget(engine.atlas_view.label_tree)
         self.inspector_tabs.addTab(regions, "Regions")
         inspector_layout.addWidget(self.inspector_tabs)
@@ -408,9 +422,15 @@ class V2Window(QMainWindow):
             button("SWC female rat atlas…", lambda: self.download_rat_atlas("swc_female_rat")),
             button("Your own atlas…", self.engine.actionAtlas_Processor.trigger),
         ], columns=2))
-        card.add(self._start_title("2  Plan a probe"))
-        card.add(hint_label("With an atlas only: plan the track on the atlas before surgery."))
-        card.add(grid_of([button("Plan a probe", self.start_probe_plan)], columns=2))
+        card.add(self._start_title("2  Plan an implant"))
+        card.add(hint_label("With an atlas only: plan where a probe, an optical fiber or a "
+                            "microprism goes, before surgery. You choose the atlas folder "
+                            "first, then the plan opens."))
+        card.add(grid_of([
+            button("Plan a probe…", lambda: self.start_probe_plan("probe")),
+            button("Plan a fiber…", lambda: self.start_probe_plan("fiber")),
+            button("Plan a prism…", lambda: self.start_probe_plan("prism")),
+        ], columns=3))
         card.add(self._start_title("3  Continue earlier work"))
         card.add(grid_of([button("Open project…", lambda: self.run("project.open"))],
                          columns=2))
@@ -428,27 +448,43 @@ class V2Window(QMainWindow):
         label.setObjectName("CardTitle")
         return label
 
-    def start_probe_plan(self):
-        """Open a probe to plan on the atlas: the one without points, or a new one."""
+    def _region_opacity_changed(self, value):
+        self.region_opacity_value.setText("{}%".format(value))
+        self.engine.set_region_opacity(value / 100.0)
+
+    def start_probe_plan(self, kind="probe"):
+        """Open a probe, fiber or prism to plan on the atlas: one without a plan or
+        sections, or a new one. Without an atlas, the atlas folder is asked for
+        first, so the start screen's buttons work before an atlas is loaded."""
         engine = self.engine
         if engine.atlas_view.atlas_data is None:
-            self.message("Load an atlas folder first (or download one); then Plan a probe "
-                         "(Project step, Atlas card) opens a probe to plan.", "warn")
+            self.run("atlas.load")
+            if engine.atlas_view.atlas_data is None:
+                self.message("Planning needs a volume atlas: load an atlas folder (or "
+                             "download one), then plan.", "warn")
+                return
+        if engine.plan_atlas() is None:
+            self.message("Plans need a volume atlas (a slice atlas has no depth to plan in).",
+                         "warn")
             return
         self.go_to("annotate")
         self.set_view("atlas" if engine.image_view.current_img is None else "compare")
         card = self.panels["annotate"].implants
-        book = card.probe_card.book
-        unplanned = [name for name in book.names()
-                     if not book.parts(name) and not book.built(name)
-                     and book.plan(name) is None]
-        probe = unplanned[0] if unplanned else card.probe_card.new_probe()
-        card._select_probe(probe)
-        editor = card.probe_card.plan_editor
-        if engine.plan_atlas() is None:
-            self.message("{}: plans need a volume atlas (a slice atlas has no depth to plan "
-                         "in).".format(probe), "warn")
-            return
+        if kind == "probe":
+            book = card.probe_card.book
+            unplanned = [name for name in book.names()
+                         if not book.parts(name) and not book.built(name)
+                         and book.plan(name) is None]
+            probe = unplanned[0] if unplanned else card.probe_card.new_probe()
+            card._select_probe(probe)
+            editor = card.probe_card.plan_editor
+        else:
+            unplanned = [i for i in engine.implants.implants()
+                         if i.kind == kind and engine.implant_plan(i.implant_id) is None
+                         and not engine.implant_objects(i.implant_id)]
+            implant = unplanned[0] if unplanned else engine.add_implant(kind)
+            card.refresh(select=implant.implant_id)
+            editor = card.plan_editor
         editor.start_plan()
 
     def _name_undo_steps(self):
@@ -756,11 +792,16 @@ class V2Window(QMainWindow):
                     "Ctrl+N"))
         add(Command("project.new_window", "New window", self.open_new_window, "Project",
                     ("another project", "another atlas", "second window"), "Ctrl+Shift+N"))
+        # Without an atlas these ask for one first (the start screen offers them).
         add(Command("probe.plan", "Plan a probe on the atlas", self.start_probe_plan,
                     "Annotate", ("probe planning", "plan track", "neuropixels", "surgery",
-                                 "trajectory"),
-                    available=lambda: None if self.engine.atlas_view.atlas_data is not None
-                    else "Load a volume atlas first."))
+                                 "trajectory")))
+        add(Command("fiber.plan", "Plan an optical fiber on the atlas",
+                    lambda: self.start_probe_plan("fiber"), "Annotate",
+                    ("fiber planning", "optogenetics", "photometry", "surgery")))
+        add(Command("prism.plan", "Plan a microprism on the atlas",
+                    lambda: self.start_probe_plan("prism"), "Annotate",
+                    ("prism planning", "two-photon", "imaging", "surgery")))
         add(Command("project.open", "Open project…", self.open_project, "Project",
                     ("load project",), "Ctrl+O"))
         add(Command("project.save", "Save project", self.save_project, "Project",

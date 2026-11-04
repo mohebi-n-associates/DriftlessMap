@@ -119,7 +119,13 @@ class ImplantEngineMixin:
             return None
         data = o.obj_data[index]
         implant = self.implants.get(data.get("implant_id"))
-        if implant is not None and data.get("report", {}).get("specs") != implant.specs:
+        if implant is None:
+            return None
+        # Only the settings the fit uses count: a prism's length and bevel
+        # (2.8.5, for planning) do not change a built prism.
+        built = data.get("report", {}).get("specs") or {}
+        if any(built.get(key) != implant.specs.get(key)
+               for key in implant_model.FIT_SPECS[implant.kind]):
             return BUILD_CHANGED
         return None
 
@@ -130,8 +136,14 @@ class ImplantEngineMixin:
         return {self.object_ctrl.piece_group(name) for name in self.object_ctrl.obj_name}
 
     # -------------------------------------------------------------- editing
-    def add_implant(self, kind, name=None, specs=None):
+    def _taken_by_probes(self):
+        """Names an implant cannot take: objects that are not implants, and
+        planned probes (plans are kept by name)."""
         taken = self._object_group_names() - {i.name for i in self.implants.implants()}
+        return taken | {plan.probe for plan in self.probe_plans.plans_of(implants=False)}
+
+    def add_implant(self, kind, name=None, specs=None):
+        taken = self._taken_by_probes()
         if name and " ".join(str(name).split()) in taken:
             raise ValueError("There is already an object called {}.".format(name))
         implant = self.implants.add(kind, name=name, specs=specs, taken=taken)
@@ -141,10 +153,20 @@ class ImplantEngineMixin:
 
     def rename_implant(self, implant_id, name):
         old = self.implants.get(implant_id)
-        taken = self._object_group_names() - {i.name for i in self.implants.implants()}
+        taken = self._taken_by_probes()
         if " ".join(str(name).split()) in taken:
             raise ValueError("There is already an object called {}.".format(name))
+        with self.undoable("Rename {}".format(old.name)):
+            return self._rename_implant(implant_id, old, name)
+
+    def _rename_implant(self, implant_id, old, name):
+        planned = self.implant_plan(implant_id) is not None
         implant = self.implants.rename(implant_id, name)
+        if planned and implant.name != old.name:
+            # Its plan and planned object follow the name (2.8.5).
+            self.rename_probe_plan(old.name, implant.name)
+            if old.name in self.plan_colours:
+                self.plan_colours[implant.name] = self.plan_colours.pop(old.name)
         o = self.object_ctrl
         for index in self.implant_objects(implant_id):
             rest = o.obj_name[index][len(old.name):]
@@ -155,7 +177,16 @@ class ImplantEngineMixin:
         return implant
 
     def set_implant_specs(self, implant_id, specs):
+        with self.undoable("Settings of {}".format(self.implants.get(implant_id).name)):
+            return self._set_implant_specs(implant_id, specs)
+
+    def _set_implant_specs(self, implant_id, specs):
         implant = self.implants.set_specs(implant_id, specs)
+        plan = self.implant_plan(implant_id)
+        if plan is not None and plan.specs != implant.specs:
+            # The plan is of this implant: it takes the new size at once.
+            self.probe_plans.set(plan.copy(specs=implant.specs))
+            self._build_plan(plan.probe, implant.colour)
         if self.implant_objects(implant_id, built=True):
             self.print_message("Build {} again to use the new settings.".format(implant.name),
                                self.reminder_color)
@@ -166,6 +197,9 @@ class ImplantEngineMixin:
         if implant is None:
             return False
         with self.undoable("Delete {}".format(implant.name)):
+            if self.implant_plan(implant_id) is not None:
+                self.plan_previews.pop(implant.name, None)
+                self.remove_probe_plan(implant.name)
             indexes = self.implant_objects(implant_id)
             if indexes:
                 self.object_ctrl.delete_objects(indexes)
@@ -402,6 +436,8 @@ class ImplantEngineMixin:
         if not kind.startswith("merged "):
             return "implant parts are not imported; export the built implant"
         data = object_dict.get("data")
+        if isinstance(data, dict) and data.get("plan_of") is not None:
+            return "planned implants are not imported; their plan is part of the project"
         try:
             report = data["report"]
             implant_model.validated_specs(report["kind"], report["specs"])

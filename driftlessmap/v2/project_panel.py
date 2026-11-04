@@ -57,9 +57,14 @@ class ProjectPanel(StepPanel):
         # Probe planning needs only the atlas (review: it was reachable only
         # from the start screen, which goes once an atlas is loaded).
         self.plan_probe = button(
-            "Plan a probe on this atlas…", lambda: shell.run("probe.plan"),
-            tooltip="Plan a probe track on the atlas before surgery (no section needed); "
-                    "opens Annotate with a probe to mark")
+            "Plan on this atlas",
+            tooltip="Plan a probe, an optical fiber or a microprism on the atlas before "
+                    "surgery (no section needed); opens Annotate with its plan")
+        plans = QMenu(self.plan_probe)
+        plans.addAction("A probe…", lambda: shell.run("probe.plan"))
+        plans.addAction("An optical fiber…", lambda: shell.run("fiber.plan"))
+        plans.addAction("A microprism…", lambda: shell.run("prism.plan"))
+        self.plan_probe.setMenu(plans)
         self.atlas_card.add_row(self.gate(self.plan_probe, self._needs_volume_atlas), None)
 
         self.section_card = self.add(Card(
