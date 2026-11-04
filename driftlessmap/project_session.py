@@ -183,6 +183,7 @@ class ProjectSessionMixin:
             "atlas_mark_origin": self.atlas_mark_origin,
             "implants": self.implants.to_list(),
             "implant_outlines": self.implant_outlines,
+            "probe_plans": self.probe_plans.to_list(),
             "sections": self.sections_index(),
             "interface_state": self._interface_state_for_save(),
             "np_onside": self.np_onside,

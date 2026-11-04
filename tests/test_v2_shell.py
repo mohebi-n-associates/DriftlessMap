@@ -642,7 +642,8 @@ class V2ShellTests(unittest.TestCase):
             window.refresh()
             self.assertFalse(panel.plan_probe.isEnabled())
             self.assertIn("atlas", window.registry.run("probe.plan"))
-            self.assertTrue(engine.load_volume_atlas(str(make_processed_atlas(root / "atlas"))))
+            self.assertTrue(engine.load_volume_atlas(
+                str(make_processed_atlas(root / "atlas", axis_info=True))))
             window.refresh()
             # The start screen (with its Plan a probe) is gone; the Project
             # step offers it instead.
@@ -652,13 +653,171 @@ class V2ShellTests(unittest.TestCase):
             card = window.panels["annotate"].implants
             self.assertEqual(card.probe_card.book.names(), ["Probe 1"])
             self.assertEqual(card.probe_card.probe, "Probe 1")
-            self.assertIn("Mark track", window.message_label.text())
-            # Again: the same unplanned probe, not a second one.
+            # The probe starts with a plan (since 2.8.0), built at once.
+            self.assertIsNotNone(engine.probe_plan("Probe 1"))
+            self.assertTrue(engine.plan_objects("Probe 1"))
+            self.assertIn("Probe 1 planned", window.message_label.text())
+            # Again: Probe 1 is planned, so a second probe is opened.
             window.go_to("project")
             self.push(panel, "Plan a probe on this atlas…")
-            self.assertEqual(card.probe_card.book.names(), ["Probe 1"])
+            self.assertEqual(card.probe_card.book.names(), ["Probe 1", "Probe 2"])
             self.assertIn("Plan a probe on the atlas",
                           [c.name for c in window.registry.search("probe")])
+
+    @isolated_gui_test
+    def test_a_probe_plan_is_a_pose_with_a_live_readout(self):
+        import csv
+        from unittest.mock import patch
+
+        from PyQt6.QtWidgets import QMessageBox
+
+        from driftlessmap import file_dialogs
+        from driftlessmap.mapping_records import CURRENT
+        from tests.atlas_fixture import make_processed_atlas
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window = self.make_window(folder)
+            engine = window.engine
+            # Large enough for a Neuropixels tip and its first sites (1.4 mm deep).
+            self.assertTrue(engine.load_volume_atlas(str(make_processed_atlas(
+                root / "atlas", shape=(80, 64, 64), axis_info=True))))
+            window.run("probe.plan")
+            window.refresh()
+            card = window.panels["annotate"].implants.probe_card
+            editor = card.plan_editor
+            book = card.book
+            self.assertTrue(editor.isVisibleTo(window))
+            # Without a section the track steps are hidden: the plan is the probe.
+            self.assertFalse(card.mark.isVisibleTo(window))
+            plan = engine.probe_plan("Probe 1")
+            readout = engine.probe_plan_readout("Probe 1")
+            self.assertIsNotNone(readout["entry_um"])
+            self.assertEqual(readout["warnings"], [])
+            self.assertIn("Entry", editor.readout.text())
+            self.assertIn("Depth", editor.readout.text())
+            # The planned object belongs to Probe 1; it is not a probe of its own.
+            self.assertEqual(book.names(), ["Probe 1"])
+            self.assertEqual(book.summary("Probe 1"), "planned")
+            [built] = engine.plan_objects("Probe 1")
+            self.assertEqual(engine.object_ctrl.obj_name[built], "Probe 1 plan")
+            self.assertEqual(engine.object_mapping_status(built), CURRENT)
+            info = engine.object_ctrl.obj_data[built]
+            np.testing.assert_allclose(info["terminus_coords"], plan.tip_um, atol=1e-6)
+
+            # Snap the tip to the centre of the brain ("CH" holds every labelled
+            # voxel) on the tip's side, the animal's right.
+            editor.snap_to_region(10)
+            atlas = engine.plan_atlas()
+            brain = np.argwhere(atlas.labels != 0) + 0.5
+            centre = brain[brain[:, 0] >= atlas.bregma[0]].mean(axis=0)
+            np.testing.assert_allclose(atlas.to_vox(engine.probe_plan("Probe 1").tip_um),
+                                       centre, atol=1.0)
+            plan = engine.probe_plan("Probe 1")
+            self.assertEqual(engine.object_ctrl.obj_data[engine.plan_objects("Probe 1")[0]]
+                             ["plan"], plan.to_dict())
+            # Editing a field shows the readout at once and builds when it settles.
+            editor.ap_tilt.setValue(10.0)
+            self.assertIn("10.0° anterior", editor.readout.text())
+            self.assertEqual(engine.probe_plan("Probe 1").ap_tilt_deg, 0.0)
+            editor.commit()
+            tilted = engine.probe_plan("Probe 1")
+            self.assertEqual(tilted.ap_tilt_deg, 10.0)
+            [built] = engine.plan_objects("Probe 1")
+            self.assertAlmostEqual(engine.object_ctrl.obj_data[built]["ap_angle"], 10.0)
+            # Depth slides the tip along the probe from the same entry.
+            entry = engine.probe_plan_readout("Probe 1")["entry_um"]
+            editor.depth.setValue(0.2)
+            editor.commit()
+            moved = engine.probe_plan_readout("Probe 1")
+            np.testing.assert_allclose(moved["entry_um"], entry, atol=1e-6)
+            self.assertAlmostEqual(moved["depth_um"], 200.0, delta=1e-6)
+            # Each settled edit is one undo step.
+            self.assertTrue(engine.undo_mapping_step())
+            self.assertEqual(engine.probe_plan("Probe 1"), tilted)
+            self.assertTrue(engine.undo_mapping_step())
+            self.assertEqual(engine.probe_plan("Probe 1"), plan)
+            self.assertTrue(engine.redo_mapping_step())
+            self.assertEqual(engine.probe_plan("Probe 1"), tilted)
+
+            # Two clicks on the coronal view (entry, then tip) set the plan.
+            view = engine.atlas_view
+            engine.atlas_display = "coronal"
+            editor.click_button.click()
+            self.assertTrue(editor.clicking)
+            atlas = engine.plan_atlas()
+            mid = view.current_coronal_index
+            points2 = np.array([[atlas.bregma[0] + 1.0, view.atlas_size[0] - 30.0],
+                                [atlas.bregma[0] + 2.0, view.atlas_size[0] - 10.0]])
+            engine.working_atlas_data["atlas-probe"] = points2.tolist()
+            expected = np.asarray(view.get_3d_data_from_2d_view(points2, "coronal")) \
+                * view.vox_size_um
+            window.refresh()
+            self.assertFalse(editor.clicking)
+            self.assertEqual(engine.working_atlas_data["atlas-probe"], [])
+            clicked = engine.probe_plan("Probe 1")
+            np.testing.assert_allclose(clicked.tip_um, expected[np.argmin(expected[:, 2])],
+                                       atol=1e-6)
+            self.assertEqual(view.current_coronal_index, mid)
+
+            # Drawn on the atlas through the tip.
+            self.assertTrue(engine.show_plan_on_atlas("Probe 1"))
+            engine.plan_overlay.refresh()
+            self.assertEqual(engine.plan_overlay.drawn("coronal"), 1)
+            self.assertEqual(engine.plan_overlay.drawn("horizontal"), 1)
+            # The track crosses the shown slices, so each view has its solid
+            # part; its path must build (pyqtgraph hides errors while painting).
+            import pyqtgraph as pg
+            for plane in ("coronal", "sagittal", "horizontal"):
+                lines = [item for _stack, item in engine.plan_overlay._items[plane]
+                         if isinstance(item, pg.PlotDataItem)]
+                self.assertEqual(len(lines), 2, plane)
+                for item in lines:
+                    self.assertFalse(item.curve.getPath().isEmpty(), plane)
+
+            # Copy coordinates puts one self-describing line on the clipboard.
+            editor.copy_coordinates()
+            line = QApplication.clipboard().text()
+            self.assertTrue(line.startswith("Probe 1:"))
+            self.assertIn("from Bregma", line)
+
+            # Renaming the probe renames its plan and its planned object.
+            book.rename("Probe 1", "Left PFC")
+            self.assertIsNone(engine.probe_plan("Probe 1"))
+            self.assertEqual(engine.probe_plan("Left PFC").probe, "Left PFC")
+            [built] = engine.plan_objects("Left PFC")
+            self.assertEqual(engine.object_ctrl.obj_name[built], "Left PFC plan")
+            self.assertEqual(book.names(), ["Left PFC"])
+
+            # Export all results writes the plan table.
+            out = root / "results"
+            out.mkdir()
+            paths, _notes = engine.export_all_results(str(out))
+            self.assertIn(str(out / "probe_plans.csv"), paths)
+            with (out / "probe_plans.csv").open() as stream:
+                [row] = list(csv.DictReader(stream))
+            self.assertEqual(row["probe"], "Left PFC")
+            self.assertAlmostEqual(float(row["tip_dv_mm"]),
+                                   engine.probe_plan("Left PFC").tip_um[2] / 1000.0, places=3)
+
+            # Saved and reopened with the project.
+            saved = engine.probe_plan("Left PFC")
+            path = str(root / "plan.dmap")
+            self.assertTrue(engine.save_project_called(path=path))
+            window.mark_saved()
+            with patch.object(file_dialogs, "get_open_file_name", return_value=(path, "")), \
+                    patch("driftlessmap.app.QMessageBox.question",
+                          return_value=QMessageBox.StandardButton.No):
+                window.run("project.open")
+            window.refresh()
+            self.assertEqual(engine.probe_plan("Left PFC"), saved)
+            [built] = engine.plan_objects("Left PFC")
+            self.assertEqual(engine.object_mapping_status(built), CURRENT)
+
+            # Deleting the probe deletes its plan.
+            book.delete("Left PFC")
+            self.assertIsNone(engine.probe_plan("Left PFC"))
+            self.assertEqual(engine.plan_objects(), [])
 
     @isolated_gui_test
     def test_the_sections_card_adds_opens_renames_and_removes_sections(self):

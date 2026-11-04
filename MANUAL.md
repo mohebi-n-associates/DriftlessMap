@@ -1,7 +1,7 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 2.7.0**. Section 2 explains how to
-install it; `pip install driftlessmap` installs 2.7.0.
+This manual applies to **DriftlessMap 2.8.0**. Section 2 explains how to
+install it; `pip install driftlessmap` installs 2.8.0.
 
 DriftlessMap - Histological E-data Registration in Brain Space - is a desktop
 application for aligning rodent histology with a reference atlas, reconstructing
@@ -60,8 +60,8 @@ three ways to start:
    (Section 11 and the [probe tutorials](Tutorial/Probe_Related/1-Important_to_know_before_you_start.md)).
    Once an atlas is loaded this start screen gives way to the views; **Plan a
    probe on this atlas…** in the Project step's Atlas card (or "plan a probe"
-   in Ctrl/Cmd+K) then goes to Annotate with a probe ready to mark: an
-   existing probe without points, or a new one (since 2.7.0).
+   in Ctrl/Cmd+K) then goes to Annotate with a planned probe to move into
+   place (since 2.8.0; Section 11.0).
 3. **Continue earlier work.** **Open project…**; it reopens where you left off.
 
 Ctrl/Cmd+K searches every command. The rest of this manual describes each part
@@ -131,7 +131,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-DriftlessMap 2.7.0 requires:
+DriftlessMap 2.8.0 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -150,8 +150,8 @@ page. The macOS DMG (`-macOS-arm64.dmg`) is built for Apple Silicon; on an Intel
 Mac, use the developer installation below.
 The desktop builds include Python and all runtime dependencies. Windows users
 extract the entire ZIP and run `DriftlessMap.exe`; macOS users open the DMG and
-drag `DriftlessMap.app` to Applications. The 2.7.0 downloads are named
-`DriftlessMap-2.7.0-Windows-x64.zip` and `DriftlessMap-2.7.0-macOS-arm64.dmg`.
+drag `DriftlessMap.app` to Applications. The 2.8.0 downloads are named
+`DriftlessMap-2.8.0-Windows-x64.zip` and `DriftlessMap-2.8.0-macOS-arm64.dmg`.
 Release builds are unsigned unless the release notes say otherwise, so the first
 launch may require Windows SmartScreen confirmation or Control-clicking the
 macOS app and choosing **Open**.
@@ -200,7 +200,7 @@ python -m pip --version
 python -c "import driftlessmap; print(driftlessmap.__version__)"
 ```
 
-The final command prints the installed version, `2.7.0`.
+The final command prints the installed version, `2.8.0`.
 
 ### 2.5 Launching DriftlessMap
 
@@ -1543,6 +1543,61 @@ Probe comparison requires at least two linked merged probes. Other object-type
 comparisons are not currently implemented.
 
 ## 11. Pre-surgical probe planning
+
+### 11.0 Plan a probe by its position and angles (2.0 interface, since 2.8.0)
+
+In the 2.0 interface a planned probe is a position and two angles, shown and
+changed in the probe's **Plan** section (Annotate, Implants card, select the
+probe). Everything a surgeon needs is shown as you change it; there is no
+Add or Build step.
+
+1. Load a volume atlas. **Plan a probe on this atlas…** (Project step, Atlas
+   card, or "plan a probe" in Ctrl/Cmd+K) adds a probe and gives it a plan
+   to start from: vertical, 1 mm right of Bregma, 3 mm below the brain
+   surface. For an existing probe, **Plan this probe** does the same.
+2. Put it where you want it, in any of these ways:
+   - Type the **tip** (AP, ML, DV in mm from Bregma; ML + is the animal's
+     right, DV + is dorsal), the **AP tilt** and **ML tilt** (degrees from
+     vertical in the sagittal and coronal planes; + puts the tip anterior of,
+     or to the animal's right of, the entry) and the **roll** (0: the contacts
+     face anterior; 90: they face the animal's right). **Depth** slides the
+     tip along the probe from the same entry.
+   - **Set from clicks**: click the entry and then the tip on any atlas view.
+     The plan runs through both points, so it can cross slices; the entry is
+     where that line meets the brain.
+   - **Snap tip to region…**: the tip moves to a region's centre on the tip's
+     side of the brain (a region and its sub-regions, for example PL and its
+     layers), keeping the angles. The list starts at the region selected in
+     the Regions tree.
+3. Read the plan as it changes: **Entry** (where the probe first touches the
+   brain, from Bregma), **Depth** along the probe from that entry (what you
+   advance after zeroing at the brain surface), **Tip** and its region, the
+   **tilt** in words, which way the contacts face, the regions **along the
+   shank** with their lengths, and warnings (the tip is outside the brain or at
+   its surface, the probe is deeper than its shank, it crosses the midline).
+4. The plan is drawn on every atlas view (dashed, solid within 100 µm of the
+   shown slice, entry open and tip filled) and built in 3D as the object
+   *"<probe> plan"*, a probe like any other: **Region table…** shows its
+   regions, contacts and coordinates, and it is exported with the other
+   probes. **Show on atlas** moves the pages through the tip.
+5. **Copy coordinates** copies one line naming the atlas, the frame, the
+   entry, depth, tip, angles, roll, probe and regions, for surgery notes.
+
+Each change is stored and built once you stop changing it (half a second, or
+Enter); Edit > Undo mapping step takes it back one change at a time. The
+probe type (Neuropixels 1.0, 2.0 with one or four shanks, or the current
+probe settings, for a designed linear silicon probe) is chosen in the Plan
+section. Renaming a probe renames its plan; deleting it deletes the plan;
+**Remove plan** forgets only the plan. Plans are saved with the project, and
+**Export all results** writes `probe_plans.csv` (one row per plan). A probe
+can have a plan and a track marked on sections; the two are built as separate
+objects (*"<probe> plan"* and *"<probe>"*), so the plan and the result can be
+compared.
+
+Positions are relative to the atlas's Bregma, which for the Allen CCFv3 is an
+estimate; real brains differ from the atlas.
+
+The sections below describe planning in the classic interface.
 
 ### 11.1 Standard single-shank plan
 

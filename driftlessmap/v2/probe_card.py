@@ -8,6 +8,7 @@ reconstruction); only where it is shown changed.
 
 from PyQt6.QtWidgets import QInputDialog, QLabel, QMenu, QMessageBox
 
+from .plan_editor import PlanEditor
 from .probes import ProbeBook
 from .widgets import Card, button, grid_of, hint_label, set_status, status_label, undo_help
 
@@ -26,6 +27,9 @@ class ProbeControls(Card):
         self.probe = None
 
         help_ = undo_help()
+        self.plan_editor = self.add(PlanEditor(shell, self))
+        self.track_title = self.add(QLabel("Track on sections"))
+        self.track_title.setObjectName("CardTitle")
         self.guide = self.add(hint_label(""))
         self.mark = button("1  Mark track", self.toggle_marking, checkable=True,
                            tooltip="Click along the probe track in the image. "
@@ -80,6 +84,7 @@ class ProbeControls(Card):
         if probe != self.probe:
             set_status(self.status, "", None)
         self.probe = probe
+        self.plan_editor.set_probe(probe)
         if probe is not None and self.engine.tool_box.checkable_btn_dict["probe_btn"].isChecked():
             self.book.use_colour(probe)
         self.sync()
@@ -166,10 +171,12 @@ class ProbeControls(Card):
         engine = self.engine
         probe = self.probe
         pre_plan = engine.image_view.image_file is None
+        self.plan_editor.sync()
+        # Without a section there is no track to mark: the plan above is the probe.
+        for widget in (self.track_title, self.guide, self.mark, self.marks, self.add_button,
+                       self.build_button, self.undo_note):
+            widget.setVisible(not pre_plan)
         self.guide.setText(
-            "Plan a probe: switch on Mark track, click the entry point and then the tip "
-            "on the atlas, add the points to the probe, then build it."
-            if pre_plan else
             "On each section that shows the track: switch on Mark track, click along "
             "the track, then map the section. Build the probe when all its sections "
             "are mapped.")

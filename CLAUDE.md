@@ -8,9 +8,10 @@ or important workflows change.
 
 ## Project identity
 
-- Current stable release: DriftlessMap 2.7.0 (3 November 2026; 2.4.0 plus
-  fixes and the rat atlas downloads, the first release since 2.0.0, including 2.0.1-2.3.0 and multi-section
-  projects). 2.0.0
+- Current release: DriftlessMap 2.8.0 (4 November 2026; probe planning by
+  pose, `probe_planning_design.md` Phase 1; not yet published). Latest
+  published: 2.7.0 (3 November 2026; the first release since 2.0.0, including
+  2.0.1-2.3.0 and multi-section projects). 2.0.0
   (29 October 2026) followed the 2.0.0aN previews and 2.0.0rc1-rc16. The owner released it with the
   `release_validation.md` gates still pending (recorded there as waived); keep
   recording evidence for them. Later fixes become 2.0.N, features 2.N.0.
@@ -76,6 +77,28 @@ or important workflows change.
   above the histology image (one brightness slider per channel through
   `channel_display`); brightness sliders are brighter to the right
   (`slider_brightness`).
+- `driftlessmap/probe_plans.py` (GUI-free) and `probe_plan_engine.py`:
+  planned probes as poses (`probe_planning_design.md`; Phase 1 in 2.8.0).
+  `ProbePlan` holds the tip (Bregma-relative um: ML right +, AP anterior +,
+  DV dorsal +), `ap_tilt_deg`/`ml_tilt_deg` (signed projected tilts, the
+  angles `get_angles` reports unsigned), `roll_deg` (0: contacts face
+  anterior; `face_normal`), probe settings and shank offsets. `PlanBook`
+  keys plans by probe name (`from_list` returns plans and problems).
+  `plan_readout` (entry: exact crossing into the first brain voxel coming
+  down the line, `surface_entry`; depth along the probe; `regions_along`;
+  warnings) is cheap and drives the live readout; `region_centre` (strided,
+  one hemisphere) backs Snap tip to region. `ProbePlanEngineMixin.set_probe_plan`
+  stores and builds a plan in one `undoable` step: `calculate_probe_info`
+  (pre-plan, face normal from the roll) on `shank_lines`, giving merged-probe
+  objects `"<probe> plan"` (`"<probe> plan shank N"`) with `plan_of` and the
+  plan in their data; `plan_build_status` gives CURRENT or BUILD_CHANGED.
+  `ProbeBook` leaves plan objects out of a probe's parts/built and renames
+  and deletes plans with their probe. Plans are document state saved as the
+  optional payload key `probe_plans` (no schema bump), part of undo
+  transactions, and exported as `probe_plans.csv`. `plan_overlay.PlanOverlay`
+  projects each plan (and `plan_previews`, the plan being edited) onto the
+  atlas views. V2: `v2/plan_editor.PlanEditor` (the Plan section of
+  `ProbeControls`; edits preview at once and commit after `BUILD_DELAY_MS`).
 - `driftlessmap/project_session.py`: `ProjectSessionMixin.project_payload` is the
   shared saved-state collector. `load_project` snapshots the active document and
   restores it on failure, including its original reader, in-memory atlas and undo
@@ -424,6 +447,9 @@ or important workflows change.
   sections' sources under `portable_sources.sections`.
   The optional `interface_state` (where the user left off) needs no schema
   bump: it is absent in older files and dropped when unusable.
+  The optional `probe_plans` (2.8.0, document state) needs none either:
+  absent means no plans; invalid plans are left out with a message; older
+  versions ignore it and keep the built plan objects as ordinary probes.
   Schemas 1 and 2 load with Legacy registration input.
   Do not bump either without a backward-compatible reader/migration path.
 - Supported primary extensions:
