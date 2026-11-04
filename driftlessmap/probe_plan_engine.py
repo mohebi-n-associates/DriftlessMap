@@ -14,6 +14,8 @@ import numpy as np
 
 from .mapping_records import BUILD_CHANGED, CURRENT
 from .probe_plans import (
+    propose_plans,
+    target_coverage,
     Craniotomy,
     CraniotomyBook,
     across_face,
@@ -154,7 +156,25 @@ class ProbePlanEngineMixin:
             if warning:
                 readout["warnings"].append(warning)
         readout["scale"] = self.surgery_scale()
+        readout["targets"] = target_coverage(plan, readout, atlas)
         return readout
+
+    # ------------------------------------------------------------ proposals
+    def propose_probe_plans(self, probe, request):
+        """Ranked proposals for ``probe`` (see ``probe_plans.propose_plans``),
+        searched on a worker thread; ``(proposals, reasons)``. The probe's
+        design, roll, bank and craniotomy are kept; each proposed plan
+        carries the request's targets and regions to avoid."""
+        from .background import run_in_background
+
+        plan = self.probe_plans.get(probe) or self.default_probe_plan(probe)
+        atlas = self.plan_atlas()
+        if atlas is None:
+            return [], ["Load a volume atlas to propose a plan."]
+        base = plan.copy(targets=request.targets, avoid=request.avoid)
+        proposals, reasons = run_in_background(
+            self, "Searching for probe plans...", propose_plans, atlas, request, base)
+        return proposals, reasons
 
     def current_plans(self, replace=None):
         """Every plan, the ones being edited in place of their stored version."""

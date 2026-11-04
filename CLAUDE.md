@@ -8,8 +8,8 @@ or important workflows change.
 
 ## Project identity
 
-- Current release: DriftlessMap 2.8.2 (4 November 2026; probe planning,
-  `probe_planning_design.md` Phases 1-3; not yet published; the owner
+- Current release: DriftlessMap 2.8.3 (4 November 2026; probe planning,
+  `probe_planning_design.md` Phases 1-4; not yet published; the owner
   numbers the probe-planning phases 2.8.0-2.8.3, one feature). Latest
   published: 2.7.0 (3 November 2026; the first release since 2.0.0, including
   2.0.1-2.3.0 and multi-section projects). 2.0.0
@@ -126,6 +126,20 @@ or important workflows change.
   message). `PlanOverlay` draws craniotomies on the horizontal view.
   `PlanEditor`: Angles (QSettings `plan/angles`), Craniotomy list, Surgery
   menu (`craniotomy_dialog`, `bregma_lambda_dialog`).
+  2.8.3 (Phase 4): `ProbePlan.targets`/`avoid` (region ids; absent means
+  none); `ProposalRequest` and `propose_plans` (screen lines per tilt on a
+  strided copy by projecting target voxels across each direction,
+  `_screen_lines`; evaluate them at full resolution with `_LineScorer`,
+  sliding the recording window by cumulative sums and stopping before
+  avoided regions, the midline margin, the other side, the shank's end or
+  leaving the brain; refine the best by 1° and rank with `_key`/`_rank`:
+  reached, window coverage less `PROPOSAL_TILT_PENALTY_UM_PER_DEG` per
+  degree, shallowest; best per tilt band kept); `_reasons` explains failures
+  from the scorer's counts and `_line_spans_targets`. `target_coverage`
+  feeds the readout's `targets`. Engine `propose_probe_plans` (worker
+  thread). V2 `v2/proposal_dialog.ProposalDialog` (Record/Keep out of lists,
+  `checked_regions`, side, midline, tilt limits, craniotomy, results table,
+  reasons) from Propose… in `PlanEditor`.
 - `driftlessmap/project_session.py`: `ProjectSessionMixin.project_payload` is the
   shared saved-state collector. `load_project` snapshots the active document and
   restores it on failure, including its original reader, in-memory atlas and undo

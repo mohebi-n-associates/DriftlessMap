@@ -1,7 +1,7 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 2.8.2**. Section 2 explains how to
-install it; `pip install driftlessmap` installs 2.8.2.
+This manual applies to **DriftlessMap 2.8.3**. Section 2 explains how to
+install it; `pip install driftlessmap` installs 2.8.3.
 
 DriftlessMap - Histological E-data Registration in Brain Space - is a desktop
 application for aligning rodent histology with a reference atlas, reconstructing
@@ -131,7 +131,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-DriftlessMap 2.8.2 requires:
+DriftlessMap 2.8.3 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -150,8 +150,8 @@ page. The macOS DMG (`-macOS-arm64.dmg`) is built for Apple Silicon; on an Intel
 Mac, use the developer installation below.
 The desktop builds include Python and all runtime dependencies. Windows users
 extract the entire ZIP and run `DriftlessMap.exe`; macOS users open the DMG and
-drag `DriftlessMap.app` to Applications. The 2.8.2 downloads are named
-`DriftlessMap-2.8.2-Windows-x64.zip` and `DriftlessMap-2.8.2-macOS-arm64.dmg`.
+drag `DriftlessMap.app` to Applications. The 2.8.3 downloads are named
+`DriftlessMap-2.8.3-Windows-x64.zip` and `DriftlessMap-2.8.3-macOS-arm64.dmg`.
 Release builds are unsigned unless the release notes say otherwise, so the first
 launch may require Windows SmartScreen confirmation or Control-clicking the
 macOS app and choosing **Open**.
@@ -200,7 +200,7 @@ python -m pip --version
 python -c "import driftlessmap; print(driftlessmap.__version__)"
 ```
 
-The final command prints the installed version, `2.8.2`.
+The final command prints the installed version, `2.8.3`.
 
 ### 2.5 Launching DriftlessMap
 
@@ -1635,6 +1635,35 @@ Since 2.8.2 (surgery):
   ratio); the plan itself stays in atlas coordinates.
 - The copied line and `probe_plans.csv` add the arm angles, the craniotomy,
   the closest probe and, when scaled, the coordinates for this animal.
+
+Since 2.8.3 (proposals):
+
+- **Propose…** (or **Propose a plan…** for a probe without a plan) opens a
+  search for tracks that record chosen regions. Under **Record** add the
+  target regions (Add… picks one; Checked regions takes those checked in the
+  Regions tree, each with its sub-regions); under **Keep out of** the regions
+  the probe must not pass through. Choose the side of the brain, the midline
+  margin (default 0.2 mm; the sinus is not in the atlas), the largest AP and
+  ML tilts the rig allows (0 for vertical), and whether the entry must lie in
+  the probe's craniotomy.
+- **Find plans** searches straight tracks through the targets within those
+  tilts, sliding the probe's recording window (its bank) to the best depth on
+  each, and lists the best: entry, tilts, depth and the length of each target
+  in the window. Most targets recorded comes first, then the most of the
+  window in them, then the shallowest tip. **Use this plan** (or a double
+  click) makes it the probe's plan, which you can then adjust; Edit > Undo
+  mapping step takes it back.
+- When no track records every target the dialog says why: how many the best
+  track reaches; that no straight line passes through them within the tilt
+  limits (and the tilt that would allow one) or at any tilt (plan one probe
+  per target); or that the lines through them cross a region to avoid, come
+  too close to the midline, enter outside the craniotomy, are deeper than the
+  shank, or spread the targets over more than the recording window.
+- A plan keeps its targets and regions to avoid; the readout then gives
+  **Targets in the window**, the length of each target the window records
+  (marked missed below 0.1 mm), for proposed and hand-made plans alike.
+- The search uses the atlas only; check every plan against your own
+  knowledge of the animal.
 
 Each change is stored and built once you stop changing it (half a second, or
 Enter); Edit > Undo mapping step takes it back one change at a time. The

@@ -1037,6 +1037,75 @@ class V2ShellTests(unittest.TestCase):
             self.assertEqual(engine.probe_plan("Probe 1").craniotomy, hole.craniotomy_id)
 
     @isolated_gui_test
+    def test_a_plan_is_proposed_from_the_regions_to_record(self):
+        from unittest.mock import patch
+
+        from PyQt6.QtWidgets import QDialog
+
+        from driftlessmap.probe_plans import REACHED_UM
+        from driftlessmap.v2 import proposal_dialog
+        from tests.atlas_fixture import make_processed_atlas
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window = self.make_window(folder)
+            engine = window.engine
+            self.assertTrue(engine.load_volume_atlas(str(make_processed_atlas(
+                root / "atlas", shape=(80, 64, 64), axis_info=True))))
+            window.go_to("annotate")
+            card = window.panels["annotate"].implants.probe_card
+            card.new_probe()
+            window.refresh()
+            editor = card.plan_editor
+            # A probe without a plan offers a proposal straight away.
+            self.assertTrue(editor.start_propose.isVisibleTo(window))
+            # The Regions tree's checked regions become targets ("GC", label 20).
+            tree = engine.atlas_view.label_tree
+            tree.checked = {20}
+            seen = {}
+
+            def run(dialog):
+                dialog.add_checked(dialog.targets)
+                self.assertEqual(dialog.regions(dialog.targets), [20])
+                dialog.side.setCurrentIndex(0)
+                dialog.midline.setValue(0.0)
+                dialog.find()
+                seen["rows"] = dialog.table.rowCount()
+                seen["reasons"] = dialog.reasons.text()
+                self.assertTrue(dialog.use_button.isEnabled())
+                dialog.use()
+                return QDialog.DialogCode.Accepted
+
+            with patch.object(proposal_dialog.ProposalDialog, "exec", run):
+                editor.propose()
+            self.assertGreater(seen["rows"], 0)
+            self.assertEqual(seen["reasons"], "")
+            plan = engine.probe_plan("Probe 1")
+            self.assertEqual(plan.targets, [20])
+            self.assertTrue(engine.plan_objects("Probe 1"))
+            readout = engine.probe_plan_readout("Probe 1")
+            [(name, length)] = readout["targets"]
+            self.assertEqual(name, "GC")
+            self.assertGreaterEqual(length, REACHED_UM)
+            self.assertIn("Targets in the window", editor.readout.text())
+            # Undo takes the proposal back (the probe had no plan before).
+            self.assertTrue(engine.undo_mapping_step())
+            self.assertIsNone(engine.probe_plan("Probe 1"))
+
+            # A target the atlas does not have: the dialog says so, nothing is used.
+            def missing(dialog):
+                dialog._add(dialog.targets, 999)
+                dialog.find()
+                seen["missing"] = dialog.reasons.text()
+                self.assertFalse(dialog.use_button.isEnabled())
+                return QDialog.DialogCode.Rejected
+
+            with patch.object(proposal_dialog.ProposalDialog, "exec", missing):
+                editor.propose()
+            self.assertIn("None of the target regions", seen["missing"])
+            self.assertIsNone(engine.probe_plan("Probe 1"))
+
+    @isolated_gui_test
     def test_the_sections_card_adds_opens_renames_and_removes_sections(self):
         import cv2
         from unittest.mock import patch
