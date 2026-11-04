@@ -1381,6 +1381,22 @@ class V2ShellTests(unittest.TestCase):
             window.region_opacity.setValue(100)
             for mesh in engine.small_mesh_list.values():
                 self.assertAlmostEqual(mesh.opts["color"][3], 0.8)
+            # A checked region is one smooth surface around it and its
+            # sub-regions, in the region meshes' frame, not its parts' meshes.
+            tree = engine.atlas_view.label_tree
+            tree.show_labels([10])                     # CH, and so GC
+            self.assertEqual(tree.checked, {10, 20})
+            surface = engine.region_surfaces[10]
+            self.assertTrue(surface.visible())
+            self.assertFalse(any(m.visible() for m in engine.small_mesh_list.values()))
+            self.assertNotIn(20, engine.region_surfaces)
+            vertices = surface.opts["meshdata"].vertexes()
+            labels = np.transpose(engine.atlas_view.atlas_label[::-1, :, :], (1, 2, 0))
+            inside = np.argwhere(np.isin(labels, [10, 20]))
+            np.testing.assert_allclose(vertices.min(axis=0), inside.min(axis=0) - 0.5, atol=1.5)
+            np.testing.assert_allclose(vertices.max(axis=0), inside.max(axis=0) + 0.5, atol=1.5)
+            tree.labels_by_id[10]['item'].setCheckState(0, Qt.CheckState.Unchecked)
+            self.assertFalse(surface.visible())
 
     @isolated_gui_test
     def test_regions_are_found_by_typing_and_planning_shows_the_ones_it_uses(self):

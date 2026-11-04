@@ -23,6 +23,8 @@ screen that gets you to a plan.
 - **Fibers and prisms are filled in 3D**, and **Region opacity in 3D** (Regions
   tab) makes the checked regions see-through, so tracks and implants inside
   them show.
+- **Smooth regions in 3D**: a checked region is one smooth surface around
+  it and its sub-regions, not its layers' coarse meshes drawn over each other.
 - **Find regions by typing**: a search box above the Regions tree, and in
   Snap tip to region and Propose's Add… a list that narrows as you type.
 - **Regions you plan with are shown**: snapping to a region or adding it to

@@ -519,7 +519,11 @@ The window has four areas:
   to narrow it to the regions whose acronym or name holds every word you
   type (with their parents); Enter selects the best match (since 2.8.5).
   **Region opacity in 3D** below it makes the checked regions see-through, so
-  probe tracks and implants inside them show (100% draws them solid).
+  probe tracks and implants inside them show (100% draws them solid). A
+  checked region is drawn in 3D as one smooth surface around it and all its
+  sub-regions, built from the atlas labels when first shown (since 2.8.5;
+  before, a region such as PL showed as its layers' coarse meshes, one over
+  another).
 - **The status line** at the bottom: the last message, the atlas and section,
   and whether there are unsaved changes. Changing views, zooming or selecting
   never counts as a change; adding a probe, even before marking it, does.

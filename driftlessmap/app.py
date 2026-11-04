@@ -297,6 +297,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
         self.atlas_img_path = None
 
         self.small_mesh_list = {}
+        self.region_surfaces = {}     # region id -> smooth surface (or None), 2.8.5
         # Opacity of the checked regions' meshes in 3D (0-1; 2.8.5): lower it to
         # see probes and implants inside them.
         self.region_opacity = 1.0
@@ -6707,23 +6708,80 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
         atlas as its layers (prelimbic as PL1-PL6b) shows as those meshes.
         """
         checked = self.atlas_view.label_tree.checked
-        wanted = set()
+        wanted, built = set(), set()
         if self.show_child_mesh:
+            ids = set()
             for label_id in checked:
                 try:
-                    wanted.add(str(int(label_id)))
+                    ids.add(int(label_id))
                 except (TypeError, ValueError):
                     continue
+            # Each checked region whose parent is not checked is drawn as one
+            # smooth surface around it and its sub-regions, built from the
+            # labels (2.8.5); its layers' coarse meshes are not drawn over it.
+            parents = self._region_parents()
+            for label_id in ids:
+                if parents.get(label_id) in ids:
+                    continue
+                if self._region_surface_item(label_id) is not None:
+                    built.add(label_id)
+                elif str(label_id) in self.small_mesh_list:
+                    wanted.add(str(label_id))
         for key, mesh in self.small_mesh_list.items():
             if mesh.visible() != (key in wanted):
                 mesh.setVisible(key in wanted)
+        for label_id, mesh in self.region_surfaces.items():
+            if mesh is not None and mesh.visible() != (label_id in built):
+                mesh.setVisible(label_id in built)
         self.previous_checked_label = list(checked)
+
+    def _region_parents(self):
+        info = self.atlas_view.label_info
+        if info is None or "parent" not in info:
+            return {}
+        return {int(i): int(p) for i, p in zip(np.ravel(info["index"]),
+                                               np.ravel(info["parent"]))}
+
+    def _region_surface_item(self, label_id):
+        """The smooth surface of a region and its sub-regions (cached), or None
+        when the atlas has no voxels for it."""
+        if label_id in self.region_surfaces:
+            return self.region_surfaces[label_id]
+        view = self.atlas_view
+        mesh = None
+        if view.atlas_label is not None and view.label_info is not None \
+                and view.origin_3d is not None:
+            from .region_meshes import descendants, region_surface
+
+            # The region meshes are in the processed segmentation's frame;
+            # the view holds it reordered (see load_volume_atlas), so undo that.
+            labels = np.transpose(view.atlas_label[::-1, :, :], (1, 2, 0))
+            surface = region_surface(labels, descendants(view.label_info, label_id))
+            if surface is not None:
+                mesh = gl.GLMeshItem(meshdata=gl.MeshData(vertexes=surface[0],
+                                                          faces=surface[1]),
+                                     smooth=True, shader="balloon")
+                colour = self.atlas_view.label_tree.color_for_label(label_id) / 255
+                self._set_region_mesh_colour(mesh, colour)
+                origin = np.ravel(view.origin_3d)
+                mesh.translate(-origin[0], -origin[1], -origin[2])
+                mesh.setVisible(False)
+                self.view3d.addItem(mesh)
+        self.region_surfaces[label_id] = mesh
+        return mesh
+
+    def clear_region_surfaces(self):
+        for mesh in self.region_surfaces.values():
+            if mesh is not None:
+                self.view3d.removeItem(mesh)
+        self.region_surfaces.clear()
 
     def set_region_opacity(self, opacity):
         """Draw the region meshes at ``opacity`` (0-1); below 1 they are
         translucent, so tracks and implants inside them show."""
         self.region_opacity = float(min(max(opacity, 0.0), 1.0))
-        for mesh in self.small_mesh_list.values():
+        for mesh in list(self.small_mesh_list.values()) + [
+                m for m in self.region_surfaces.values() if m is not None]:
             colour = mesh.opts.get("color", (0.5, 0.5, 0.5, 1.0))
             self._set_region_mesh_colour(mesh, colour)
 
@@ -6762,6 +6820,8 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
 
         col_to_set = ev[1] / 255
         label_id = str(ev[0])
+        if self.region_surfaces.get(int(ev[0])) is not None:
+            self._set_region_mesh_colour(self.region_surfaces[int(ev[0])], col_to_set)
         all_keys = self.small_mesh_list.keys()
         if label_id not in all_keys:
             return
@@ -6778,6 +6838,10 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
         for label_id in valid_id:
             col_to_set = self.atlas_view.label_tree.color_for_label(label_id) / 255
             self._set_region_mesh_colour(self.small_mesh_list[label_id], col_to_set)
+        for label_id, mesh in self.region_surfaces.items():
+            if mesh is not None:
+                self._set_region_mesh_colour(
+                    mesh, self.atlas_view.label_tree.color_for_label(label_id) / 255)
 
     # ------------------------------------------------------------------
     #
@@ -8008,6 +8072,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
             for label_id in list(self.small_mesh_list.keys()):
                 self.view3d.removeItem(self.small_mesh_list[label_id])
             self.small_mesh_list.clear()
+            self.clear_region_surfaces()
 
         self.atlas_view.set_data(
             atlas_data, segmentation_data, atlas_info, label_info, boundary

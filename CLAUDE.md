@@ -182,6 +182,10 @@ or important workflows change.
   Fibers and prisms are filled in 3D (`implants.model_mesh`,
   `obj_items.ImplantItem`, which takes `setData(color=, width=)`);
   `set_region_opacity` (Regions tab slider) makes region meshes translucent.
+  `region_meshes.region_surface` builds one smooth surface per checked
+  region (with sub-regions) in the segmentation frame (`atlas_label`
+  reordered back); `sync_region_meshes` draws it instead of the parts'
+  meshes.
 - `driftlessmap/project_session.py`: `ProjectSessionMixin.project_payload` is the
   shared saved-state collector. `load_project` snapshots the active document and
   restores it on failure, including its original reader, in-memory atlas and undo

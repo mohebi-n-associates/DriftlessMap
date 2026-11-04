@@ -345,6 +345,7 @@ class ProjectSessionMixin:
         for mesh in self.small_mesh_list.values():
             self.view3d.removeItem(mesh)
         self.small_mesh_list.clear()
+        self.clear_region_surfaces()
         view.mesh.setMeshData(meshdata=gl.MeshData())
         view.mesh.resetTransform()
         view.atlas_data = view.atlas_label = view.slice_image_data = None
