@@ -34,14 +34,21 @@ FIBER_NAS = (0.22, 0.37, 0.39, 0.50)
 PRISM_FACES = ("medial", "lateral", "anterior", "posterior")
 DEFAULT_SPECS = {
     FIBER: {"diameter_um": 200.0, "na": 0.39},
-    # width runs along the imaging face, depth away from it.
-    PRISM: {"width_um": 1500.0, "depth_um": 1500.0, "face": "lateral"},
+    # width runs along the imaging face, depth away from it; length is the
+    # imaging face's long edge, and the bottom is bevelled at bevel_deg to the
+    # long edges (the mirror; 90 is a flat bottom), deepest at the face (2.8.5).
+    PRISM: {"width_um": 1500.0, "depth_um": 1500.0, "face": "lateral",
+            "length_um": 3000.0, "bevel_deg": 45.0},
 }
+# The settings a fit from mapped outlines uses.
+FIT_SPECS = {FIBER: ("diameter_um", "na"), PRISM: ("width_um", "depth_um", "face")}
 _SPEC_RANGES = {
     "diameter_um": (10.0, 3000.0),
     "na": (0.05, 1.0),
     "width_um": (100.0, 5000.0),
     "depth_um": (100.0, 5000.0),
+    "length_um": (300.0, 20000.0),
+    "bevel_deg": (20.0, 90.0),
 }
 PALETTE = [
     (0, 184, 169), (242, 153, 74), (155, 81, 224), (47, 128, 237),
@@ -103,8 +110,16 @@ def validated_specs(kind, specs):
 def describe_specs(kind, specs):
     if kind == FIBER:
         return "Ø {:g} µm · NA {:g}".format(specs["diameter_um"], specs["na"])
-    return "{:g} × {:g} µm · {} face".format(specs["width_um"], specs["depth_um"],
-                                            specs["face"])
+    specs = validated_specs(PRISM, specs)    # specs saved before 2.8.5 lack the length
+    return "{:g} × {:g} × {:g} µm · {:g}° bottom · {} face".format(
+        specs["width_um"], specs["depth_um"], specs["length_um"], specs["bevel_deg"],
+        specs["face"])
+
+
+def prism_rise(specs):
+    """How far the bevelled bottom rises per µm behind the imaging face."""
+    bevel = float(specs.get("bevel_deg", 90.0))
+    return 0.0 if bevel >= 90.0 else 1.0 / math.tan(math.radians(bevel))
 
 
 @dataclass(frozen=True)
@@ -670,6 +685,11 @@ def model_segments(model):
         for k in range(0, 24, 3):
             segments += [top + ring[k], bottom + ring[k]]
         return np.asarray(segments)
+    if model["type"] == "prism":
+        corners = _prism_corners(model)
+        edges = [(0, 1), (1, 2), (2, 3), (3, 0), (4, 5), (5, 6), (6, 7), (7, 4),
+                 (0, 4), (1, 5), (2, 6), (3, 7)]
+        return np.asarray([corners[i] for edge in edges for i in edge])
     bottom = np.asarray(model["bottom"])
     up, face, across = (np.asarray(model[k]) for k in ("up", "face_normal", "across"))
     corners = []
@@ -680,6 +700,20 @@ def model_segments(model):
     edges = [(0, 1), (1, 2), (2, 3), (3, 0), (4, 5), (5, 6), (6, 7), (7, 4),
              (0, 4), (1, 5), (2, 6), (3, 7)]
     return np.asarray([corners[i] for edge in edges for i in edge])
+
+
+def _prism_corners(model):
+    """The eight corners of a planned prism: the bottom (face edge, then the
+    raised back edge), then the top, each corner by ``(behind, across)``."""
+    bottom = np.asarray(model["bottom"], float)
+    up, face, across = (np.asarray(model[k], float) for k in ("up", "face_normal", "across"))
+    depth, half, rise = model["depth_vox"], model["half_width_vox"], model["rise"]
+    corners = []
+    for top in (False, True):
+        for behind, side in ((0.0, -1), (depth, -1), (depth, 1), (0.0, 1)):
+            height = model["length_vox"] if top else behind * rise
+            corners.append(bottom + height * up - behind * face + side * half * across)
+    return np.asarray(corners)
 
 
 def model_section(model, origin, axis_x, axis_y, shape):
@@ -700,6 +734,11 @@ def model_section(model, origin, axis_x, axis_y, shape):
         top, bottom = np.asarray(model["top"], float), np.asarray(model["bottom"], float)
         reach = float(model["radius_vox"])
         extremes = np.vstack([top, bottom])
+    elif model["type"] == "prism":
+        bottom = np.asarray(model["bottom"], float)
+        up, face, across = (np.asarray(model[k], float) for k in ("up", "face_normal", "across"))
+        extremes = _prism_corners(model)
+        reach = 0.0
     else:
         bottom = np.asarray(model["bottom"], float)
         up, face, across = (np.asarray(model[k], float) for k in ("up", "face_normal", "across"))
@@ -732,6 +771,12 @@ def model_section(model, origin, axis_x, axis_y, shape):
         along = (points - top) @ axis
         across_ = points - top - along[..., None] * axis
         inside = (along >= 0) & (along <= span) & (np.linalg.norm(across_, axis=-1) <= reach)
+    elif model["type"] == "prism":
+        relative = points - bottom
+        height, behind = relative @ up, -(relative @ face)
+        inside = ((behind >= 0) & (behind <= model["depth_vox"])
+                  & (np.abs(relative @ across) <= model["half_width_vox"])
+                  & (height >= behind * model["rise"]) & (height <= model["length_vox"]))
     else:
         relative = points - bottom
         inside = ((relative @ up >= 0) & (relative @ up <= model["height_vox"])
@@ -764,6 +809,8 @@ def _point_line(label, point):
 
 def report_lines(report):
     """The report as lines of plain text, most important first."""
+    if report.get("planned"):
+        return list(report.get("lines") or [])     # a planned fiber or prism (2.8.5)
     lines = []
     if report["kind"] == FIBER:
         lines.append(_point_line("Tip ({})".format(report["tip_source"]), report["tip"]))

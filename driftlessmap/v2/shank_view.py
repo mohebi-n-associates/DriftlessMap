@@ -97,7 +97,19 @@ class ShankView(QWidget):
                            rect.top() + (along - top) * scale)
 
         colour = QColor(*self.engine.plan_colours.get(self.plan.probe, (232, 72, 85)))
-        for offset in self.plan.shank_offsets_um or [0.0]:
+        kind = getattr(self.plan, "kind", "probe")
+        if kind != "probe":
+            # A fiber's or prism's outline in this plane (the prism's: its
+            # imaging face, which the plane contains).
+            specs = self.plan.specs
+            half = specs["diameter_um"] / 2.0 if kind == "fiber" else specs["width_um"] / 2.0
+            upper = top if kind == "fiber" else max(top, depth - specs["length_um"])
+            fill = QColor(colour)
+            fill.setAlpha(60)
+            painter.setPen(QPen(colour, 2))
+            painter.setBrush(fill)
+            painter.drawRect(QRectF(point(-half, upper), point(half, depth)))
+        for offset in (self.plan.shank_offsets_um or [0.0]) if kind == "probe" else [0.0]:
             painter.setPen(QPen(QColor(255, 255, 255), 4))
             painter.drawLine(point(offset, top), point(offset, depth))
             painter.setPen(QPen(colour, 2))
@@ -115,7 +127,9 @@ class ShankView(QWidget):
         painter.setPen(QColor(200, 200, 200))
         painter.setFont(QFont(painter.font().family(), 8))
         painter.drawText(QRectF(rect.left() + 4, rect.top() + 2, rect.width() - 8, 14),
-                         Qt.AlignmentFlag.AlignLeft, "probe plane")
+                         Qt.AlignmentFlag.AlignLeft,
+                         {"fiber": "fiber plane", "prism": "imaging face plane"}.get(
+                             kind, "probe plane"))
         bar = 500.0 * scale
         painter.drawLine(QPointF(rect.right() - 6 - bar, rect.bottom() - 8),
                          QPointF(rect.right() - 6, rect.bottom() - 8))

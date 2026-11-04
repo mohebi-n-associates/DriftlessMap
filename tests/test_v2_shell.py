@@ -42,6 +42,12 @@ def isolated_gui_test(test):
     return wrapper
 
 
+
+def card_names(window):
+    """Names listed in the Annotate step's Implants card."""
+    card = window.panels["annotate"].implants
+    return [i.name for i in window.engine.implants.implants()] + card.probe_card.book.names()
+
 class BrightnessContrastTests(unittest.TestCase):
     def test_window_round_trip(self):
         for black, white in ((0, 65535), (1000, 5000), (30000, 30100), (0, 255)):
@@ -641,14 +647,25 @@ class V2ShellTests(unittest.TestCase):
             window.go_to("project")
             window.refresh()
             self.assertFalse(panel.plan_probe.isEnabled())
-            self.assertIn("atlas", window.registry.run("probe.plan"))
+            # Without an atlas, planning asks for one first; cancelled, nothing opens.
+            from unittest.mock import patch
+
+            from driftlessmap import file_dialogs
+
+            with patch.object(file_dialogs, "get_existing_directory", return_value=""):
+                window.run("probe.plan")
+            self.assertIn("needs a volume atlas", window.message_label.text())
+            self.assertEqual(card_names(window), [])
             self.assertTrue(engine.load_volume_atlas(
                 str(make_processed_atlas(root / "atlas", axis_info=True))))
             window.refresh()
-            # The start screen (with its Plan a probe) is gone; the Project
-            # step offers it instead.
+            # The start screen is gone; the Project step offers planning instead.
             self.assertFalse(window.empty_canvas.isVisibleTo(window))
-            self.push(panel, "Plan a probe on this atlas…")
+            self.assertTrue(panel.plan_probe.isEnabled())
+            self.assertEqual([a.text() for a in panel.plan_probe.menu().actions()],
+                             ["A probe…", "An optical fiber…", "A microprism…"])
+            panel.plan_probe.menu().actions()[0].trigger()
+            self.application.processEvents()
             self.assertIs(window.stack.currentWidget(), window.panels["annotate"])
             card = window.panels["annotate"].implants
             self.assertEqual(card.probe_card.book.names(), ["Probe 1"])
@@ -659,7 +676,7 @@ class V2ShellTests(unittest.TestCase):
             self.assertIn("Probe 1 planned", window.message_label.text())
             # Again: Probe 1 is planned, so a second probe is opened.
             window.go_to("project")
-            self.push(panel, "Plan a probe on this atlas…")
+            panel.plan_probe.menu().actions()[0].trigger()
             self.assertEqual(card.probe_card.book.names(), ["Probe 1", "Probe 2"])
             self.assertIn("Plan a probe on the atlas",
                           [c.name for c in window.registry.search("probe")])
@@ -1116,6 +1133,108 @@ class V2ShellTests(unittest.TestCase):
         window.run("probe.plan")
         window.refresh()
         return window, engine, window.panels["annotate"].implants.probe_card.plan_editor
+
+    @isolated_gui_test
+    def test_plan_a_prism_and_a_fiber_from_the_start_screen(self):
+        from unittest.mock import patch
+
+        from PyQt6.QtWidgets import QMessageBox
+
+        from driftlessmap import file_dialogs
+        from driftlessmap.mapping_records import CURRENT
+        from driftlessmap.persistence import load_driftlessmap_file
+        from tests.atlas_fixture import make_processed_atlas
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            atlas = make_processed_atlas(root / "atlas", shape=(80, 64, 64), axis_info=True)
+            window = self.make_window(folder)
+            engine = window.engine
+            window.refresh()
+            self.assertTrue(window.empty_canvas.isVisibleTo(window))
+            # The start screen asks for the atlas, then opens the plan (2.8.5:
+            # before, it only said to load an atlas, and the screen then went).
+            with patch.object(file_dialogs, "get_existing_directory", return_value=str(atlas)):
+                self.push(window.empty_canvas, "Plan a prism…")
+            window.refresh()
+            self.assertIsNotNone(engine.atlas_view.atlas_data)
+            self.assertFalse(window.empty_canvas.isVisibleTo(window))
+            self.assertIs(window.stack.currentWidget(), window.panels["annotate"])
+            [prism] = engine.implants.implants()
+            self.assertEqual((prism.kind, prism.specs["width_um"], prism.specs["depth_um"],
+                              prism.specs["length_um"], prism.specs["bevel_deg"]),
+                             ("prism", 1500.0, 1500.0, 3000.0, 45.0))
+            plan = engine.implant_plan(prism.implant_id)
+            self.assertEqual(plan.roll_deg, 90.0)      # lateral, on the right
+            editor = window.panels["annotate"].implants.plan_editor
+            self.assertTrue(editor.isVisibleTo(window))
+            self.assertEqual(editor.roll_label.text(), "Face")
+            self.assertFalse(editor.type_box.isVisibleTo(window))
+            self.assertFalse(editor.propose_button.isVisibleTo(window))
+            self.assertIn("Face looks into", editor.readout.text())
+            [built] = engine.plan_objects(prism.name)
+            self.assertEqual(engine.object_ctrl.obj_type[built], "merged prism")
+            self.assertEqual(engine.object_mapping_status(built), CURRENT)
+            self.assertEqual(engine.implant_objects(prism.implant_id), [])
+            engine.show_plan_on_atlas(prism.name)
+            engine.plan_overlay.refresh()
+            for plane in ("coronal", "sagittal", "horizontal"):
+                self.assertGreater(engine.plan_overlay.outlines_drawn(plane), 0, plane)
+            # Turning the face is a staged edit like any other.
+            self.assertTrue(editor.steer_key(Qt.Key.Key_O))
+            editor.commit()
+            self.assertEqual(engine.implant_plan(prism.implant_id).roll_deg, 91.0)
+
+            window.run("fiber.plan")
+            window.refresh()
+            fiber = engine.implants.by_name("Fiber 1")
+            self.assertEqual(engine.implant_plan(fiber.implant_id).kind, "fiber")
+            self.assertFalse(editor.roll.isVisibleTo(window))
+            self.assertEqual(engine.object_ctrl.obj_type[engine.plan_objects("Fiber 1")[0]],
+                             "merged fiber")
+
+            # The plan follows its implant's settings and name; undo takes both back.
+            engine.set_implant_specs(prism.implant_id, dict(prism.specs, length_um=1000.0))
+            self.assertEqual(engine.implant_plan(prism.implant_id).specs["length_um"], 1000.0)
+            self.assertTrue(any("below the brain surface" in w for w in
+                                engine.probe_plan_readout(prism.name)["warnings"]))
+            engine.rename_implant(prism.implant_id, "Prism L")
+            self.assertIsNotNone(engine.probe_plan("Prism L"))
+            self.assertEqual(engine.object_ctrl.obj_name[engine.plan_objects("Prism L")[0]],
+                             "Prism L plan")
+            self.assertTrue(engine.undo_mapping_step())
+            self.assertIsNotNone(engine.probe_plan("Prism 1"))
+            self.assertIsNone(engine.probe_plan("Prism L"))
+            self.assertTrue(engine.undo_mapping_step())
+            self.assertEqual(engine.implant_plan(prism.implant_id).specs["length_um"], 3000.0)
+
+            # Saved apart from the probe plans, and reopened with their implants.
+            path = root / "plans.dmap"
+            self.assertTrue(engine.save_project_called(path=str(path)))
+            window.mark_saved()
+            data, error = load_driftlessmap_file(str(path), expected_kind="project")
+            self.assertIsNone(error)
+            self.assertEqual(data["probe_plans"], [])
+            self.assertEqual(sorted(p["kind"] for p in data["implant_plans"]),
+                             ["fiber", "prism"])
+            saved = [engine.probe_plan(n) for n in ("Fiber 1", "Prism 1")]
+            self.answer_new_project(window, "Keep the atlas")
+            window.run("project.new")
+            self.assertEqual(len(engine.probe_plans), 0)
+            with patch.object(file_dialogs, "get_open_file_name",
+                              return_value=(str(path), "")), \
+                    patch("driftlessmap.v2.shell.QMessageBox.question",
+                          return_value=QMessageBox.StandardButton.Discard), \
+                    patch("driftlessmap.app.QMessageBox.question",
+                          return_value=QMessageBox.StandardButton.No):
+                window.run("project.open")
+            self.assertEqual([engine.probe_plan(n) for n in ("Fiber 1", "Prism 1")], saved)
+
+            # Deleting the implant deletes its plan and planned object.
+            fiber = engine.implants.by_name("Fiber 1")
+            engine.delete_implant(fiber.implant_id)
+            self.assertIsNone(engine.probe_plan("Fiber 1"))
+            self.assertEqual(engine.plan_objects("Fiber 1"), [])
 
     @isolated_gui_test
     def test_review_r2_a_staged_edit_is_saved_counted_and_kept_to_its_document(self):
@@ -2323,10 +2442,19 @@ class V2ShellTests(unittest.TestCase):
             texts = {b.text() for b in window.findChildren(QPushButton)}
             for text in ("Load atlas folder…", "Add sections…", "Allen mouse atlas…",
                          "Waxholm rat atlas…", "SWC female rat atlas…", "Your own atlas…",
-                         "Plan a probe", "Open project…"):
+                         "Plan a probe…", "Plan a fiber…", "Plan a prism…", "Open project…"):
                 self.assertIn(text, texts)
-            window.start_probe_plan()                   # no atlas yet
-            self.assertIn("Load an atlas folder first", window.message_label.text())
+            from unittest.mock import patch
+
+            from driftlessmap import file_dialogs
+
+            # No atlas yet: the folder is asked for; cancelled, nothing opens.
+            with patch.object(file_dialogs, "get_existing_directory",
+                              return_value="") as ask:
+                window.start_probe_plan()
+            ask.assert_called_once()
+            self.assertIn("Planning needs a volume atlas", window.message_label.text())
+            self.assertIsNot(window.stack.currentWidget(), window.panels["annotate"])
             self.assertTrue(window.engine.load_volume_atlas(
                 str(make_processed_atlas(Path(folder) / "atlas"))))
             window.start_probe_plan()

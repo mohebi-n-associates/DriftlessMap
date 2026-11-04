@@ -4619,6 +4619,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
             "mapping_review_state": self.mapping_review_state,
             "implants": self._implant_state(),
             "probe_plans": self.probe_plans.to_list(),
+            "implant_plans": self.probe_plans.to_list(implants=True),
             "craniotomies": self.craniotomies.to_list(),
             "surgery_settings": dict(self.surgery_settings),
         }
@@ -4715,7 +4716,8 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
         self.registration_review = RegistrationReview.from_dict(state["registration_review"])
         self.mapping_review_state = state["mapping_review_state"]
         self._restore_implant_state(state["implants"])
-        self.probe_plans = PlanBook.from_list(state.get("probe_plans"))[0]
+        self.probe_plans = PlanBook.from_list(state.get("probe_plans"),
+                                              state.get("implant_plans"))[0]
         self.craniotomies = CraniotomyBook.from_list(state.get("craniotomies"))[0]
         self.surgery_settings = validated_surgery_settings(state.get("surgery_settings"))
         for key, value in state["atlas"].items():

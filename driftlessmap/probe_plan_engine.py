@@ -18,7 +18,6 @@ from .probe_plans import (
     target_coverage,
     Craniotomy,
     CraniotomyBook,
-    across_face,
     arm_from_tilts,
     bregma_lambda_scale,
     clearance_warning,
@@ -38,12 +37,66 @@ from .probe_plans import (
     shank_lines,
     surface_entry,
 )
+from .probe_plans import (
+    PRISM,
+    device_lines,
+    imaging_summary,
+    planned_model,
+    region_summary,
+)
+from .implants import describe_specs
 from .probe_utiles import calculate_probe_info, probe_error_message
 
 PLAN_SUFFIX = " plan"
 # A staged plan edit is stored and built once edits settle for this long, or at
 # once before anything reads or replaces the document (review R2 of 2.8.3).
 PLAN_SETTLE_MS = 500
+
+
+def plan_focus_um(plan):
+    """Where Show on atlas puts the pages: a probe's tip; inside a fiber just
+    above its tip, and inside a prism beside its imaging face, so every page
+    cuts it (the tip lies on the device's surface)."""
+    tip = np.asarray(plan.tip_um, dtype=float)
+    if plan.is_probe:
+        return tip
+    up = -plan.direction
+    if plan.kind == PRISM:
+        from .implants import prism_rise
+
+        depth = plan.specs["depth_um"]
+        height = min(0.75 * max(depth * prism_rise(plan.specs), 100.0),
+                     plan.specs["length_um"] / 2.0)
+        return tip + up * height - plan.normal * min(depth / 4.0, height * 0.5)
+    return tip + up * min(plan.specs["diameter_um"] / 2.0, 250.0)
+
+
+def implant_plan_lines(plan, readout, type_name):
+    """A planned fiber or prism's report, as lines of text (its object's
+    information window)."""
+    def triple(values):
+        return "AP {:+.3f} · ML {:+.3f} · DV {:+.3f} mm".format(
+            values[1] / 1000.0, values[0] / 1000.0, values[2] / 1000.0)
+
+    lines = ["Planned {} (from Bregma; ML + is the animal's right, DV + dorsal).".format(
+        type_name.lower())]
+    if readout.get("entry_um") is not None:
+        lines.append("Entry: {}".format(triple(readout["entry_um"])))
+        lines.append("Depth: {:.3f} mm along the {}".format(readout["depth_um"] / 1000.0,
+                                                           plan.kind))
+    lines.append("{}: {} · in {}".format(
+        "Bottom of the imaging face" if plan.kind == PRISM else "Tip",
+        triple(readout["tip_um"]), readout["tip_region"][1]))
+    lines.append("Tilt: {}".format(readout.get("tilt", "")))
+    if plan.kind == PRISM:
+        lines.append("Imaging face looks {}".format(readout.get("face", "")))
+        if readout.get("imaging"):
+            lines.append("Face looks into: {}".format(imaging_summary(readout, limit=8)))
+    regions = region_summary(readout, limit=8)
+    if regions:
+        lines.append("Along the axis: {}".format(regions))
+    lines += ["⚠ " + warning for warning in readout.get("warnings") or []]
+    return lines
 
 
 def plan_object_name(probe, shank=None, shanks=1):
@@ -145,6 +198,37 @@ class ProbePlanEngineMixin:
                 return plan_from_entry_depth(plan, entry, depth)
         return plan
 
+    def implant_plan(self, implant_id):
+        """The plan of a fiber or prism, or None."""
+        implant = self.implants.get(implant_id)
+        plan = self.probe_plans.get(implant.name) if implant is not None else None
+        return plan if plan is not None and plan.implant_id == implant_id else None
+
+    def default_implant_plan(self, implant_id):
+        """A vertical plan for a fiber or prism to start from, placed as a probe's
+        (``default_probe_plan``); a prism goes no deeper than its length allows
+        and its imaging face looks the way its settings say."""
+        implant = self.implants.get(implant_id)
+        if implant is None:
+            raise ValueError("unknown implant")
+        probe = self.default_probe_plan(implant.name)
+        plan = ProbePlan(implant.name, probe.tip_um, kind=implant.kind, specs=implant.specs,
+                         implant_id=implant.implant_id)
+        atlas = self.plan_atlas()
+        if implant.kind == PRISM:
+            side = 1.0 if plan.tip_um[0] >= 0 else -1.0
+            # Roll: 0 faces anterior, 90 the animal's right.
+            roll = {"anterior": 0.0, "posterior": 180.0,
+                    "lateral": 90.0 if side > 0 else 270.0,
+                    "medial": 270.0 if side > 0 else 90.0}[implant.specs.get("face", "lateral")]
+            plan = plan.copy(roll_deg=roll)
+            if atlas is not None:
+                readout = plan_readout(plan, atlas)
+                limit = implant.specs["length_um"] - 500.0
+                if readout["entry_um"] is not None and readout["depth_um"] > limit:
+                    plan = plan_from_entry_depth(plan, readout["entry_um"], max(limit, 500.0))
+        return plan
+
     def probe_plan_readout(self, probe_or_plan, others=True):
         """The plan's readout plus the surgery checks (since 2.8.2): arm angles,
         its craniotomy, the closest other planned probe and the Bregma-Lambda
@@ -176,6 +260,7 @@ class ProbePlanEngineMixin:
                 "unknown: no coordinates for the animal are given (enter the atlas's "
                 "distance in Surgery > Bregma-Lambda distance).")
         readout["targets"] = target_coverage(plan, readout, atlas)
+        readout["model"] = planned_model(plan, readout, atlas.vox_um)
         return readout
 
     # ------------------------------------------------------------ proposals
@@ -289,9 +374,9 @@ class ProbePlanEngineMixin:
                 continue
             readout = plan_readout(plan, atlas)
             if readout["entry_um"] is not None:
-                across = across_face(plan.direction, plan.normal)
-                entries.extend(np.asarray(readout["entry_um"]) + across * offset
-                               for offset in plan.shank_offsets_um or [0.0])
+                # Every shank, or the rim of a fiber or the footprint of a prism.
+                entries.extend(np.asarray(readout["entry_um"]) + offset
+                               for _name, offset, _raised in device_lines(plan, outline=True))
         if not entries:
             return None
         centre, diameter = fit_craniotomy(entries)
@@ -417,7 +502,7 @@ class ProbePlanEngineMixin:
         atlas = self.plan_atlas()
         if plan is None or atlas is None:
             return False
-        point = atlas.to_vox(plan.tip_um)
+        point = atlas.to_vox(plan_focus_um(plan))
         view = self.atlas_view
         for control, page in ((view.spage_ctrl, point[0]), (view.cpage_ctrl, point[1]),
                               (view.hpage_ctrl, point[2])):
@@ -439,6 +524,8 @@ class ProbePlanEngineMixin:
             if earlier:
                 o.delete_objects(earlier)
             return False, readout["warnings"][-1]
+        if not plan.is_probe:
+            return self._build_implant_plan(plan, colour, earlier)
         metadata, error = self._plan_atlas_metadata()
         if error is not None:
             return False, error
@@ -470,6 +557,38 @@ class ProbePlanEngineMixin:
         o.current_obj_index = len(o.obj_name) - 1
         return True, "Planned {}.".format(probe)
 
+    def _build_implant_plan(self, plan, colour, earlier):
+        """A planned fiber or prism as a ``merged fiber``/``merged prism`` object
+        named ``"<name> plan"``; its data carries the plan and a report with
+        the display model, but no ``implant_id``, so it is never taken for the
+        implant built from sections."""
+        from .implants import TYPE_NAMES
+
+        readout = self.probe_plan_readout(plan, others=False)
+        o = self.object_ctrl
+        name = plan_object_name(plan.probe)
+        info = {
+            "object_type": plan.kind,
+            "plan_of": plan.probe,
+            "plan": plan.to_dict(),
+            "data": [],
+            "pieces_names": [name],
+            "report": {"kind": plan.kind, "specs": dict(plan.specs), "planned": True,
+                       "model": readout["model"],
+                       "lines": implant_plan_lines(plan, readout,
+                                                   TYPE_NAMES[plan.kind])},
+        }
+        if earlier:
+            o.delete_objects(earlier)
+        o.add_object(name, "merged " + plan.kind, object_data=info,
+                     object_mode=self.obj_display_mode)
+        implant = self.implants.get(plan.implant_id)
+        colour = colour or (implant.colour if implant is not None else None)
+        if colour is not None:
+            self._colour_object(len(o.obj_name) - 1, colour)
+        o.current_obj_index = len(o.obj_name) - 1
+        return True, "Planned {}.".format(plan.probe)
+
     def _colour_object(self, index, colour):
         from PyQt6.QtGui import QColor
 
@@ -486,7 +605,7 @@ class ProbePlanEngineMixin:
                     "window_regions", "arm_azimuth_deg", "arm_elevation_deg", "craniotomy",
                     "closest_probe", "closest_mm", "bregma_lambda_scale", "animal_entry_ap_mm",
                     "animal_entry_ml_mm", "animal_entry_dv_mm", "animal_depth_mm", "regions",
-                    "warnings", "coordinates")
+                    "warnings", "coordinates", "device", "device_settings", "imaging_regions")
 
     def plan_table_rows(self):
         """One row per plan (millimetres from Bregma; ML + is the animal's right)."""
@@ -545,7 +664,16 @@ class ProbePlanEngineMixin:
                 "warnings": " ".join(readout.get("warnings") or []),
                 "coordinates": (coordinate_line(plan, readout, atlas_name)
                                 if readout else ""),
+                "device": plan.kind,
+                "device_settings": "" if plan.is_probe
+                else describe_specs(plan.kind, plan.specs),
+                "imaging_regions": imaging_summary(readout, limit=12, minimum=0.0),
             })
+            if not plan.is_probe:
+                # No contacts, shanks or recording window; the face is the
+                # prism's imaging face (2.8.5).
+                rows[-1].update({"contacts_face": readout.get("face", "")
+                                 if plan.kind == PRISM else "", "shanks": "", "bank": ""})
         return rows
 
     def export_probe_plans(self, path):
@@ -565,7 +693,20 @@ class ProbePlanEngineMixin:
         if broken:
             self.print_message("{} craniotomy(ies) could not be restored: {}".format(
                 len(broken), "; ".join(broken)), self.reminder_color)
-        self.probe_plans, problems = PlanBook.from_list(p_dict.get("probe_plans"))
+        self.probe_plans, problems = PlanBook.from_list(p_dict.get("probe_plans"),
+                                                        p_dict.get("implant_plans"))
+        for plan in self.probe_plans.plans_of(implants=True):
+            # A fiber or prism plan belongs to its implant: it follows the
+            # implant's name and specs, and goes when the implant is missing.
+            implant = self.implants.get(plan.implant_id)
+            if implant is None or implant.kind != plan.kind:
+                self.probe_plans.remove(plan.probe)
+                problems.append("{}: its {} was not found and the plan was left out".format(
+                    plan.probe, plan.kind))
+                continue
+            if implant.name != plan.probe or implant.specs != plan.specs:
+                self.probe_plans.remove(plan.probe)
+                self.probe_plans.set(plan.copy(probe=implant.name, specs=implant.specs))
         for plan in self.probe_plans.plans():
             if plan.craniotomy and self.craniotomies.get(plan.craniotomy) is None:
                 self.probe_plans.set(plan.copy(craniotomy=None))

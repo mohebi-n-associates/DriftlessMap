@@ -3,6 +3,27 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.8.5
+
+Release, 4 November 2026: plan optical fibers and microprisms, and a start
+screen that gets you to a plan.
+
+- **Plan a fiber or a prism** as you plan a probe: tip (or entry and depth),
+  tilts, clicks, snapping, steering, craniotomies and the copied coordinates.
+  The device's own size is checked: a fiber's rim and a prism's whole
+  footprint must keep out of the regions to keep out of and fit through the
+  craniotomy, and the distance to other plans is measured to its surface.
+- **Microprisms have a length and a bevelled bottom**: 1.5 × 1.5 × 3 mm by
+  default with a 45° bottom. A planned prism's readout lists what its imaging
+  face looks into, and warns when it is too short for its depth. **Face**
+  turns the imaging face.
+- Planned fibers and prisms are outlined on the atlas views wherever a page
+  cuts them, and listed in `probe_plans.csv`.
+- **The start screen's planning works before an atlas is loaded**: Plan a
+  probe…, Plan a fiber… and Plan a prism… ask for the atlas folder and then
+  open the plan. Before, the button only said to load an atlas, and the start
+  screen was gone once you had.
+
 ## DriftlessMap 2.8.4
 
 Fix release, 4 November 2026: the eight findings of the 2.8.3 review

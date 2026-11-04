@@ -1,7 +1,8 @@
 # Probe planning design: a planned probe is a pose
 
 Status: implemented in 2.8.0-2.8.3 (4 November 2026); approved for four phases,
-2.8.0 (Phase 1) to 2.8.3 (Phase 4), all in the 2.8 series. Builds on the pre-surgical probe
+2.8.0 (Phase 1) to 2.8.3 (Phase 4), all in the 2.8 series. Fibers and
+microprisms (section 6) were added in 2.8.5. Builds on the pre-surgical probe
 plan (MANUAL Section 11), `probe_utiles.calculate_probe_info`, the named
 probes of the V2 Annotate step (`v2/probes.py`) and the undo history
 (`phase3_mapping_design.md`).
@@ -216,3 +217,34 @@ is computed once per loaded atlas and reused.
 
 A full manipulator joint solver (Pinpoint v5's inverse kinematics), gamepad
 control, cloud sync, and collisions with rig and headstage models.
+
+## 6. Planned fibers and microprisms (2.8.5)
+
+Requested on 4 November 2026: plan optical fibers and microprisms as probes
+are planned; a prism defaults to 1.5 × 1.5 × 3 mm with a 45° bottom.
+
+* **One plan type.** A `ProbePlan` has a `kind` (`probe`, `fiber`, `prism`);
+  an implant plan carries a copy of its implant's specs and its `implant_id`,
+  and is kept under the implant's name, so staging, undo, saving, the
+  overlay, craniotomies, clearances, steering and the coordinate line are
+  shared. Probe and implant names exclude each other. Implant plans are saved
+  under `implant_plans`, apart from `probe_plans`, so an earlier version does
+  not read them as probes.
+* **The device's size.** Checks run along lines parallel to the axis
+  (`device_lines`): a probe's shanks, a fiber's axis and rim, a prism's
+  footprint grid. A prism's tip is the middle of the imaging face's bottom
+  edge; behind the face its bottom rises by `1 / tan(bevel)` per µm, so at
+  45° the back edge is as much higher as the prism is deep. `length_um` is the
+  face's edge.
+* **The prism's view.** The mirror sends the view out of the face from the
+  bottom edge up to `depth / tan(bevel)`, across its width; the readout lists
+  the labels from one voxel to 0.2 mm in front of it. This is geometry, not
+  an optical model; imaging depth depends on the microscope.
+* **Display.** Planned fibers are cylinders and planned prisms a new `prism`
+  model type (`implants.model_section`), outlined dashed on the atlas views
+  and built as `merged fiber`/`merged prism` objects named `"<name> plan"`,
+  without `implant_id`, so they are never taken for implants built from
+  sections. Fits from mapped outlines do not use the length or bevel, and
+  changing those does not put a built implant out of date.
+* Not done: a fiber's light cone (NA and power), proposals for fibers and
+  prisms, and the prism's reach into the skull.

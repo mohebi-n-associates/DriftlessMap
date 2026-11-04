@@ -187,6 +187,7 @@ class ProjectSessionMixin:
             "implants": self.implants.to_list(),
             "implant_outlines": self.implant_outlines,
             "probe_plans": self.probe_plans.to_list(),
+            "implant_plans": self.probe_plans.to_list(implants=True),
             "craniotomies": self.craniotomies.to_list(),
             "surgery_settings": dict(self.surgery_settings),
             "sections": self.sections_index(),

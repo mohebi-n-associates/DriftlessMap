@@ -1,7 +1,7 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 2.8.4**. Section 2 explains how to
-install it; `pip install driftlessmap` installs 2.8.4.
+This manual applies to **DriftlessMap 2.8.5**. Section 2 explains how to
+install it; `pip install driftlessmap` installs 2.8.5.
 
 DriftlessMap - Histological E-data Registration in Brain Space - is a desktop
 application for aligning rodent histology with a reference atlas, reconstructing
@@ -56,12 +56,15 @@ three ways to start:
    ([tutorial](Tutorial/Registration_Related/automatic_section_and_landmarks.md)),
    Register pairs landmarks and records your review, Annotate marks and maps
    implants, probes, cells and other annotations, and Results exports them.
-2. **Plan a probe.** With an atlas alone, plan a track before surgery
+2. **Plan an implant.** With an atlas alone, plan where a probe, an optical
+   fiber or a microprism goes before surgery
    (Section 11 and the [probe tutorials](Tutorial/Probe_Related/1-Important_to_know_before_you_start.md)).
-   Once an atlas is loaded this start screen gives way to the views; **Plan a
-   probe on this atlas…** in the Project step's Atlas card (or "plan a probe"
-   in Ctrl/Cmd+K) then goes to Annotate with a planned probe to move into
-   place (since 2.8.0; Section 11.0).
+   **Plan a probe…**, **Plan a fiber…** and **Plan a prism…** ask for the
+   atlas folder first, load it and open Annotate with a plan to move into
+   place (since 2.8.5; before, they only said to load an atlas, and this start
+   screen then went away). Once an atlas is loaded, **Plan on this atlas** in
+   the Project step's Atlas card (or "plan a probe", "plan an optical fiber",
+   "plan a microprism" in Ctrl/Cmd+K) does the same (Section 11.0).
 3. **Continue earlier work.** **Open project…**; it reopens where you left off.
 
 Ctrl/Cmd+K searches every command. The rest of this manual describes each part
@@ -131,7 +134,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-DriftlessMap 2.8.4 requires:
+DriftlessMap 2.8.5 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -150,8 +153,8 @@ page. The macOS DMG (`-macOS-arm64.dmg`) is built for Apple Silicon; on an Intel
 Mac, use the developer installation below.
 The desktop builds include Python and all runtime dependencies. Windows users
 extract the entire ZIP and run `DriftlessMap.exe`; macOS users open the DMG and
-drag `DriftlessMap.app` to Applications. The 2.8.4 downloads are named
-`DriftlessMap-2.8.4-Windows-x64.zip` and `DriftlessMap-2.8.4-macOS-arm64.dmg`.
+drag `DriftlessMap.app` to Applications. The 2.8.5 downloads are named
+`DriftlessMap-2.8.5-Windows-x64.zip` and `DriftlessMap-2.8.5-macOS-arm64.dmg`.
 Release builds are unsigned unless the release notes say otherwise, so the first
 launch may require Windows SmartScreen confirmation or Control-clicking the
 macOS app and choosing **Open**.
@@ -200,7 +203,7 @@ python -m pip --version
 python -c "import driftlessmap; print(driftlessmap.__version__)"
 ```
 
-The final command prints the installed version, `2.8.4`.
+The final command prints the installed version, `2.8.5`.
 
 ### 2.5 Launching DriftlessMap
 
@@ -1551,7 +1554,7 @@ changed in the probe's **Plan** section (Annotate, Implants card, select the
 probe). Everything a surgeon needs is shown as you change it; there is no
 Add or Build step.
 
-1. Load a volume atlas. **Plan a probe on this atlas…** (Project step, Atlas
+1. Load a volume atlas. **Plan on this atlas > A probe…** (Project step, Atlas
    card, or "plan a probe" in Ctrl/Cmd+K) adds a probe and gives it a plan
    to start from: vertical, 1 mm right of Bregma, 3 mm below the brain
    surface. For an existing probe, **Plan this probe** does the same.
@@ -1719,6 +1722,45 @@ compared.
 
 Positions are relative to the atlas's Bregma, which for the Allen CCFv3 is an
 estimate; real brains differ from the atlas.
+
+#### Planning an optical fiber or a microprism (since 2.8.5)
+
+Fibers and microprisms are planned the same way, from the same Plan section:
+select the fiber or prism in the Implants card (or use **Plan a fiber…** /
+**Plan a prism…**, which add one). The fields, clicks, Snap tip to region,
+Steer with keys, Tip to surface, craniotomies, the Bregma–Lambda scale, undo
+and saving work as for a probe; a probe's design, recording window and
+proposals do not apply.
+
+- **The device's own size counts.** A fiber is checked along its axis and its
+  rim (its diameter); a prism over its whole footprint. A region to keep out
+  of that the rim or footprint touches, a craniotomy the device does not fit
+  through, a tip or bottom outside the brain, and the distance to other plans
+  (measured to the device's surface) are reported as for a probe.
+- **A prism** is set by the middle of its imaging face's bottom edge, its
+  deepest point. **Face** turns the imaging face about the prism's axis (0°:
+  it looks anterior; 90°: the animal's right); a new plan looks the way the
+  prism's Imaging face setting says. Its size is width (along the face) ×
+  depth (away from the face) × length (the face's long edge), 1.5 × 1.5 × 3 mm
+  by default, with the bottom bevelled at 45° (the mirror), deepest at the
+  face; set them with **Settings…** in the Implants card (Bottom angle 90° is
+  a flat bottom). The readout lists what the face looks into: the tissue up to
+  0.2 mm in front of the face, over the face's width and the height the bevel
+  reflects (the depth, at 45°), as shares of that view. It warns when the
+  prism is too short for its depth (its top would be below the brain
+  surface).
+- **A fiber** is set by the middle of its tip; its diameter comes from its
+  settings. The readout gives its entry, depth, tip region and the regions
+  along it (the light cone is not estimated).
+
+The plan is drawn on the atlas views as the device's cross-section (dashed)
+wherever a page cuts it, and built as the object *"<name> plan"* (a planned
+fiber or prism; its information window is its report), apart from the fiber
+or prism built from mapped sections. Renaming the implant renames its plan,
+changing its settings changes the plan at once, and deleting it deletes the
+plan. The plans are saved with the project (apart from probe plans, so
+earlier versions leave them out) and listed in `probe_plans.csv` with the
+columns `device`, `device_settings` and `imaging_regions`.
 
 The sections below describe planning in the classic interface.
 

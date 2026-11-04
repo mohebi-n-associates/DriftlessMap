@@ -26,6 +26,7 @@ from PyQt6.QtWidgets import (
 from .. import file_dialogs
 from .. import implants as model
 from .outline_editor import OutlineEditor
+from .plan_editor import PlanEditor
 from .probe_card import ProbeControls
 from .widgets import Card, button, grid_of, hint_label, set_status, status_label, undo_help
 
@@ -68,6 +69,19 @@ class ImplantDialog(QDialog):
             spin.setSingleStep(50)
             spin.setDecimals(0)
             spin.setSuffix(" µm")
+        self.length = QDoubleSpinBox()
+        self.length.setRange(300, 20000)
+        self.length.setSingleStep(100)
+        self.length.setDecimals(0)
+        self.length.setSuffix(" µm")
+        self.length.setToolTip("The imaging face's long edge, from the deepest point up")
+        self.bevel = QDoubleSpinBox()
+        self.bevel.setRange(20, 90)
+        self.bevel.setSingleStep(5)
+        self.bevel.setDecimals(1)
+        self.bevel.setSuffix("°")
+        self.bevel.setToolTip("Angle of the bevelled bottom (the mirror) to the long edges; "
+                              "it is deepest at the imaging face. 90° is a flat bottom.")
         self.face = QComboBox()
         self.face.addItems(model.PRISM_FACES)
         for widget in (self.kind, self.name):
@@ -80,7 +94,8 @@ class ImplantDialog(QDialog):
         self.rows = {
             "fiber": [("Diameter (µm)", self.diameter), ("NA", self.na)],
             "prism": [("Width along the face", self.width),
-                      ("Depth away from the face", self.depth), ("Imaging face", self.face)],
+                      ("Depth away from the face", self.depth), ("Length", self.length),
+                      ("Bottom angle", self.bevel), ("Imaging face", self.face)],
         }
         for rows in self.rows.values():
             for label, widget in rows:
@@ -117,6 +132,8 @@ class ImplantDialog(QDialog):
             else:
                 self.width.setValue(values["width_um"])
                 self.depth.setValue(values["depth_um"])
+                self.length.setValue(values["length_um"])
+                self.bevel.setValue(values["bevel_deg"])
                 self.face.setCurrentText(values["face"])
 
     def _kind_changed(self):
@@ -130,7 +147,9 @@ class ImplantDialog(QDialog):
                 self.form.setRowVisible(widget, each == kind)
         self.note.setText({
             "fiber": "NA is stored for a later light-cone estimate; the tip does not use it.",
-            "prism": "For a medial or lateral face, the depth is the prism's ML size.",
+            "prism": "For a medial or lateral face, the depth is the prism's ML size. The "
+                     "length and bottom angle place a planned prism; fits to mapped "
+                     "outlines do not use them.",
             NEUROPIXELS: "The probe type, site face and shank layout are set in Tool "
                          "options while Mark track is on.",
         }[kind])
@@ -148,6 +167,7 @@ class ImplantDialog(QDialog):
                 raise ValueError("Diameter and NA must be numbers.") from None
         else:
             specs = {"width_um": self.width.value(), "depth_um": self.depth.value(),
+                     "length_um": self.length.value(), "bevel_deg": self.bevel.value(),
                      "face": self.face.currentText()}
         return kind, self.name.text(), model.validated_specs(kind, specs)
 
@@ -185,6 +205,11 @@ class ImplantCard(Card):
         self.active.setWordWrap(True)      # long hints must not widen the column
         self.active.setObjectName("CardTitle")
         self.specs = self.add(hint_label(""))
+        # A fiber or prism can be planned on the atlas before surgery, as a
+        # probe is (2.8.5); the outlines below map what it left in sections.
+        self.plan_editor = self.add(PlanEditor(shell, self))
+        self.sections_title = self.add(QLabel("Outline on sections"))
+        self.sections_title.setObjectName("CardTitle")
         self.draw = button("1  Draw outline", lambda: self._mode("draw"), checkable=True,
                            tooltip="Click around the track; click the first point to close")
         self.propose = button("Propose", lambda: self._mode("propose"), checkable=True,
@@ -217,6 +242,30 @@ class ImplantCard(Card):
         ], columns=2)
         self.add(self.results)
         self.add(self.probe_card)
+
+    # ------------------------------------------- the plan editor's device
+    def _by_name(self, name):
+        return self.engine.implants.by_name(name) if name else None
+
+    def plan_colour(self, name):
+        implant = self._by_name(name)
+        return implant.colour if implant is not None else None
+
+    def use_colour(self, _name):
+        pass                     # clicked points are only used to set the pose
+
+    def plan_kind(self, name):
+        implant = self._by_name(name)
+        return implant.kind if implant is not None else "fiber"
+
+    def default_plan(self, name):
+        return self.engine.default_implant_plan(self._by_name(name).implant_id)
+
+    def plan_removed(self, _name):
+        pass                     # the implant stays listed
+
+    def sync(self):
+        self.refresh()
 
     # ------------------------------------------------------------ helpers
     def current(self):
@@ -485,6 +534,12 @@ class ImplantCard(Card):
         self._sync_actions()
 
     def summary(self, implant):
+        text = self._sections_summary(implant)
+        if self.engine.implant_plan(implant.implant_id) is not None:
+            return "planned" if text == "no sections yet" else "planned · " + text
+        return text
+
+    def _sections_summary(self, implant):
         engine = self.engine
         if any(engine.implant_build_status(i) for i in
                engine.implant_objects(implant.implant_id, built=True)):
@@ -504,8 +559,13 @@ class ImplantCard(Card):
         implant = self.implant()
         probe = self._shown_probe()
         self.probe_card.setVisible(probe is not None)
-        for widget in (self.specs, self.controls, self.outline_state, self.map_button,
-                       self.build_button, self.status):
+        self.plan_editor.set_probe(implant.name if implant is not None else None)
+        # Without a section there is nothing to outline: the plan is the implant.
+        pre_plan = engine.image_view.image_file is None
+        for widget in (self.sections_title, self.controls, self.outline_state,
+                       self.map_button, self.build_button):
+            widget.setVisible(implant is not None and not pre_plan)
+        for widget in (self.specs, self.status):
             widget.setVisible(implant is not None)
         if implant is None:
             self.active.setText("{} · Probe".format(probe) if probe
