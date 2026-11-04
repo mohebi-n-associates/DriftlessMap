@@ -1744,11 +1744,14 @@ proposals do not apply.
   depth (away from the face) × length (the face's long edge), 1.5 × 1.5 × 3 mm
   by default, with the bottom bevelled at 45° (the mirror), deepest at the
   face; set them with **Settings…** in the Implants card (Bottom angle 90° is
-  a flat bottom). The readout lists what the face looks into: the tissue up to
-  0.2 mm in front of the face, over the face's width and the height the bevel
-  reflects (the depth, at 45°), as shares of that view. It warns when the
-  prism is too short for its depth (its top would be below the brain
-  surface).
+  a flat bottom). The **imaging window** is the bottom of the face, as wide
+  as the prism and as high as the bevel reflects (the depth, at 45°): 1.5 ×
+  1.5 mm by default, drawn solid in the Imaging face view with the rest of
+  the face dashed above it. The readout lists what the window looks into
+  (the tissue up to 0.2 mm in front of it, as shares of the view), warns when
+  the window reaches above the brain surface (the face's bottom must be at
+  least the window's height deep), and when the prism is too short for its
+  depth (its top would be below the brain surface).
 - **A fiber** is set by the middle of its tip; its diameter comes from its
   settings. The readout gives its entry, depth, tip region and the regions
   along it (the light cone is not estimated).

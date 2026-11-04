@@ -538,10 +538,11 @@ class PlanEditor(Card):
             else " · imaging face looks {}".format(html.escape(readout["face"]))
             if kind == "prism" else ""))
         if readout.get("imaging"):
-            lines.append("<b>Face looks into</b> {} (bottom {:.2f} mm of the face, within "
-                         "{:.1f} mm of it)".format(
-                             html.escape(imaging_summary(readout)),
-                             readout["imaging_height_um"] / 1000.0, FACE_LOOK_UM / 1000.0))
+            width, height = readout["imaging_window_um"]
+            lines.append("<b>Face looks into</b> {} (the {:.2f} × {:.2f} mm imaging window "
+                         "at the bottom of the face, tissue within {:.1f} mm of it)".format(
+                             html.escape(imaging_summary(readout)), width / 1000.0,
+                             height / 1000.0, FACE_LOOK_UM / 1000.0))
         regions = region_summary(readout, limit=8)
         if regions:
             lines.append("<b>Along the {}</b> {}".format(

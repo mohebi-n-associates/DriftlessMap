@@ -594,6 +594,7 @@ def plan_readout(plan, atlas):
         "kind": plan.kind,
         "imaging": [],
         "imaging_height_um": 0.0,
+        "imaging_window_um": None,
         "regions": [],
         "tip_region": atlas.name(atlas.labels_at(tip_vox[None, :])[0][0]),
         "warnings": warnings,
@@ -645,10 +646,28 @@ def plan_readout(plan, atlas):
 def _add_prism(readout, plan, atlas):
     """A planned prism's imaging face and whether it is long enough."""
     readout["face"] = side_words(plan.normal, plan.tip_um)
-    readout["imaging_height_um"], readout["imaging"] = face_view(plan, atlas)
+    height, readout["imaging"] = face_view(plan, atlas)
+    readout["imaging_height_um"] = height
+    readout["imaging_window_um"] = [plan.specs["width_um"], height]
     length = plan.specs["length_um"]
     direction = plan.direction
     tip = np.asarray(plan.tip_um, dtype=float)
+    # The imaging window (the face's bottom, as high as the bevel reflects)
+    # must lie in the brain along the whole bottom edge of the face.
+    shallowest = None
+    for _name, offset, raised in device_lines(plan):
+        if raised != 0.0 or abs(float(np.dot(offset, plan.normal))) > 1e-6:
+            continue                       # only lines on the face itself
+        bottom = tip + offset
+        entry, _inside = surface_entry(atlas, bottom, direction)
+        depth = 0.0 if entry is None else float(np.dot(bottom - np.asarray(entry), direction))
+        shallowest = depth if shallowest is None else min(shallowest, depth)
+    if height > 0 and shallowest is not None and height - shallowest > atlas.vox_um:
+        readout["warnings"].append(
+            "The imaging window ({:.2f} × {:.2f} mm) reaches {:.2f} mm above the brain "
+            "surface: put the bottom of the face at least {:.2f} mm deep.".format(
+                plan.specs["width_um"] / 1000.0, height / 1000.0,
+                (height - shallowest) / 1000.0, height / 1000.0))
     # Each line's own depth below the surface, against the length the prism
     # has above that line's bottom.
     worst = 0.0

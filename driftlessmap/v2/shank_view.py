@@ -41,7 +41,12 @@ class ShankView(QWidget):
         atlas = self.engine.plan_atlas()
         if plan is not None and readout is not None and atlas is not None \
                 and readout.get("entry_um") is not None:
-            self._plane = probe_plane(atlas, plan, readout)
+            margin = 500.0
+            window = readout.get("imaging_window_um")
+            if window and readout.get("depth_um") is not None:
+                # Room above the entry for an imaging window that reaches out.
+                margin = max(margin, window[1] - readout["depth_um"] + 200.0)
+            self._plane = probe_plane(atlas, plan, readout, margin_um=margin)
             if self._plane is not None:
                 self._image = self._colour_image(atlas, self._plane[0])
         self.update()
@@ -105,10 +110,23 @@ class ShankView(QWidget):
             half = specs["diameter_um"] / 2.0 if kind == "fiber" else specs["width_um"] / 2.0
             upper = top if kind == "fiber" else max(top, depth - specs["length_um"])
             fill = QColor(colour)
-            fill.setAlpha(60)
-            painter.setPen(QPen(colour, 2))
+            fill.setAlpha(40)
+            painter.setPen(QPen(colour, 1, Qt.PenStyle.DashLine))
             painter.setBrush(fill)
             painter.drawRect(QRectF(point(-half, upper), point(half, depth)))
+            window = self.readout.get("imaging_window_um")
+            if kind == "prism" and window and window[1] > 0:
+                # The imaging window: the face's bottom, as high as the bevel
+                # reflects (1.5 x 1.5 mm for the default prism).
+                fill.setAlpha(110)
+                painter.setPen(QPen(colour, 2))
+                painter.setBrush(fill)
+                painter.drawRect(QRectF(point(-half, depth - window[1]), point(half, depth)))
+                painter.setPen(QColor(255, 255, 255))
+                painter.setFont(QFont(painter.font().family(), 8))
+                painter.drawText(point(-half, depth - window[1]) + QPointF(3, 11),
+                                 "{:.1f} × {:.1f} mm".format(window[0] / 1000.0,
+                                                             window[1] / 1000.0))
         for offset in (self.plan.shank_offsets_um or [0.0]) if kind == "probe" else [0.0]:
             painter.setPen(QPen(QColor(255, 255, 255), 4))
             painter.drawLine(point(offset, top), point(offset, depth))

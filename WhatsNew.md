@@ -14,9 +14,10 @@ screen that gets you to a plan.
   footprint must keep out of the regions to keep out of and fit through the
   craniotomy, and the distance to other plans is measured to its surface.
 - **Microprisms have a length and a bevelled bottom**: 1.5 × 1.5 × 3 mm by
-  default with a 45° bottom. A planned prism's readout lists what its imaging
-  face looks into, and warns when it is too short for its depth. **Face**
-  turns the imaging face.
+  default with a 45° bottom, so the imaging window at the bottom of the face
+  is 1.5 × 1.5 mm. A planned prism's readout lists what the window looks
+  into, and warns when the window reaches above the brain or the prism is
+  too short for its depth. **Face** turns the imaging face.
 - Planned fibers and prisms are outlined on the atlas views wherever a page
   cuts them, and listed in `probe_plans.csv`.
 - **The start screen's planning works before an atlas is loaded**: Plan a

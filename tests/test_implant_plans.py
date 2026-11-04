@@ -160,6 +160,17 @@ class ReadoutTests(unittest.TestCase):
         self.assertEqual(face_view(prism([150.0, 0.0, -1250.0], bevel_deg=90.0),
                                    self.atlas), (0.0, []))
 
+    def test_the_imaging_window_must_be_in_the_brain(self):
+        # The window is 0.4 x 0.4 mm (45°, 0.4 mm deep): with the face's bottom
+        # 0.3 mm deep it reaches 0.1 mm above the surface.
+        readout = plan_readout(prism([150.0, 0.0, -300.0]), self.atlas)
+        np.testing.assert_allclose(readout["imaging_window_um"], [400.0, 400.0])
+        self.assertIn("The imaging window (0.40 × 0.40 mm) reaches 0.10 mm above the brain "
+                      "surface: put the bottom of the face at least 0.40 mm deep.",
+                      readout["warnings"])
+        deep = plan_readout(prism([150.0, 0.0, -1250.0]), self.atlas)
+        self.assertFalse(any("imaging window" in w for w in deep["warnings"]))
+
     def test_a_prism_too_short_for_its_depth(self):
         plan = prism([150.0, 0.0, -1250.0], length_um=1000.0)
         warnings = plan_readout(plan, self.atlas)["warnings"]
