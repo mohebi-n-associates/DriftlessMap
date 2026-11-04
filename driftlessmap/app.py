@@ -109,7 +109,7 @@ from .project_session import ProjectSessionMixin
 from .state_digest import state_digest
 from .implant_engine import ImplantEngineMixin
 from .probe_plan_engine import ProbePlanEngineMixin
-from .probe_plans import PlanBook
+from .probe_plans import CraniotomyBook, PlanBook, validated_surgery_settings
 from .section_engine import SectionsMixin
 from .mapping_records import (
     BUILD_CHANGED,
@@ -4619,6 +4619,8 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
             "mapping_review_state": self.mapping_review_state,
             "implants": self._implant_state(),
             "probe_plans": self.probe_plans.to_list(),
+            "craniotomies": self.craniotomies.to_list(),
+            "surgery_settings": dict(self.surgery_settings),
         }
         return copy.deepcopy(state) if copy_state else state
 
@@ -4707,6 +4709,8 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
         self.mapping_review_state = state["mapping_review_state"]
         self._restore_implant_state(state["implants"])
         self.probe_plans = PlanBook.from_list(state.get("probe_plans"))[0]
+        self.craniotomies = CraniotomyBook.from_list(state.get("craniotomies"))[0]
+        self.surgery_settings = validated_surgery_settings(state.get("surgery_settings"))
         for key, value in state["atlas"].items():
             self.working_atlas_data[key] = value
         for kind in MAPPED_KINDS:

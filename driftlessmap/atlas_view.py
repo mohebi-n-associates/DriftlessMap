@@ -316,6 +316,7 @@ class AtlasView(QObject):
         self.right_info = None
         self.vox_size_um = None
         self.Bregma = None
+        self.atlas_lambda = None
         self.rotate_origin_3d = None
         self.origin_3d = None
 
@@ -696,6 +697,12 @@ class AtlasView(QObject):
             da_bregma = atlas_info[3]['Bregma']
         inverse_b2 = self.atlas_size[0] - 1 - da_bregma[2]
         self.Bregma = (inverse_b2, da_bregma[0], da_bregma[1])
+        # Lambda in the same voxel frame as the Bregma (origin_3d), when the
+        # processed atlas records one (None for zeros or older atlases).
+        da_lambda = atlas_info[3].get('Lambda') if isinstance(atlas_info[3], dict) else None
+        self.atlas_lambda = (np.asarray(da_lambda, dtype=float)
+                             if da_lambda is not None and np.any(np.ravel(da_lambda) != 0)
+                             else None)
         self.rotate_origin_3d = np.array(da_bregma)
         self.origin_3d = np.array(da_bregma)
 

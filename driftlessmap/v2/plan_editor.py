@@ -30,8 +30,11 @@ from PyQt6.QtWidgets import (
 )
 
 from ..probe_plans import (
+    CLEARANCE_UM,
     MAX_TILT_DEG,
     ProbePlan,
+    arm_from_tilts,
+    tilts_from_arm,
     bank_count,
     plan_from_entry_depth,
     plan_from_points,
@@ -48,6 +51,9 @@ NP2_SHANKS = [-375.0, -125.0, 125.0, 375.0]
 PROBE_TYPES = ("Neuropixels 1.0", "Neuropixels 2.0, one shank",
                "Neuropixels 2.0, four shanks", "Current probe settings")
 EDIT_MODES = ("Tip", "Entry and depth")
+ANGLE_MODES = ("AP/ML tilts", "Arm angles")
+NO_CRANIOTOMY = "None"
+NEW_CRANIOTOMY = "New at this entry…"
 # Keyboard steering: steps in um (and degrees at the same index).
 STEPS_UM = (10.0, 50.0, 100.0, 500.0)
 STEPS_DEG = (1.0, 1.0, 5.0, 5.0)
@@ -209,16 +215,32 @@ class PlanEditor(Card):
                           "the animal's right")
         self.roll.setWrapping(True)
         self.ap_label, self.ml_label, self.dv_label = QLabel(), QLabel(), QLabel()
-        rows = ((self.ap_label, self.ap, "AP tilt", self.ap_tilt),
-                (self.ml_label, self.ml, "ML tilt", self.ml_tilt),
-                (self.dv_label, self.dv, "Roll", self.roll),
-                (QLabel("Depth"), self.depth, None, None))
+        self.first_angle_label, self.second_angle_label = QLabel(), QLabel()
+        self.angle_box = QComboBox()
+        self.angle_box.addItems(ANGLE_MODES)
+        self.angle_box.setToolTip("Enter the tilts in the sagittal and coronal planes, or as "
+                                  "an arm is set: azimuth (the direction the tip leans, from "
+                                  "anterior towards the animal's right) and elevation (from "
+                                  "vertical)")
+        rows = ((self.ap_label, self.ap, self.first_angle_label, self.ap_tilt),
+                (self.ml_label, self.ml, self.second_angle_label, self.ml_tilt),
+                (self.dv_label, self.dv, QLabel("Roll"), self.roll),
+                (QLabel("Depth"), self.depth, QLabel("Angles"), self.angle_box))
         for row, (label_a, box_a, label_b, box_b) in enumerate(rows, start=2):
             grid.addWidget(label_a, row, 0)
             grid.addWidget(box_a, row, 1)
-            if box_b is not None:
-                grid.addWidget(QLabel(label_b), row, 2)
-                grid.addWidget(box_b, row, 3)
+            grid.addWidget(label_b, row, 2)
+            grid.addWidget(box_b, row, 3)
+        self.hole_box = QComboBox()
+        self.hole_box.setToolTip("The craniotomy this probe goes through; the readout warns "
+                                 "when the entry lies outside it")
+        self.hole_box.activated.connect(self._hole_chosen)
+        grid.addWidget(QLabel("Craniotomy"), 6, 0)
+        grid.addWidget(self.hole_box, 6, 1, 1, 3)
+        arm = str(self.shell.settings.value("plan/angles", ANGLE_MODES[0]))
+        self.angle_box.setCurrentIndex(ANGLE_MODES.index(arm) if arm in ANGLE_MODES else 0)
+        self.angle_box.currentIndexChanged.connect(self._angles_changed)
+        self._label_angles()
         for box in (self.ap, self.ml, self.dv, self.ap_tilt, self.ml_tilt, self.roll):
             box.valueChanged.connect(self._pose_changed)
         self.depth.valueChanged.connect(self._depth_changed)
@@ -238,6 +260,17 @@ class PlanEditor(Card):
         self.surface_button.setMenu(menu)
         self.surface_button.setToolTip("Put the tip on the brain surface, along the probe or "
                                        "straight down, then set the depth")
+        self.surgery_button = button("Surgery")
+        surgery = QMenu(self.surgery_button)
+        surgery.addAction("New craniotomy at this entry", self.new_craniotomy)
+        surgery.addAction("Edit the craniotomy…", self.edit_craniotomy)
+        surgery.addAction("Fit the craniotomy to its probes", self.fit_craniotomy)
+        surgery.addAction("Remove the craniotomy", self.remove_craniotomy)
+        surgery.addSeparator()
+        surgery.addAction("Bregma–Lambda distance…", self.edit_bregma_lambda)
+        self.surgery_button.setMenu(surgery)
+        self.surgery_button.setToolTip("Craniotomies, and scaling the coordinates to this "
+                                       "animal's Bregma–Lambda distance")
         self.actions = grid_of([
             self.click_button,
             button("Snap tip to region…", self.snap_to_region,
@@ -245,6 +278,7 @@ class PlanEditor(Card):
                            "the brain), keeping the tilts."),
             self.steer_button,
             self.surface_button,
+            self.surgery_button,
             button("Show on atlas", self.show_on_atlas,
                    tooltip="Move the atlas pages through the tip"),
             button("Copy coordinates", self.copy_coordinates,
@@ -351,8 +385,11 @@ class PlanEditor(Card):
             self.ml.setValue(shown[0] / 1000.0)
             self.ap.setValue(shown[1] / 1000.0)
             self.dv.setValue(shown[2] / 1000.0)
-            self.ap_tilt.setValue(plan.ap_tilt_deg)
-            self.ml_tilt.setValue(plan.ml_tilt_deg)
+            first, second = (arm_from_tilts(plan.ap_tilt_deg, plan.ml_tilt_deg)
+                             if self.arm_mode() else (plan.ap_tilt_deg, plan.ml_tilt_deg))
+            self.ap_tilt.setValue(first)
+            self.ml_tilt.setValue(second)
+            self._fill_holes(plan)
             self.roll.setValue(plan.roll_deg)
             depth = readout and readout["depth_um"]
             self.depth.setEnabled(depth is not None)
@@ -409,6 +446,25 @@ class PlanEditor(Card):
                                           readout["window_sites_in_brain"],
                                           readout["window_sites"],
                                           ": " + cover if cover else ""))
+        if readout.get("arm"):
+            lines.append("<b>Arm</b> azimuth {:.1f}° · elevation {:.1f}°".format(*readout["arm"]))
+        hole = readout.get("craniotomy")
+        if hole and readout["entry_um"] is not None:
+            from ..probe_plans import Craniotomy
+            distance = Craniotomy.from_dict(hole).distance_um(readout["entry_um"])
+            lines.append("<b>Craniotomy</b> {} · entry {:.2f} mm from its centre ({:.2f} mm "
+                         "across)".format(html.escape(hole["name"]), distance / 1000.0,
+                                          hole["diameter_um"] / 1000.0))
+        closest = readout.get("closest")
+        if closest and closest["distance_um"] >= CLEARANCE_UM:
+            other = [p for p in closest["probes"] if p != plan.probe][0]
+            lines.append("<b>Closest probe</b> {} at {:.2f} mm".format(
+                html.escape(other), closest["distance_um"] / 1000.0))
+        scale = readout.get("scale") or 1.0
+        if abs(scale - 1.0) > 1e-9 and readout["entry_um"] is not None:
+            entry = [v * scale for v in readout["entry_um"]]
+            lines.append("<b>For this animal</b> (×{:.3f}) entry {} · depth {:.2f} mm".format(
+                scale, triple(entry), readout["depth_um"] * scale / 1000.0))
         for warning in readout["warnings"]:
             lines.append("<span style='color:#e8a33d'>⚠ {}</span>".format(
                 html.escape(warning)))
@@ -417,8 +473,9 @@ class PlanEditor(Card):
     # ------------------------------------------------------------ editing
     def _fields_plan(self):
         """The plan the fields describe, or None (an entry with no brain under it)."""
-        base = self.current().copy(ap_tilt_deg=self.ap_tilt.value(),
-                                   ml_tilt_deg=self.ml_tilt.value(),
+        ap_tilt, ml_tilt = (tilts_from_arm(self.ap_tilt.value(), self.ml_tilt.value())
+                            if self.arm_mode() else (self.ap_tilt.value(), self.ml_tilt.value()))
+        base = self.current().copy(ap_tilt_deg=ap_tilt, ml_tilt_deg=ml_tilt,
                                    roll_deg=self.roll.value())
         if not self.entry_mode():
             return base.copy(tip_um=[self.ml.value() * 1000.0, self.ap.value() * 1000.0,
@@ -482,6 +539,144 @@ class PlanEditor(Card):
         finally:
             self._filling = False
         self.preview(plan)
+
+    def arm_mode(self):
+        return self.angle_box.currentIndex() == 1
+
+    def _label_angles(self):
+        arm = self.arm_mode()
+        self.first_angle_label.setText("Azimuth" if arm else "AP tilt")
+        self.second_angle_label.setText("Elevation" if arm else "ML tilt")
+        self._filling = True
+        try:
+            if arm:
+                self.ap_tilt.setRange(0.0, 359.9)
+                self.ap_tilt.setWrapping(True)
+                self.ap_tilt.setToolTip("The direction the tip leans, from anterior (0°) "
+                                        "towards the animal's right (90°)")
+                self.ml_tilt.setRange(0.0, MAX_TILT_DEG)
+                self.ml_tilt.setToolTip("The angle of the probe from vertical")
+            else:
+                self.ap_tilt.setWrapping(False)
+                self.ap_tilt.setRange(-MAX_TILT_DEG, MAX_TILT_DEG)
+                self.ap_tilt.setToolTip("Tilt in the sagittal plane (+: the tip is anterior "
+                                        "of the entry)")
+                self.ml_tilt.setRange(-MAX_TILT_DEG, MAX_TILT_DEG)
+                self.ml_tilt.setToolTip("Tilt in the coronal plane (+: the tip is to the "
+                                        "animal's right of the entry)")
+        finally:
+            self._filling = False
+
+    def _angles_changed(self, _index):
+        self.shell.settings.setValue("plan/angles", self.angle_box.currentText())
+        self._label_angles()
+        plan = self.current()
+        if plan is not None:
+            self._fill(plan)
+
+    # ------------------------------------------------------------ surgery
+    def _fill_holes(self, plan):
+        holes = self.engine.craniotomies.craniotomies()
+        items = [NO_CRANIOTOMY] + [h.name for h in holes] + [NEW_CRANIOTOMY]
+        if [self.hole_box.itemText(i) for i in range(self.hole_box.count())] != items:
+            self.hole_box.clear()
+            self.hole_box.addItems(items)
+        ids = [None] + [h.craniotomy_id for h in holes]
+        self.hole_box.setCurrentIndex(ids.index(plan.craniotomy)
+                                      if plan.craniotomy in ids else 0)
+
+    def _hole_chosen(self, index):
+        plan = self.current()
+        if plan is None:
+            return
+        holes = self.engine.craniotomies.craniotomies()
+        if self.hole_box.itemText(index) == NEW_CRANIOTOMY:
+            self.new_craniotomy()
+            return
+        chosen = None if index == 0 else holes[index - 1].craniotomy_id
+        if chosen != plan.craniotomy:
+            self.preview(plan.copy(craniotomy=chosen))
+            self.commit()
+
+    def _hole(self):
+        plan = self.current()
+        return self.engine.craniotomies.get(plan.craniotomy) if plan and plan.craniotomy \
+            else None
+
+    def new_craniotomy(self, diameter_um=1000.0):
+        """A craniotomy centred on this probe's entry, which then goes through it."""
+        self.commit()
+        plan = self.plan()
+        readout = self.engine.probe_plan_readout(plan, others=False) if plan else None
+        if readout is None or readout["entry_um"] is None:
+            self._say(False, "The probe needs an entry on the brain first.")
+            self._fill_holes(plan) if plan else None
+            return None
+        hole = self.engine.add_craniotomy(readout["entry_um"][:2], diameter_um)
+        self.engine.set_probe_plan(plan.copy(craniotomy=hole.craniotomy_id),
+                                   colour=self._colour())
+        self._fill(self.plan())
+        self._say(True, "{} ({:.1f} mm across) is centred on the entry of {}.".format(
+            hole.name, diameter_um / 1000.0, plan.probe))
+        self.shell.refresh()
+        return hole
+
+    def edit_craniotomy(self):
+        hole = self._hole()
+        if hole is None:
+            self._say(False, "Choose the probe's craniotomy first.")
+            return
+        values = craniotomy_dialog(self, hole)
+        if values is None:
+            return
+        try:
+            self.engine.edit_craniotomy(hole.craniotomy_id, **values)
+        except ValueError as exc:
+            self._say(False, "Not changed: {}.".format(exc))
+            return
+        self._fill(self.current())
+        self._show_readout(self.current())
+        self.shell.refresh()
+
+    def fit_craniotomy(self):
+        hole = self._hole()
+        if hole is None:
+            self._say(False, "Choose the probe's craniotomy first.")
+            return
+        self.commit()
+        fitted = self.engine.fit_craniotomy_to_plans(hole.craniotomy_id)
+        if fitted is None:
+            self._say(False, "No planned probe enters the brain through {}.".format(hole.name))
+            return
+        self._show_readout(self.current())
+        self._say(True, "{} now holds the entries of its probes: centre AP {:+.2f}, ML {:+.2f} "
+                  "mm, {:.2f} mm across.".format(fitted.name, fitted.centre_um[1] / 1000.0,
+                                                 fitted.centre_um[0] / 1000.0,
+                                                 fitted.diameter_um / 1000.0))
+        self.shell.refresh()
+
+    def remove_craniotomy(self):
+        hole = self._hole()
+        if hole is None:
+            self._say(False, "Choose the probe's craniotomy first.")
+            return
+        self.commit()
+        self.engine.remove_craniotomy(hole.craniotomy_id)
+        self._fill(self.plan())
+        self._say(True, "Removed {}; its probes keep their places.".format(hole.name))
+        self.shell.refresh()
+
+    def edit_bregma_lambda(self):
+        values = bregma_lambda_dialog(self, self.engine)
+        if values is None:
+            return
+        self.engine.set_surgery_settings(**values)
+        scale = self.engine.surgery_scale()
+        if self.current() is not None:
+            self._show_readout(self.current())
+        self._say(True, "Coordinates for this animal are scaled ×{:.3f}.".format(scale)
+                  if abs(scale - 1.0) > 1e-9 else
+                  "Coordinates are not scaled (set both distances to scale them).")
 
     def _mode_changed(self, _index):
         self._label_fields()
@@ -723,3 +918,66 @@ class PlanEditor(Card):
 
 
 __all__ = ["PlanEditor", "ProbePlan"]
+
+
+def craniotomy_dialog(parent, hole):
+    """Ask for a craniotomy's name, centre and diameter; a dict of changes or None."""
+    from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QFormLayout
+
+    dialog = QDialog(parent)
+    dialog.setWindowTitle("Craniotomy")
+    form = QFormLayout(dialog)
+    name = QLineEdit(hole.name)
+    ap = _spin(-20, 20, 0.05, 3, " mm", "Centre AP from Bregma (+ anterior)")
+    ml = _spin(-20, 20, 0.05, 3, " mm", "Centre ML from Bregma (+ the animal's right)")
+    across = _spin(0.05, 20, 0.1, 2, " mm", "Diameter of the opening")
+    ap.setValue(hole.centre_um[1] / 1000.0)
+    ml.setValue(hole.centre_um[0] / 1000.0)
+    across.setValue(hole.diameter_um / 1000.0)
+    for label, widget in (("Name", name), ("Centre AP", ap), ("Centre ML", ml),
+                          ("Diameter", across)):
+        form.addRow(label, widget)
+    buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok
+                               | QDialogButtonBox.StandardButton.Cancel)
+    buttons.accepted.connect(dialog.accept)
+    buttons.rejected.connect(dialog.reject)
+    form.addRow(buttons)
+    if dialog.exec() != QDialog.DialogCode.Accepted:
+        return None
+    return {"name": name.text().strip() or hole.name,
+            "centre_um": [ml.value() * 1000.0, ap.value() * 1000.0],
+            "diameter_um": across.value() * 1000.0}
+
+
+def bregma_lambda_dialog(parent, engine):
+    """Ask for this animal's and the atlas's Bregma-Lambda distances; a dict or None."""
+    from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QFormLayout
+
+    settings = engine.surgery_settings
+    known = engine.atlas_bregma_lambda_um()
+    dialog = QDialog(parent)
+    dialog.setWindowTitle("Bregma–Lambda distance")
+    form = QFormLayout(dialog)
+    form.addRow(hint_label(
+        "Coordinates for this animal are the atlas coordinates scaled by its measured "
+        "Bregma–Lambda distance over the atlas's. Leave a distance at 0 to not scale."
+        + ("" if known else " This atlas does not record Lambda: enter its Bregma–Lambda "
+                            "distance from its documentation.")))
+    animal = _spin(0, 20, 0.01, 3, " mm", "Measured on this animal's skull")
+    atlas = _spin(0, 20, 0.01, 3, " mm", "The atlas's own Bregma–Lambda distance")
+    animal.setValue((settings.get("bregma_lambda_um") or 0.0) / 1000.0)
+    atlas.setValue((settings.get("atlas_bregma_lambda_um") or known or 0.0) / 1000.0)
+    form.addRow("This animal", animal)
+    form.addRow("The atlas", atlas)
+    buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok
+                               | QDialogButtonBox.StandardButton.Cancel)
+    buttons.accepted.connect(dialog.accept)
+    buttons.rejected.connect(dialog.reject)
+    form.addRow(buttons)
+    if dialog.exec() != QDialog.DialogCode.Accepted:
+        return None
+    atlas_um = atlas.value() * 1000.0 or None
+    return {"bregma_lambda_um": animal.value() * 1000.0 or None,
+            # The atlas's recorded distance is used without storing it.
+            "atlas_bregma_lambda_um": None if known and atlas_um is not None
+            and abs(atlas_um - known) < 1.0 else atlas_um}

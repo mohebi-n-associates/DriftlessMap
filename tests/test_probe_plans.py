@@ -7,6 +7,16 @@ import numpy as np
 
 from driftlessmap.probe_plans import (
     MAX_TILT_DEG,
+    Craniotomy,
+    CraniotomyBook,
+    arm_from_tilts,
+    bregma_lambda_scale,
+    clearance_warning,
+    clearances,
+    craniotomy_warning,
+    fit_craniotomy,
+    tilts_from_arm,
+    validated_surgery_settings,
     PlanAtlas,
     PlanBook,
     ProbePlan,
@@ -271,6 +281,94 @@ class WindowAndSurfaceTests(unittest.TestCase):
                                    atol=1e-6)
 
 
+class SurgeryTests(unittest.TestCase):
+    def setUp(self):
+        self.atlas, self.labels, self.info = make_atlas()
+
+    def test_arm_angles_round_trip_and_match_the_direction(self):
+        for ap, ml in [(0, 0), (10, 0), (0, 10), (12, -7), (-30, 25), (-5, -5)]:
+            azimuth, elevation = arm_from_tilts(ap, ml)
+            back = tilts_from_arm(azimuth, elevation)
+            self.assertAlmostEqual(back[0], ap, places=9)
+            self.assertAlmostEqual(back[1], ml, places=9)
+            d = direction_from_tilts(ap, ml)
+            # Elevation is the angle from vertical; azimuth from anterior to the right.
+            self.assertAlmostEqual(math.degrees(math.acos(-d[2])), elevation, places=9)
+            if elevation > 0:
+                self.assertAlmostEqual(math.degrees(math.atan2(d[0], d[1])) % 360, azimuth,
+                                       places=9)
+        self.assertEqual(arm_from_tilts(0, 10)[0], 90.0)
+        self.assertEqual(arm_from_tilts(0, -10)[0], 270.0)
+        self.assertEqual(arm_from_tilts(-10, 0)[0], 180.0)
+
+    def test_craniotomies_hold_their_entries(self):
+        hole = Craniotomy("c1", "Left", [-500.0, 1000.0], 1000.0)
+        self.assertIsNone(craniotomy_warning(hole, [-500.0, 1400.0, 0.0]))
+        warning = craniotomy_warning(hole, [-500.0, 1600.0, 0.0])
+        self.assertIn("0.60 mm from the centre of Left", warning)
+        self.assertIsNone(craniotomy_warning(None, [0, 0, 0]))
+        # Fitting: the smallest circle through the entries, with the margin.
+        centre, diameter = fit_craniotomy([[0, 0, 0], [1000, 0, -5]], margin_um=250)
+        np.testing.assert_allclose(centre, [500, 0], atol=1e-6)
+        self.assertAlmostEqual(diameter, 1500.0, places=6)
+        triangle = [[0, 0], [1000, 0], [500, 800]]
+        centre, diameter = fit_craniotomy(triangle, margin_um=0, minimum_um=0)
+        radii = [math.dist(centre, p) for p in triangle]
+        self.assertAlmostEqual(max(radii), diameter / 2, places=6)
+        self.assertAlmostEqual(max(radii), min(radii), places=6)   # the circumcircle
+        self.assertEqual(fit_craniotomy([[3, 4]])[1], 500.0)
+        book = CraniotomyBook()
+        book.add(hole)
+        self.assertEqual(book.new_name(), "Craniotomy 1")
+        again, problems = CraniotomyBook.from_list(book.to_list() + [{"id": "x"}, "bad"])
+        self.assertEqual(again.get("c1"), hole)
+        self.assertEqual(len(problems), 2)
+        with self.assertRaises(ValueError):
+            Craniotomy("c", "n", [0, 0], 0)
+
+    def test_clearance_between_planned_probes(self):
+        a = ProbePlan("A", [0, 0, -1200])
+        b = ProbePlan("B", [200, 0, -1200])
+        c = ProbePlan("C", [-900, 0, -1200])
+        planned = [(p, plan_readout(p, self.atlas)) for p in (a, b, c)]
+        pairs = clearances(planned)
+        self.assertEqual(pairs[0]["probes"], ("A", "B"))
+        self.assertAlmostEqual(pairs[0]["distance_um"], 200.0, places=6)
+        self.assertEqual(len(pairs), 3)
+        self.assertAlmostEqual(pairs[-1]["distance_um"], 1100.0, places=6)
+        # A probe that misses the brain has no track to compare.
+        outside = ProbePlan("Z", [-1500, 0, -1200])
+        self.assertEqual(clearances(planned[:1] + [(outside, plan_readout(outside,
+                                                                          self.atlas))]), [])
+        self.assertIn("A passes 0.20 mm from B", clearance_warning("A", pairs))
+        self.assertIsNone(clearance_warning("C", pairs))
+        # Leaning apart going down, so their lines cross 0.1 mm above the brain.
+        d = ProbePlan("D", [400, 0, -1000], ml_tilt_deg=20)
+        e = ProbePlan("E", [-400, 0, -1000], ml_tilt_deg=-20)
+        crossing = clearances([(p, plan_readout(p, self.atlas)) for p in (d, e)])
+        self.assertLess(crossing[0]["distance_um"], 1e-6)
+        self.assertAlmostEqual(crossing[0]["depth_um"],
+                               -(400 / math.tan(math.radians(20)) - 1000)
+                               / math.cos(math.radians(20)), delta=1.0)
+        self.assertIn("above the brain", clearance_warning("D", crossing))
+        # Shanks count: a four-shank probe beside a single shank.
+        f = ProbePlan("F", [0, 0, -1200], shank_offsets_um=[-375, -125, 125, 375])
+        g = ProbePlan("G", [600, 0, -1200])
+        near = clearances([(p, plan_readout(p, self.atlas)) for p in (f, g)])
+        self.assertAlmostEqual(near[0]["distance_um"], 225.0, places=6)
+
+    def test_bregma_lambda_scale(self):
+        self.assertEqual(bregma_lambda_scale(None, 4200), 1.0)
+        self.assertAlmostEqual(bregma_lambda_scale(3990, 4200), 0.95)
+        with self.assertRaises(ValueError):
+            bregma_lambda_scale(-1, 4200)
+        self.assertEqual(validated_surgery_settings({"bregma_lambda_um": "4100",
+                                                     "atlas_bregma_lambda_um": -3}),
+                         {"bregma_lambda_um": 4100.0, "atlas_bregma_lambda_um": None})
+        self.assertEqual(validated_surgery_settings(None),
+                         {"bregma_lambda_um": None, "atlas_bregma_lambda_um": None})
+
+
 class PersistenceTests(unittest.TestCase):
     def test_book_round_trip_rename_and_invalid_entries(self):
         book = PlanBook()
@@ -283,6 +381,7 @@ class PersistenceTests(unittest.TestCase):
         self.assertEqual(again.to_list(), data)
         self.assertEqual(again.get("A").roll_deg, 10.0)
         self.assertIsNone(again.get("A").bank)
+        self.assertIsNone(again.get("A").craniotomy)
         self.assertEqual(again.get("B").bank, 0)
         # A 2.8.0 plan (no bank) opens with the lowest bank.
         old = dict(data[1])

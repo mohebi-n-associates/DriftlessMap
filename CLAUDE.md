@@ -8,8 +8,8 @@ or important workflows change.
 
 ## Project identity
 
-- Current release: DriftlessMap 2.8.1 (4 November 2026; probe planning,
-  `probe_planning_design.md` Phases 1-2; not yet published; the owner
+- Current release: DriftlessMap 2.8.2 (4 November 2026; probe planning,
+  `probe_planning_design.md` Phases 1-3; not yet published; the owner
   numbers the probe-planning phases 2.8.0-2.8.3, one feature). Latest
   published: 2.7.0 (3 November 2026; the first release since 2.0.0, including
   2.0.1-2.3.0 and multi-section projects). 2.0.0
@@ -110,6 +110,22 @@ or important workflows change.
   keyboard steering (`plan_editor.KEYS`, `steered`, an application event
   filter installed only while Steer with keys is on, ignoring text inputs
   and other windows).
+  2.8.2 (Phase 3): `ProbePlan.craniotomy` (an id; absent means None);
+  `Craniotomy`/`CraniotomyBook` (centre ML/AP and diameter in um),
+  `craniotomy_warning`, `fit_craniotomy` (exact smallest enclosing circle
+  plus margin); `clearances`/`clearance_warning` (segment-to-segment
+  distances from `CLEARANCE_ABOVE_UM` above each entry, per shank);
+  `arm_from_tilts`/`tilts_from_arm` (azimuth from anterior towards the
+  right, elevation from vertical; exact inverses); `bregma_lambda_scale`,
+  `validated_surgery_settings`. The engine's `probe_plan_readout` adds
+  `arm`, `craniotomy`, `closest` (other plans, previews included) and
+  `scale`; `atlas_bregma_lambda_um` uses `AtlasView.atlas_lambda` (the
+  processed atlas's Lambda, None when absent, as for the Allen atlas).
+  Payload keys `craniotomies` and `surgery_settings` (optional, document
+  state, undoable; plans whose craniotomy is missing lose the link with a
+  message). `PlanOverlay` draws craniotomies on the horizontal view.
+  `PlanEditor`: Angles (QSettings `plan/angles`), Craniotomy list, Surgery
+  menu (`craniotomy_dialog`, `bregma_lambda_dialog`).
 - `driftlessmap/project_session.py`: `ProjectSessionMixin.project_payload` is the
   shared saved-state collector. `load_project` snapshots the active document and
   restores it on failure, including its original reader, in-memory atlas and undo
@@ -458,7 +474,8 @@ or important workflows change.
   sections' sources under `portable_sources.sections`.
   The optional `interface_state` (where the user left off) needs no schema
   bump: it is absent in older files and dropped when unusable.
-  The optional `probe_plans` (2.8.0, document state) needs none either:
+  The optional `probe_plans` (2.8.0), `craniotomies` and `surgery_settings`
+  (2.8.2), all document state, need none either:
   absent means no plans; invalid plans are left out with a message; older
   versions ignore it and keep the built plan objects as ordinary probes.
   Schemas 1 and 2 load with Legacy registration input.
