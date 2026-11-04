@@ -440,11 +440,16 @@ class V2Window(QMainWindow):
         card = self.panels["annotate"].implants
         book = card.probe_card.book
         unplanned = [name for name in book.names()
-                     if not book.parts(name) and not book.built(name)]
+                     if not book.parts(name) and not book.built(name)
+                     and book.plan(name) is None]
         probe = unplanned[0] if unplanned else card.probe_card.new_probe()
         card._select_probe(probe)
-        self.message("{}: switch on Mark track, click the entry point and then the tip on "
-                     "the atlas, add the points to the probe, then build it.".format(probe))
+        editor = card.probe_card.plan_editor
+        if engine.plan_atlas() is None:
+            self.message("{}: plans need a volume atlas (a slice atlas has no depth to plan "
+                         "in).".format(probe), "warn")
+            return
+        editor.start_plan()
 
     def _name_undo_steps(self):
         history = self.engine.undo_history

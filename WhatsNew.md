@@ -3,6 +3,31 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.8.0
+
+Feature release, 4 November 2026: the first part of a new way to plan probes
+(`probe_planning_design.md`).
+
+- **Plan a probe by its position and angles.** A planned probe is now a tip
+  position (AP, ML, DV from Bregma), an AP tilt, an ML tilt and a roll, set in
+  the probe's new **Plan** section in Annotate. Type the numbers, click the
+  entry and the tip on any atlas view (the track can now cross slices), or
+  snap the tip to a region's centre. There is no Add or Build step.
+- **See the plan as you change it.** The entry where the probe first touches
+  the brain, the depth to advance from there, the tip and its region, the
+  tilt in words, which way the contacts face, and the regions along the
+  shank with their lengths, with warnings when the tip is outside the brain,
+  the probe is deeper than its shank or it crosses the midline.
+- **Drawn on the atlas and in 3D.** Each plan is drawn on every atlas view and
+  built as the probe *"<probe> plan"*, with its Region table and exports.
+  **Copy coordinates** copies one line for surgery notes; **Export all
+  results** writes `probe_plans.csv`.
+- Plans are saved with the project and each change can be undone. A probe can
+  have a plan and a track from sections, built side by side for comparison.
+- On the Allen 10 µm atlas, snapping a plan to the prelimbic area puts the tip
+  at AP +2.30, ML +0.43, DV −2.33 mm (layer 5) under MOs and ACAd; the
+  readout updates in about a millisecond.
+
 ## DriftlessMap 2.7.0
 
 Feature release, 3 November 2026.

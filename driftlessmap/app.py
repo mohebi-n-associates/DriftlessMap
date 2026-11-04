@@ -108,6 +108,8 @@ from .transactions import TransactionHistory, unpack
 from .project_session import ProjectSessionMixin
 from .state_digest import state_digest
 from .implant_engine import ImplantEngineMixin
+from .probe_plan_engine import ProbePlanEngineMixin
+from .probe_plans import PlanBook
 from .section_engine import SectionsMixin
 from .mapping_records import (
     BUILD_CHANGED,
@@ -179,6 +181,7 @@ from .roi_analysis import build_drawing_roi_info
 from .atlas_matching import plane_from_name, planes_for, suggest_sections
 from .auto_registration import propose_landmarks
 from .implant_overlay import ImplantOverlay
+from .plan_overlay import PlanOverlay
 from .background import run_in_background
 from .section_suggestion_dialog import SectionSuggestionDialog
 from .registration_channels_dialog import RegistrationChannelsDialog
@@ -223,7 +226,7 @@ script_dir = dirname(realpath(__file__))
 FORM_Main, _ = loadUiType((join(dirname(__file__), "main_window.ui")))
 
 
-class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMainWindow,
+class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin, SectionsMixin, QMainWindow,
                    FORM_Main):
     def __init__(self, parent=FORM_Main):
         super(DriftlessMap, self).__init__()
@@ -271,6 +274,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
         self._transaction_depth = 0
         # Fibers and prisms, and their outlines on the loaded section.
         self._init_implants()
+        self._init_probe_plans()
         self.atlas_provenance = None
         self.histology_provenance = None
         self._portable_source_directories = []
@@ -488,6 +492,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
         self.atlas_view = AtlasView()
         # Built fibers and prisms are outlined where the shown slices cut them.
         self.implant_overlay = ImplantOverlay(self)
+        self.plan_overlay = PlanOverlay(self)
         self.atlas_view.show_boundary_btn.clicked.connect(self.vis_atlas_boundary)
         self.atlas_view.section_rabnt1.toggled.connect(self.display_changed)
         self.atlas_view.section_rabnt2.toggled.connect(self.display_changed)
@@ -4613,6 +4618,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
             "registration_review": self.registration_review.to_dict(),
             "mapping_review_state": self.mapping_review_state,
             "implants": self._implant_state(),
+            "probe_plans": self.probe_plans.to_list(),
         }
         return copy.deepcopy(state) if copy_state else state
 
@@ -4700,6 +4706,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
         self.registration_review = RegistrationReview.from_dict(state["registration_review"])
         self.mapping_review_state = state["mapping_review_state"]
         self._restore_implant_state(state["implants"])
+        self.probe_plans = PlanBook.from_list(state.get("probe_plans"))[0]
         for key, value in state["atlas"].items():
             self.working_atlas_data[key] = value
         for kind in MAPPED_KINDS:
@@ -4950,7 +4957,8 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
 
     def object_mapping_status(self, index):
         """Whether object ``index`` is current, out of date or of unknown origin."""
-        return self.implant_build_status(index) or derivation_status(
+        return self.implant_build_status(index) or self.plan_build_status(index) \
+            or derivation_status(
             self.object_ctrl.obj_derivation[index], self.mapping_ledger,
             self.section_id, self.current_registration_fingerprint(),
             self.stored_registrations())
@@ -4969,6 +4977,10 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
         rebuild = ("build it again" if self.object_ctrl.obj_type[index].startswith("merged")
                    else "make its part again")
         if status == BUILD_CHANGED:
+            plan_of = (self.object_ctrl.obj_data[index] or {}).get("plan_of")
+            if plan_of is not None:
+                return ("the plan of {} changed after it was built; open the probe's plan "
+                        "in Annotate to build it again".format(plan_of))
             return "the implant settings changed after it was built; {}".format(rebuild)
         self.sync_sections()
         fingerprint = self.current_registration_fingerprint()
@@ -5076,7 +5088,8 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
         fingerprint = self.current_registration_fingerprint()
         stored = self.stored_registrations()
         records = [(r, r.status(self.section_id, fingerprint)) for r in self.kept_marks()]
-        objects = [self.implant_build_status(i) or derivation_status(
+        objects = [self.implant_build_status(i) or self.plan_build_status(i)
+                   or derivation_status(
             entries, self.mapping_ledger, self.section_id, fingerprint, stored)
             for i, entries in enumerate(self.object_ctrl.obj_derivation)]
         return records, objects
@@ -8463,6 +8476,11 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
             self.export_implant_table(table)
             paths.append(table)
 
+        if len(self.probe_plans):
+            table = os.path.join(folder, "probe_plans.csv")
+            self.export_probe_plans(table)
+            paths.append(table)
+
         # Every section's working image, landmarks and atlas placement: the
         # images the exported results were mapped from.
         written, section_notes = self.export_sections(os.path.join(folder, "sections"))
@@ -9830,6 +9848,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
         self.atlas_mark_origin = _saved_atlas_mark_origin(p_dict.get("atlas_mark_origin"))
         self.editing_units = set()
         self._load_implants(p_dict)
+        self._load_probe_plans(p_dict)
         self.undo_history.clear()
         self.sync_mapping_undo_actions()
         self.refresh_kept_marks()

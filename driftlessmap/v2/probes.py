@@ -38,12 +38,24 @@ class ProbeBook:
 
     # ---------------------------------------------------------- listing
     def _objects(self):
+        """(index, name, kind) of every object except those built from a plan,
+        which belong to their probe through ``plan_of`` (the plan engine's)."""
         o = self.engine.object_ctrl
-        return list(zip(range(len(o.obj_name)), o.obj_name, o.obj_type))
+        return [(i, name, kind) for i, (name, kind, data)
+                in enumerate(zip(o.obj_name, o.obj_type, o.obj_data))
+                if not (isinstance(data, dict) and data.get("plan_of") is not None)]
+
+    def _plans(self):
+        plans = getattr(self.engine, "probe_plans", None)
+        return {plan.probe for plan in plans.plans()} if plans is not None else set()
+
+    def plan(self, probe):
+        plans = getattr(self.engine, "probe_plans", None)
+        return plans.get(probe) if plans is not None else None
 
     def names(self):
         found = {probe_of(group_of(name)) for _i, name, kind in self._objects()
-                 if kind in ("probe piece", "merged probe")}
+                 if kind in ("probe piece", "merged probe")} | self._plans()
         for name in list(self._empty):
             if name in found:
                 self._empty.remove(name)
@@ -65,6 +77,12 @@ class ProbeBook:
         return self._colours[probe]
 
     def summary(self, probe):
+        text = self._track_summary(probe)
+        if self.plan(probe) is not None:
+            return "planned" if text == "no sections yet" else "planned · " + text
+        return text
+
+    def _track_summary(self, probe):
         parts, built = len(self.parts(probe)), len(self.built(probe))
         if built and not parts:
             return "built"
@@ -152,6 +170,8 @@ class ProbeBook:
             data = self.engine.object_ctrl.obj_data[index]
             if isinstance(data, dict) and "pieces_names" in data:
                 data["pieces_names"] = [renamed(n) for n in data["pieces_names"]]
+        if self.plan(old) is not None:
+            self.engine.rename_probe_plan(old, new)
         if old in self._empty:
             self._empty[self._empty.index(old)] = new
         if old in self._colours:
@@ -162,6 +182,8 @@ class ProbeBook:
         indexes = self.parts(probe) + self.built(probe)
         if indexes:
             self.engine.object_ctrl.delete_objects(indexes)
+        if self.plan(probe) is not None:
+            self.engine.remove_probe_plan(probe)
         if probe in self._empty:
             self._empty.remove(probe)
         self._colours.pop(probe, None)
