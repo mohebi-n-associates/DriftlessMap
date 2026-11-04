@@ -24,7 +24,8 @@ DEFAULT_DEPTH_UM = 3000.0
 SUMMARY_MIN_UM = 50.0
 
 PLAN_FIELDS = ("probe", "tip_um", "ap_tilt_deg", "ml_tilt_deg", "roll_deg",
-               "probe_settings", "shank_offsets_um", "bank", "craniotomy")
+               "probe_settings", "shank_offsets_um", "bank", "craniotomy", "targets",
+               "avoid")
 # Clearance between planned probes: checked from this far above each entry
 # down to the tip, and reported when closer than CLEARANCE_UM.
 CLEARANCE_ABOVE_UM = 3000.0
@@ -104,7 +105,8 @@ class ProbePlan:
     """One planned probe (see the module docstring for the frame)."""
 
     def __init__(self, probe, tip_um, ap_tilt_deg=0.0, ml_tilt_deg=0.0, roll_deg=0.0,
-                 probe_settings=None, shank_offsets_um=None, bank=0, craniotomy=None):
+                 probe_settings=None, shank_offsets_um=None, bank=0, craniotomy=None,
+                 targets=None, avoid=None):
         self.probe = str(probe)
         self.tip_um = [float(v) for v in tip_um]
         self.ap_tilt_deg = float(ap_tilt_deg)
@@ -119,6 +121,10 @@ class ProbePlan:
         # The craniotomy the probe goes through (an id in the project's
         # CraniotomyBook), or None (2.10.0; absent means None).
         self.craniotomy = None if craniotomy is None else str(craniotomy)
+        # Regions the probe is meant to record and to keep out of (ids; 2.8.3,
+        # absent means none). Proposals search for them; the readout scores them.
+        self.targets = [int(t) for t in targets or []]
+        self.avoid = [int(a) for a in avoid or []]
         self.validate()
 
     def validate(self):
@@ -138,6 +144,8 @@ class ProbePlan:
             length = self.probe_settings.get("probe_length")
             if length is not None and not (isinstance(length, (int, float)) and length > 0):
                 raise ValueError("the probe length must be positive")
+        if len(self.targets) > 32 or len(self.avoid) > 256:
+            raise ValueError("too many target or avoided regions")
         if self.bank is not None and not 0 <= self.bank < 64:
             raise ValueError("the bank must lie between 0 and 63")
         if self.shank_offsets_um is not None:
@@ -177,6 +185,8 @@ class ProbePlan:
                                  if self.shank_offsets_um else None),
             "bank": self.bank,
             "craniotomy": self.craniotomy,
+            "targets": list(self.targets),
+            "avoid": list(self.avoid),
         }
 
     @classmethod
@@ -188,7 +198,8 @@ class ProbePlan:
                 data["probe"], data["tip_um"],
                 data.get("ap_tilt_deg", 0.0), data.get("ml_tilt_deg", 0.0),
                 data.get("roll_deg", 0.0), data.get("probe_settings"),
-                data.get("shank_offsets_um"), data.get("bank", 0), data.get("craniotomy"))
+                data.get("shank_offsets_um"), data.get("bank", 0), data.get("craniotomy"),
+                data.get("targets"), data.get("avoid"))
         except (KeyError, TypeError) as exc:
             raise ValueError("incomplete plan ({})".format(exc)) from None
 
@@ -411,7 +422,7 @@ def surface_entry(atlas, tip_um, direction):
     # The exact point where the line enters the first brain voxel, so the
     # entry does not depend on where the samples fall along the line.
     low, high = distances[first - 1], distances[first]
-    for _step in range(40):
+    for _step in range(30):          # half a voxel / 2**30: about 1e-8 um at 25 um voxels
         middle = (low + high) / 2.0
         if atlas.labels_at((start + middle * d)[None, :])[0][0] != 0:
             high = middle
@@ -995,3 +1006,394 @@ def validated_surgery_settings(data):
         out[key] = value if value is not None and math.isfinite(value) and 0 < value < 50000 \
             else None
     return out
+
+
+# ----------------------------------------------------------------- proposals
+PROPOSAL_TILT_STEP_DEG = 5.0
+PROPOSAL_FINE_STEP_DEG = 1.0
+PROPOSAL_SCREEN_VOXELS = 4_000_000
+PROPOSAL_LINES_PER_DIRECTION = 12
+PROPOSAL_REFINE = 6
+PROPOSAL_KEEP = 8
+PROPOSAL_EXTRA_UM = 5000.0  # looked at below the shank, to say how deep a target is
+REACHED_UM = 100.0          # a target counts as reached with this much of it in the window
+# Ranking: each degree from vertical costs this much window in the targets, so a
+# nearly as good, straighter track comes first; and the list keeps the best
+# track of each band of tilts, so a vertical option is shown next to angled ones.
+PROPOSAL_TILT_PENALTY_UM_PER_DEG = 10.0
+PROPOSAL_TILT_BANDS_DEG = (5.0, 15.0, 25.0)
+
+
+class ProposalRequest:
+    """What a proposal must do (see ``propose_plans``).
+
+    ``targets`` and ``avoid`` are region ids (each with its sub-regions);
+    ``side`` keeps the probe in one hemisphere (+1 right, -1 left, None
+    either); ``midline_um`` keeps it this far from the midline;
+    ``max_ap_tilt_deg``/``max_ml_tilt_deg`` bound the tilts (0 and 0: vertical);
+    ``craniotomy`` (a Craniotomy) must hold the entry.
+    """
+
+    def __init__(self, targets, avoid=(), side=None, midline_um=0.0, max_ap_tilt_deg=30.0,
+                 max_ml_tilt_deg=30.0, craniotomy=None):
+        self.targets = list(dict.fromkeys(int(t) for t in targets))
+        self.avoid = [int(a) for a in avoid if int(a) not in self.targets]
+        self.side = None if side is None else (1 if side >= 0 else -1)
+        self.midline_um = max(0.0, float(midline_um))
+        self.max_ap_tilt_deg = float(np.clip(max_ap_tilt_deg, 0.0, MAX_TILT_DEG))
+        self.max_ml_tilt_deg = float(np.clip(max_ml_tilt_deg, 0.0, MAX_TILT_DEG))
+        self.craniotomy = craniotomy
+        if not self.targets:
+            raise ValueError("choose at least one target region")
+
+
+def _region_index(atlas, regions):
+    """Sorted label ids and, for each, which of ``regions`` it belongs to."""
+    pairs = sorted({(label, number) for number, region in enumerate(regions)
+                    for label in atlas.descendants(region)})
+    ids = np.asarray([p[0] for p in pairs], dtype=np.int64)
+    owners = np.asarray([p[1] for p in pairs], dtype=np.int64)
+    return ids, owners
+
+
+def _owner(labels, ids, owners):
+    """Which region (index) each label belongs to, -1 for none."""
+    labels = np.asarray(labels, dtype=np.int64)
+    out = np.full(labels.shape, -1, dtype=np.int64)
+    if not len(ids):
+        return out
+    where = np.clip(np.searchsorted(ids, labels), 0, len(ids) - 1)
+    hit = ids[where] == labels
+    out[hit] = owners[where[hit]]
+    return out
+
+
+class _LineScorer:
+    """Scores lines through the atlas for one request and one probe design."""
+
+    def __init__(self, atlas, request, plan):
+        self.atlas = atlas
+        self.request = request
+        self.plan = plan
+        self.target_ids, self.target_owner = _region_index(atlas, request.targets)
+        self.avoid_ids, self.avoid_owner = _region_index(atlas, request.avoid)
+        settings = plan.probe_settings or {}
+        self.shank_um = float(settings.get("probe_length") or 10000.0)
+        self.tip_um = float(settings.get("tip_length") or 0.0)
+        window = recording_sites(plan)
+        self.window_low = float(window.min()) if len(window) else 0.0
+        self.window_high = float(window.max()) if len(window) else 0.0
+        self.step_um = atlas.vox_um * SAMPLE_STEP_VOX
+        self.count = int((self.shank_um + PROPOSAL_EXTRA_UM) / self.step_um) + 1
+        self.depths = np.arange(self.count) * self.step_um
+        # Why lines through every target could not be used.
+        self.reasons = {"avoid": 0, "midline": 0, "too_deep": 0, "craniotomy": 0,
+                        "window": 0}
+        self.through_all = 0
+        self.deepest_needed_um = []
+
+    def evaluate(self, direction, through_um):
+        """The best tip along the line through ``through_um`` (um) along ``direction``.
+
+        Returns a dict (tip_um, entry_um, depth_um, coverage_um per target,
+        reached, total_um) or None when nothing on the line is usable.
+        """
+        atlas, request = self.atlas, self.request
+        far = np.asarray(through_um, dtype=float) + direction * self.shank_um
+        entry, _inside = surface_entry(atlas, far, direction)
+        if entry is None:
+            return None
+        entry = np.asarray(entry)
+        points = entry[None, :] + self.depths[:, None] * direction[None, :]
+        labels, _inside = atlas.labels_at(atlas.to_vox(points))
+        owner = _owner(labels, self.target_ids, self.target_owner)
+        avoided = _owner(labels, self.avoid_ids, self.avoid_owner) >= 0
+        near_midline = np.zeros(self.count, dtype=bool)
+        if request.midline_um > 0:
+            near_midline |= np.abs(points[:, 0]) < request.midline_um
+        if request.side is not None:
+            near_midline |= points[:, 0] * request.side < 0
+        blocked = avoided | near_midline
+        n = len(request.targets)
+        hits = [np.flatnonzero(owner == k) for k in range(n)]
+        through_all = all(len(h) for h in hits)
+        needed = max(int(h[0]) for h in hits) if through_all else None
+        outside_hole = request.craniotomy is not None and \
+            request.craniotomy.distance_um(entry) > request.craniotomy.diameter_um / 2.0
+        first_blocked = int(np.argmax(blocked)) if np.any(blocked) else self.count
+        shank_end = int(self.shank_um / self.step_um)
+        if through_all:
+            self.through_all += 1
+            self.deepest_needed_um.append(self.depths[needed])
+            if outside_hole:
+                self.reasons["craniotomy"] += 1
+            elif first_blocked <= needed:
+                self.reasons["avoid" if avoided[:needed + 1].any() else "midline"] += 1
+            elif needed > shank_end:
+                self.reasons["too_deep"] += 1
+        if outside_hole:
+            return None
+        inside = np.flatnonzero(labels[:shank_end + 1] != 0)
+        limit = min(first_blocked - 1, int(inside[-1]) if len(inside) else 0, shank_end)
+        if limit < 1:
+            return None
+        # Window coverage of each target for every tip position (cumulative sums).
+        one_hot = np.stack([owner == k for k in range(n)], axis=1).astype(float)
+        cumulative = np.vstack([np.zeros((1, n)), np.cumsum(one_hot, axis=0)])
+        tips = np.arange(1, limit + 1)
+        tip_depth = self.depths[tips]
+        top = np.clip(np.searchsorted(self.depths, tip_depth - self.tip_um - self.window_high),
+                      0, self.count)
+        bottom = np.clip(np.searchsorted(self.depths, tip_depth - self.tip_um - self.window_low,
+                                         side="right"), 0, self.count)
+        cover = (cumulative[bottom] - cumulative[top]) * self.step_um
+        reached = (cover >= REACHED_UM).sum(axis=1)
+        total = cover.sum(axis=1)
+        # Most targets reached, then most of the window in them, then shallowest.
+        best = int(np.lexsort((tip_depth, -total, -reached))[0])
+        if reached[best] == 0:
+            return None
+        if through_all and reached[best] < n and first_blocked > needed \
+                and needed <= shank_end:
+            self.reasons["window"] += 1
+        return {"tip_um": points[tips[best]].tolist(), "entry_um": entry.tolist(),
+                "depth_um": float(tip_depth[best]), "coverage_um": cover[best].tolist(),
+                "reached": int(reached[best]), "total_um": float(total[best]),
+                "elevation_deg": math.degrees(math.acos(float(np.clip(-direction[2], -1, 1))))}
+
+
+def _directions(max_ap, max_ml, step):
+    aps = np.arange(-max_ap, max_ap + 1e-9, step) if max_ap > 0 else np.zeros(1)
+    mls = np.arange(-max_ml, max_ml + 1e-9, step) if max_ml > 0 else np.zeros(1)
+    return [(float(a), float(m)) for a in aps for m in mls]
+
+
+def _target_voxels(atlas, request, sample, stride):
+    """Positions (um) and target indexes of the strided target voxels."""
+    found = np.argwhere(sample >= 0)
+    owner = sample[found[:, 0], found[:, 1], found[:, 2]]
+    um = atlas.to_um(found * stride + stride / 2.0)
+    if request.side is not None:
+        keep_side = um[:, 0] * request.side > 0
+        um, owner = um[keep_side], owner[keep_side]
+    return um, owner, stride
+
+
+def _screen_lines(atlas, request, voxels, direction, keep):
+    """Lines along ``direction`` through the most target voxels (a coarse projection).
+
+    ``voxels`` (from ``_target_voxels``) are the target voxels of a strided
+    copy of the atlas. Each is projected along ``direction`` onto the plane
+    across it; cells holding voxels of the most targets, then the most voxels,
+    are the lines worth evaluating exactly. Returns points (um) on those lines.
+    """
+    um, owner, stride = voxels
+    if not len(um):
+        return []
+    helper = np.array([1.0, 0.0, 0.0]) if abs(direction[0]) < 0.9 else np.array([0, 1.0, 0])
+    first = np.cross(direction, helper)
+    first /= np.linalg.norm(first)
+    second = np.cross(direction, first)
+    cell = stride * atlas.vox_um
+    keys = np.stack([np.floor(um @ first / cell), np.floor(um @ second / cell)], axis=1)
+    keys = keys.astype(np.int64)
+    cells, inverse = np.unique(keys, axis=0, return_inverse=True)
+    inverse = np.ravel(inverse)
+    targets = len(request.targets)
+    present = np.zeros((len(cells), targets), dtype=bool)
+    present[inverse, owner] = True
+    voxels = np.bincount(inverse, minlength=len(cells))
+    order = np.lexsort((-voxels, -present.sum(axis=1)))[:keep]
+    points = []
+    for index in order:
+        members = um[inverse == index]
+        points.append(members.mean(axis=0))
+    return points
+
+
+def propose_plans(atlas, request, plan, progress=None):
+    """Ranked plans for ``plan``'s probe that best record ``request.targets``.
+
+    Searches lines over the allowed tilts on a coarse copy of the atlas,
+    evaluates the promising ones at full resolution (sliding the recording
+    window to its best depth on each), and refines the best. Returns
+    ``(proposals, reasons)``: proposals are dicts with ``plan`` (a ProbePlan
+    keeping the probe's settings, roll, bank and craniotomy), ``entry_um``,
+    ``depth_um``, ``coverage`` ([(acronym, um)] per target), ``reached`` and
+    ``score``; ``reasons`` explain, in words, why no proposal records every
+    target (empty when one does).
+    """
+    scorer = _LineScorer(atlas, request, plan)
+    size = int(np.prod(atlas.shape))
+    stride = max(1, int(math.ceil((size / PROPOSAL_SCREEN_VOXELS) ** (1.0 / 3.0))))
+    coarse = np.asarray(atlas.labels[::stride, ::stride, ::stride])
+    sample = _owner(coarse, scorer.target_ids, scorer.target_owner)
+    if not np.any(sample >= 0):
+        # Regions smaller than the coarse grid: look at every voxel instead.
+        stride = 1
+        sample = _owner(np.asarray(atlas.labels), scorer.target_ids, scorer.target_owner)
+        if not np.any(sample >= 0):
+            return [], ["None of the target regions is in this atlas volume."]
+    candidates = []
+    voxels = _target_voxels(atlas, request, sample, stride)
+    directions = _directions(request.max_ap_tilt_deg, request.max_ml_tilt_deg,
+                             PROPOSAL_TILT_STEP_DEG)
+    for number, (ap, ml) in enumerate(directions):
+        direction = direction_from_tilts(ap, ml)
+        for point in _screen_lines(atlas, request, voxels, direction,
+                                   PROPOSAL_LINES_PER_DIRECTION):
+            result = scorer.evaluate(direction, point)
+            if result is not None:
+                candidates.append((ap, ml, result))
+        if progress is not None and progress(number + 1, len(directions)) is False:
+            break
+    ranked = _rank(candidates, atlas)
+    # Refine the best: finer tilts and small shifts, at full resolution.
+    refined = []
+    for ap, ml, result in ranked[:PROPOSAL_REFINE]:
+        best = (ap, ml, result)
+        for d_ap in (-2, -1, 0, 1, 2):
+            for d_ml in (-2, -1, 0, 1, 2):
+                new_ap = float(np.clip(ap + d_ap * PROPOSAL_FINE_STEP_DEG,
+                                       -request.max_ap_tilt_deg, request.max_ap_tilt_deg))
+                new_ml = float(np.clip(ml + d_ml * PROPOSAL_FINE_STEP_DEG,
+                                       -request.max_ml_tilt_deg, request.max_ml_tilt_deg))
+                direction = direction_from_tilts(new_ap, new_ml)
+                trial = scorer.evaluate(direction, result["tip_um"])
+                if trial is not None and _key(trial) < _key(best[2]):
+                    best = (new_ap, new_ml, trial)
+        refined.append(best)
+    ranked = _rank(refined + ranked[PROPOSAL_REFINE:], atlas)
+    proposals = []
+    for ap, ml, result in ranked[:PROPOSAL_KEEP]:
+        proposed = plan.copy(tip_um=result["tip_um"], ap_tilt_deg=ap, ml_tilt_deg=ml)
+        proposals.append({
+            "plan": proposed, "entry_um": result["entry_um"], "depth_um": result["depth_um"],
+            "coverage": [(atlas.name(region)[0], length) for region, length
+                         in zip(request.targets, result["coverage_um"])],
+            "reached": result["reached"], "score": result["total_um"]})
+    reasons = []
+    if not proposals or proposals[0]["reached"] < len(request.targets):
+        reasons = _reasons(scorer, request, atlas, voxels, proposals)
+    return proposals, reasons
+
+
+def _score(result):
+    return result["total_um"] - PROPOSAL_TILT_PENALTY_UM_PER_DEG * result["elevation_deg"]
+
+
+def _key(result):
+    """Most targets reached, then the best score, then the shallowest tip."""
+    return (-result["reached"], -round(_score(result), 6), result["depth_um"])
+
+
+def _band(result):
+    return sum(result["elevation_deg"] >= edge for edge in PROPOSAL_TILT_BANDS_DEG)
+
+
+def _rank(candidates, atlas, apart_um=500.0, apart_deg=5.0):
+    """Best first, near-duplicates dropped, the best of each tilt band kept."""
+    ordered = sorted(candidates, key=lambda item: _key(item[2]))
+    unique = []
+    for ap, ml, result in ordered:
+        if any(math.dist(result["entry_um"], other["entry_um"]) < apart_um
+               and abs(ap - a) < apart_deg and abs(ml - m) < apart_deg
+               for a, m, other in unique):
+            continue
+        unique.append((ap, ml, result))
+    if not unique:
+        return unique
+    # The best of every band that reaches as many targets as the best overall.
+    most = unique[0][2]["reached"]
+    firsts = {}
+    for item in unique:
+        if item[2]["reached"] == most:
+            firsts.setdefault(_band(item[2]), item)
+    chosen = list(firsts.values())
+    rest = [item for item in unique if all(item is not other for other in chosen)]
+    return sorted(chosen, key=lambda item: _key(item[2])) + rest
+
+
+def _reasons(scorer, request, atlas, voxels, proposals):
+    """Why no proposal records every target, in words."""
+    reasons = []
+    n = len(request.targets)
+    names = [atlas.name(t)[0] for t in request.targets]
+    best = proposals[0]["reached"] if proposals else 0
+    if n > 1:
+        reasons.append("The best line reaches {} of the {} targets ({}).".format(
+            best, n, ", ".join(names)))
+    if scorer.through_all == 0:
+        wider = None
+        if n > 1:
+            for limit in (10.0, 20.0, 30.0, 45.0, 60.0, MAX_TILT_DEG):
+                if limit <= max(request.max_ap_tilt_deg, request.max_ml_tilt_deg):
+                    continue
+                for ap, ml in _directions(limit, limit, PROPOSAL_TILT_STEP_DEG):
+                    lines = _screen_lines(atlas, request, voxels,
+                                          direction_from_tilts(ap, ml), 1)
+                    if lines and _line_spans_targets(scorer, ap, ml, lines[0]):
+                        wider = limit
+                        break
+                if wider is not None:
+                    break
+        if wider is not None:
+            reasons.append("No straight line within the tilt limits passes through every "
+                           "target; tilts of up to {:.0f}° would allow one.".format(wider))
+        elif n > 1:
+            reasons.append("No straight line the {:.1f} mm shank can follow passes through "
+                           "every target at any tilt: plan one probe per target or "
+                           "group.".format(scorer.shank_um / 1000.0))
+        return reasons
+    words = {
+        "craniotomy": "lines through every target enter the brain outside the craniotomy",
+        "avoid": "lines through every target cross a region to avoid",
+        "midline": "lines through every target come too close to the midline or cross it",
+        "too_deep": "the targets lie deeper than the {:.1f} mm shank reaches (the deepest "
+                    "line needs {:.1f} mm)".format(scorer.shank_um / 1000.0,
+                                                   min(scorer.deepest_needed_um) / 1000.0
+                                                   if scorer.deepest_needed_um else 0.0),
+        "window": "the targets are spread over more than the {:.2f} mm recording window; "
+                  "record every site or choose another bank".format(
+                      (scorer.window_high - scorer.window_low) / 1000.0),
+    }
+    for reason, count in sorted(scorer.reasons.items(), key=lambda item: -item[1]):
+        if count:
+            reasons.append("Of the lines through every target, {} {}.".format(
+                count, words[reason]))
+    return reasons
+
+
+def _line_spans_targets(scorer, ap, ml, point):
+    """Whether the line through ``point`` meets every target within one shank length."""
+    direction = direction_from_tilts(ap, ml)
+    atlas = scorer.atlas
+    span = np.linspace(-15000.0, 15000.0, int(30000.0 / scorer.step_um) + 1)
+    points = np.asarray(point, dtype=float)[None, :] + span[:, None] * direction[None, :]
+    labels, _inside = atlas.labels_at(atlas.to_vox(points))
+    owner = _owner(labels, scorer.target_ids, scorer.target_owner)
+    hits = [span[np.flatnonzero(owner == k)] for k in range(len(scorer.request.targets))]
+    tissue = span[np.flatnonzero(labels != 0)]
+    if not all(len(h) for h in hits) or not len(tissue):
+        return False
+    # Touching every target: from where the line enters the brain down to the
+    # first voxel of the deepest target (positions grow along the probe).
+    needed = max(h.min() for h in hits) - tissue.min()
+    return needed <= scorer.shank_um - scorer.tip_um
+
+
+def target_coverage(plan, readout, atlas):
+    """Length of each of the plan's targets inside its recording window (um)."""
+    if not plan.targets or readout.get("window_um") is None:
+        return []
+    ids, owners = _region_index(atlas, plan.targets)
+    lengths = [0.0] * len(plan.targets)
+    top, bottom = readout["window_um"]
+    for run in readout.get("regions") or []:
+        overlap = min(run["end_um"], bottom) - max(run["start_um"], max(top, 0.0))
+        if overlap <= 0:
+            continue
+        owner = int(_owner(np.array([run["id"]]), ids, owners)[0])
+        if owner >= 0:
+            lengths[owner] += overlap
+    return [(atlas.name(t)[0], length) for t, length in zip(plan.targets, lengths)]

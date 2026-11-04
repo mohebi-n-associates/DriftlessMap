@@ -172,7 +172,10 @@ class PlanEditor(Card):
         self.start_button = button("Plan this probe", self.start_plan, primary=True,
                                    tooltip="Give the probe a plan: 1 mm right of Bregma, "
                                            "3 mm deep, vertical; then move it.")
-        self.add_row(self.start_button, None)
+        self.start_propose = button("Propose a plan…", self.propose,
+                                    tooltip="Choose the regions to record; the search proposes "
+                                            "tracks through them")
+        self.add_row(self.start_button, self.start_propose, None)
 
         self.fields = QWidget()
         grid = QGridLayout(self.fields)
@@ -284,6 +287,9 @@ class PlanEditor(Card):
             button("Copy coordinates", self.copy_coordinates,
                    tooltip="Copy one line with the atlas, frame, entry, depth, tip, tilts, "
                            "recording window and regions"),
+            button("Propose…", self.propose,
+                   tooltip="Propose plans that record chosen regions (and keep out of "
+                           "others) within the tilts the rig allows"),
             button("Region table…", self.region_table,
                    tooltip="The planned probe's regions, contacts and coordinates"),
             button("Show in 3D", lambda: self.shell.set_view("3d")),
@@ -345,6 +351,8 @@ class PlanEditor(Card):
         has_atlas = atlas is not None
         self.start_button.setVisible(plan is None)
         self.start_button.setEnabled(has_atlas)
+        self.start_propose.setVisible(plan is None)
+        self.start_propose.setEnabled(has_atlas)
         self.start_button.setToolTip("" if has_atlas else "Load a volume atlas first.")
         for widget in (self.fields, self.actions, self.readout, self.remove_button, self.shank):
             widget.setVisible(plan is not None)
@@ -446,6 +454,15 @@ class PlanEditor(Card):
                                           readout["window_sites_in_brain"],
                                           readout["window_sites"],
                                           ": " + cover if cover else ""))
+        if readout.get("targets"):
+            from ..probe_plans import REACHED_UM
+
+            parts = []
+            for name, length in readout["targets"]:
+                text = "{} {:.2f} mm".format(html.escape(name), length / 1000.0)
+                parts.append(text if length >= REACHED_UM else
+                             "<span style='color:#e8a33d'>{} (missed)</span>".format(text))
+            lines.append("<b>Targets in the window</b> " + ", ".join(parts))
         if readout.get("arm"):
             lines.append("<b>Arm</b> azimuth {:.1f}° · elevation {:.1f}°".format(*readout["arm"]))
         hole = readout.get("craniotomy")
@@ -878,6 +895,26 @@ class PlanEditor(Card):
         self._fill(new)
         self._say(True, "The tip is on the brain surface ({}); set the depth to go in.".format(
             "along the probe" if along_probe else "straight down"))
+
+    def propose(self):
+        """Open the proposal dialog; the chosen proposal becomes the plan."""
+        from .proposal_dialog import ProposalDialog
+
+        self.commit()
+        if self.probe is None or self.engine.plan_atlas() is None:
+            self._say(False, "Load a volume atlas first.")
+            return
+        dialog = self.proposal_dialog = ProposalDialog(self)
+        accepted = dialog.exec() == ProposalDialog.DialogCode.Accepted
+        self.proposal_dialog = None
+        if not accepted or dialog.chosen is None:
+            return
+        ok, message = self.engine.set_probe_plan(dialog.chosen, colour=self._colour())
+        self.engine.show_plan_on_atlas(self.probe)
+        self._fill(dialog.chosen)
+        self._say(ok, message if not ok else
+                  "{} now follows the proposal; adjust it as you like.".format(self.probe))
+        self.shell.refresh()
 
     def show_on_atlas(self):
         if not self.engine.show_plan_on_atlas(self.probe):

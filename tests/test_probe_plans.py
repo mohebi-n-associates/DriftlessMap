@@ -7,6 +7,9 @@ import numpy as np
 
 from driftlessmap.probe_plans import (
     MAX_TILT_DEG,
+    ProposalRequest,
+    propose_plans,
+    target_coverage,
     Craniotomy,
     CraniotomyBook,
     arm_from_tilts,
@@ -367,6 +370,148 @@ class SurgeryTests(unittest.TestCase):
                          {"bregma_lambda_um": 4100.0, "atlas_bregma_lambda_um": None})
         self.assertEqual(validated_surgery_settings(None),
                          {"bregma_lambda_um": None, "atlas_bregma_lambda_um": None})
+
+
+def make_target_atlas():
+    """A 4 mm cube brain (50 um voxels, surface at DV 0) with known targets.
+
+    40 "A" and 41 "B": 0.2 mm blocks stacked straight down on the right
+    (A above B); 42 "X": a block straight above A; 43 "C": a block across the
+    midline; 44 "D": 0.3 mm lateral of B and 1 mm deeper; 45 "E": far left.
+    """
+    labels = np.zeros((80, 80, 80), dtype=np.int32)
+    labels[10:70, 10:70, 10:70] = 10
+    labels[50:54, 40:44, 50:54] = 40      # A
+    labels[50:54, 40:44, 35:39] = 41      # B
+    labels[50:54, 40:44, 58:62] = 42      # X, above A
+    labels[36:44, 20:24, 40:44] = 43      # C, across the midline (ML index 40)
+    labels[56:60, 40:44, 15:19] = 44      # D
+    labels[18:22, 40:44, 50:54] = 45      # E, left
+    names = ["root", "brain", "A", "B", "X", "C", "D", "E"]
+    ids = [1, 10, 40, 41, 42, 43, 44, 45]
+    info = {"index": np.array(ids), "label": np.array(names), "abbrev": np.array(names),
+            "parent": np.array([0, 1, 10, 10, 10, 10, 10, 10]),
+            "color": np.array([[200, 200, 200]] * len(ids))}
+    return PlanAtlas(labels, info, VOX, [40.0, 40.0, 70.0]), labels
+
+
+class ProposalTests(unittest.TestCase):
+    def setUp(self):
+        self.atlas, self.labels = make_target_atlas()
+        self.plan = ProbePlan("P", [0, 0, -1000], probe_settings=Probe().get_settings())
+
+    def readout_labels(self, plan):
+        readout = plan_readout(plan, self.atlas)
+        return {r["acronym"] for r in readout["regions"]}, readout
+
+    def test_a_vertical_line_through_two_stacked_targets(self):
+        request = ProposalRequest([40, 41], max_ap_tilt_deg=0, max_ml_tilt_deg=0)
+        proposals, reasons = propose_plans(self.atlas, request, self.plan)
+        self.assertEqual(reasons, [])
+        best = proposals[0]
+        self.assertEqual(best["reached"], 2)
+        self.assertEqual((best["plan"].ap_tilt_deg, best["plan"].ml_tilt_deg), (0.0, 0.0))
+        # Through the blocks' footprint: ML 0.5-0.7 mm, AP 0-0.2 mm.
+        self.assertTrue(500 <= best["entry_um"][0] <= 700, best["entry_um"])
+        self.assertTrue(0 <= best["entry_um"][1] <= 200, best["entry_um"])
+        # The whole of both 0.2 mm targets is in the window.
+        for name, length in best["coverage"]:
+            self.assertAlmostEqual(length, 200.0, delta=VOX, msg=name)
+        # The plan really records them, by the readout's own reckoning.
+        names, readout = self.readout_labels(best["plan"])
+        self.assertTrue({"A", "B"} <= names)
+        self.assertEqual(readout["warnings"], [])
+        covered = dict(target_coverage(best["plan"].copy(targets=[40, 41]), readout,
+                                       self.atlas))
+        self.assertAlmostEqual(covered["A"], 200.0, delta=VOX)
+        self.assertAlmostEqual(covered["B"], 200.0, delta=VOX)
+        # Shallowest of the best: B's bottom (1.75 mm) plus the 175 um tip and the
+        # lowest site's 10 um, not the brain's floor.
+        self.assertAlmostEqual(best["depth_um"], 1750.0 + 175.0 + 10.0, delta=0.5 * VOX)
+
+    def test_avoiding_a_region_above_the_target_needs_a_tilt(self):
+        vertical = ProposalRequest([40], avoid=[42], max_ap_tilt_deg=0, max_ml_tilt_deg=0)
+        proposals, reasons = propose_plans(self.atlas, vertical, self.plan)
+        self.assertTrue(any("cross a region to avoid" in r for r in reasons), reasons)
+        tilted = ProposalRequest([40], avoid=[42], max_ap_tilt_deg=30, max_ml_tilt_deg=30)
+        proposals, reasons = propose_plans(self.atlas, tilted, self.plan)
+        self.assertEqual(reasons, [])
+        best = proposals[0]["plan"]
+        self.assertGreater(abs(best.ap_tilt_deg) + abs(best.ml_tilt_deg), 0)
+        self.assertLessEqual(max(abs(best.ap_tilt_deg), abs(best.ml_tilt_deg)), 30)
+        names, _readout = self.readout_labels(best)
+        self.assertIn("A", names)
+        self.assertNotIn("X", names)
+
+    def test_one_side_of_the_midline(self):
+        left = ProposalRequest([43], side=-1, midline_um=100, max_ap_tilt_deg=0,
+                               max_ml_tilt_deg=0)
+        proposals, reasons = propose_plans(self.atlas, left, self.plan)
+        self.assertEqual(reasons, [])
+        for proposal in proposals:
+            self.assertLessEqual(proposal["entry_um"][0], -100)
+            self.assertLessEqual(proposal["plan"].tip_um[0], -100)
+
+    def test_reasons_when_nothing_works(self):
+        short = self.plan.copy(probe_settings=dict(self.plan.probe_settings, probe_length=900))
+        proposals, reasons = propose_plans(
+            self.atlas, ProposalRequest([41], max_ap_tilt_deg=0, max_ml_tilt_deg=0), short)
+        self.assertTrue(any("deeper than the 0.9 mm shank" in r for r in reasons), reasons)
+        # D is 0.3 mm lateral of B and 1 mm deeper; the blocks are 0.2 mm wide, so
+        # a line through both needs about 7° (0.1 mm across 0.8 mm), more than 5°.
+        proposals, reasons = propose_plans(
+            self.atlas, ProposalRequest([41, 44], max_ap_tilt_deg=5, max_ml_tilt_deg=5),
+            self.plan)
+        self.assertTrue(any("The best line reaches 1 of the 2 targets" in r for r in reasons),
+                        reasons)
+        self.assertTrue(any("tilts of up to 10° would allow one" in r for r in reasons),
+                        reasons)
+        wide = ProposalRequest([41, 44], max_ap_tilt_deg=10, max_ml_tilt_deg=10)
+        proposals, reasons = propose_plans(self.atlas, wide, self.plan)
+        self.assertEqual(reasons, [])
+        self.assertEqual(proposals[0]["reached"], 2)
+        # A and E lie side by side, 1.6 mm apart at the same depth.
+        proposals, reasons = propose_plans(
+            self.atlas, ProposalRequest([40, 45], max_ap_tilt_deg=30, max_ml_tilt_deg=30),
+            self.plan)
+        self.assertTrue(any("one probe per target" in r for r in reasons), reasons)
+        self.assertEqual(propose_plans(self.atlas, ProposalRequest([999]), self.plan)[1],
+                         ["None of the target regions is in this atlas volume."])
+        with self.assertRaises(ValueError):
+            ProposalRequest([])
+
+    def test_an_angled_best_comes_with_a_straighter_option(self):
+        # A slanted target (30° from vertical in the coronal plane): the angled
+        # track records most of it, a vertical one only its width.
+        labels = self.labels.copy()
+        for dv in range(25, 61):
+            ml = int(round(30 + (60 - dv) * math.tan(math.radians(30))))
+            labels[ml:ml + 3, 38:46, dv] = 46
+        info = dict(self.atlas.label_info)
+        info["index"] = np.append(info["index"], 46)
+        info["label"] = np.append(info["label"], "S")
+        info["abbrev"] = np.append(info["abbrev"], "S")
+        info["parent"] = np.append(info["parent"], 10)
+        info["color"] = np.vstack([info["color"], [[1, 2, 3]]])
+        atlas = PlanAtlas(labels, info, VOX, self.atlas.bregma)
+        proposals, reasons = propose_plans(atlas, ProposalRequest([46], max_ap_tilt_deg=40,
+                                                                  max_ml_tilt_deg=40),
+                                           self.plan)
+        self.assertEqual(reasons, [])
+        best = proposals[0]
+        self.assertGreater(best["coverage"][0][1], 1000.0)
+        self.assertAlmostEqual(abs(best["plan"].ml_tilt_deg), 30.0, delta=3.0)
+        elevations = [math.degrees(math.acos(-p["plan"].direction[2])) for p in proposals]
+        self.assertLess(min(elevations), 5.0)
+
+    def test_targets_and_avoid_are_saved_with_the_plan(self):
+        plan = self.plan.copy(targets=[40, 41], avoid=[42])
+        self.assertEqual(ProbePlan.from_dict(plan.to_dict()), plan)
+        old = plan.to_dict()
+        del old["targets"], old["avoid"]
+        self.assertEqual(ProbePlan.from_dict(old).targets, [])
+        with self.assertRaises(ValueError):
+            ProbePlan.from_dict(dict(plan.to_dict(), targets=["PL"]))
 
 
 class PersistenceTests(unittest.TestCase):

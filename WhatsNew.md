@@ -3,6 +3,32 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.8.3
+
+Release, 4 November 2026: the last part of the new probe planning, proposals.
+
+- **Propose a plan from the regions to record.** Choose the target regions
+  (or take those checked in the Regions tree), regions to keep out of, the
+  side, a margin from the midline, the tilts the rig allows and, if wanted,
+  the probe's craniotomy. Find plans lists straight tracks through the targets
+  with their entry, tilts, depth and the length of each target in the
+  recording window; Use this plan makes one the probe's plan.
+- The best track comes first, with the best straighter options beside it, so
+  a vertical approach is offered next to angled ones that record more.
+- **When nothing works, it says why**: how many targets the best track
+  reaches, the tilt that would allow one line through all of them, or that
+  the lines cross a region to avoid, come too close to the midline, enter
+  outside the craniotomy, go deeper than the shank or spread the targets
+  beyond the recording window.
+- A plan keeps its targets; its readout shows the length of each in the
+  recording window, for proposed and hand-made plans alike.
+- On the Allen 10 µm atlas, prelimbic and infralimbic cortex on the right give
+  a 30° track recording PL 1.40 mm and ILA 1.14 mm, a 20° one, and a nearly
+  vertical one entering at AP +2.19, ML +0.21 mm (PL 0.97, ILA 1.17 mm), in
+  about 1.6 s.
+- The search uses the atlas only: vessels, the sinus and the skull are not in
+  it. Check every plan.
+
 ## DriftlessMap 2.8.2
 
 Release, 4 November 2026: the third part of the new probe planning, for

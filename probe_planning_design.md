@@ -1,6 +1,6 @@
 # Probe planning design: a planned probe is a pose
 
-Status: approved 4 November 2026 for implementation in four phases,
+Status: implemented in 2.8.0-2.8.3 (4 November 2026); approved for four phases,
 2.8.0 (Phase 1) to 2.8.3 (Phase 4), all in the 2.8 series. Builds on the pre-surgical probe
 plan (MANUAL Section 11), `probe_utiles.calculate_probe_info`, the named
 probes of the V2 Annotate step (`v2/probes.py`) and the undo history
@@ -204,6 +204,13 @@ is computed once per loaded atlas and reused.
   midline margin, or a target is too small for the window.
 * The score uses the atlas only: vessels, the sinus and the skull are not
   in it, and real brains differ from the atlas. The dialog says so.
+* As built (2.8.3): ranking is most targets reached, then the window's length
+  in the targets less 10 µm per degree from vertical, then the shallowest tip;
+  the list keeps the best track of each tilt band (under 5°, 5-15°, 15-25°,
+  25° and over) so a straighter option is shown beside angled ones. The
+  "tilt that would allow one" counts only lines a shank can follow from the
+  surface to the deepest target. Multi-shank probes are searched by their
+  centre line.
 
 ## 5. Not planned
 
