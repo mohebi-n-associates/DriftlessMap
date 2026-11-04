@@ -3,9 +3,9 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
-## DriftlessMap 2.9.0
+## DriftlessMap 2.8.1
 
-Feature release, 4 November 2026: the second part of the new probe planning.
+Release, 4 November 2026: the second part of the new probe planning.
 
 - **Entry and depth.** Edit a plan by its entry on the brain surface (AP and
   ML) and its depth, as a stereotaxic frame is set; the tilts then turn the

@@ -109,7 +109,7 @@ class ProbePlan:
         self.shank_offsets_um = ([float(v) for v in shank_offsets_um]
                                  if shank_offsets_um else None)
         # Recording window: the bank of channels counted from the tip (0 is
-        # the lowest 384), or None for every site (2.9.0; absent means 0).
+        # the lowest 384), or None for every site (2.8.1; absent means 0).
         self.bank = None if bank is None else int(bank)
         self.validate()
 

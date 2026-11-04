@@ -8,8 +8,9 @@ or important workflows change.
 
 ## Project identity
 
-- Current release: DriftlessMap 2.9.0 (4 November 2026; probe planning,
-  `probe_planning_design.md` Phases 1-2; not yet published). Latest
+- Current release: DriftlessMap 2.8.1 (4 November 2026; probe planning,
+  `probe_planning_design.md` Phases 1-2; not yet published; the owner
+  numbers the probe-planning phases 2.8.0-2.8.3, one feature). Latest
   published: 2.7.0 (3 November 2026; the first release since 2.0.0, including
   2.0.1-2.3.0 and multi-section projects). 2.0.0
   (29 October 2026) followed the 2.0.0aN previews and 2.0.0rc1-rc16. The owner released it with the
@@ -99,7 +100,7 @@ or important workflows change.
   projects each plan (and `plan_previews`, the plan being edited) onto the
   atlas views. V2: `v2/plan_editor.PlanEditor` (the Plan section of
   `ProbeControls`; edits preview at once and commit after `BUILD_DELAY_MS`).
-  2.9.0 (Phase 2): `ProbePlan.bank` (recording window, 384 channels counted
+  2.8.1 (Phase 2): `ProbePlan.bank` (recording window, 384 channels counted
   from the tip; None for every site; absent in 2.8.0 plans means 0);
   `site_offsets_um`, `recording_sites`, `window_coverage` and the readout's
   `contacts_um`/`window_um`/`window_regions`; `column_surface`,

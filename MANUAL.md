@@ -1,7 +1,7 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 2.9.0**. Section 2 explains how to
-install it; `pip install driftlessmap` installs 2.9.0.
+This manual applies to **DriftlessMap 2.8.1**. Section 2 explains how to
+install it; `pip install driftlessmap` installs 2.8.1.
 
 DriftlessMap - Histological E-data Registration in Brain Space - is a desktop
 application for aligning rodent histology with a reference atlas, reconstructing
@@ -131,7 +131,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-DriftlessMap 2.9.0 requires:
+DriftlessMap 2.8.1 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -150,8 +150,8 @@ page. The macOS DMG (`-macOS-arm64.dmg`) is built for Apple Silicon; on an Intel
 Mac, use the developer installation below.
 The desktop builds include Python and all runtime dependencies. Windows users
 extract the entire ZIP and run `DriftlessMap.exe`; macOS users open the DMG and
-drag `DriftlessMap.app` to Applications. The 2.9.0 downloads are named
-`DriftlessMap-2.9.0-Windows-x64.zip` and `DriftlessMap-2.9.0-macOS-arm64.dmg`.
+drag `DriftlessMap.app` to Applications. The 2.8.1 downloads are named
+`DriftlessMap-2.8.1-Windows-x64.zip` and `DriftlessMap-2.8.1-macOS-arm64.dmg`.
 Release builds are unsigned unless the release notes say otherwise, so the first
 launch may require Windows SmartScreen confirmation or Control-clicking the
 macOS app and choosing **Open**.
@@ -200,7 +200,7 @@ python -m pip --version
 python -c "import driftlessmap; print(driftlessmap.__version__)"
 ```
 
-The final command prints the installed version, `2.9.0`.
+The final command prints the installed version, `2.8.1`.
 
 ### 2.5 Launching DriftlessMap
 
@@ -1584,7 +1584,7 @@ Add or Build step.
    entry, depth, tip, angles, roll, probe, regions and recording window, for
    surgery notes.
 
-Since 2.9.0:
+Since 2.8.1:
 
 - **Edit by: Entry and depth** shows the entry on the brain surface instead of
   the tip. Type its AP and ML (its DV follows from the surface) and the depth;

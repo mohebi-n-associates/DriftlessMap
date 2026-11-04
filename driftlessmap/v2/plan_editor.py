@@ -2,7 +2,7 @@
 
 A planned probe is a pose (``probe_plans.ProbePlan``): the tip, the AP and ML
 tilts and the roll. The fields show it, either as the tip or as the entry on
-the brain surface and the depth (since 2.9.0); every change shows its readout
+the brain surface and the depth (since 2.8.1); every change shows its readout
 at once (entry, depth, the regions along the shank, the recording window),
 draws it on the atlas and in the shank view, and the plan is stored and built
 (one undo step) once the change settles. A plan can also be set from two
