@@ -78,9 +78,12 @@ class PlanOverlay:
             colour = (255, 255, 255) if probe.endswith(" (proposal)") \
                 else engine.plan_colours.get(probe, implant.colour if implant is not None
                                              else DEFAULT_COLOUR)
+            model = readout.get("model")
+            if readout.get("hardware") is not None:
+                model = {"type": "hardware", "hardware": readout["hardware"]}
             found.append((probe, tuple(colour),
                           np.asarray(readout["entry_um"]) / atlas.vox_um,
-                          np.asarray(plan.tip_um) / atlas.vox_um, readout.get("model")))
+                          np.asarray(plan.tip_um) / atlas.vox_um, model))
         return found
 
     def refresh(self):
@@ -118,6 +121,9 @@ class PlanOverlay:
                     # The device in its colour, a fiber's ferrule gray.
                     ferrule = model.get("ferrule")
                     body = {k: v for k, v in model.items() if k != "ferrule"}
+                    if model["type"] == "hardware":
+                        # A probe's hardware is gray (2.8.6); its track is drawn above.
+                        body, ferrule = None, model["hardware"]
                     for part, tint in ((body, colour), (ferrule, FERRULE_GRAY)):
                         if not isinstance(part, dict):
                             continue

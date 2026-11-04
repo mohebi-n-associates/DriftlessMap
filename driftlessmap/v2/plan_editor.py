@@ -43,6 +43,7 @@ from ..probe_plans import (
     region_summary,
     tip_to_surface,
 )
+from ..probe_hardware import ALL, SHOWN, shown_parts
 from ..probe_utiles import Probe
 from .shank_view import ShankView
 from .widgets import Card, Disclosure, button, grid_of, hint_label, set_status, status_label
@@ -341,6 +342,25 @@ class PlanEditor(Card):
         more_grid.addWidget(self.angle_box, 0, 1)
         more_grid.addWidget(QLabel("Craniotomy"), 1, 0)
         more_grid.addWidget(self.hole_box, 1, 1)
+        # The probe's hardware (2.8.6): none, the probe itself (shanks and
+        # base), or with its backend (flex, headstage, dovetail); remembered.
+        self.hardware_box = QComboBox()
+        for value, label in SHOWN.items():
+            self.hardware_box.addItem(label, value)
+        self.hardware_box.setToolTip(
+            "What to draw of a planned Neuropixels probe, in gray: nothing, the probe "
+            "(shanks and base), or the probe and its backend (flex cable, connector "
+            "board or headstage, dovetail adapter). Distances between plans always "
+            "include all of it.")
+        stored = str(self.shell.settings.value("plan/hardware", ALL)).lower()
+        shown = shown_parts({"true": True, "false": False}.get(stored, stored))
+        self.hardware_box.setCurrentIndex(self.hardware_box.findData(shown))
+        self.engine.set_probe_hardware_shown(shown)
+        self.hardware_box.currentIndexChanged.connect(
+            lambda _index: self._hardware_toggled(self.hardware_box.currentData()))
+        self.hardware_label = QLabel("Hardware")
+        more_grid.addWidget(self.hardware_label, 3, 0)
+        more_grid.addWidget(self.hardware_box, 3, 1)
         more_grid.addWidget(grid_of([
             self.surface_button,
             self.surgery_button,
@@ -360,6 +380,13 @@ class PlanEditor(Card):
         self.add_row(self.remove_button, None)
         self._steering = _Steering(self)
 
+    def _hardware_toggled(self, shown):
+        self.shell.settings.setValue("plan/hardware", shown)
+        self.engine.set_probe_hardware_shown(shown)
+        plan = self.current()
+        if plan is not None:
+            self._show_readout(plan)
+
     def _keep(self, name, widget):
         setattr(self, name, widget)
         return widget
@@ -375,7 +402,7 @@ class PlanEditor(Card):
             "Give the {} a plan: 1 mm right of Bregma, vertical, in the brain; then move it."
             .format(kind))
         for widget in (self.type_label, self.type_box, self.bank_label, self.bank_box,
-                       self.propose_button):
+                       self.propose_button, self.hardware_box, self.hardware_label):
             widget.setVisible(probe)
         self.roll_label.setVisible(kind != "fiber")
         self.roll.setVisible(kind != "fiber")

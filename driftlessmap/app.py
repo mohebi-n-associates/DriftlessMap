@@ -7301,6 +7301,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
                 obj_3d.setGLOptions("opaque")
             else:
                 obj_3d.setGLOptions("additive")
+            self.show_hardware_of(obj_3d)
             self.object_3d_list.append(obj_3d)
             self.view3d.addItem(self.object_3d_list[-1])
 
@@ -7661,6 +7662,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
                 obj_3d.setGLOptions("opaque")
             else:
                 obj_3d.setGLOptions("additive")
+            self.show_hardware_of(obj_3d)
             self.object_3d_list.append(obj_3d)
             self.view3d.addItem(self.object_3d_list[-1])
 

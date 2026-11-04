@@ -23,10 +23,32 @@ def create_plot_points_in_3d(data_dict):
     return vis_points
 
 
+HARDWARE_GRAY = (0.62, 0.62, 0.66, 0.85)
+
+
 def create_probe_line_in_3d(data_dict):
     pos = np.stack([data_dict['insertion_coords_3d'], data_dict['terminus_coords_3d']], axis=0)
     vis_color = get_object_vis_color(data_dict['vis_color'])
     probe_line = gl.GLLinePlotItem(pos=pos, color=vis_color, width=2, mode='line_strip')
+    # A planned Neuropixels probe's hardware, gray (2.8.6), as children of the
+    # track so they show and hide with it: ``hardware`` the probe itself
+    # (shanks and base), ``backend`` its flex, headstage and dovetail.
+    probe_line.hardware = probe_line.backend = None
+    if isinstance(data_dict.get('hardware'), dict):
+        from .implants import model_mesh
+        from .probe_hardware import is_backend
+
+        boxes = data_dict['hardware'].get('boxes', [])
+        for attr, chosen in (('hardware', [b for b in boxes if not is_backend(b)]),
+                             ('backend', [b for b in boxes if is_backend(b)])):
+            if not chosen:
+                continue
+            vertices, faces = model_mesh({'type': 'boxes', 'boxes': chosen})
+            mesh = gl.GLMeshItem(vertexes=vertices, faces=faces, smooth=False,
+                                 shader='balloon', glOptions='translucent',
+                                 color=HARDWARE_GRAY)
+            mesh.setParentItem(probe_line)
+            setattr(probe_line, attr, mesh)
     return probe_line
 
 

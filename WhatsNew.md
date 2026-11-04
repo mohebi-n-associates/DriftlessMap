@@ -3,6 +3,19 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.8.6
+
+Release, 4 November 2026: probe hardware, as in Pinpoint.
+
+- **A planned Neuropixels probe shows its hardware**: the whole shank, the
+  probe base, the flex cable, the connector board (1.0) or headstage (2.0),
+  and the dovetail adapter, in gray, in 3D and wherever an atlas page cuts
+  them. Sizes come from imec's datasheets and Pinpoint's models.
+- **Collisions above the brain are reported**: distances between plans
+  include the hardware, so bases or adapters that would touch are named.
+- **Hardware** (Surgery and more) shows the probe and its backend, the
+  probe only (shanks and base), or nothing.
+
 ## DriftlessMap 2.8.5
 
 Release, 4 November 2026: plan optical fibers and microprisms, and a start

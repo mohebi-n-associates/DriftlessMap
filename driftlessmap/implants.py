@@ -676,7 +676,7 @@ def _prism_model(specs, outlines, direction, bottom, top, face_axis, voxel_um):
 # -------------------------------------------------------------------- display
 def model_segments(model):
     """Line segments ``(2K, 3)`` drawing a fitted model in 3D."""
-    if len(model_parts(model)) > 1:
+    if len(model_parts(model)) > 1 or model.get("type") == "boxes":
         return np.vstack([model_segments({k: v for k, v in part.items() if k != "ferrule"})
                           for part in model_parts(model)])
     if model["type"] == "cylinder":
@@ -697,8 +697,8 @@ def model_segments(model):
         for k in range(0, 24, 3):
             segments += [top + ring[k], bottom + ring[k]]
         return np.asarray(segments)
-    if model["type"] == "prism":
-        corners = _prism_corners(model)
+    if model["type"] in ("prism", "box"):
+        corners = _prism_corners(model) if model["type"] == "prism" else _box_corners(model)
         edges = [(0, 1), (1, 2), (2, 3), (3, 0), (4, 5), (5, 6), (6, 7), (7, 4),
                  (0, 4), (1, 5), (2, 6), (3, 7)]
         return np.asarray([corners[i] for edge in edges for i in edge])
@@ -716,16 +716,25 @@ def model_segments(model):
 
 def model_parts(model):
     """The model and the parts it carries (a planned fiber's ferrule, 2.8.5)."""
+    if model.get("type") == "boxes":
+        # A planned probe's hardware (2.8.6): each part a box.
+        return [dict(box, type="box") for box in model["boxes"]]
     parts = [model]
     if isinstance(model.get("ferrule"), dict):
         parts.append(model["ferrule"])
     return parts
 
 
+def _box_corners(model):
+    from .probe_hardware import box_corners
+
+    return box_corners(model)
+
+
 def model_mesh(model, segments=32):
     """The model as a closed triangle mesh ``(vertices (N, 3), faces (M, 3))``,
     to draw it filled in 3D (2.8.5); a ferrule is a second closed mesh."""
-    if len(model_parts(model)) > 1:
+    if len(model_parts(model)) > 1 or model.get("type") == "boxes":
         vertices, faces, offset = [], [], 0
         for part in model_parts(model):
             v, f = model_mesh({k: v for k, v in part.items() if k != "ferrule"}, segments)
@@ -754,6 +763,8 @@ def model_mesh(model, segments=32):
         return vertices, np.asarray(faces, dtype=np.int32)
     if model["type"] == "prism":
         corners = _prism_corners(model)
+    elif model["type"] == "box":
+        corners = _box_corners(model)
     else:
         bottom = np.asarray(model["bottom"], float)
         up, face, across = (np.asarray(model[k], float) for k in ("up", "face_normal", "across"))
@@ -792,7 +803,7 @@ def model_section(model, origin, axis_x, axis_y, shape):
     frame (the frame the mapped outlines were made in). Returns None when the
     slice does not cut the model.
     """
-    if len(model_parts(model)) > 1:
+    if len(model_parts(model)) > 1 or model.get("type") == "boxes":
         masks = [model_section({k: v for k, v in part.items() if k != "ferrule"},
                                origin, axis_x, axis_y, shape) for part in model_parts(model)]
         masks = [m for m in masks if m is not None]
@@ -811,6 +822,9 @@ def model_section(model, origin, axis_x, axis_y, shape):
         bottom = np.asarray(model["bottom"], float)
         up, face, across = (np.asarray(model[k], float) for k in ("up", "face_normal", "across"))
         extremes = _prism_corners(model)
+        reach = 0.0
+    elif model["type"] == "box":
+        extremes = _box_corners(model)
         reach = 0.0
     else:
         bottom = np.asarray(model["bottom"], float)
@@ -844,6 +858,11 @@ def model_section(model, origin, axis_x, axis_y, shape):
         along = (points - top) @ axis
         across_ = points - top - along[..., None] * axis
         inside = (along >= 0) & (along <= span) & (np.linalg.norm(across_, axis=-1) <= reach)
+    elif model["type"] == "box":
+        relative = points - np.asarray(model["centre"], float)
+        inside = np.ones(relative.shape[:-1], bool)
+        for axis, half in zip(model["axes"], model["half"]):
+            inside &= np.abs(relative @ np.asarray(axis, float)) <= half
     elif model["type"] == "prism":
         relative = points - bottom
         height, behind = relative @ up, -(relative @ face)

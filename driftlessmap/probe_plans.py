@@ -1104,8 +1104,14 @@ def plan_segments(plan, readout, above_um=CLEARANCE_ABOVE_UM):
         ferrule_top = bottom - direction * specs["ferrule_length_um"]
         return [(bottom, tip, specs["diameter_um"] / 2.0),
                 (ferrule_top, bottom, specs["ferrule_diameter_um"] / 2.0)]
-    return [(top + offset, tip + offset - direction * raised, 0.0)
-            for _name, offset, raised in device_lines(plan, outline=True)]
+    segments = [(top + offset, tip + offset - direction * raised, 0.0)
+                for _name, offset, raised in device_lines(plan, outline=True)]
+    if plan.is_probe:
+        # The base, flex, headstage and dovetail of a Neuropixels probe (2.8.6).
+        from .probe_hardware import hardware_segments
+
+        segments += [(np.asarray(a), np.asarray(b), r) for a, b, r in hardware_segments(plan)]
+    return segments
 
 
 def clearances(planned, above_um=CLEARANCE_ABOVE_UM):
