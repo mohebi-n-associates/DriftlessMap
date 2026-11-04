@@ -50,7 +50,7 @@ acknowledgements are in [THANKS.txt](THANKS.txt).
 
 ## DriftlessMap 2.0
 
-**2.6.3** is the current release. It opens the
+**2.7.0** is the current release. It opens the
 redesigned step-by-step interface by default (Project, Section, Match, Register,
 Annotate, Results); the classic interface is still available with
 `driftlessmap --classic` or from Help > Open the classic interface. See
@@ -67,18 +67,18 @@ and with `pip install "driftlessmap==1.6.1"`.
 ## Installation
 
 DriftlessMap is available as a desktop application for end users and as a
-Python package for developers. The current release is 2.6.3.
+Python package for developers. The current release is 2.7.0.
 
 ### Mode 1: desktop application for end users
 
 No Python or Conda installation is required. Download the asset for your
 computer from [GitHub Releases](https://github.com/mohebi-n-associates/DriftlessMap/releases).
-From the [2.6.3 release](https://github.com/mohebi-n-associates/DriftlessMap/releases/tag/v2.6.3):
+From the [2.7.0 release](https://github.com/mohebi-n-associates/DriftlessMap/releases/tag/v2.7.0):
 
-- **Windows 64-bit:** download `DriftlessMap-2.6.3-Windows-x64.zip`, extract
+- **Windows 64-bit:** download `DriftlessMap-2.7.0-Windows-x64.zip`, extract
   the complete folder, and double-click `DriftlessMap.exe`. Do not move the
   executable out of its extracted folder.
-- **macOS (Apple Silicon):** download `DriftlessMap-2.6.3-macOS-arm64.dmg`,
+- **macOS (Apple Silicon):** download `DriftlessMap-2.7.0-macOS-arm64.dmg`,
   open it, and drag `DriftlessMap.app` to Applications. The application bundle
   includes the DriftlessMap icon and all Python dependencies. Intel Macs are
   not covered by the desktop build; use the Conda/pip installation below.

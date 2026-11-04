@@ -8,7 +8,7 @@ or important workflows change.
 
 ## Project identity
 
-- Current stable release: DriftlessMap 2.6.3 (3 November 2026; 2.4.0 plus
+- Current stable release: DriftlessMap 2.7.0 (3 November 2026; 2.4.0 plus
   fixes and the rat atlas downloads, the first release since 2.0.0, including 2.0.1-2.3.0 and multi-section
   projects). 2.0.0
   (29 October 2026) followed the 2.0.0aN previews and 2.0.0rc1-rc16. The owner released it with the
@@ -66,7 +66,16 @@ or important workflows change.
   `ImageView.volume_img` is a read-only view of the reader's stack, never
   written in place; `progress(done, total, name)` returning False stops between
   sections; `tests/benchmark_tiff_pages.py`); the empty canvas offers
-  three starts (`start_probe_plan`).
+  three starts (`start_probe_plan`; after an atlas is loaded, the Project
+  step's Atlas card and the `probe.plan` command). 2.7.0: New project in the
+  same window (`project.new`, `ProjectSessionMixin.start_new_project`, from
+  the start-up `ProjectSnapshot` kept by `remember_empty_document`; a kept
+  volume atlas stays in memory and gets its frame from
+  `reset_tri_points_atlas`); Steps/Objects buttons at the ends of the view
+  bar (`view.task_column`, `view.inspector`); `v2/channel_strip.ChannelStrip`
+  above the histology image (one brightness slider per channel through
+  `channel_display`); brightness sliders are brighter to the right
+  (`slider_brightness`).
 - `driftlessmap/project_session.py`: `ProjectSessionMixin.project_payload` is the
   shared saved-state collector. `load_project` snapshots the active document and
   restores it on failure, including its original reader, in-memory atlas and undo

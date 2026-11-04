@@ -1,7 +1,7 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 2.6.3**. Section 2 explains how to
-install it; `pip install driftlessmap` installs 2.6.3.
+This manual applies to **DriftlessMap 2.7.0**. Section 2 explains how to
+install it; `pip install driftlessmap` installs 2.7.0.
 
 DriftlessMap - Histological E-data Registration in Brain Space - is a desktop
 application for aligning rodent histology with a reference atlas, reconstructing
@@ -58,6 +58,10 @@ three ways to start:
    implants, probes, cells and other annotations, and Results exports them.
 2. **Plan a probe.** With an atlas alone, plan a track before surgery
    (Section 11 and the [probe tutorials](Tutorial/Probe_Related/1-Important_to_know_before_you_start.md)).
+   Once an atlas is loaded this start screen gives way to the views; **Plan a
+   probe on this atlas…** in the Project step's Atlas card (or "plan a probe"
+   in Ctrl/Cmd+K) then goes to Annotate with a probe ready to mark: an
+   existing probe without points, or a new one (since 2.7.0).
 3. **Continue earlier work.** **Open project…**; it reopens where you left off.
 
 Ctrl/Cmd+K searches every command. The rest of this manual describes each part
@@ -127,7 +131,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-DriftlessMap 2.6.3 requires:
+DriftlessMap 2.7.0 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -146,8 +150,8 @@ page. The macOS DMG (`-macOS-arm64.dmg`) is built for Apple Silicon; on an Intel
 Mac, use the developer installation below.
 The desktop builds include Python and all runtime dependencies. Windows users
 extract the entire ZIP and run `DriftlessMap.exe`; macOS users open the DMG and
-drag `DriftlessMap.app` to Applications. The 2.6.3 downloads are named
-`DriftlessMap-2.6.3-Windows-x64.zip` and `DriftlessMap-2.6.3-macOS-arm64.dmg`.
+drag `DriftlessMap.app` to Applications. The 2.7.0 downloads are named
+`DriftlessMap-2.7.0-Windows-x64.zip` and `DriftlessMap-2.7.0-macOS-arm64.dmg`.
 Release builds are unsigned unless the release notes say otherwise, so the first
 launch may require Windows SmartScreen confirmation or Control-clicking the
 macOS app and choosing **Open**.
@@ -196,7 +200,7 @@ python -m pip --version
 python -c "import driftlessmap; print(driftlessmap.__version__)"
 ```
 
-The final command prints the installed version, `2.6.3`.
+The final command prints the installed version, `2.7.0`.
 
 ### 2.5 Launching DriftlessMap
 
@@ -572,6 +576,11 @@ command and every 1.x menu command by its old name, for example "merge" or
 M measure, V no tool, B region boundaries, Delete remove the selected landmark
 pair) do not fire while you type in a field; Escape stops the current tool.
 
+**Steps** (left end of the view bar) shows or hides the step list and step
+panel; **Objects** (right end) shows or hides the objects, layers and regions
+panel. In a narrow window they show as ◧ and ◨. The View menu's **Show task
+column** and **Show objects and layers** do the same (since 2.7.0).
+
 **Focus** (top right of the view bar), **View > Focus on images** or
 **Ctrl+Shift+F** (Shift+Cmd+F on macOS) hides the step list, the step panel
 and the objects/layers panel so the atlas and section views fill the window;
@@ -699,8 +708,16 @@ identical copy of it from another folder, is allowed. If the loaded atlas's own
 files changed or disappeared after loading, nothing can be compared with
 them, so any replacement is refused (since 2.6.1); restore the files, or save
 and reopen the project, which checks the atlas by its saved checksum. To work with another
-atlas, save the project and start a new one: **File > New window** (Ctrl+N)
-in the 2.0 interface, or start DriftlessMap again.
+atlas, save the project and start a new one: **New project** in the Project
+step's Project file card, or **File > New project** (Ctrl+N, Cmd+N on macOS),
+in the 2.0 interface. It asks to save unsaved work, then whether to keep the
+loaded volume atlas: **Keep the atlas** starts the new project with it, without
+reading it again; **Close the atlas too** returns to the start screen. Every
+section, landmark, mark, object, layer, implant and probe of the old project,
+and its undo history, go; the project file on disk is unchanged, and the new
+project is saved only when you save it, under a new name (since 2.7.0).
+**File > New window** (Ctrl+Shift+N) opens an empty second window instead. In
+the classic interface, start DriftlessMap again.
 
 After loading:
 
@@ -916,7 +933,16 @@ channel's window while keeping its own contrast or brightness, Min, Max and
 Gamma set the same value on each, and Auto and Reset compute each channel's own
 range. The line above the sliders names the adjusted channels, marks hidden ones
 and says whose values are shown when they differ. **Auto all** sets every
-channel.
+channel. Brightness is brighter to the right (before 2.7.0 it ran the other
+way).
+
+Above the section image, a **Brightness** strip has one slider per channel, in
+the channel's colour, so each channel can be brightened while you look at the
+image in any step. A slider moves its channel's display window and keeps its
+contrast, like Brightness in the Section step, and both show the same values.
+**Auto** and **Reset** on the strip set every channel as Auto all and Reset do.
+Hidden channels' sliders are greyed. Click **Brightness** to fold the strip
+away (since 2.7.0).
 
 These controls change the display lookup table. When scientific intensity
 values matter, preserve the original source image and document display

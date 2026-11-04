@@ -3,6 +3,27 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.7.0
+
+Feature release, 3 November 2026.
+
+- **New project in the same window.** New project in the Project step (and
+  File > New project, Ctrl+N) closes the current project, asking to save
+  unsaved work first. You can keep the loaded atlas, which is not read again,
+  or close it too. File > New window moved to Ctrl+Shift+N.
+- **Plan a probe after loading an atlas.** The start screen's Plan a probe
+  went away once an atlas was loaded. The Project step's Atlas card now has
+  Plan a probe on this atlas…, which goes to Annotate with a probe ready to
+  mark.
+- **Brightness per channel above the section image.** A strip above the
+  histology image has one brightness slider per channel, with Auto and Reset.
+  It stays in step with the Section step's controls and is saved with the
+  project.
+- **Show and hide the side panels.** Steps (left of the view bar) and Objects
+  (right) show or hide the side columns one at a time; Focus still hides both.
+- **Fix: Brightness ran backwards.** In the Section step, moving Brightness to
+  the right made the image darker; it now makes it brighter.
+
 ## DriftlessMap 2.6.3
 
 Fix release, 3 November 2026; the last fix from the 2.6.0 review.

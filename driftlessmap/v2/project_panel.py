@@ -54,6 +54,13 @@ class ProjectPanel(StepPanel):
         tools.setMenu(menu)
         self.atlas_card.add_row(
             button("Load atlas…", lambda: shell.run("atlas.load"), primary=True), tools, None)
+        # Probe planning needs only the atlas (review: it was reachable only
+        # from the start screen, which goes once an atlas is loaded).
+        self.plan_probe = button(
+            "Plan a probe on this atlas…", lambda: shell.run("probe.plan"),
+            tooltip="Plan a probe track on the atlas before surgery (no section needed); "
+                    "opens Annotate with a probe to mark")
+        self.atlas_card.add_row(self.gate(self.plan_probe, self._needs_volume_atlas), None)
 
         self.section_card = self.add(Card(
             "Sections",
@@ -91,14 +98,21 @@ class ProjectPanel(StepPanel):
 
         files = self.add(Card("Project file"))
         self.file_label = files.add(hint_label(""))
-        files.add_row(button("Open…", lambda: shell.run("project.open")),
-                      button("Save…", lambda: shell.run("project.save"), primary=True),
+        files.add_row(button("New project", lambda: shell.run("project.new"),
+                             tooltip="Close this project and start an empty one in this "
+                                     "window, keeping the atlas if you choose"),
+                      button("Open…", lambda: shell.run("project.open")), None)
+        files.add_row(button("Save…", lambda: shell.run("project.save"), primary=True),
                       button("Save portable copy…", lambda: shell.run("project.save_portable")),
                       None)
         files.add(hint_label(
             "Every section's image is saved in the project. A portable copy also "
             "contains each section's original image file. Neither copy contains the "
             "processed volume atlas, which is linked and verified."))
+
+    def _needs_volume_atlas(self):
+        return None if self.engine.atlas_view.atlas_data is not None else \
+            "Load a volume atlas first."
 
     # ------------------------------------------------------------ sections
     def selected_section(self):

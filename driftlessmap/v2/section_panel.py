@@ -27,6 +27,7 @@ from PyQt6.QtWidgets import (
 from .. import registration_input
 from ..registration_input import RegistrationInput
 from . import channel_display as display
+from .channel_strip import brightness_slider, slider_brightness
 from .widgets import Card, Disclosure, StepPanel, button, grid_of, hint_label, set_status, status_label
 
 PRESET_COLOURS = [
@@ -144,6 +145,8 @@ class SectionPanel(StepPanel):
         grid.addWidget(self.adjust_title, 0, 0, 1, 4)
         self.brightness = QSlider(Qt.Orientation.Horizontal)
         self.contrast = QSlider(Qt.Orientation.Horizontal)
+        # Right is brighter on both (it ran the other way before 2.7.0).
+        self.brightness.setToolTip("Right is brighter (display only)")
         for kind, slider in (("brightness", self.brightness), ("contrast", self.contrast)):
             slider.setRange(0, 1000)
             slider.valueChanged.connect(lambda _value, k=kind: self._bc_changed(k))
@@ -424,7 +427,7 @@ class SectionPanel(StepPanel):
         self.black.setValue(int(round(black)))
         self.white.setValue(int(round(white)))
         self.gamma.setValue(gamma)
-        self.brightness.setValue(int(round(brightness * 10)))
+        self.brightness.setValue(brightness_slider(brightness))
         self.contrast.setValue(int(round(contrast * 10)))
         self._updating = False
 
@@ -467,7 +470,7 @@ class SectionPanel(StepPanel):
             black, white, _gamma = display.channel_levels(view, index)
             brightness, contrast = display.brightness_contrast(black, white, limit)
             if kind == "brightness":
-                brightness = self.brightness.value() / 10.0
+                brightness = slider_brightness(self.brightness.value())
             else:
                 contrast = self.contrast.value() / 10.0
             return display.window_from_brightness_contrast(brightness, contrast, limit) + (None,)

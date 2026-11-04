@@ -355,6 +355,311 @@ class V2ShellTests(unittest.TestCase):
             window.run("view.focus")
             self.assertEqual(shown(), (True, True))
 
+    def push(self, root, text):
+        """Click the visible push button labelled ``text`` inside ``root``."""
+        found = [b for b in root.findChildren(QPushButton) if b.text() == text]
+        self.assertEqual(len(found), 1, text)
+        self.assertTrue(found[0].isEnabled(), found[0].toolTip())
+        found[0].click()
+        self.application.processEvents()
+
+    @staticmethod
+    def document_fields(engine):
+        """A digest of each saved field, the section identity left out (each
+        document gets a new one)."""
+        from driftlessmap.state_digest import state_digest
+
+        payload = engine.project_payload()
+        for key in ("created_at", "saved_at", "software", "num_windows", "section_id",
+                    "sections", "interface_state", "atlas_provenance"):
+            payload.pop(key, None)
+        return {key: state_digest(value) for key, value in payload.items()}
+
+    def answer_new_project(self, window, text):
+        """Click ``text`` in the New project question once it is open."""
+        from PyQt6.QtCore import QTimer
+
+        def answer():
+            box = getattr(window, "new_project_box", None)
+            if box is None or not box.isVisible():
+                QTimer.singleShot(20, answer)   # not open yet
+                return
+            [choice] = [b for b in box.buttons() if b.text().replace("&", "") == text]
+            choice.click()
+
+        QTimer.singleShot(0, answer)
+
+    @isolated_gui_test
+    def test_new_project_from_the_project_step_keeps_or_closes_the_atlas(self):
+        import cv2
+        from unittest.mock import patch
+
+        from PyQt6.QtWidgets import QMessageBox
+
+        from driftlessmap import file_dialogs
+        from tests.atlas_fixture import make_processed_atlas
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            atlas = str(make_processed_atlas(root / "atlas"))
+            # Ground truth: a fresh window with only this atlas loaded.
+            fresh = self.make_window(folder)
+            self.assertTrue(fresh.engine.load_volume_atlas(atlas))
+            fresh_fields = self.document_fields(fresh.engine)
+
+            window = self.make_window(folder)
+            engine = window.engine
+            self.assertTrue(engine.load_volume_atlas(atlas))
+            volume = engine.atlas_view.atlas_data
+            fiber = engine.add_implant("fiber", specs={"diameter_um": 100})
+            for name, value in (("pfc-1.png", 200), ("pfc-2.png", 120)):
+                cv2.imwrite(str(root / name), np.full((32, 24, 3), value, np.uint8))
+                with patch.object(file_dialogs, "get_open_file_name",
+                                  return_value=(str(root / name), "")):
+                    engine.load_image()
+                engine.atlas_tri_inside_data[:] = [[1.0, 1.0], [5.0, 1.0], [3.0, 5.0]]
+                engine.histo_tri_inside_data[:] = [[2.0, 2.0], [6.0, 2.0], [4.0, 6.0]]
+                engine.set_implant_outline(fiber.implant_id, [[10.0, 4.0], [14.0, 4.0],
+                                                              [14.0, 20.0], [10.0, 20.0]])
+                self.assertTrue(engine.map_implant(fiber.implant_id)[0])
+            self.assertTrue(engine.build_implant(fiber.implant_id)[0])
+            saved = str(root / "work.dmap")
+            self.assertTrue(engine.save_project_called(path=saved))
+            window.mark_saved()
+            old_section = engine.section_id
+            provenance = engine.atlas_provenance
+            self.assertIsNotNone(provenance)
+            window.go_to("annotate")
+            window.refresh()
+            self.assertTrue(window.is_dirty() is False)
+            engine.working_img_data["img-cells"] = [[3.0, 3.0]]   # unsaved work
+            window._dirty_check_pending = True
+            window.refresh()
+
+            panel = window.panels["project"]
+            window.go_to("project")
+            # Cancel at the unsaved-work question: nothing changes.
+            with patch("driftlessmap.v2.shell.QMessageBox.question",
+                       return_value=QMessageBox.StandardButton.Cancel):
+                self.push(panel, "New project")
+            self.assertEqual(len(engine.sections), 2)
+            # Discard, then Cancel the atlas question: nothing changes either.
+            self.answer_new_project(window, "Cancel")
+            with patch("driftlessmap.v2.shell.QMessageBox.question",
+                       return_value=QMessageBox.StandardButton.Discard):
+                self.push(panel, "New project")
+            self.assertEqual(len(engine.sections), 2)
+            self.assertEqual(engine.current_project_path, saved)
+
+            self.answer_new_project(window, "Keep the atlas")
+            with patch("driftlessmap.v2.shell.QMessageBox.question",
+                       return_value=QMessageBox.StandardButton.Discard):
+                self.push(panel, "New project")
+            window.refresh()
+            # The same volume in memory (not read again), nothing else kept.
+            self.assertIs(engine.atlas_view.atlas_data, volume)
+            self.assertIsNone(engine.image_view.current_img)
+            self.assertEqual(len(engine.sections), 1)
+            self.assertNotEqual(engine.section_id, old_section)
+            self.assertEqual(engine.mapping_ledger.records(), [])
+            self.assertEqual(engine.implants.implants(), [])
+            self.assertEqual(engine.object_ctrl.obj_name, [])
+            self.assertEqual(engine.undo_history.labels(), ([], []))
+            self.assertIsNone(engine.current_project_path)
+            self.assertFalse(window.is_dirty())
+            self.assertTrue(window.windowTitle().startswith("Untitled"))
+            self.assertIs(window.stack.currentWidget(), panel)
+            fields = self.document_fields(engine)
+            self.assertEqual([key for key in fresh_fields if fields.get(key) != fresh_fields[key]],
+                             [])
+            self.assertEqual(set(fields), set(fresh_fields))
+            # The atlas's verified identity is kept with it.
+            self.assertEqual(engine.atlas_provenance, provenance)
+            # Save asks where; the saved file still holds the earlier work.
+            with patch.object(engine, "save_project_called", return_value=False) as ask:
+                window.run("project.save")
+                ask.assert_called_once_with()
+            # Work continues normally: a section can be added and saved.
+            with patch.object(file_dialogs, "get_open_file_name",
+                              return_value=(str(root / "pfc-1.png"), "")):
+                engine.load_image()
+            self.assertEqual(len(engine.sections), 1)
+            self.assertTrue(engine.save_project_called(path=str(root / "new.dmap")))
+
+            # Close the atlas too: the start screen returns.
+            window.mark_saved()
+            self.answer_new_project(window, "Close the atlas too")
+            self.push(panel, "New project")
+            window.refresh()
+            self.assertIsNone(engine.atlas_view.atlas_data)
+            self.assertIsNone(engine.image_view.current_img)
+            self.assertTrue(window.empty_canvas.isVisibleTo(window))
+            self.assertIn("already", (lambda: (window.run("project.new"),
+                                               window.message_label.text())[1])())
+            self.assertEqual(window.registry.get("project.new").shortcut, "Ctrl+N")
+
+            # The earlier project still opens with its work.
+            with patch.object(file_dialogs, "get_open_file_name", return_value=(saved, "")):
+                window.run("project.open")
+            self.assertEqual(len(engine.sections), 2)
+            self.assertEqual(len(engine.implants.implants()), 1)
+
+    @isolated_gui_test
+    def test_side_columns_show_and_hide_from_beside_the_images(self):
+        with tempfile.TemporaryDirectory() as folder:
+            window = self.make_window(folder)
+            window.resize(1500, 900)
+            window.show()
+            self.application.processEvents()
+
+            def shown():
+                return (window.task_column.isVisibleTo(window),
+                        window.inspector_column.isVisibleTo(window))
+
+            window.task_toggle.click()
+            self.assertEqual(shown(), (False, True))
+            self.assertFalse(window.task_toggle.isChecked())
+            self.assertFalse(window.toggle_task_item.isChecked())
+            self.assertFalse(window.focus_button.isChecked())
+            window.inspector_toggle.click()
+            self.assertEqual(shown(), (False, False))
+            self.assertTrue(window.focus_button.isChecked())
+            window.task_toggle.click()
+            self.assertEqual(shown(), (True, False))
+            self.assertTrue(window.task_toggle.isChecked())
+            # The View menu and the buttons agree, both ways.
+            window.toggle_inspector_item.setChecked(True)
+            self.assertTrue(window.inspector_toggle.isChecked())
+            self.assertEqual(shown(), (True, True))
+            window.run("view.focus")
+            self.assertFalse(window.task_toggle.isChecked())
+            self.assertFalse(window.inspector_toggle.isChecked())
+            window.run("view.task_column")
+            self.assertEqual(shown(), (True, False))
+            window.run("view.inspector")
+            self.assertEqual(shown(), (True, True))
+
+    @isolated_gui_test
+    def test_brightness_per_channel_above_the_section_image(self):
+        import cv2
+        from unittest.mock import patch
+
+        from driftlessmap import file_dialogs
+        from driftlessmap.v2 import channel_display as display
+        from tests.atlas_fixture import make_processed_atlas
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window = self.make_window(folder)
+            engine = window.engine
+            self.assertTrue(engine.load_volume_atlas(str(make_processed_atlas(root / "atlas"))))
+            image = np.zeros((40, 30, 3), np.uint8)
+            image[..., 0] = np.arange(30, dtype=np.uint8)[None, :] * 8
+            image[..., 1] = 100
+            image[..., 2] = 200
+            cv2.imwrite(str(root / "section.png"), image)
+            with patch.object(file_dialogs, "get_open_file_name",
+                              return_value=(str(root / "section.png"), "")):
+                engine.load_image()
+            window.go_to("section")
+            window.refresh()
+            view = engine.image_view
+            strip = window.channel_strip
+            self.assertTrue(strip.isVisibleTo(window))
+            self.assertEqual(len(strip.rows), 3)
+            # The strip sits above the image in the histology view.
+            grid = engine.image_view_layout
+            self.assertEqual(grid.getItemPosition(grid.indexOf(strip))[0], 0)
+            self.assertEqual(grid.getItemPosition(grid.indexOf(view.img_stacks))[0], 1)
+            pixels = view.current_img.copy()
+            before = [display.channel_levels(view, i) for i in range(3)]
+            self.assertTrue(window.is_dirty() is not None)
+            window.mark_saved()
+
+            # Dragging one channel's slider right brightens only that channel.
+            slider = strip.rows[1]["slider"]
+            slider.setValue(slider.value() + 200)
+            after = [display.channel_levels(view, i) for i in range(3)]
+            self.assertLess(after[1][1], before[1][1])       # white point lower
+            self.assertLess(after[1][0], before[1][0])
+            self.assertAlmostEqual(after[1][1] - after[1][0], before[1][1] - before[1][0],
+                                   delta=2)                    # contrast kept
+            self.assertEqual(after[0], before[0])
+            self.assertEqual(after[2], before[2])
+            np.testing.assert_array_equal(view.current_img, pixels)
+            self.assertTrue(window.is_dirty())
+            # The Section step shows the new range of that channel.
+            section = window.panels["section"]
+            self.assertEqual(section._rows[1]["span"].text().split()[0],
+                             "{:.0f}".format(after[1][0]))
+
+            # The Section step's Brightness slider brightens to the right too.
+            section._select(2)
+            low, high, _gamma = display.channel_levels(view, 2)
+            section.brightness.setValue(section.brightness.value() + 100)
+            window.refresh()
+            new_low, new_high, _gamma = display.channel_levels(view, 2)
+            self.assertLess(new_high, high)
+            self.assertEqual(strip.rows[2]["slider"].value(), section.brightness.value())
+
+            # Auto and Reset act on every channel.
+            strip.auto_button.click()
+            for index in range(3):
+                self.assertEqual(display.channel_levels(view, index)[:2],
+                                 display.auto_levels(view, index))
+            strip.reset_button.click()
+            for index in range(3):
+                self.assertEqual(display.channel_levels(view, index),
+                                 display.reset_levels(view, index))
+            np.testing.assert_array_equal(view.current_img, pixels)
+
+            # Saved and reopened with the project.
+            slider.setValue(slider.value() + 150)
+            levels = display.channel_levels(view, 1)
+            path = str(root / "bright.dmap")
+            self.assertTrue(engine.save_project_called(path=path))
+            window.mark_saved()
+            from PyQt6.QtWidgets import QMessageBox
+
+            with patch.object(file_dialogs, "get_open_file_name", return_value=(path, "")), \
+                    patch("driftlessmap.app.QMessageBox.question",
+                          return_value=QMessageBox.StandardButton.No):
+                window.run("project.open")
+            window.refresh()
+            self.assertEqual(display.channel_levels(engine.image_view, 1), levels)
+            self.assertEqual(strip.rows[1]["slider"].value(), slider.value())
+
+    @isolated_gui_test
+    def test_plan_a_probe_is_offered_once_an_atlas_is_loaded(self):
+        from tests.atlas_fixture import make_processed_atlas
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window = self.make_window(folder)
+            engine = window.engine
+            panel = window.panels["project"]
+            window.go_to("project")
+            window.refresh()
+            self.assertFalse(panel.plan_probe.isEnabled())
+            self.assertIn("atlas", window.registry.run("probe.plan"))
+            self.assertTrue(engine.load_volume_atlas(str(make_processed_atlas(root / "atlas"))))
+            window.refresh()
+            # The start screen (with its Plan a probe) is gone; the Project
+            # step offers it instead.
+            self.assertFalse(window.empty_canvas.isVisibleTo(window))
+            self.push(panel, "Plan a probe on this atlas…")
+            self.assertIs(window.stack.currentWidget(), window.panels["annotate"])
+            card = window.panels["annotate"].implants
+            self.assertEqual(card.probe_card.book.names(), ["Probe 1"])
+            self.assertEqual(card.probe_card.probe, "Probe 1")
+            self.assertIn("Mark track", window.message_label.text())
+            # Again: the same unplanned probe, not a second one.
+            window.go_to("project")
+            self.push(panel, "Plan a probe on this atlas…")
+            self.assertEqual(card.probe_card.book.names(), ["Probe 1"])
+            self.assertIn("Plan a probe on the atlas",
+                          [c.name for c in window.registry.search("probe")])
+
     @isolated_gui_test
     def test_the_sections_card_adds_opens_renames_and_removes_sections(self):
         import cv2
@@ -457,11 +762,11 @@ class V2ShellTests(unittest.TestCase):
             self.assertEqual([row["select"].isChecked() for row in panel._rows],
                              [False, True, False])
             before = levels()
-            panel.brightness.setValue(700)
+            panel.brightness.setValue(700)          # right of centre: brighter
             after = levels()
             self.assertEqual(after[0], before[0])
             self.assertEqual(after[2], before[2])
-            self.assertGreater(after[1][0], before[1][0])
+            self.assertLess(after[1][1], before[1][1])
 
             # Ticking Adjust on several rows changes all of them together.
             panel._rows[0]["select"].setChecked(True)
