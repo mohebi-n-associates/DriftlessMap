@@ -1253,6 +1253,48 @@ class V2ShellTests(unittest.TestCase):
             self.assertEqual(engine.registration_review_state(), "reviewed")
 
     @isolated_gui_test
+    def test_add_sections_shows_progress_and_stops_between_pages(self):
+        # Review F7 of 2.6.0: batch progress and a safe stop, through the menu.
+        import tifffile
+        from unittest.mock import patch
+
+        from PyQt6.QtWidgets import QMessageBox, QProgressDialog
+
+        from driftlessmap import file_dialogs
+        from tests.atlas_fixture import make_processed_atlas
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window = self.make_window(folder)
+            engine = window.engine
+            self.assertTrue(engine.load_volume_atlas(str(make_processed_atlas(root / "atlas"))))
+            path = root / "stack.tif"
+            stack = np.stack([np.full((32, 24), 10 * (n + 1), np.uint8) for n in range(8)])
+            tifffile.imwrite(path, stack, metadata={"axes": "ZYX"}, photometric="minisblack")
+            labels = []
+
+            def each_page(box):
+                return next(b for b in box.buttons() if b.text() == "Each page a section")
+
+            def stop_after_three(dialog):
+                labels.append(dialog.labelText())
+                return len(engine.sections) >= 3        # the user presses Stop
+
+            with patch.object(file_dialogs, "get_open_file_names",
+                              return_value=([str(path)], "")), \
+                    patch.object(QMessageBox, "exec", lambda box: 0), \
+                    patch.object(QMessageBox, "clickedButton", each_page), \
+                    patch.object(QProgressDialog, "wasCanceled", stop_after_three):
+                window.run("section.load")
+            self.assertEqual(engine.sections.names(),
+                             ["stack.tif · page {}".format(n) for n in (1, 2, 3)])
+            self.assertIn("Adding section 3 of 8: stack.tif · page 3", labels)
+            self.assertEqual(float(engine.image_view.current_img.mean()), 30.0)
+            self.assertIsNone(window.add_sections_progress)
+            self.assertIn("Stopped after 3 sections", "\n".join(
+                entry[2] for entry in window.activity))
+
+    @isolated_gui_test
     def test_channel_columns_tick_all_or_none_and_colours_are_named(self):
         import tifffile
 

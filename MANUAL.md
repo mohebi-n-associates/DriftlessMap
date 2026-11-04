@@ -1,7 +1,7 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 2.6.2**. Section 2 explains how to
-install it; `pip install driftlessmap` installs 2.6.2.
+This manual applies to **DriftlessMap 2.6.3**. Section 2 explains how to
+install it; `pip install driftlessmap` installs 2.6.3.
 
 DriftlessMap - Histological E-data Registration in Brain Space - is a desktop
 application for aligning rodent histology with a reference atlas, reconstructing
@@ -127,7 +127,7 @@ purposes. See [Saving, loading, and exporting](#18-saving-loading-and-exporting)
 
 ### 2.1 Requirements
 
-DriftlessMap 2.6.2 requires:
+DriftlessMap 2.6.3 requires:
 
 - A 64-bit operating system and 64-bit Python 3.10 or newer.
 - Python 3.10-3.14 for the core application.
@@ -146,8 +146,8 @@ page. The macOS DMG (`-macOS-arm64.dmg`) is built for Apple Silicon; on an Intel
 Mac, use the developer installation below.
 The desktop builds include Python and all runtime dependencies. Windows users
 extract the entire ZIP and run `DriftlessMap.exe`; macOS users open the DMG and
-drag `DriftlessMap.app` to Applications. The 2.6.2 downloads are named
-`DriftlessMap-2.6.2-Windows-x64.zip` and `DriftlessMap-2.6.2-macOS-arm64.dmg`.
+drag `DriftlessMap.app` to Applications. The 2.6.3 downloads are named
+`DriftlessMap-2.6.3-Windows-x64.zip` and `DriftlessMap-2.6.3-macOS-arm64.dmg`.
 Release builds are unsigned unless the release notes say otherwise, so the first
 launch may require Windows SmartScreen confirmation or Control-clicking the
 macOS app and choosing **Open**.
@@ -196,7 +196,7 @@ python -m pip --version
 python -c "import driftlessmap; print(driftlessmap.__version__)"
 ```
 
-The final command prints the installed version, `2.6.2`.
+The final command prints the installed version, `2.6.3`.
 
 ### 2.5 Launching DriftlessMap
 
@@ -972,7 +972,11 @@ and keeps the open one. Since 2.6.0 you can choose several files at once; they
 are added in natural name order (s1, s2, s10). If one is a TIFF with several
 pages, you are asked whether each page should be its own section (named
 *stack.tif · page 2*, with its own landmarks, review and mappings) or the file
-one section whose page you choose in the Section step. Each section has its own image (after rotations, flips
+one section whose page you choose in the Section step. A stack's pages are read
+once for all its sections, and a progress window names each section as it is
+added; **Stop after this section** ends the batch with the sections added so
+far (since 2.6.3). If the file changes while its pages are added, the rest are
+not added. Each section has its own image (after rotations, flips
 and crops), display and registration channels, pixel size, landmarks and mesh,
 review, the atlas plane, page and tilt it was matched to, its marks and layers,
 and its unmapped implant outlines. The atlas, objects, mapping records,

@@ -275,7 +275,11 @@ class ImageView(QObject):
         if self.image_file.n_pages > 1:
             self.page_ctrl.set_max(self.image_file.n_pages - 1)
             self.page_ctrl.setVisible(True)
-            self.volume_img = copy.deepcopy(self.image_file.data['scene 0'])
+            # A read-only view, not a copy: page sections of one TIFF share
+            # its decoded stack (review F7 of 2.6.0), and every edit of the
+            # stack (flips, rotations) makes a new array.
+            self.volume_img = np.asarray(self.image_file.data['scene 0']).view()
+            self.volume_img.flags.writeable = False
             init_page_number = int(0.5 * self.image_file.n_pages)
             self.page_ctrl.set_val(init_page_number)
             temp_data = self.volume_img[init_page_number, :, :].copy()

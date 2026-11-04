@@ -1,7 +1,7 @@
 # Resolution of the 2.6.0 follow-up review
 
 Each finding is fixed in its own release, in the order the review recommends.
-Releases are merged to `main`; none has been published yet.
+All seven are fixed in 2.6.1-2.6.3, merged to `main`; none has been published yet.
 
 | ID | Resolution | Release |
 | --- | --- | --- |
@@ -11,7 +11,7 @@ Releases are merged to `main`; none has been published yet.
 | F4 | The repaired object stays selected (by its id) through every repair step and section switch. | 2.6.2 |
 | F5 | Repair remaps each changed section once, in order (naming the next and the number left), then builds once; a missing origin no longer hides a changed section. | 2.6.2 |
 | F6 | The Mark review complete command shares the checklist gate. | 2.6.2 |
-| F7 | A TIFF stack is read once when its pages become sections, with a page-read count and a large-stack benchmark. | 2.6.3 (planned) |
+| F7 | A TIFF stack is decoded once for all its page sections, which share it read-only; progress and Stop between sections. Benchmark (60 × 2048², 480 MiB): 60 → 1 decodes, 11.4 → 5.0 s, traced peak 1.8 → 0.95 GiB (`tests/benchmark_tiff_pages.py`, `release_validation.md`). | 2.6.3 |
 
 The review's probes (`evidence/probe_followup.py`) after 2.6.1: the atlas
 case refuses the reload (and export refuses the changed files); the legacy

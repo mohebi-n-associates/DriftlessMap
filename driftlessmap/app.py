@@ -7603,10 +7603,11 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
                 self.statusbar.showMessage("No new image file is selected.")
             return
 
-    def add_section_from_file(self, path, page=None):
+    def add_section_from_file(self, path, page=None, tiff_reader=None):
         """Load ``path`` as a new section (the open one is kept); with
         ``page``, show that page of a multi-page file and name the section
-        after it. Returns whether it was added."""
+        after it. ``tiff_reader``: this TIFF already read (no new decode).
+        Returns whether it was added."""
         image_file_type = os.path.splitext(path)[1].lower()
         history_note = self.history_cleared_note()
         try:
@@ -7615,7 +7616,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
             self.print_message("The open section could not be kept ({}); no image was "
                                "loaded.".format(exc), self.error_message_color)
             return False
-        if not self.load_single_image_file(path, image_file_type):
+        if not self.load_single_image_file(path, image_file_type, tiff_reader=tiff_reader):
             return False
         self.current_img_path = path
         self._loaded_histology_signature = path_stat_signature(self.current_img_path)
@@ -7640,26 +7641,59 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
             self.print_message(history_note.strip(), self.reminder_color)
         return True
 
-    def add_sections(self, paths, pages_as_sections=False):
+    def add_sections(self, paths, pages_as_sections=False, progress=None):
         """Add each file as a section, in natural name order; with
         ``pages_as_sections`` each page of a multi-page TIFF becomes its own
-        section. Returns the number added; stops at the first failure."""
+        section. Returns the number added; stops at the first failure.
+
+        A TIFF's pages are decoded once: every page section is made from the
+        reader of the first (review F7 of 2.6.0), as long as the file is
+        unchanged. ``progress(done, total, name)`` is called before each
+        section is made (``total`` counts the pages once the file is read);
+        when it returns False, no further section is added.
+        """
         added = 0
-        for path in natsorted(paths, key=lambda p: os.path.basename(p)):
+        paths = natsorted(paths, key=lambda p: os.path.basename(p))
+        total = len(paths)
+
+        def stopped(name):
+            return progress is not None and progress(added, total, name) is False
+
+        def stop_message():
+            self.print_message("Stopped after {} section{}.".format(
+                added, "" if added == 1 else "s"), self.reminder_color)
+
+        for path in paths:
+            if stopped(os.path.basename(path)):
+                stop_message()
+                return added
             if not self.add_section_from_file(path):
                 self.print_message("Added {} section(s); {} could not be added.".format(
                     added, os.path.basename(path)), self.error_message_color)
                 return added
             added += 1
-            pages = int(getattr(self.image_view.image_file, "n_pages", 1) or 1)
+            reader = self.image_view.image_file
+            pages = int(getattr(reader, "n_pages", 1) or 1)
             if not pages_as_sections or pages < 2:
                 continue
+            total += pages - 1
+            signature = self._loaded_histology_signature
             # The first section shows page 1 (a file may open on another page).
             if self.image_view.display_img_index != 0:
                 self.image_view.page_ctrl.page_slider.setValue(0)
             self.rename_section(self.section_id, "{} · page 1".format(os.path.basename(path)))
             for page in range(1, pages):
-                if not self.add_section_from_file(path, page):
+                name = "{} · page {}".format(os.path.basename(path), page + 1)
+                if stopped(name):
+                    stop_message()
+                    return added
+                if path_stat_signature(path) != signature:
+                    self.print_message("Added {} section(s); {} changed while its pages were "
+                                       "added, so page {} and later were not.".format(
+                                           added, os.path.basename(path), page + 1),
+                                       self.error_message_color)
+                    return added
+                if not self.add_section_from_file(path, page, tiff_reader=reader):
                     self.print_message("Added {} section(s); page {} of {} could not be "
                                        "added.".format(added, page + 1, os.path.basename(path)),
                                        self.error_message_color)
@@ -7712,8 +7746,12 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
                                self.error_message_color)
 
     def load_single_image_file(
-        self, image_file_path, image_file_type, scene_index=None, planes=None, scale=None
+        self, image_file_path, image_file_type, scene_index=None, planes=None, scale=None,
+        tiff_reader=None,
     ):
+        """Load an image file as the open section's image. ``tiff_reader``
+        (TIFF only) is a reader of this file already read, used instead of
+        decoding the file again (see :meth:`add_sections`)."""
         with pg.BusyCursor():
             if image_file_type == ".czi":
                 try:
@@ -7756,7 +7794,8 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, SectionsMixin, QMain
                         self.tool_box.cell_count_val_list[i + 1].setVisible(True)
             elif image_file_type in (".tif", ".tiff"):
                 try:
-                    image_file = TIFFReader(image_file_path, planes=planes)
+                    image_file = tiff_reader.shared() if tiff_reader is not None else \
+                        TIFFReader(image_file_path, planes=planes)
                     scale = _valid_read_scale(scale)
                     if image_file.error_index == 0 and image_file.has_levels and scale:
                         image_file.read_data(scale, scene_index=0)
