@@ -1,4 +1,4 @@
-## 2.9.3 — unpublished
+## 2.9.3 — 5 November 2026
 
 - Fix Undo after a pencil, eraser, lasso or magic wand stroke: it now takes back
   point edits and mapping steps too, newest first, instead of stopping.
@@ -9,7 +9,7 @@
 - Undoing a stroke can no longer be silently reversed when a layer's last point
   is removed.
 
-## 2.9.2 — unpublished
+## 2.9.2 — not released separately (published with 2.9.3)
 
 - Add a visible top Undo button; Ctrl/Cmd+Z walks backward through retained
   annotation, mapping, build and plan steps; Ctrl/Cmd+Shift+Z redoes.

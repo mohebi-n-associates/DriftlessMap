@@ -8,8 +8,9 @@ or important workflows change.
 
 ## Project identity
 
-- Source version: **2.9.3, unpublished** (fixes to 2.9.2's Undo). Do not tag or publish this version
-  without a new owner instruction. Current published release: DriftlessMap 2.9.0 (5 November 2026; planning services,
+- Source version: **2.9.3**. Current published release: DriftlessMap 2.9.3
+  (5 November 2026; multi-step Undo from 2.9.2 with its fixes, and
+  document-owned object state). 2.9.0 (5 November 2026; planning services,
   solid clearance, responsive jobs and direct pyramid loading). 2.8.8
   (4 November 2026; Space out). 2.8.7
   (a prism's tip at its imaging face's bottom left corner). 2.8.6 (4 November 2026; probe planning,
