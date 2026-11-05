@@ -15,6 +15,8 @@ publication or desktop build dispatch is part of this change.
 - Optional obj_id and obj_count payload fields preserve object identities and
   allocation gaps through save/reopen and undo. Old payloads and invalid identity
   metadata retain generated identities. The archive/schema versions are unchanged.
+  Unchanged rebuilds retain their original IDs/counter and do not add an undo
+  step; identity bookkeeping is excluded from scientific change signatures.
   These are document-scoped object identities, not a completed migration of named
   probe ownership to UUIDs.
 - Export-all orchestration is extracted from app.py into export_workflow.py and

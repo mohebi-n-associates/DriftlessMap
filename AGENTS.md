@@ -500,6 +500,8 @@ or important workflows change.
   ObjectControl's old attributes delegate to it; project collection and history
   read the model. Optional obj_id/obj_count payload fields preserve identities;
   legacy/invalid IDs keep generated identities. Arrays are borrowed in payloads.
+  Transaction signatures exclude identity bookkeeping; unchanged rebuilds restore
+  their original IDs/counter so they neither add an undo step nor dirty the model.
   `export_workflow.export_all_results` owns export orchestration through the
   engine's application operations; the main-window method is an adapter.
   History pack/unpack deduplicate array identity within each call, never across

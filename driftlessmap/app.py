@@ -4634,7 +4634,8 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
     def _transaction_signature(self):
         """Identify changed content, including rebuilding an object under the same name."""
         state = self._transaction_state(copy_state=False)
-        state["objects"].pop("current_obj_index", None)
+        for key in ("current_obj_index", "obj_id", "obj_count"):
+            state["objects"].pop(key, None)
         return state_digest(state)
 
     @contextmanager
@@ -4650,6 +4651,8 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
         if not self._flushing_plans:
             # A staged plan edit is its own step, before this one.
             self.flush_plan_edits()
+        identities = {"obj_id": list(self.document.objects.obj_id),
+                      "obj_count": self.document.objects.obj_count}
         before = self._transaction_signature()
         transaction = self.undo_history.prepare(label, self._transaction_state(copy_state=False))
         if transaction is None:
@@ -4676,6 +4679,11 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
             self.action_list = []
             self.action_id = 0
             self.sync_mapping_undo_actions()
+
+        else:
+            # Rebuilding identical content is not a new scientific action.
+            # Keep identities too, rather than dirtying the saved document.
+            self.object_ctrl.restore_identity(identities)
 
     def sync_mapping_undo_actions(self):
         """Name the next undo and redo step in the Edit menu."""
@@ -4716,6 +4724,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
         o.current_obj_index = None
         if state["objects"]["obj_name"]:
             o.set_obj_data(state["objects"])
+        o.restore_identity(state["objects"])
         self.mapping_ledger, _problems = MappingLedger.from_list(state["records"])
         self.atlas_mark_origin = state["atlas_mark_origin"]
         self.editing_units = set(state["editing_units"])

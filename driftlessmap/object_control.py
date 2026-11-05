@@ -1840,6 +1840,11 @@ class ObjectControl(QObject):
     def get_obj_data(self):
         return self.state.payload()
 
+    def restore_identity(self, data):
+        if self.state.restore_identity(data):
+            for item, identity in zip(self.obj_list, self.obj_id):
+                item.id = identity
+
     def set_obj_data(self, data):
         saved_modes = data.get("obj_drawing_mode")
         derivations = data.get("obj_derivation")
@@ -1863,9 +1868,7 @@ class ObjectControl(QObject):
                 piece_derivation=saved(piece_derivations, i),
             )
 
-        if self.state.restore_identity(data):
-            for item, identity in zip(self.obj_list, self.obj_id):
-                item.id = identity
+        self.restore_identity(data)
 
         self.obj_size = data["obj_size"]
         self.obj_opacity = data["obj_opacity"]
