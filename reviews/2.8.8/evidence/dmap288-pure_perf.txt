@@ -1,0 +1,31 @@
+REVIEW_RESULT {"case": "pure_perf", "operation": "plan_readout", "kind": "probe", "median_seconds": 0.0008530420018360019}
+REVIEW_RESULT {"case": "pure_perf", "operation": "plan_readout", "kind": "fiber", "median_seconds": 0.0032470000442117453}
+REVIEW_RESULT {"case": "pure_perf", "operation": "plan_readout", "kind": "prism", "median_seconds": 0.005842708982527256}
+REVIEW_RESULT {"case": "pure_perf", "operation": "space_plans_2_fibers", "seconds": 1.583526041940786, "report": {"moved": ["Fiber 1", "Fiber 2"], "clashes": [], "ap_used": false}}
+         3477298 function calls in 1.583 seconds
+
+   Ordered by: cumulative time
+   List reduced from 145 to 18 due to restriction <18>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.000    0.000    1.583    1.583 probe_plans.py:1191(space_plans)
+      293    0.001    0.000    1.565    0.005 probe_plans.py:1264(apply)
+       27    0.001    0.000    1.562    0.058 probe_plans.py:1280(resolve)
+      295    0.000    0.000    1.554    0.005 probe_plans.py:1213(<lambda>)
+      295    0.004    0.000    1.554    0.005 probe_plans.py:609(plan_readout)
+      295    0.018    0.000    1.423    0.005 probe_plans.py:1636(track_checks)
+      240    0.000    0.000    1.282    0.005 probe_plans.py:1271(try_step)
+     2950    0.123    0.000    0.893    0.000 probe_plans.py:482(surface_entry)
+    94990    0.426    0.000    0.721    0.000 probe_plans.py:448(labels_at)
+     2655    0.255    0.000    0.554    0.000 probe_plans.py:1596(traverse)
+   353454    0.143    0.000    0.298    0.000 fromnumeric.py:86(_wrapreduction_any_all)
+   257874    0.068    0.000    0.294    0.000 fromnumeric.py:2586(all)
+   361929    0.136    0.000    0.136    0.000 {method 'reduce' of 'numpy.ufunc' objects}
+    95580    0.025    0.000    0.097    0.000 fromnumeric.py:2474(any)
+    81442    0.028    0.000    0.075    0.000 fromnumeric.py:1359(argmin)
+    84982    0.022    0.000    0.049    0.000 fromnumeric.py:48(_wrapfunc)
+     3245    0.012    0.000    0.033    0.000 probe_plans.py:476(_line_samples)
+      590    0.000    0.000    0.027    0.000 probe_plans.py:202(normal)
+
+
+

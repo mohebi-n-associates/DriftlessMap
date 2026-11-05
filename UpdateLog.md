@@ -1,3 +1,12 @@
+## 2.9.0 — 5 November 2026
+
+- Correct prism solid containment, overlapping-tip and fixed-device clearance reporting.
+- Reuse scientific planning readouts and pair clearances through a bounded, GUI-free service.
+- Run spacing with cancellation and stale-result rejection; avoid anatomy computation for trial poses.
+- Separate object archive writing from widgets and run it off the GUI thread; build region surfaces in a worker.
+- Decode a requested TIFF pyramid level directly without first decoding the full-resolution plane.
+- Exclude PyQt6 6.12.0's malformed typing stubs; desktop bundles use Qt/PyQt6 6.11.0.
+
 # Update Log
 
 ### 4th November 2026

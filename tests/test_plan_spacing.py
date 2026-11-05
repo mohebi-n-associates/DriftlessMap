@@ -3,6 +3,7 @@ vertical where possible, ML before AP, the largest tilt as small as possible."""
 
 import math
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 
@@ -34,6 +35,35 @@ class SpacingTests(unittest.TestCase):
 
         distance = _segment_distance(*ferrule(a), *ferrule(b))[0]
         return distance - a.specs["ferrule_diameter_um"]
+
+    def test_search_does_not_compute_anatomical_readouts(self):
+        plans = [fiber("Fiber 1", [300, 0, -1200]),
+                 fiber("Fiber 2", [500, 200, -1300])]
+        with patch("driftlessmap.probe_plans.plan_readout",
+                   side_effect=AssertionError("unnecessary anatomical calculation")):
+            spaced, report = space_plans(self.atlas, plans, [p.probe for p in plans])
+        self.assertTrue(report["moved"])
+        self.assertFalse(report["clashes"])
+        self.assertGreaterEqual(self.ferrule_gap(*spaced), 300 - 1e-6)
+
+    def test_overlapping_fixed_tips_remain_a_clash(self):
+        plans = [fiber("Fiber 1", [0, 0, -1200]),
+                 fiber("Fiber 2", [0, 0, -1200])]
+        spaced, report = space_plans(self.atlas, plans, [p.probe for p in plans])
+        self.assertEqual([p.tip_um for p in spaced], [p.tip_um for p in plans])
+        self.assertEqual(len(report["clashes"]), 1)
+        self.assertEqual(report["clashes"][0]["distance_um"], 0.0)
+
+    def test_fixed_pair_conflict_is_reported_without_moving_it(self):
+        plans = [fiber("Fiber 1", [-800, 0, -1200]),
+                 fiber("Fiber 2", [-600, 0, -1200]),
+                 fiber("Fiber 3", [900, 900, -1200])]
+        spaced, report = space_plans(self.atlas, plans, ["Fiber 3"],
+                                     max_ml_deg=0, max_ap_deg=0)
+        self.assertEqual(spaced, plans)
+        self.assertEqual(report["moved"], [])
+        self.assertEqual([p["probes"] for p in report["clashes"]],
+                         [("Fiber 1", "Fiber 2")])
 
     def test_ferrules_that_touch_are_splayed_in_ml_about_fixed_tips(self):
         plans = [fiber("Fiber 1", [300.0, 0.0, -1200.0]),

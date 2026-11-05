@@ -2,7 +2,7 @@
 
 Stable release: **2.0.0**, 29 October 2026 (PyPI, and a GitHub release with
 Windows and macOS builds), after release candidates 2.0.0rc1 (published) to
-2.0.0rc16. Current release: 2.8.8, 4 November 2026 (Space out: tilting plans that come too close; 2.8.7, the same day, put a prism's tip at its imaging face's bottom left corner; 2.8.6, the same day, published probe planning, Phases 1-4, the fixes from `reviews/2.8.3`, planned fibers and prisms, and probe hardware with 2.8.0-2.8.5; 2.7.0, 3 November 2026, was the one before); the waiver below
+2.0.0rc16. Current release: 2.9.0, 5 November 2026 (service extraction and performance); previously 2.8.8, 4 November 2026 (Space out: tilting plans that come too close; 2.8.7, the same day, put a prism's tip at its imaging face's bottom left corner; 2.8.6, the same day, published probe planning, Phases 1-4, the fixes from `reviews/2.8.3`, planned fibers and prisms, and probe hardware with 2.8.0-2.8.5; 2.7.0, 3 November 2026, was the one before); the waiver below
 applies to it as well. Passing automated tests does not satisfy the native-installation or
 user-evaluation gates.
 
@@ -114,3 +114,10 @@ data on one machine; not a measurement of real-data registration or saving.
 Do not mark a pending gate complete based on synthetic tests, digest timings, or
 successful source execution alone. Record concrete artifacts and outcomes here
 as those checks are performed.
+
+## 2.9.0 refactoring validation
+
+See `reviews/2.9.0/IMPLEMENTATION.md` for changed boundaries, regression
+coverage and measured synthetic performance. Ruff and mypy (36 modules) pass
+with PyQt6 6.11.0. The 6.12.0 stubs have invalid parameter ordering and that
+version is excluded. Existing real-data/native installation gates stay pending.

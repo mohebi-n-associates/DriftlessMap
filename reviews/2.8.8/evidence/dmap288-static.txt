@@ -1,0 +1,20 @@
+All checks passed!
+/Users/ali/anaconda3/envs/DriftlessMap/lib/python3.14/site-packages/PyQt6/QtGui.pyi:4856: error: '/' parameter must appear before '*' parameter  [syntax]
+/Users/ali/anaconda3/envs/DriftlessMap/lib/python3.14/site-packages/PyQt6/QtGui.pyi:4860: error: '/' parameter must appear before '*' parameter  [syntax]
+/Users/ali/anaconda3/envs/DriftlessMap/lib/python3.14/site-packages/PyQt6/QtGui.pyi:4868: error: '/' parameter must appear before '*' parameter  [syntax]
+/Users/ali/anaconda3/envs/DriftlessMap/lib/python3.14/site-packages/PyQt6/QtGui.pyi:4872: error: '/' parameter must appear before '*' parameter  [syntax]
+/Users/ali/anaconda3/envs/DriftlessMap/lib/python3.14/site-packages/PyQt6/QtGui.pyi:4880: error: '/' parameter must appear before '*' parameter  [syntax]
+/Users/ali/anaconda3/envs/DriftlessMap/lib/python3.14/site-packages/PyQt6/QtGui.pyi:4884: error: '/' parameter must appear before '*' parameter  [syntax]
+/Users/ali/anaconda3/envs/DriftlessMap/lib/python3.14/site-packages/PyQt6/QtGui.pyi:4898: error: '/' parameter must appear before '*' parameter  [syntax]
+/Users/ali/anaconda3/envs/DriftlessMap/lib/python3.14/site-packages/PyQt6/QtGui.pyi:4902: error: '/' parameter must appear before '*' parameter  [syntax]
+/Users/ali/anaconda3/envs/DriftlessMap/lib/python3.14/site-packages/PyQt6/QtGui.pyi:4906: error: '/' parameter must appear before '*' parameter  [syntax]
+/Users/ali/anaconda3/envs/DriftlessMap/lib/python3.14/site-packages/PyQt6/QtGui.pyi:4910: error: '/' parameter must appear before '*' parameter  [syntax]
+/Users/ali/anaconda3/envs/DriftlessMap/lib/python3.14/site-packages/PyQt6/QtGui.pyi:4914: error: '/' parameter must appear before '*' parameter  [syntax]
+/Users/ali/anaconda3/envs/DriftlessMap/lib/python3.14/site-packages/PyQt6/QtGui.pyi:4918: error: '/' parameter must appear before '*' parameter  [syntax]
+/Users/ali/anaconda3/envs/DriftlessMap/lib/python3.14/site-packages/PyQt6/QtGui.pyi:4926: error: '/' parameter must appear before '*' parameter  [syntax]
+/Users/ali/anaconda3/envs/DriftlessMap/lib/python3.14/site-packages/PyQt6/QtGui.pyi:4930: error: '/' parameter must appear before '*' parameter  [syntax]
+/Users/ali/anaconda3/envs/DriftlessMap/lib/python3.14/site-packages/PyQt6/QtGui.pyi:5661: error: '/' parameter must appear before '*' parameter  [syntax]
+/Users/ali/anaconda3/envs/DriftlessMap/lib/python3.14/site-packages/PyQt6/QtGui.pyi:5664: error: '/' parameter must appear before '*' parameter  [syntax]
+Found 16 errors in 1 file (errors prevented further checking)
+UI valid
+Guides identical

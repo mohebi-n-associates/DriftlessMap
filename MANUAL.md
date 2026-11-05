@@ -1,7 +1,7 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 2.8.8**. Section 2 explains how to
-install it; `pip install driftlessmap` installs 2.8.8.
+This manual applies to **DriftlessMap 2.9.0**. Section 2 explains how to
+install it; `pip install driftlessmap` installs 2.9.0.
 
 DriftlessMap - Histological E-data Registration in Brain Space - is a desktop
 application for aligning rodent histology with a reference atlas, reconstructing
@@ -2812,3 +2812,16 @@ experiment/
 The processed atlas itself can remain in a shared read-only location, provided
 its absolute path remains stable and the experiment records exactly which atlas
 folder was used.
+
+### Spacing conflict reporting (2.9.0)
+
+Space out also reports conflicts between plans that were left fixed. Select
+one of those plans to let it move. Overlapping fixed tips remain a conflict:
+tilting cannot separate coincident tips, so move a tip or change the device
+dimensions.
+
+Space out runs in a worker and offers Cancel; cancelled or stale results do not
+change plan poses. Prism clearance includes the solid interior and its actual
+length. Planning readouts are reused until their atlas or pose changes.
+Requested TIFF pyramid levels are decoded directly, and object exports and
+region-surface generation run outside the GUI thread.

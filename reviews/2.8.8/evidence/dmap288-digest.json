@@ -1,0 +1,26 @@
+{
+  "machine": "arm64",
+  "platform": "macOS-26.1-arm64-arm-64bit-Mach-O",
+  "python": "3.14.10",
+  "numpy": "2.5.4",
+  "results": [
+    {
+      "shape": [
+        1024,
+        1024,
+        3
+      ],
+      "image_mib": 6.0,
+      "median_seconds": 0.02232120803091675
+    },
+    {
+      "shape": [
+        4096,
+        4096,
+        6
+      ],
+      "image_mib": 192.0,
+      "median_seconds": 0.09963762504048645
+    }
+  ]
+}

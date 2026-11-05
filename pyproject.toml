@@ -42,7 +42,7 @@ classifiers = [
     "Operating System :: MacOS",
 ]
 dependencies = [
-    "PyQt6>=6.8,<7",
+    "PyQt6!=6.12.0,>=6.8,<7",
     "pyqtgraph>=0.14,<0.15",
     "PyOpenGL>=3.1.7,<4",
     "superqt>=0.8,<0.9",
@@ -119,6 +119,9 @@ ignore = ["B905"]
 # Type-check the GUI-free scientific and persistence core. Qt widget modules
 # are left out until they gain annotations.
 files = [
+    "driftlessmap/plan_service.py",
+    "driftlessmap/solid_geometry.py",
+    "driftlessmap/object_export.py",
     "driftlessmap/atlas_loader.py",
     "driftlessmap/atlas_matching.py",
     "driftlessmap/atlas_transform.py",

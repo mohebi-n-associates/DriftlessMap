@@ -1173,6 +1173,10 @@ def _pair_gap(plan_a, read_a, plan_b, read_b, above_um=CLEARANCE_ABOVE_UM):
     """``(gap, point)``: the smallest distance between the two devices'
     surfaces (negative where they overlap, by as much) and where on the first
     it is; None when either has no entry."""
+    if plan_a.kind == PRISM or plan_b.kind == PRISM:
+        from .solid_geometry import prism_pair_gap
+
+        return prism_pair_gap(plan_a, read_a, plan_b, read_b, above_um)
     best = None
     for a0, a1, ra in plan_segments(plan_a, read_a, above_um):
         for b0, b1, rb in plan_segments(plan_b, read_b, above_um):
@@ -1189,7 +1193,7 @@ SPACING_MAX_STEPS = 600
 
 
 def space_plans(atlas, plans, movable, gap_um=CLEARANCE_UM, max_ml_deg=30.0,
-                max_ap_deg=30.0, readout=None):
+                max_ap_deg=30.0, readout=None, progress=None):
     """Tilt the ``movable`` plans (names) about their tips so that every pair
     of plans keeps ``gap_um`` between their surfaces (2.8.8).
 
@@ -1210,7 +1214,10 @@ def space_plans(atlas, plans, movable, gap_um=CLEARANCE_UM, max_ml_deg=30.0,
     (names whose tilts changed), ``clashes`` (pairs still short, as from
     ``clearances``) and ``ap_used``.
     """
-    readout = readout or (lambda plan: plan_readout(plan, atlas))
+    # Spacing consumes only the entry; anatomical diagnostics are computed
+    # when the resulting plans are built/displayed, not for every trial tilt.
+    readout = readout or (lambda plan: {
+        "entry_um": surface_entry(atlas, plan.tip_um, plan.direction)[0]})
     current = {plan.probe: plan for plan in plans}
     movable = [name for name in movable if name in current]
     reads = {name: readout(plan) for name, plan in current.items()}
@@ -1227,6 +1234,9 @@ def space_plans(atlas, plans, movable, gap_um=CLEARANCE_UM, max_ml_deg=30.0,
         """How far the pair is from the gap it needs (negative: short).
         Parts that reach both tips need no more than the tips allow, as
         tilting about the tips cannot widen them."""
+        if current[a].kind == PRISM or current[b].kind == PRISM:
+            physical = _pair_gap(current[a], reads[a], current[b], reads[b])
+            return None if physical is None else physical[0] - gap_um
         seg_a = plan_segments(current[a], reads[a])
         seg_b = plan_segments(current[b], reads[b])
         if not seg_a or not seg_b:
@@ -1239,7 +1249,7 @@ def space_plans(atlas, plans, movable, gap_um=CLEARANCE_UM, max_ml_deg=30.0,
                 need = gap_um
                 if la and lb:
                     floor = float(np.linalg.norm(a1 - b1)) - ra - rb
-                    need = min(gap_um, floor - 1.0)
+                    need = max(0.0, min(gap_um, floor - 1.0))
                 margin = distance - need
                 worst = margin if worst is None else min(worst, margin)
         return worst
@@ -1262,6 +1272,8 @@ def space_plans(atlas, plans, movable, gap_um=CLEARANCE_UM, max_ml_deg=30.0,
         return plan.copy(**{axis: value})
 
     def apply(name, plan):
+        if progress is not None and not progress():
+            raise SearchStopped()
         current[name] = plan
         reads[name] = readout(plan)
         for pair in required:
@@ -1338,6 +1350,13 @@ def space_plans(atlas, plans, movable, gap_um=CLEARANCE_UM, max_ml_deg=30.0,
              if (current[name].ml_tilt_deg, current[name].ap_tilt_deg)
              != (original[name].ml_tilt_deg, original[name].ap_tilt_deg)]
     short = {pair for pair in required if gaps[pair] is not None and gaps[pair] < -1e-6}
+    # Fixed pairs cannot improve the objective, but still belong in the report.
+    for i, a in enumerate(names):
+        for b in names[i + 1:]:
+            if a not in movable and b not in movable:
+                physical = _pair_gap(current[a], reads[a], current[b], reads[b])
+                if physical is not None and physical[0] < gap_um - 1e-6:
+                    short.add((a, b))
     clashes = [pair for pair in clearances([(current[n], reads[n]) for n in names])
                if tuple(sorted(pair["probes"])) in short]
     ap_used = any(abs(current[n].ap_tilt_deg - original[n].ap_tilt_deg) > 1e-9 for n in moved)

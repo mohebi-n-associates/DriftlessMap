@@ -56,7 +56,7 @@ class PackagingMetadataTests(unittest.TestCase):
         metadata = project_metadata()
 
         self.assertEqual(metadata["requires-python"], ">=3.10")
-        self.assertIn("PyQt6>=6.8,<7", metadata["dependencies"])
+        self.assertIn("PyQt6!=6.12.0,>=6.8,<7", metadata["dependencies"])
         self.assertIn("pyqtgraph>=0.14,<0.15", metadata["dependencies"])
         self.assertIn("superqt>=0.8,<0.9", metadata["dependencies"])
         self.assertIn("numpy>=2.0,<3", metadata["dependencies"])

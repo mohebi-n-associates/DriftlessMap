@@ -21,7 +21,6 @@ from .probe_plans import (
     arm_from_tilts,
     bregma_lambda_scale,
     clearance_warning,
-    clearances,
     craniotomy_warning,
     fit_craniotomy,
     validated_surgery_settings,
@@ -113,6 +112,9 @@ def plan_object_name(probe, shank=None, shanks=1):
 
 class ProbePlanEngineMixin:
     def _init_probe_plans(self):
+        from .plan_service import PlanService
+
+        self.plan_service = PlanService()
         self.probe_plans = PlanBook()
         self.craniotomies = CraniotomyBook()
         self.surgery_settings = validated_surgery_settings(None)
@@ -267,7 +269,7 @@ class ProbePlanEngineMixin:
         atlas = self.plan_atlas()
         if plan is None or atlas is None:
             return None
-        readout = plan_readout(plan, atlas)
+        readout = self.plan_service.readout(plan, atlas)
         readout["arm"] = arm_from_tilts(plan.ap_tilt_deg, plan.ml_tilt_deg)
         craniotomy = self.craniotomies.get(plan.craniotomy) if plan.craniotomy else None
         readout["craniotomy"] = craniotomy.to_dict() if craniotomy else None
@@ -326,8 +328,7 @@ class ProbePlanEngineMixin:
         atlas = self.plan_atlas()
         if atlas is None:
             return []
-        return clearances([(plan, plan_readout(plan, atlas))
-                           for plan in self.current_plans(replace)])
+        return self.plan_service.clearances(self.current_plans(replace), atlas)
 
     # -------------------------------------------------------------- surgery
     def surgery_scale(self):
@@ -477,7 +478,26 @@ class ProbePlanEngineMixin:
             return None
         self.flush_plan_edits()
         plans = self.probe_plans.plans()
-        spaced, report = space_plans(atlas, plans, names, gap_um, max_ml_deg, max_ap_deg)
+        import copy
+        from threading import Event
+        from .background import run_in_background
+        from .probe_plans import SearchStopped
+
+        cancelled = Event()
+        signature = [self.plan_service.key(p) for p in plans]
+        document = self.project_created_at
+        try:
+            spaced, report = run_in_background(
+                self, "Spacing plans...", space_plans, atlas, copy.deepcopy(plans),
+                list(names), gap_um, max_ml_deg, max_ap_deg,
+                progress=lambda: not cancelled.is_set(), cancel_event=cancelled)
+        except SearchStopped:
+            return {"moved": [], "clashes": [], "ap_used": False, "cancelled": True}
+        if cancelled.is_set():
+            return {"moved": [], "clashes": [], "ap_used": False, "cancelled": True}
+        if (self.plan_previews or self.plan_atlas() is not atlas or self.project_created_at != document
+                or signature != [self.plan_service.key(p) for p in self.probe_plans.plans()]):
+            return {"moved": [], "clashes": [], "ap_used": False, "stale": True}
         if report["moved"]:
             with self.undoable("Space out plans"):
                 for plan in spaced:

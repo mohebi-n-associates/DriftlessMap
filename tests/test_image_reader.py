@@ -287,6 +287,10 @@ class TiffLayoutTests(unittest.TestCase):
                 tiff.write(data, subifds=2, metadata={"axes": "CYX"}, tile=(16, 16))
                 tiff.write(data[:, ::2, ::2], subfiletype=1, tile=(16, 16))
                 tiff.write(data[:, ::4, ::4], subfiletype=1, tile=(16, 16))
+            initial = image_reader.TIFFReader(path, scale=0.25)
+            self.assertEqual(initial.scale["scene 0"], 0.25)
+            np.testing.assert_array_equal(initial.data["scene 0"],
+                                          np.moveaxis(data[:, ::4, ::4], 0, -1))
             reader = image_reader.TIFFReader(path)
             self.assertEqual(reader.error_index, 0)
             self.assertTrue(reader.has_levels)
