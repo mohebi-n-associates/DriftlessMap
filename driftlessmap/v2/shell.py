@@ -487,6 +487,19 @@ class V2Window(QMainWindow):
             editor = card.plan_editor
         editor.start_plan()
 
+    def space_out_plans(self, kind="fiber"):
+        """Space out (2.8.8): tilt plans that come too close, fibers ticked."""
+        from .spacing_dialog import SpacingDialog
+
+        if self.engine.plan_atlas() is None:
+            self.message("Spacing plans out needs a volume atlas.", "warn")
+            return
+        self.engine.flush_plan_edits()
+        dialog = self.spacing_dialog = SpacingDialog(self, self.engine, kind)
+        dialog.exec()
+        self.spacing_dialog = None
+        self.refresh()
+
     def _name_undo_steps(self):
         history = self.engine.undo_history
         for menu_item, label, verb in ((self.undo_step_item, history.undo_label(), "Undo"),
@@ -802,6 +815,10 @@ class V2Window(QMainWindow):
         add(Command("prism.plan", "Plan a microprism on the atlas",
                     lambda: self.start_probe_plan("prism"), "Annotate",
                     ("prism planning", "two-photon", "imaging", "surgery")))
+        add(Command("plan.space", "Space out plans that come too close…",
+                    self.space_out_plans, "Annotate",
+                    ("collision", "clearance", "ferrules touch", "auto plan", "tilt",
+                     "fibers too close")))
         add(Command("project.open", "Open project…", self.open_project, "Project",
                     ("load project",), "Ctrl+O"))
         add(Command("project.save", "Save project", self.save_project, "Project",

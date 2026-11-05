@@ -38,6 +38,7 @@ from .probe_plans import (
     surface_entry,
 )
 from .probe_plans import (
+    CLEARANCE_UM,
     FIBER,
     PRISM,
     device_lines,
@@ -45,6 +46,7 @@ from .probe_plans import (
     imaging_summary,
     planned_model,
     region_summary,
+    space_plans,
 )
 from .implants import describe_specs
 from .probe_hardware import ALL, NONE, hardware_model, shown_parts
@@ -463,6 +465,26 @@ class ProbePlanEngineMixin:
         with self.undoable("Edit {} plan".format(plan.probe)):
             self.probe_plans.set(plan)
             return self._build_plan(plan.probe, colour)
+
+    def space_out_plans(self, names, gap_um=CLEARANCE_UM, max_ml_deg=30.0, max_ap_deg=30.0):
+        """Tilt the named plans about their tips so all plans keep ``gap_um``
+        apart, vertical where possible and ML before AP (2.8.8,
+        ``probe_plans.space_plans``); the other plans stay as they are. The
+        changed plans are stored and built in one undoable step. Returns the
+        report (``moved``, ``clashes``, ``ap_used``), or None without an atlas."""
+        atlas = self.plan_atlas()
+        if atlas is None:
+            return None
+        self.flush_plan_edits()
+        plans = self.probe_plans.plans()
+        spaced, report = space_plans(atlas, plans, names, gap_um, max_ml_deg, max_ap_deg)
+        if report["moved"]:
+            with self.undoable("Space out plans"):
+                for plan in spaced:
+                    if plan.probe in report["moved"]:
+                        self.probe_plans.set(plan)
+                        self._build_plan(plan.probe, None)
+        return report
 
     def remove_probe_plan(self, probe):
         """Forget ``probe``'s plan and delete its planned objects."""

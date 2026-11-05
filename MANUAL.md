@@ -1,7 +1,7 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 2.8.7**. Section 2 explains how to
-install it; `pip install driftlessmap` installs 2.8.7.
+This manual applies to **DriftlessMap 2.8.8**. Section 2 explains how to
+install it; `pip install driftlessmap` installs 2.8.8.
 
 DriftlessMap - Histological E-data Registration in Brain Space - is a desktop
 application for aligning rodent histology with a reference atlas, reconstructing
@@ -1816,6 +1816,32 @@ changing its settings changes the plan at once, and deleting it deletes the
 plan. The plans are saved with the project (apart from probe plans, so
 earlier versions leave them out) and listed in `probe_plans.csv` with the
 columns `device`, `device_settings` and `imaging_regions`.
+
+#### Space out plans that come too close (since 2.8.8)
+
+When plans come too close, for example two fibers whose ferrules would
+collide above the skull, **Space out…** (in the Plan section, or Space out
+plans in the command palette) tilts them apart about their tips, which stay
+on their targets:
+
+- Plans stay vertical where they can. ML tilts are used first; AP tilts
+  only when ML tilts up to their limit cannot help.
+- The largest tilt is kept as small as possible, so two fibers are splayed
+  about evenly rather than one tilted a lot.
+- Every plan keeps **Keep apart by** (0.3 mm by default) from every other,
+  measured between surfaces: fibers and their ferrules, prisms, probe shanks
+  and Neuropixels hardware. Parts that reach the tips keep only what the tips
+  allow when they are closer than that.
+- **Largest ML tilt** and **Largest AP tilt** (30° each by default) bound
+  the tilts. Afterwards each tilt is turned back towards where it started as
+  far as the plans stay apart.
+
+Tick the plans that may move; the plans of the kind you are editing are
+ticked and those too close are marked. Unticked plans stay where they are
+and are kept clear of. The result, or the pairs still too close, are given
+in the dialog, and Undo mapping step reverses the whole change. Tilting moves
+the entries, so check the craniotomy and the regions along each plan
+afterwards.
 
 The sections below describe planning in the classic interface.
 

@@ -272,3 +272,20 @@ above a planned Neuropixels probe, as Pinpoint does.
   (shanks and base) or nothing; clearances always use every part.
 * Not done: the headstage cable, rig and manipulator models, and NP1.0 and
   NP2.0 variants (NHP, 2.0 alpha).
+
+## 8. Spacing plans out (2.8.8)
+
+Requested on 4 November 2026: when fibers' ferrules collide, plan them apart
+automatically; fibers should stay vertical, and if they must tilt, in ML
+first.
+
+* Tips are targets and never move; only tilts change (`space_plans`).
+* Objective, in order: no pair closer than the gap; no AP tilt unless ML
+  tilts up to their limit cannot do it; the largest tilt as small as
+  possible; each tilt as close to its starting value as stays clear.
+* Search: 1° steps under a rising cap (ML, then AP), each step the one that
+  most reduces the summed shortfall; a final pass turns tilts back. Greedy,
+  so not guaranteed optimal for many plans, but each result is checked and
+  any pair still too close is reported.
+* Entries move with the tilts; craniotomies, avoided regions and the depth
+  limits are not part of the objective (the readout still warns).

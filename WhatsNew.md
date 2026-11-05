@@ -3,6 +3,20 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.8.8
+
+Release, 4 November 2026: space out plans that come too close.
+
+- **Space out…** (Plan section and command palette) tilts plans that come
+  too close, such as fibers whose ferrules collide, about their tips. Plans
+  stay vertical where they can, ML tilts come before AP tilts, and the
+  largest tilt is kept as small as possible. Choose which plans may move,
+  the gap to keep (0.3 mm) and the largest tilts (30°); one Undo reverses
+  it.
+- On the Allen atlas, two vertical fibers whose 1.25 mm ferrules touched
+  6.7 mm above the brain are splayed to ML +8° and −9° and keep 0.34 mm
+  apart, with their tips where they were.
+
 ## DriftlessMap 2.8.7
 
 Release, 4 November 2026: a prism's tip is a corner you can find.

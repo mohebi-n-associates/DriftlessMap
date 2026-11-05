@@ -331,6 +331,10 @@ class PlanEditor(Card):
             button("Copy coordinates", self.copy_coordinates,
                    tooltip="Copy one line with the atlas, frame, entry, depth, tip, tilts, "
                            "recording window and regions"),
+            self._keep("space_button", button(
+                "Space out…", self.space_out,
+                tooltip="Tilt plans that come too close (ferrules, prisms, probe hardware) "
+                        "about their tips: vertical where possible, ML before AP")),
         ], columns=2)
         self.add(self.actions)
         self.legend = self.add(hint_label(""))
@@ -1034,6 +1038,19 @@ class PlanEditor(Card):
         self._fill(new)
         self._say(True, "The tip is on the brain surface ({}); set the depth to go in.".format(
             "along the probe" if along_probe else "straight down"))
+
+    def space_out(self):
+        """Open Space out (2.8.8) with this kind's plans ticked."""
+        from .spacing_dialog import SpacingDialog
+
+        self.commit()
+        if self.engine.plan_atlas() is None:
+            self._say(False, "Load a volume atlas first.")
+            return
+        dialog = self.spacing_dialog = SpacingDialog(self, self.engine, self.kind)
+        dialog.exec()
+        self.spacing_dialog = None
+        self.sync()
 
     def propose(self):
         """Open the proposal dialog; the chosen proposal becomes the plan."""

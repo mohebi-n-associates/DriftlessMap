@@ -8,8 +8,8 @@ or important workflows change.
 
 ## Project identity
 
-- Current release: DriftlessMap 2.8.7 (4 November 2026; a prism's tip at
-  its imaging face's bottom left corner). 2.8.6 (4 November 2026; probe planning,
+- Current release: DriftlessMap 2.8.8 (4 November 2026; Space out). 2.8.7
+  (a prism's tip at its imaging face's bottom left corner). 2.8.6 (4 November 2026; probe planning,
   `probe_planning_design.md` Phases 1-4, `reviews/2.8.3` R1-R8, planned
   fibers and prisms (its section 6) and probe hardware (section 7); the owner
   numbers the probe-planning phases 2.8.0-2.8.3, one feature), published on
@@ -203,6 +203,10 @@ or important workflows change.
   from the edge's middle, `prism_corner_from_middle`; `face_middle_um` for
   the model, face view, focus, default plan and snapping); prisms face
   posterior by default.
+  2.8.8: `space_plans` (tilts movable plans about their tips so all keep a
+  gap: ML before AP, smallest largest tilt, back towards the start; `moved`,
+  `clashes`, `ap_used`), engine `space_out_plans` (one undoable step),
+  `v2/spacing_dialog.SpacingDialog`, Space out… and command `plan.space`.
 - `driftlessmap/project_session.py`: `ProjectSessionMixin.project_payload` is the
   shared saved-state collector. `load_project` snapshots the active document and
   restores it on failure, including its original reader, in-memory atlas and undo
