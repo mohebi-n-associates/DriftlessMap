@@ -1399,6 +1399,53 @@ class V2ShellTests(unittest.TestCase):
             self.assertFalse(implants.plan_editor.hardware_box.isVisibleTo(window))
 
     @isolated_gui_test
+    def test_space_out_tilts_fibers_whose_ferrules_touch(self):
+        from unittest.mock import patch
+
+        from driftlessmap.mapping_records import CURRENT
+        from driftlessmap.v2.spacing_dialog import SpacingDialog
+
+        with tempfile.TemporaryDirectory() as folder:
+            window, engine, _editor = self.planned_window(folder)
+            window.run("fiber.plan")
+            window.run("fiber.plan")
+            first = engine.probe_plans.get("Fiber 1")
+            engine.set_probe_plan(engine.probe_plans.get("Fiber 2").copy(
+                tip_um=[first.tip_um[0] + 200.0] + list(first.tip_um[1:])))
+            before = {n: engine.probe_plans.get(n) for n in ("Fiber 1", "Fiber 2")}
+            self.assertEqual(engine.plan_clearances()[0]["distance_um"], 0.0)
+            seen = {}
+
+            def run_it(dialog):
+                ticked = dialog.chosen()
+                seen["ticked"] = ticked
+                dialog.run()
+                seen["status"] = dialog.status.text()
+                return 0
+
+            with patch.object(SpacingDialog, "exec", run_it):
+                window.run("plan.space")
+            self.assertEqual(sorted(seen["ticked"]), ["Fiber 1", "Fiber 2"])
+            self.assertIn("Tilted", seen["status"])
+            after = {n: engine.probe_plans.get(n) for n in before}
+            for name in before:
+                self.assertEqual(after[name].tip_um, before[name].tip_um)
+                self.assertEqual(after[name].ap_tilt_deg, 0.0)
+                [built] = engine.plan_objects(name)
+                self.assertEqual(engine.object_mapping_status(built), CURRENT)
+            # Fiber 1 is on the left: their tops part, left and right.
+            self.assertGreater(after["Fiber 1"].ml_tilt_deg, 0.0)
+            self.assertLess(after["Fiber 2"].ml_tilt_deg, 0.0)
+            self.assertGreaterEqual(engine.plan_clearances()[0]["distance_um"], 0.0)
+            # One step undoes both.
+            engine.undo_mapping_step()
+            for name in before:
+                self.assertEqual(engine.probe_plans.get(name), before[name])
+            # The Plan section's button opens it too.
+            editor = window.panels["annotate"].implants.plan_editor
+            self.assertTrue(editor.space_button.isVisibleTo(window))
+
+    @isolated_gui_test
     def test_implants_are_filled_in_3d_and_regions_can_be_see_through(self):
         from driftlessmap.implants import model_mesh
         from driftlessmap.obj_items import FERRULE_GRAY, IMPLANT_FILL_ALPHA, ImplantItem

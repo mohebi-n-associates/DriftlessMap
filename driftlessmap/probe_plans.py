@@ -1159,19 +1159,190 @@ def clearances(planned, above_um=CLEARANCE_ABOVE_UM):
         for j in range(i + 1, len(planned)):
             plan_a, read_a = planned[i]
             plan_b, read_b = planned[j]
-            best = None
-            for a0, a1, ra in plan_segments(plan_a, read_a, above_um):
-                for b0, b1, rb in plan_segments(plan_b, read_b, above_um):
-                    distance, point, _other = _segment_distance(a0, a1, b0, b1)
-                    distance = max(0.0, distance - ra - rb)    # 0: they overlap
-                    if best is None or distance < best[0]:
-                        best = (distance, point)
+            best = _pair_gap(plan_a, read_a, plan_b, read_b, above_um)
             if best is None:
                 continue
             depth = float(np.dot(best[1] - np.asarray(read_a["entry_um"]), plan_a.direction))
-            found.append({"probes": (plan_a.probe, plan_b.probe), "distance_um": best[0],
+            found.append({"probes": (plan_a.probe, plan_b.probe),
+                          "distance_um": max(0.0, best[0]),    # 0: they overlap
                           "depth_um": depth})
     return sorted(found, key=lambda item: item["distance_um"])
+
+
+def _pair_gap(plan_a, read_a, plan_b, read_b, above_um=CLEARANCE_ABOVE_UM):
+    """``(gap, point)``: the smallest distance between the two devices'
+    surfaces (negative where they overlap, by as much) and where on the first
+    it is; None when either has no entry."""
+    best = None
+    for a0, a1, ra in plan_segments(plan_a, read_a, above_um):
+        for b0, b1, rb in plan_segments(plan_b, read_b, above_um):
+            distance, point, _other = _segment_distance(a0, a1, b0, b1)
+            distance -= ra + rb
+            if best is None or distance < best[0]:
+                best = (distance, point)
+    return best
+
+
+# ------------------------------------------------------------- spacing out
+SPACING_STEP_DEG = 1.0
+SPACING_MAX_STEPS = 600
+
+
+def space_plans(atlas, plans, movable, gap_um=CLEARANCE_UM, max_ml_deg=30.0,
+                max_ap_deg=30.0, readout=None):
+    """Tilt the ``movable`` plans (names) about their tips so that every pair
+    of plans keeps ``gap_um`` between their surfaces (2.8.8).
+
+    Plans stay vertical where they can. Clashes are resolved by ML tilts
+    first, with the largest tilt as small as possible: all ML tilts are
+    allowed up to 1°, then 2°, and so on, and within each the one-degree step
+    that most reduces the total shortfall is taken (the more upright plan
+    moves first when steps are equal). AP tilts are used only when ML tilts up
+    to ``max_ml_deg`` cannot help. Last, every tilt is turned back towards
+    the plan's own as far as that stays clear. Limits apply to the tilts
+    reached, so a plan already tilted past them is not tilted further.
+    Tips never move, so parts that reach both tips (a fiber's bare end, a
+    probe's shanks) need keep only the distance the tips allow when that is
+    less than ``gap_um``; everything above keeps ``gap_um``.
+
+    ``plans`` are all the plans (the others are fixed obstacles). Returns
+    ``(plans, report)``: the plans with new tilts, and a dict with ``moved``
+    (names whose tilts changed), ``clashes`` (pairs still short, as from
+    ``clearances``) and ``ap_used``.
+    """
+    readout = readout or (lambda plan: plan_readout(plan, atlas))
+    current = {plan.probe: plan for plan in plans}
+    movable = [name for name in movable if name in current]
+    reads = {name: readout(plan) for name, plan in current.items()}
+    names = sorted(current)
+    pairs = [(a, b) for i, a in enumerate(names) for b in names[i + 1:]
+             if a in movable or b in movable]
+
+    def lowest(plan, segments):
+        """Whether each segment reaches the device's tip depth."""
+        tip, direction = np.asarray(plan.tip_um, dtype=float), plan.direction
+        return [float(np.dot(end - tip, direction)) >= -1.0 for _s, end, _r in segments]
+
+    def gap(a, b):
+        """How far the pair is from the gap it needs (negative: short).
+        Parts that reach both tips need no more than the tips allow, as
+        tilting about the tips cannot widen them."""
+        seg_a = plan_segments(current[a], reads[a])
+        seg_b = plan_segments(current[b], reads[b])
+        if not seg_a or not seg_b:
+            return None
+        low_a, low_b = lowest(current[a], seg_a), lowest(current[b], seg_b)
+        worst = None
+        for (a0, a1, ra), la in zip(seg_a, low_a):
+            for (b0, b1, rb), lb in zip(seg_b, low_b):
+                distance = _segment_distance(a0, a1, b0, b1)[0] - ra - rb
+                need = gap_um
+                if la and lb:
+                    floor = float(np.linalg.norm(a1 - b1)) - ra - rb
+                    need = min(gap_um, floor - 1.0)
+                margin = distance - need
+                worst = margin if worst is None else min(worst, margin)
+        return worst
+
+    gaps = {pair: gap(*pair) for pair in pairs}
+    required = {pair: 0.0 for pair, start in gaps.items() if start is not None}
+
+    def shortfall(only=None):
+        total = 0.0
+        for pair, need in required.items():
+            if only is not None and only not in pair:
+                continue
+            value = gaps[pair]
+            if value is not None and value < need:
+                total += need - value
+        return total
+
+    def tilt(name, axis, value):
+        plan = current[name]
+        return plan.copy(**{axis: value})
+
+    def apply(name, plan):
+        current[name] = plan
+        reads[name] = readout(plan)
+        for pair in required:
+            if name in pair:
+                gaps[pair] = gap(*pair)
+
+    def try_step(name, plan):
+        """The total shortfall with ``name`` replaced by ``plan``."""
+        saved = (current[name], reads[name], {p: gaps[p] for p in required if name in p})
+        apply(name, plan)
+        total = shortfall()
+        current[name], reads[name] = saved[0], saved[1]
+        gaps.update(saved[2])
+        return total
+
+    def resolve(axes, limits):
+        """Steps that reduce the shortfall, within ``limits``, until none does."""
+        for _step in range(SPACING_MAX_STEPS):
+            total = shortfall()
+            if total <= 1e-6:
+                return True
+            clashing = {n for pair, need in required.items()
+                        if gaps[pair] is not None and gaps[pair] < need for n in pair}
+            best = None
+            for name in sorted(clashing & set(movable)):
+                plan = current[name]
+                for axis in axes:
+                    for sign in (1.0, -1.0):
+                        value = getattr(plan, axis) + sign * SPACING_STEP_DEG
+                        if abs(value) > limits[axis] + 1e-9:
+                            continue
+                        candidate = tilt(name, axis, value)
+                        after = try_step(name, candidate)
+                        upright = max(abs(candidate.ml_tilt_deg), abs(candidate.ap_tilt_deg))
+                        key = (round(after, 3), upright, abs(value), name)
+                        if best is None or key < best[0]:
+                            best = (key, name, candidate)
+            if best is None or best[0][0] >= round(total, 3):
+                return False
+            apply(best[1], best[2])
+        return shortfall() <= 1e-6
+
+    # The smallest largest tilt that works: ML tilts up to 1°, 2°, ... and
+    # only then AP tilts, likewise, with ML tilts up to their limit.
+    solved = shortfall() <= 1e-6
+    level = 0.0
+    while not solved and level < max_ml_deg:
+        level = min(level + SPACING_STEP_DEG, float(max_ml_deg))
+        solved = resolve(["ml_tilt_deg"], {"ml_tilt_deg": level, "ap_tilt_deg": 0.0})
+    level = 0.0
+    while not solved and level < max_ap_deg:
+        level = min(level + SPACING_STEP_DEG, float(max_ap_deg))
+        solved = resolve(["ml_tilt_deg", "ap_tilt_deg"],
+                         {"ml_tilt_deg": float(max_ml_deg), "ap_tilt_deg": level})
+
+    # Back towards the tilts each plan started with (vertical, for a plan
+    # that was) as far as that stays clear: AP first, then ML.
+    original = {plan.probe: plan for plan in plans}
+    changed = True
+    while changed:
+        changed = False
+        for name in movable:
+            for axis in ("ap_tilt_deg", "ml_tilt_deg"):
+                value = getattr(current[name], axis)
+                target = getattr(original[name], axis)
+                if abs(value - target) < 1e-9:
+                    continue
+                step = min(SPACING_STEP_DEG, abs(value - target))
+                candidate = tilt(name, axis, value - math.copysign(step, value - target))
+                if try_step(name, candidate) <= shortfall() + 1e-6:
+                    apply(name, candidate)
+                    changed = True
+    moved = [name for name in movable
+             if (current[name].ml_tilt_deg, current[name].ap_tilt_deg)
+             != (original[name].ml_tilt_deg, original[name].ap_tilt_deg)]
+    short = {pair for pair in required if gaps[pair] is not None and gaps[pair] < -1e-6}
+    clashes = [pair for pair in clearances([(current[n], reads[n]) for n in names])
+               if tuple(sorted(pair["probes"])) in short]
+    ap_used = any(abs(current[n].ap_tilt_deg - original[n].ap_tilt_deg) > 1e-9 for n in moved)
+    return [current[plan.probe] for plan in plans], {
+        "moved": moved, "clashes": clashes, "ap_used": ap_used}
 
 
 def clearance_warning(probe, pairs, limit_um=CLEARANCE_UM):
