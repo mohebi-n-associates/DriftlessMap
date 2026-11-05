@@ -66,6 +66,15 @@ universal undo for view, registration, file or display settings.
 
 - `driftlessmap/app.py`: main window, workflow orchestration, menu handlers,
   project/layer/object persistence, atlas and histology loading.
+- `driftlessmap/undo_engine.py`: `UndoEngineMixin` (mixed into `DriftlessMap`)
+  holds the Undo/Redo engine described under Undo above: `point_action`,
+  `undoable`, `_next_edit_seq`, the point history (`POINT_KEYS`,
+  `_record_point_edit`, `_step_points`), the per-tool list
+  (`save_current_action`, `set_undo_redo_data`, `forget_layer_actions`),
+  `next_undo`/`next_redo`, `undo_called`/`redo_called` and
+  `undo_mapping_step`/`redo_mapping_step` (`_step_history`). What a mapping
+  step captures stays in `app.py` (`ATLAS_MARK_KEYS`, `_transaction_state`,
+  `_transaction_signature`, `_restore_transaction_state`).
 - `driftlessmap/project_io.py`: GUI-free project helpers (default working
   data, merging older payloads, input pre-fingerprinting, export file names).
   Atlas kind, path and load fingerprint are committed only through
