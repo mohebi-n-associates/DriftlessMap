@@ -133,7 +133,7 @@ class ProjectSessionMixin:
             layer_data = None
 
         if self.object_ctrl.obj_name:
-            object_data = self.object_ctrl.get_obj_data()
+            object_data = self.document.objects.payload()
             # object_data["object_3d_list"] = [
             #     [] for _ in range(len(self.object_3d_list))
             # ]

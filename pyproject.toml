@@ -119,6 +119,8 @@ ignore = ["B905"]
 # Type-check the GUI-free scientific and persistence core. Qt widget modules
 # are left out until they gain annotations.
 files = [
+    "driftlessmap/document_state.py",
+    "driftlessmap/export_workflow.py",
     "driftlessmap/plan_service.py",
     "driftlessmap/solid_geometry.py",
     "driftlessmap/object_export.py",

@@ -3082,6 +3082,94 @@ class V2ShellTests(unittest.TestCase):
             self.assertEqual(len(engine.working_img_data["img-probe"]), 2)
 
     @isolated_gui_test
+    def test_top_undo_and_native_shortcut_share_multiple_steps(self):
+        import cv2
+        from PyQt6.QtTest import QTest
+        from PyQt6.QtWidgets import QLineEdit
+        from tests.atlas_fixture import make_processed_atlas
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window = self.make_window(folder)
+            engine = window.engine
+            self.assertTrue(engine.load_volume_atlas(str(make_processed_atlas(root / "atlas"))))
+            cv2.imwrite(str(root / "s.png"), np.full((40, 30, 3), 120, dtype=np.uint8))
+            self.assertTrue(engine.load_single_image_file(str(root / "s.png"), ".png"))
+            window.go_to("annotate")
+            probes = window.panels["annotate"].implants.probe_card
+            probes.new_probe("NP A")
+            probes.toggle_marking()
+            fiber = engine.add_implant("fiber")
+            for point in ((13.0, 5.0), (14.0, 15.0), (15.0, 25.0)):
+                engine.img_stacks_clicked(point)
+            engine.rename_implant(fiber.implant_id, "Renamed")
+            window.refresh()
+            self.assertIn("Rename", window.undo_button.toolTip())
+            self.assertTrue(window.undo_button.isEnabled())
+            window.undo_button.click()
+            self.assertEqual(engine.implants.get(fiber.implant_id).name, fiber.name)
+            self.assertEqual(len(engine.working_img_data["img-probe"]), 3)
+
+            window.show()
+            window.activateWindow()
+            window.undo_button.setFocus()
+            self.application.processEvents()
+            for count in (2, 1, 0):
+                QTest.keySequence(window, QKeySequence("Ctrl+Z"))
+                self.application.processEvents()
+                self.assertEqual(len(engine.working_img_data["img-probe"]), count)
+            window.refresh()
+            self.assertFalse(window.undo_button.isEnabled())
+            QTest.keySequence(window, QKeySequence("Ctrl+Shift+Z"))
+            self.assertEqual(len(engine.working_img_data["img-probe"]), 1)
+
+            # Text editing keeps its native undo without changing document history.
+            text = QLineEdit(window)
+            text.show()
+            text.setFocus()
+            QTest.keyClicks(text, "hello")
+            QTest.keySequence(text, QKeySequence("Ctrl+Z"))
+            self.assertEqual(text.text(), "")
+            self.assertEqual(len(engine.working_img_data["img-probe"]), 1)
+            text.hide()
+            # A fresh annotation after Undo discards the old redo branch.
+            engine._image_click_probe((16.0, 26.0), 16.0, 26.0)
+            self.assertIsNone(engine.undo_history.redo_label())
+            engine.undo_called()
+            self.assertEqual(len(engine.working_img_data["img-probe"]), 1)
+
+    @isolated_gui_test
+    def test_cell_add_and_erase_restore_counts_and_metadata(self):
+        import cv2
+        from types import SimpleNamespace
+        from tests.atlas_fixture import make_processed_atlas
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window = self.make_window(folder)
+            engine = window.engine
+            self.assertTrue(engine.load_volume_atlas(str(make_processed_atlas(root / "atlas"))))
+            cv2.imwrite(str(root / "s.png"), np.full((40, 30, 3), 120, dtype=np.uint8))
+            self.assertTrue(engine.load_single_image_file(str(root / "s.png"), ".png"))
+            engine.tool_box.cell_selector_btn.setChecked(True)
+            engine._image_click_loc((10.0, 12.0), 10.0, 12.0)
+            engine._image_click_loc((14.0, 18.0), 14.0, 18.0)
+            before = engine._live_marks()
+            engine.tool_box.checkable_btn_dict["eraser_btn"].setChecked(True)
+            engine.img_cell_pnts_clicked(None, [SimpleNamespace(index=lambda: 0)])
+            self.assertEqual(sum(engine.working_img_data["cell_count"]), 1)
+            engine.undo_called()
+            for key in ("img-cells", "cell_size", "cell_symbol", "cell_layer_index", "cell_count"):
+                self.assertEqual(engine.working_img_data[key], before[key])
+            engine.undo_called()
+            engine.undo_called()
+            self.assertEqual(engine.working_img_data["img-cells"], [])
+            self.assertEqual(sum(engine.working_img_data["cell_count"]), 0)
+            engine.redo_called()
+            self.assertEqual(engine.working_img_data["img-cells"], [[10.0, 12.0]])
+            self.assertEqual(sum(engine.working_img_data["cell_count"]), 1)
+
+    @isolated_gui_test
     def test_a_deleted_probe_leaves_no_marks_on_screen(self):
         import cv2
         from unittest.mock import patch

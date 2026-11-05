@@ -41,6 +41,50 @@ class DrawingInfoWindowTests(unittest.TestCase):
     def setUpClass(cls):
         cls.app = QApplication.instance() or QApplication([])
 
+    def test_binding_existing_model_preserves_object_colour(self):
+        from driftlessmap.document_state import ObjectState
+        state = ObjectState()
+        data = {'vis_color': (12, 34, 56, 200)}
+        state.add('existing', 'merged cells', data, 'opaque', 'line')
+        control = ObjectControl(state=state)
+        self.assertEqual(data['vis_color'], (12, 34, 56, 200))
+        self.assertEqual(control.obj_list[0].color.getRgb(), (12, 34, 56, 200))
+
+    def test_control_can_bind_an_existing_document_model(self):
+        from driftlessmap.document_state import ObjectState
+        state = ObjectState()
+        state.add('existing', 'probe piece', np.ones((2, 3)), 'opaque', 'line')
+        control = ObjectControl(state=state)
+        self.assertIs(control.state, state)
+        self.assertEqual(state.obj_name, ['existing'])
+        self.assertEqual(len(control.obj_list), 1)
+        legacy = dict(control.get_obj_data())
+        legacy.pop('obj_id')
+        legacy.pop('obj_count')
+        other = ObjectControl()
+        other.set_obj_data(legacy)
+        self.assertEqual(other.obj_name, ['existing'])
+        self.assertEqual(other.obj_id, [0])
+
+    def test_object_model_owns_state_and_ids_survive_reopening(self):
+        from driftlessmap.document_state import DocumentState
+        document = DocumentState()
+        control = ObjectControl(state=document.objects)
+        for name in ('a', 'b', 'c'):
+            control.add_object(name, 'probe piece', np.zeros((2, 3)), 'opaque')
+        control.delete_objects([1])
+        saved = document.objects.payload()
+        ids = list(control.obj_id)
+        self.assertIs(control.obj_data, document.objects.obj_data)
+        reopened = ObjectControl()
+        reopened.set_obj_data(saved)
+        self.assertEqual(reopened.obj_id, ids)
+        self.assertEqual([widget.id for widget in reopened.obj_list], ids)
+        reopened.add_object('d', 'probe piece', np.zeros((2, 3)), 'opaque')
+        self.assertGreater(reopened.obj_id[-1], max(ids))
+        reopened.obj_name[0] = 'renamed'
+        self.assertEqual(reopened.state.obj_name[0], 'renamed')
+
     def test_window_shows_region_summary_and_export_action(self):
         window = DrawingInfoWindow("line drawing", drawing_info())
 

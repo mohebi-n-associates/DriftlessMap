@@ -1,6 +1,6 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 2.9.0**. Section 2 explains how to
+This manual applies to **DriftlessMap 2.9.2 (unpublished source version)**. Section 2 explains how to
 install it; `pip install driftlessmap` installs 2.9.0.
 
 DriftlessMap - Histological E-data Registration in Brain Space - is a desktop
@@ -1402,8 +1402,9 @@ implant, or remove a section with its results.
 **Undoing mapping steps.** Accept and Transfer (Map), Update mapping, Make
 Pieces (Make parts) and the Merge/Build actions can be undone and redone as
 whole steps: undo restores the section marks, atlas marks, mapping records,
-pieces, built objects and review state together. Use **Edit > Undo** *step*
-(Ctrl+Alt+Z) and **Edit > Redo** *step* (Ctrl+Alt+Shift+Z); the menu names the
+pieces, built objects and review state together. Use the top **Undo** button or
+**Ctrl/Cmd+Z**, and **Ctrl/Cmd+Shift+Z** to redo. The legacy mapping-step shortcuts
+(Ctrl+Alt+Z and Ctrl+Alt+Shift+Z) remain available; the menu names the
 step, for example "Undo Map cells", and **Edit > Mapping history…** (2.0
 interface, since 2.6.0) lists every step Undo and Redo would take back.
 Opening or removing a section, or adding an image, clears this history; the
@@ -1414,9 +1415,9 @@ Undo and redo share the 500 MB budget. If an inverse state cannot fit, the reque
 step can still be restored, but further history is cleared. Steps that change
 nothing are not recorded. Loading a section or
 opening a project starts a new history, and the history is not saved. The
-existing Edit > Undo and Redo (Ctrl+Z) still undo individual drawing and erasing
-edits and probe track points, one point at a time; a mapping step clears that
-shorter history, because its snapshots describe the marks the step replaced.
+probe/cell point edits now share this history, including the first point. Older
+raster/drawing tools keep their separate shorter history; a transaction step
+clears that older history because its snapshots describe the state replaced.
 In the 2.0 interface the probe and implant controls say this in their tooltips
 (hover over **Mark track**, **Map this section**, **Build** or **Delete…**),
 and a line under the probe buttons repeats it. On macOS the shortcuts use Cmd
@@ -2825,3 +2826,23 @@ change plan poses. Prism clearance includes the solid interior and its actual
 length. Planning readouts are reused until their atlas or pose changes.
 Requested TIFF pyramid levels are decoded directly, and object exports and
 region-surface generation run outside the GUI thread.
+
+### Object state and history (2.9.2, unpublished)
+
+Object identities are retained across saving and reopening, including deleted
+ID gaps. Older projects receive identities when opened. Undo snapshots share
+repeated references to the same array within each snapshot, while separate
+snapshots remain independent. Save formats and normal object workflows stay
+compatible with older versions.
+
+### Multi-step Undo (2.9.2)
+
+Click **Undo** above the canvas, or press **Ctrl+Z** (Windows/Linux) or **Cmd+Z**
+(macOS). Repeat to take back earlier actions. The button tooltip names the next
+action; **Ctrl/Cmd+Shift+Z** redoes. Probe/cell points, mapping, building, plan
+edits and other transaction actions share up to 10 steps within a 500 MB budget.
+The first probe/cell point is undoable too. New edits discard the redo branch.
+Edit > Mapping history lists retained transaction steps. Older raster/tool
+operations retain their existing separate history. Opening/changing sections or
+projects clears history; file, display and registration changes are not universal
+undo operations. Text fields keep their own normal Undo.

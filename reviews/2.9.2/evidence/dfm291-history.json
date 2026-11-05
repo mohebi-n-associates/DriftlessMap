@@ -1,0 +1,12 @@
+{
+  "current": {
+    "pack_seconds": 0.11280854104552418,
+    "retained_bytes": 8391169,
+    "traced_peak_bytes": 30772193
+  },
+  "baseline": {
+    "pack_seconds": 0.3322993329493329,
+    "retained_bytes": 25173507,
+    "traced_peak_bytes": 47554717
+  }
+}

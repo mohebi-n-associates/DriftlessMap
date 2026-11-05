@@ -37,23 +37,30 @@ class _Packed:
             self.shape).copy()
 
 
-def pack(value):
+def pack(value, _arrays=None):
     """A deep, compact copy of ``value`` and its size in bytes."""
+    if _arrays is None:
+        _arrays = {}
     if isinstance(value, np.ndarray):
+        if id(value) in _arrays:
+            return _arrays[id(value)], 0
         if value.nbytes >= COMPRESS_FROM_BYTES:
             packed = _Packed(value)
+            _arrays[id(value)] = packed
             return packed, len(packed.payload)
-        return value.copy(), value.nbytes
+        copied_array = value.copy()
+        _arrays[id(value)] = copied_array
+        return copied_array, value.nbytes
     if isinstance(value, dict):
         items, size = {}, 0
         for key, item in value.items():
-            items[key], item_size = pack(item)
+            items[key], item_size = pack(item, _arrays)
             size += item_size
         return items, size
     if isinstance(value, (list, tuple)):
         items, size = [], 0
         for item in value:
-            packed, item_size = pack(item)
+            packed, item_size = pack(item, _arrays)
             items.append(packed)
             size += item_size
         return (tuple(items) if isinstance(value, tuple) else items), size
@@ -61,17 +68,20 @@ def pack(value):
     return copied, 64
 
 
-def unpack(value):
-    if isinstance(value, _Packed):
-        return value.unpack()
-    if isinstance(value, np.ndarray):
-        return value.copy()
+def unpack(value, _arrays=None):
+    """Restore one independent state, retaining array aliases within it."""
+    if _arrays is None:
+        _arrays = {}
+    if isinstance(value, (_Packed, np.ndarray)):
+        if id(value) not in _arrays:
+            _arrays[id(value)] = value.unpack() if isinstance(value, _Packed) else value.copy()
+        return _arrays[id(value)]
     if isinstance(value, dict):
-        return {key: unpack(item) for key, item in value.items()}
+        return {key: unpack(item, _arrays) for key, item in value.items()}
     if isinstance(value, list):
-        return [unpack(item) for item in value]
+        return [unpack(item, _arrays) for item in value]
     if isinstance(value, tuple):
-        return tuple(unpack(item) for item in value)
+        return tuple(unpack(item, _arrays) for item in value)
     return copy.deepcopy(value)
 
 

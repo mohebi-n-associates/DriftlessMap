@@ -4,8 +4,7 @@ message: >-
   grew out of HERBS, whose publication is listed under references.
 title: DriftlessMap
 type: software
-version: 2.9.0
-date-released: 2026-11-05
+version: 2.9.2
 authors:
   - name: Mohebi & Associates
     website: https://www.mohebi-associates.org/

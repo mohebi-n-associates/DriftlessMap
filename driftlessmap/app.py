@@ -5,6 +5,7 @@ import copy
 import importlib.util
 import hashlib
 from contextlib import contextmanager
+from functools import wraps
 from pathlib import Path
 import tempfile
 
@@ -168,7 +169,6 @@ from .version import APPLICATION_DISPLAY_NAME, APPLICATION_WINDOW_TITLE, __versi
 from .cell_detection import select_detection_channel
 from .coordinate_validation import coordinates_in_bounds
 from .layer_validation import image_layer_matches
-from .probe_csv import write_probe_csv_files
 from .probe_reconstruction import (
     allen_ccf_to_estimated_bregma_mm,
     format_estimated_bregma_report,
@@ -224,6 +224,21 @@ from .user_settings import load_last_atlas_path, save_last_atlas_path
 
 script_dir = dirname(realpath(__file__))
 FORM_Main, _ = loadUiType((join(dirname(__file__), "main_window.ui")))
+
+
+def undo_action(label, layers=None):
+    """Capture annotation state before an edit, including the first point."""
+    def decorate(method):
+        @wraps(method)
+        def recorded(self, *args, **kwargs):
+            if layers is not None:
+                selected = self.layer_ctrl.current_layer_index
+                if len(selected) != 1 or self.layer_ctrl.layer_link[selected[0]] not in layers:
+                    return method(self, *args, **kwargs)
+            with self.undoable(label):
+                return method(self, *args, **kwargs)
+        return recorded
+    return decorate
 
 
 class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin, SectionsMixin, QMainWindow,
@@ -455,7 +470,10 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
         self.layer_ctrl.sig_layer_deleted.connect(self.layers_exist_changed)
         self.layer_ctrl.sig_blend_mode_changed.connect(self.layers_blend_mode_changed)
 
-        self.object_ctrl = ObjectControl()
+        from .document_state import DocumentState
+
+        self.document = DocumentState()
+        self.object_ctrl = ObjectControl(state=self.document.objects)
         self.object_ctrl.drawing_info_provider = self.build_drawing_object_info
         self.object_ctrl.sig_delete_object.connect(self.gl_object_deleted)
         self.object_ctrl.sig_add_object.connect(self.gl_object_added)
@@ -1531,6 +1549,8 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
 
 
     def save_current_action(self, current_tool, layer_link, data, layer_tb):
+        if self._transaction_depth:
+            return  # The enclosing transaction already owns this edit.
         if self.action_id != 0:
             del_index = np.arange(
                 len(self.action_list) + self.action_id, len(self.action_list)
@@ -1550,6 +1570,9 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
             del self.action_list[0]
 
     def redo_called(self):
+        self.flush_plan_edits()
+        if not self.action_list:
+            return self.redo_mapping_step()
         self.action_id += 1
         if self.action_id > 0:
             self.action_id -= 1
@@ -1557,6 +1580,9 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
         self.set_undo_redo_data()
 
     def undo_called(self):
+        self.flush_plan_edits()
+        if not self.action_list:
+            return self.undo_mapping_step()
         self.action_id -= 1
         if abs(self.action_id) >= len(self.action_list):
             self.action_id += 1
@@ -2585,6 +2611,10 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
         # lasso related
         self.tool_box.lasso_color_btn.sigColorChanged.connect(self.lasso_color_changed)
 
+        self.undo_button = QPushButton("Undo")
+        self.undo_button.setToolTip("Undo the last action (Ctrl/Cmd+Z); repeat for earlier actions")
+        self.undo_button.clicked.connect(self.undo_called)
+        self.toolbar.addWidget(self.undo_button)
         self.toolbar.addAction(self.tool_box.add_atlas)
         self.toolbar.addAction(self.tool_box.add_image_stack)
         #     self.toolBar.addAction(add_cell_act)
@@ -4618,7 +4648,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
             "records": self.mapping_ledger.to_list(),
             "atlas_mark_origin": self.atlas_mark_origin,
             "editing_units": sorted(self.editing_units),
-            "objects": self.object_ctrl.get_obj_data(),
+            "objects": self.document.objects.payload(),
             "registration_review": self.registration_review.to_dict(),
             "mapping_review_state": self.mapping_review_state,
             "implants": self._implant_state(),
@@ -4632,7 +4662,8 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
     def _transaction_signature(self):
         """Identify changed content, including rebuilding an object under the same name."""
         state = self._transaction_state(copy_state=False)
-        state["objects"].pop("current_obj_index", None)
+        for key in ("current_obj_index", "obj_id", "obj_count"):
+            state["objects"].pop(key, None)
         return state_digest(state)
 
     @contextmanager
@@ -4648,6 +4679,8 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
         if not self._flushing_plans:
             # A staged plan edit is its own step, before this one.
             self.flush_plan_edits()
+        identities = {"obj_id": list(self.document.objects.obj_id),
+                      "obj_count": self.document.objects.obj_count}
         before = self._transaction_signature()
         transaction = self.undo_history.prepare(label, self._transaction_state(copy_state=False))
         if transaction is None:
@@ -4674,6 +4707,11 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
             self.action_list = []
             self.action_id = 0
             self.sync_mapping_undo_actions()
+
+        else:
+            # Rebuilding identical content is not a new scientific action.
+            # Keep identities too, rather than dirtying the saved document.
+            self.object_ctrl.restore_identity(identities)
 
     def sync_mapping_undo_actions(self):
         """Name the next undo and redo step in the Edit menu."""
@@ -4714,6 +4752,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
         o.current_obj_index = None
         if state["objects"]["obj_name"]:
             o.set_obj_data(state["objects"])
+        o.restore_identity(state["objects"])
         self.mapping_ledger, _problems = MappingLedger.from_list(state["records"])
         self.atlas_mark_origin = state["atlas_mark_origin"]
         self.editing_units = set(state["editing_units"])
@@ -5256,6 +5295,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
                 np.asarray(self.working_img_data["ruler_path"])
             )
 
+    @undo_action("Erase points", layers=("img-probe", "img-cells"))
     def _image_click_eraser(self, pos, x, y):
         if (
             not self.layer_ctrl.layer_id
@@ -5551,6 +5591,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
                 strict=False, show_error=False
             )
 
+    @undo_action("Mark cells")
     def _image_click_loc(self, pos, x, y):
         if self.tool_box.cell_selector_btn.isChecked():
             if "rgb" in self.image_view.image_file.pixel_type:
@@ -5626,6 +5667,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
                 pos=np.asarray(self.working_img_data["img-blob"])
             )
 
+    @undo_action("Mark probe point")
     def _image_click_probe(self, pos, x, y):
         self.working_img_data["img-probe"].append([x, y])
         self.image_view.img_stacks.image_dict["img-probe"].setData(
@@ -5815,6 +5857,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
         if self.tool_box.triang_vis_btn.isChecked():
             self.update_histo_tri_lines()
 
+    @undo_action("Erase probe point")
     def img_probe_pnts_clicked(self, points, ev):
         if (
             not self.tool_box.checkable_btn_dict["eraser_btn"].isChecked()
@@ -5827,6 +5870,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
             np.asarray(self.working_img_data["img-probe"])
         )
 
+    @undo_action("Erase cell")
     def img_cell_pnts_clicked(self, points, ev):
         if (
             not self.tool_box.checkable_btn_dict["eraser_btn"].isChecked()
@@ -6240,6 +6284,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
         else:
             self.print_message("", self.normal_color)
 
+    @undo_action("Erase atlas probe point")
     def atlas_erasing_probe(self, pos):
         x = pos[0]
         y = pos[1]
@@ -6411,6 +6456,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
         current_data = {"data": self.working_atlas_data["lasso_path"].copy()}
         self.save_current_action("lasso_btn", "lasso_path", current_data, None)
 
+    @undo_action("Mark atlas probe point")
     def _atlas_click_probe(self, pos, x, y):
         self.working_atlas_data["atlas-probe"].append([x, y])
 
@@ -6676,6 +6722,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
         # else:
         #     self.atlas_view.working_atlas.image_dict['atlas-probe'].clear()
 
+    @undo_action("Erase atlas contour point")
     def atlas_contour_pnts_clicked(self, points, ev):
         if self.num_windows == 4 or not self.working_atlas_data["atlas-contour"]:
             return
@@ -8477,117 +8524,20 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
         """Write objects as ``.dmapobj`` files; returns ``(paths, error)``."""
         from .object_export import write_objects
 
-        # Capture widgets on the GUI thread; the writer receives only data.
-        objects = [{"type": self.object_ctrl.obj_type[index],
-                    "data": self.object_ctrl.obj_data[index],
-                    "name": self.object_ctrl.obj_name[index],
+        # Capture the document on the GUI thread; the writer receives only data.
+        objects = [{"type": self.document.objects.obj_type[index],
+                    "data": self.document.objects.obj_data[index],
+                    "name": self.document.objects.obj_name[index],
                     "provenance": provenance,
                     "mapping_status": self.object_mapping_status(index)}
                    for index in indexes]
         return run_in_background(self, "Exporting objects...", write_objects, objects, folder)
 
     def export_all_results(self, folder):
-        """Export every available result into ``folder`` (created if needed).
+        """Export a project copy and its results through the shared workflow."""
+        from .export_workflow import export_all_results
 
-        Staged plan edits are stored and built first.
-
-        Writes a copy of the project, each built object as ``.dmapobj``
-        (``objects/``), the localisation CSVs of each probe (``probes/``),
-        the implant table, every section's working image, landmarks and
-        placement (``sections/``) and every layer (``layers/``). The project being
-        worked on keeps its own file. Returns ``(paths, notes)``: the files
-        written and what was left out and why. Raises OSError when the
-        folder cannot be created.
-        """
-        self.flush_plan_edits()
-        os.makedirs(folder, exist_ok=True)
-        paths, notes = [], []
-        o = self.object_ctrl
-        stem = (os.path.splitext(os.path.basename(self.current_project_path))[0]
-                if getattr(self, "current_project_path", None) else "project")
-        project = os.path.join(folder, "{}.dmap".format(stem))
-        if self.save_project_called(path=project, as_copy=True):
-            paths.append(project)
-        else:
-            notes.append("The project copy was not saved; see the message below the image.")
-
-        built = [i for i, kind in enumerate(o.obj_type) if kind.startswith("merged")]
-        stale = self.out_of_date_lines(built)
-        if stale:
-            notes.append("These exported results are out of date; fix them before using them "
-                         "as current results:\n" + "\n".join(stale))
-        unverified = self.unverified_lines(built)
-        if unverified:
-            notes.append("These exported results could not be verified as current (the files "
-                         "record \"not verified\"):\n" + "\n".join(unverified))
-        old_probes = [i for i in built if o.obj_type[i] == "merged probe"
-                      and "reconstruction" not in o.obj_data[i]]
-        if old_probes:
-            notes.append("Not exported, build again first (older probes without "
-                         "reconstruction data): {}.".format(
-                             ", ".join(o.obj_name[i] for i in old_probes)))
-        built = [i for i in built if i not in old_probes]
-        unbuilt = sum(1 for kind in o.obj_type if not kind.startswith("merged"))
-        if unbuilt:
-            notes.append("{} unbuilt part{} are in the project only.".format(
-                unbuilt, " is" if unbuilt == 1 else "s"))
-        if built:
-            try:
-                provenance = self.get_object_export_provenance()
-            except (OSError, ValueError) as exc:
-                provenance = None
-                notes.append("Objects not exported: the atlas could not be "
-                             "fingerprinted ({}).".format(exc))
-            if provenance is not None:
-                objects = os.path.join(folder, "objects")
-                os.makedirs(objects, exist_ok=True)
-                written, error = self._write_object_files(built, objects, provenance)
-                paths.extend(written)
-                if error is not None:
-                    notes.append(error)
-                self._note_out_of_date_export(built)
-
-        probes = [i for i in built if o.obj_type[i] == "merged probe"]
-        if probes:
-            probe_folder = os.path.join(folder, "probes")
-            os.makedirs(probe_folder, exist_ok=True)
-            for index, file_stem in zip(probes, self._object_file_names(
-                    [o.obj_name[i] for i in probes])):
-                try:
-                    written = write_probe_csv_files(
-                        os.path.join(probe_folder, "{}.csv".format(file_stem)),
-                        o.obj_name[index], o.obj_data[index])
-                except (KeyError, OSError, TypeError, ValueError) as exc:
-                    notes.append("Probe CSVs of {} not written: {}".format(
-                        o.obj_name[index], exc))
-                    continue
-                paths.extend(str(path) for path in written.values())
-
-        if any(self.implant_report(i.implant_id) for i in self.implants.implants()) or probes:
-            table = os.path.join(folder, "implants.csv")
-            self.export_implant_table(table)
-            paths.append(table)
-
-        if len(self.probe_plans):
-            table = os.path.join(folder, "probe_plans.csv")
-            self.export_probe_plans(table)
-            paths.append(table)
-
-        # Every section's working image, landmarks and atlas placement: the
-        # images the exported results were mapped from.
-        written, section_notes = self.export_sections(os.path.join(folder, "sections"))
-        paths.extend(written)
-        notes.extend(section_notes)
-
-        if self.layer_ctrl.layer_link:
-            layers = os.path.join(folder, "layers")
-            os.makedirs(layers, exist_ok=True)
-            before = set(os.listdir(layers))
-            if not self.save_all_layer(path=os.path.join(layers, "layer")):
-                notes.append("Some layers were not saved; see the message below the image.")
-            paths.extend(os.path.join(layers, name)
-                         for name in sorted(set(os.listdir(layers)) - before))
-        return paths, notes
+        return export_all_results(self, folder)
 
     def _note_out_of_date_export(self, indexes):
         stale = self.out_of_date_lines(indexes)

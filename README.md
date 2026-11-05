@@ -50,7 +50,7 @@ acknowledgements are in [THANKS.txt](THANKS.txt).
 
 ## DriftlessMap 2.0
 
-**2.9.0** is the current release. It opens the
+**2.9.0** is the current published release. The main branch is **2.9.2 (unpublished)**. It opens the
 redesigned step-by-step interface by default (Project, Section, Match, Register,
 Annotate, Results); the classic interface is still available with
 `driftlessmap --classic` or from Help > Open the classic interface. See

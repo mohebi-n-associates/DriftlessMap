@@ -231,10 +231,13 @@ class ImplantEngineTests(unittest.TestCase):
             self.assertEqual(window.object_mapping_status(0), "current")
             self.assertIsNotNone(window.object_3d_list[0])
 
+            kept_ids, kept_counter = list(o.obj_id), o.obj_count
             # Building again rebuilds from the same part and, changing nothing,
             # is not a separate undo step; undo restores the part.
             self.assertTrue(window.build_implant(fiber.implant_id)[0])
             self.assertEqual(o.obj_type, ["merged fiber"])
+            self.assertEqual(o.obj_id, kept_ids)
+            self.assertEqual(o.obj_count, kept_counter)
             self.assertEqual(window.undo_history.undo_label(), "Build Fiber 1")
             self.assertTrue(window.undo_mapping_step())
             self.assertEqual(o.obj_type, ["fiber piece"])
