@@ -1,0 +1,21 @@
+qt.qpa.fonts: Populating font family aliases took 53 ms. Replace uses of missing font family "Sans Serif" with one that exists to avoid this cost. 
+QOpenGLWidget is not supported on this platform.
+{
+  "machine": "arm64",
+  "platform": "macOS-26.1-arm64-arm-64bit-Mach-O",
+  "python": "3.14.10",
+  "numpy": "2.5.4",
+  "tifffile": "2026.10.15",
+  "result": {
+    "pages": 40,
+    "side": 1024,
+    "stack_mib": 80.0,
+    "sections_added": 40,
+    "full_stack_decodes": 1,
+    "decodes": 1,
+    "seconds": 1.64,
+    "traced_peak_mib": 225.3,
+    "resident_peak_mib": 922.5,
+    "resident_peak_before_mib": 417.7
+  }
+}

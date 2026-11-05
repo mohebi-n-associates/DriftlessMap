@@ -1,6 +1,6 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 2.9.0**. Section 2 explains how to
+This manual applies to **DriftlessMap 2.9.1 (unpublished source version)**. Section 2 explains how to
 install it; `pip install driftlessmap` installs 2.9.0.
 
 DriftlessMap - Histological E-data Registration in Brain Space - is a desktop
@@ -2825,3 +2825,11 @@ change plan poses. Prism clearance includes the solid interior and its actual
 length. Planning readouts are reused until their atlas or pose changes.
 Requested TIFF pyramid levels are decoded directly, and object exports and
 region-surface generation run outside the GUI thread.
+
+### Object state and history (2.9.1, unpublished)
+
+Object identities are retained across saving and reopening, including deleted
+ID gaps. Older projects receive identities when opened. Undo snapshots share
+repeated references to the same array within each snapshot, while separate
+snapshots remain independent. Save formats and normal object workflows stay
+compatible with older versions.

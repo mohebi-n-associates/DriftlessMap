@@ -1,3 +1,12 @@
+## 2.9.1 — unpublished
+
+- Move object data and creation/deletion into a document-owned, GUI-free model;
+  keep the existing controls as adapters.
+- Preserve object IDs and the allocation counter across project save/reopen and undo.
+- Extract Export all results orchestration from the main window.
+- Deduplicate shared arrays within undo snapshots while preserving independent restores.
+- Add object-state, legacy compatibility, history memory and workflow regressions.
+
 ## 2.9.0 — 5 November 2026
 
 - Correct prism solid containment, overlapping-tip and fixed-device clearance reporting.

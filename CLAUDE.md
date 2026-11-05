@@ -8,7 +8,8 @@ or important workflows change.
 
 ## Project identity
 
-- Current release: DriftlessMap 2.9.0 (5 November 2026; planning services,
+- Source version: **2.9.1, unpublished**. Do not tag or publish this version
+  without a new owner instruction. Current published release: DriftlessMap 2.9.0 (5 November 2026; planning services,
   solid clearance, responsive jobs and direct pyramid loading). 2.8.8
   (4 November 2026; Space out). 2.8.7
   (a prism's tip at its imaging face's bottom left corner). 2.8.6 (4 November 2026; probe planning,
@@ -494,6 +495,15 @@ or important workflows change.
   offsets are probe-frame x (across the probe) and y (face normal);
   `get_center_lines` turns them by the site face, and the preview uses the
   same mapping (`shank_plane_offsets`); never swap x and y for a face.
+- `document_state.DocumentState.objects` is the canonical GUI-free ObjectState.
+  It owns object columns, creation/deletion, selection, IDs and the next-ID counter.
+  ObjectControl's old attributes delegate to it; project collection and history
+  read the model. Optional obj_id/obj_count payload fields preserve identities;
+  legacy/invalid IDs keep generated identities. Arrays are borrowed in payloads.
+  `export_workflow.export_all_results` owns export orchestration through the
+  engine's application operations; the main-window method is an adapter.
+  History pack/unpack deduplicate array identity within each call, never across
+  snapshots; budget accounting counts each retained array once.
 - `driftlessmap/object_control.py`: object pieces/merged objects, visualization,
   and information dialogs.
 - `driftlessmap/layers_control.py`: layer metadata and UI state.

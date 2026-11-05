@@ -35,11 +35,11 @@ from PyQt6.QtCore import (
     pyqtSignal,
     pyqtSlot,
 )
+from .document_state import ObjectState, OBJECT_COLUMNS, object_state_property
 from . import file_dialogs
 from .wtiles import QDoubleButton
 from .probe_csv import write_probe_csv_files
 from .roi_analysis import write_roi_csv
-from .mapping_records import valid_derivation
 from .utils import read_qss_file
 from .resources import resource_path
 
@@ -1253,7 +1253,9 @@ class ObjectControl(QObject):
         sigSizeChanged = pyqtSignal(object)
         sigBlendModeChanged = pyqtSignal(object)
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, state=None):
+        initial = state.payload() if state is not None and state.obj_type else None
+        self.state = state if state is not None else ObjectState()
         self._sigprox = ObjectControl.SignalProxy()
         self.sig_opacity_changed = self._sigprox.sigOpacityChanged
         self.sig_visible_changed = self._sigprox.sigVisChanged
@@ -1452,6 +1454,8 @@ class ObjectControl(QObject):
         self.delete_object_btn = BottomButton("icons/sidebar/trash.png")
         self.delete_object_btn.setToolTip("delete an object")
         self.delete_object_btn.clicked.connect(self.delete_object_btn_clicked)
+        if initial is not None:
+            self.set_obj_data(initial)
 
     def blend_mode_changed(self):
         blend_mode = self.obj_blend_combo.currentText()
@@ -1610,23 +1614,15 @@ class ObjectControl(QObject):
         if len(del_ind) > 1:
             del_ind = np.sort(delete_index)[::-1]
 
+        selected_index = self.current_obj_index
         current_obj_id = self.obj_id[self.current_obj_index]
         for da_ind in del_ind:
             self.layer_layout.removeWidget(self.obj_list[da_ind])
             self.obj_list[da_ind].deleteLater()
             del self.obj_list[da_ind]
-            del self.obj_id[da_ind]
-            del self.obj_name[da_ind]
-            del self.obj_type[da_ind]
-            del self.obj_data[da_ind]
-            del self.obj_comp_mode[da_ind]
-            del self.obj_opacity[da_ind]
-            del self.obj_size[da_ind]
-            del self.obj_drawing_mode[da_ind]
-            del self.obj_derivation[da_ind]
-            del self.obj_piece_derivation[da_ind]
+            self.state.remove_row(int(da_ind))
             self.sig_delete_object.emit(da_ind)
-        if self.current_obj_index in del_ind:
+        if selected_index in del_ind:
             if self.obj_list:
                 self.obj_list[-1].set_checked(True)
                 self.current_obj_index = len(self.obj_list) - 1
@@ -1679,22 +1675,14 @@ class ObjectControl(QObject):
         # group_count = self.get_group_count(object_type)
         if object_icon is None:
             return
-        self.obj_derivation.append(valid_derivation(derivation))
-        self.obj_piece_derivation.append(
-            [valid_derivation(item) for item in piece_derivation]
-            if isinstance(piece_derivation, (list, tuple)) else [])
         if drawing_mode is None:
-            drawing_mode = self._default_drawing_mode(
-                object_name, object_type, object_data
-            )
-        self.obj_drawing_mode.append(drawing_mode)
-        self.obj_id.append(self.obj_count)
-        self.obj_data.append(object_data)
-        self.obj_name.append(object_name)
-        self.obj_type.append(object_type)
+            drawing_mode = self._default_drawing_mode(object_name, object_type, object_data)
+        identity = self.state.add(object_name, object_type, object_data, object_mode,
+                                  drawing_mode, derivation, piece_derivation,
+                                  self.default_size_val, self.default_opacity_val)
         if "merged" in object_type:
             new_layer = RegisteredObject(
-                obj_id=self.obj_count,
+                obj_id=identity,
                 obj_name=object_name,
                 obj_type=object_type,
                 object_icon=object_icon,
@@ -1702,16 +1690,20 @@ class ObjectControl(QObject):
             new_layer.eye_clicked.connect(self.obj_eye_clicked)
             new_layer.sig_object_color_changed.connect(self.obj_color_changed)
             new_layer.sig_link.connect(self.obj_link_changed)
-            self.obj_opacity.append(self.default_opacity_val)
-            self.obj_size.append(self.default_size_val)
-            self.obj_comp_mode.append(object_mode)
             da_color = (
                 new_layer.color.red(),
                 new_layer.color.green(),
                 new_layer.color.blue(),
                 255,
             )
-            self.obj_data[-1]["vis_color"] = da_color
+            stored_colour = object_data.get("vis_color")
+            if isinstance(stored_colour, (list, tuple)) and len(stored_colour) in (3, 4):
+                try:
+                    new_layer.set_icon_style(QColor(*(int(v) for v in stored_colour)))
+                except (TypeError, ValueError, OverflowError):
+                    self.obj_data[-1]["vis_color"] = da_color
+            else:
+                self.obj_data[-1]["vis_color"] = da_color
             if self.obj_size_slider.value() != self.default_size_val:
                 self.obj_size_slider.setValue(self.default_size_val)
             if self.obj_opacity_slider.value() != self.default_opacity_val:
@@ -1722,22 +1714,19 @@ class ObjectControl(QObject):
                 self.obj_blend_combo.blockSignals(False)
         else:
             new_layer = SinglePiece(
-                index=self.obj_count,
+                index=identity,
                 obj_name=object_name,
                 obj_type=object_type,
                 object_icon=object_icon,
             )
             new_layer.sig_name_changed.connect(self.obj_piece_name_changed)
-            self.obj_opacity.append([])
-            self.obj_size.append([])
-            self.obj_comp_mode.append([])
 
         new_layer.text_btn.setText(self.obj_name[-1])
         new_layer.set_checked(True)
         new_layer.sig_clicked.connect(self.obj_clicked)
         self.obj_list.append(new_layer)
 
-        active_index = np.where(np.ravel(self.obj_id) == self.obj_count)[0][0]
+        active_index = np.where(np.ravel(self.obj_id) == identity)[0][0]
         if self.current_obj_index is None:
             self.current_obj_index = active_index
         else:
@@ -1746,7 +1735,6 @@ class ObjectControl(QObject):
 
         self.layer_layout.addWidget(self.obj_list[-1])
         self.sig_add_object.emit((object_data, object_type))
-        self.obj_count += 1
 
     # merge object pieces
     def collect_pieces(self, obj_type="probe piece"):
@@ -1850,19 +1838,7 @@ class ObjectControl(QObject):
 
     # get obj data
     def get_obj_data(self):
-        data = {
-            "obj_name": self.obj_name,
-            "obj_type": self.obj_type,
-            "obj_data": self.obj_data,
-            "obj_size": self.obj_size,
-            "obj_opacity": self.obj_opacity,
-            "obj_comp_mode": self.obj_comp_mode,
-            "obj_drawing_mode": self.obj_drawing_mode,
-            "obj_derivation": self.obj_derivation,
-            "obj_piece_derivation": self.obj_piece_derivation,
-            "current_obj_index": self.current_obj_index,
-        }
-        return data
+        return self.state.payload()
 
     def set_obj_data(self, data):
         saved_modes = data.get("obj_drawing_mode")
@@ -1886,6 +1862,10 @@ class ObjectControl(QObject):
                 derivation=saved(derivations, i),
                 piece_derivation=saved(piece_derivations, i),
             )
+
+        if self.state.restore_identity(data):
+            for item, identity in zip(self.obj_list, self.obj_id):
+                item.id = identity
 
         self.obj_size = data["obj_size"]
         self.obj_opacity = data["obj_opacity"]
@@ -1949,3 +1929,7 @@ class ObjectControl(QObject):
         compare_data = [self.obj_data[ind] for ind in linked]
         info_window = CompareWindow(compare_names, compare_data)
         info_window.exec()
+
+
+for _field in (*OBJECT_COLUMNS, "obj_count", "current_obj_index"):
+    setattr(ObjectControl, _field, object_state_property(_field))

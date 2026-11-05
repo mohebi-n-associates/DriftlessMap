@@ -168,7 +168,6 @@ from .version import APPLICATION_DISPLAY_NAME, APPLICATION_WINDOW_TITLE, __versi
 from .cell_detection import select_detection_channel
 from .coordinate_validation import coordinates_in_bounds
 from .layer_validation import image_layer_matches
-from .probe_csv import write_probe_csv_files
 from .probe_reconstruction import (
     allen_ccf_to_estimated_bregma_mm,
     format_estimated_bregma_report,
@@ -455,7 +454,10 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
         self.layer_ctrl.sig_layer_deleted.connect(self.layers_exist_changed)
         self.layer_ctrl.sig_blend_mode_changed.connect(self.layers_blend_mode_changed)
 
-        self.object_ctrl = ObjectControl()
+        from .document_state import DocumentState
+
+        self.document = DocumentState()
+        self.object_ctrl = ObjectControl(state=self.document.objects)
         self.object_ctrl.drawing_info_provider = self.build_drawing_object_info
         self.object_ctrl.sig_delete_object.connect(self.gl_object_deleted)
         self.object_ctrl.sig_add_object.connect(self.gl_object_added)
@@ -4618,7 +4620,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
             "records": self.mapping_ledger.to_list(),
             "atlas_mark_origin": self.atlas_mark_origin,
             "editing_units": sorted(self.editing_units),
-            "objects": self.object_ctrl.get_obj_data(),
+            "objects": self.document.objects.payload(),
             "registration_review": self.registration_review.to_dict(),
             "mapping_review_state": self.mapping_review_state,
             "implants": self._implant_state(),
@@ -8477,117 +8479,20 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
         """Write objects as ``.dmapobj`` files; returns ``(paths, error)``."""
         from .object_export import write_objects
 
-        # Capture widgets on the GUI thread; the writer receives only data.
-        objects = [{"type": self.object_ctrl.obj_type[index],
-                    "data": self.object_ctrl.obj_data[index],
-                    "name": self.object_ctrl.obj_name[index],
+        # Capture the document on the GUI thread; the writer receives only data.
+        objects = [{"type": self.document.objects.obj_type[index],
+                    "data": self.document.objects.obj_data[index],
+                    "name": self.document.objects.obj_name[index],
                     "provenance": provenance,
                     "mapping_status": self.object_mapping_status(index)}
                    for index in indexes]
         return run_in_background(self, "Exporting objects...", write_objects, objects, folder)
 
     def export_all_results(self, folder):
-        """Export every available result into ``folder`` (created if needed).
+        """Export a project copy and its results through the shared workflow."""
+        from .export_workflow import export_all_results
 
-        Staged plan edits are stored and built first.
-
-        Writes a copy of the project, each built object as ``.dmapobj``
-        (``objects/``), the localisation CSVs of each probe (``probes/``),
-        the implant table, every section's working image, landmarks and
-        placement (``sections/``) and every layer (``layers/``). The project being
-        worked on keeps its own file. Returns ``(paths, notes)``: the files
-        written and what was left out and why. Raises OSError when the
-        folder cannot be created.
-        """
-        self.flush_plan_edits()
-        os.makedirs(folder, exist_ok=True)
-        paths, notes = [], []
-        o = self.object_ctrl
-        stem = (os.path.splitext(os.path.basename(self.current_project_path))[0]
-                if getattr(self, "current_project_path", None) else "project")
-        project = os.path.join(folder, "{}.dmap".format(stem))
-        if self.save_project_called(path=project, as_copy=True):
-            paths.append(project)
-        else:
-            notes.append("The project copy was not saved; see the message below the image.")
-
-        built = [i for i, kind in enumerate(o.obj_type) if kind.startswith("merged")]
-        stale = self.out_of_date_lines(built)
-        if stale:
-            notes.append("These exported results are out of date; fix them before using them "
-                         "as current results:\n" + "\n".join(stale))
-        unverified = self.unverified_lines(built)
-        if unverified:
-            notes.append("These exported results could not be verified as current (the files "
-                         "record \"not verified\"):\n" + "\n".join(unverified))
-        old_probes = [i for i in built if o.obj_type[i] == "merged probe"
-                      and "reconstruction" not in o.obj_data[i]]
-        if old_probes:
-            notes.append("Not exported, build again first (older probes without "
-                         "reconstruction data): {}.".format(
-                             ", ".join(o.obj_name[i] for i in old_probes)))
-        built = [i for i in built if i not in old_probes]
-        unbuilt = sum(1 for kind in o.obj_type if not kind.startswith("merged"))
-        if unbuilt:
-            notes.append("{} unbuilt part{} are in the project only.".format(
-                unbuilt, " is" if unbuilt == 1 else "s"))
-        if built:
-            try:
-                provenance = self.get_object_export_provenance()
-            except (OSError, ValueError) as exc:
-                provenance = None
-                notes.append("Objects not exported: the atlas could not be "
-                             "fingerprinted ({}).".format(exc))
-            if provenance is not None:
-                objects = os.path.join(folder, "objects")
-                os.makedirs(objects, exist_ok=True)
-                written, error = self._write_object_files(built, objects, provenance)
-                paths.extend(written)
-                if error is not None:
-                    notes.append(error)
-                self._note_out_of_date_export(built)
-
-        probes = [i for i in built if o.obj_type[i] == "merged probe"]
-        if probes:
-            probe_folder = os.path.join(folder, "probes")
-            os.makedirs(probe_folder, exist_ok=True)
-            for index, file_stem in zip(probes, self._object_file_names(
-                    [o.obj_name[i] for i in probes])):
-                try:
-                    written = write_probe_csv_files(
-                        os.path.join(probe_folder, "{}.csv".format(file_stem)),
-                        o.obj_name[index], o.obj_data[index])
-                except (KeyError, OSError, TypeError, ValueError) as exc:
-                    notes.append("Probe CSVs of {} not written: {}".format(
-                        o.obj_name[index], exc))
-                    continue
-                paths.extend(str(path) for path in written.values())
-
-        if any(self.implant_report(i.implant_id) for i in self.implants.implants()) or probes:
-            table = os.path.join(folder, "implants.csv")
-            self.export_implant_table(table)
-            paths.append(table)
-
-        if len(self.probe_plans):
-            table = os.path.join(folder, "probe_plans.csv")
-            self.export_probe_plans(table)
-            paths.append(table)
-
-        # Every section's working image, landmarks and atlas placement: the
-        # images the exported results were mapped from.
-        written, section_notes = self.export_sections(os.path.join(folder, "sections"))
-        paths.extend(written)
-        notes.extend(section_notes)
-
-        if self.layer_ctrl.layer_link:
-            layers = os.path.join(folder, "layers")
-            os.makedirs(layers, exist_ok=True)
-            before = set(os.listdir(layers))
-            if not self.save_all_layer(path=os.path.join(layers, "layer")):
-                notes.append("Some layers were not saved; see the message below the image.")
-            paths.extend(os.path.join(layers, name)
-                         for name in sorted(set(os.listdir(layers)) - before))
-        return paths, notes
+        return export_all_results(self, folder)
 
     def _note_out_of_date_export(self, indexes):
         stale = self.out_of_date_lines(indexes)
