@@ -1210,7 +1210,10 @@ def space_plans(atlas, plans, movable, gap_um=CLEARANCE_UM, max_ml_deg=30.0,
     (names whose tilts changed), ``clashes`` (pairs still short, as from
     ``clearances``) and ``ap_used``.
     """
-    readout = readout or (lambda plan: plan_readout(plan, atlas))
+    # Spacing consumes only the entry; anatomical diagnostics are computed
+    # when the resulting plans are built/displayed, not for every trial tilt.
+    readout = readout or (lambda plan: {
+        "entry_um": surface_entry(atlas, plan.tip_um, plan.direction)[0]})
     current = {plan.probe: plan for plan in plans}
     movable = [name for name in movable if name in current]
     reads = {name: readout(plan) for name, plan in current.items()}
@@ -1239,7 +1242,7 @@ def space_plans(atlas, plans, movable, gap_um=CLEARANCE_UM, max_ml_deg=30.0,
                 need = gap_um
                 if la and lb:
                     floor = float(np.linalg.norm(a1 - b1)) - ra - rb
-                    need = min(gap_um, floor - 1.0)
+                    need = max(0.0, min(gap_um, floor - 1.0))
                 margin = distance - need
                 worst = margin if worst is None else min(worst, margin)
         return worst
@@ -1338,6 +1341,13 @@ def space_plans(atlas, plans, movable, gap_um=CLEARANCE_UM, max_ml_deg=30.0,
              if (current[name].ml_tilt_deg, current[name].ap_tilt_deg)
              != (original[name].ml_tilt_deg, original[name].ap_tilt_deg)]
     short = {pair for pair in required if gaps[pair] is not None and gaps[pair] < -1e-6}
+    # Fixed pairs cannot improve the objective, but still belong in the report.
+    for i, a in enumerate(names):
+        for b in names[i + 1:]:
+            if a not in movable and b not in movable:
+                physical = _pair_gap(current[a], reads[a], current[b], reads[b])
+                if physical is not None and physical[0] < gap_um - 1e-6:
+                    short.add((a, b))
     clashes = [pair for pair in clearances([(current[n], reads[n]) for n in names])
                if tuple(sorted(pair["probes"])) in short]
     ap_used = any(abs(current[n].ap_tilt_deg - original[n].ap_tilt_deg) > 1e-9 for n in moved)

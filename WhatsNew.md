@@ -2446,3 +2446,8 @@ The changes were kept as separate issue-level commits:
 | `c0bc2d9` | Add regression test CI |
 | `f6d20ff` | Remove unused HDF5 runtime dependencies |
 | `00b5368` | Bump HERBS version to 0.2.8.1 |
+
+## Unreleased — work toward 2.9.0
+
+- Keep overlapping tips and fixed-device conflicts visible after Space out.
+- Avoid full anatomical readouts for every trial spacing pose.

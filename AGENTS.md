@@ -207,6 +207,9 @@ or important workflows change.
   gap: ML before AP, smallest largest tilt, back towards the start; `moved`,
   `clashes`, `ap_used`), engine `space_out_plans` (one undoable step),
   `v2/spacing_dialog.SpacingDialog`, Space out… and command `plan.space`.
+- Work toward 2.9.0: spacing trials calculate only surface entry and geometry;
+  anatomical readouts remain in build/display. Fixed-device conflicts and
+  overlapping fixed tips remain visible in the spacing report.
 - `driftlessmap/project_session.py`: `ProjectSessionMixin.project_payload` is the
   shared saved-state collector. `load_project` snapshots the active document and
   restores it on failure, including its original reader, in-memory atlas and undo

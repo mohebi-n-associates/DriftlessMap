@@ -1,0 +1,38 @@
+qt.qpa.fonts: Populating font family aliases took 54 ms. Replace uses of missing font family "Sans Serif" with one that exists to avoid this cost. 
+QOpenGLWidget is not supported on this platform.
+REVIEW_RESULT {"case": "gui_perf", "operation": "unchanged_shell_refresh_prism", "seconds": [0.04107124998699874, 0.04174870892893523, 0.03969420806970447]}
+         232306 function calls (232270 primitive calls) in 0.122 seconds
+
+   Ordered by: cumulative time
+   List reduced from 403 to 25 due to restriction <25>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        3    0.000    0.000    0.123    0.041 shell.py:1481(refresh)
+        3    0.000    0.000    0.121    0.040 annotate_panel.py:259(refresh)
+        3    0.000    0.000    0.119    0.040 implant_card.py:637(refresh)
+        3    0.000    0.000    0.119    0.040 implant_card.py:580(_sync_actions)
+        3    0.000    0.000    0.118    0.039 plan_editor.py:445(set_probe)
+        3    0.000    0.000    0.118    0.039 plan_editor.py:463(sync)
+        6    0.000    0.000    0.116    0.019 probe_plan_engine.py:261(probe_plan_readout)
+       12    0.000    0.000    0.114    0.010 probe_plans.py:609(plan_readout)
+      564    0.010    0.000    0.071    0.000 probe_plans.py:482(surface_entry)
+       12    0.001    0.000    0.062    0.005 probe_plans.py:1636(track_checks)
+        3    0.000    0.000    0.060    0.020 plan_editor.py:547(_show_readout)
+        3    0.000    0.000    0.058    0.019 plan_editor.py:510(_fill)
+        6    0.000    0.000    0.057    0.010 probe_plan_engine.py:324(plan_clearances)
+     6927    0.032    0.000    0.056    0.000 probe_plans.py:448(labels_at)
+       12    0.001    0.000    0.047    0.004 probe_plans.py:688(_add_prism)
+       96    0.010    0.000    0.022    0.000 probe_plans.py:1596(traverse)
+    20121    0.009    0.000    0.020    0.000 fromnumeric.py:86(_wrapreduction_any_all)
+    13167    0.004    0.000    0.018    0.000 fromnumeric.py:2586(all)
+    20826    0.010    0.000    0.010    0.000 {method 'reduce' of 'numpy.ufunc' objects}
+       12    0.003    0.000    0.009    0.001 probe_plans.py:1560(face_view)
+     6954    0.002    0.000    0.007    0.000 fromnumeric.py:2474(any)
+      159    0.000    0.000    0.007    0.000 probe_plans.py:202(normal)
+      159    0.001    0.000    0.006    0.000 probe_plans.py:70(face_normal)
+      234    0.002    0.000    0.006    0.000 numeric.py:1563(cross)
+      576    0.002    0.000    0.005    0.000 probe_plans.py:476(_line_samples)
+
+
+
+REVIEW_RESULT {"case": "gui_perf", "operation": "unchanged_overlay_refresh_prism", "seconds": [0.0064715000335127115, 0.0061355410143733025, 0.00625041697639972]}

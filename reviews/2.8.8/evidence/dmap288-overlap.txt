@@ -1,0 +1,1 @@
+REVIEW_RESULT {"case": "overlap", "report": {"moved": ["Fiber 1", "Fiber 2"], "clashes": [], "ap_used": true}, "angles": [30.0, -30.0], "actual": [{"probes": ["Fiber 1", "Fiber 2"], "distance_um": 0.0, "depth_um": 1401.703012021232}]}

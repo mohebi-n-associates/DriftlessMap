@@ -1,0 +1,1352 @@
+{
+  "python_files": 100,
+  "physical_source_lines": 47674,
+  "modules": [
+    {
+      "file": "driftlessmap/app.py",
+      "lines": 10408,
+      "functions": 355,
+      "classes": [
+        {
+          "name": "DriftlessMap",
+          "methods": 344
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/probe_plans.py",
+      "lines": 2145,
+      "functions": 124,
+      "classes": [
+        {
+          "name": "ProbePlan",
+          "methods": 12
+        },
+        {
+          "name": "PlanBook",
+          "methods": 11
+        },
+        {
+          "name": "PlanAtlas",
+          "methods": 6
+        },
+        {
+          "name": "Craniotomy",
+          "methods": 5
+        },
+        {
+          "name": "CraniotomyBook",
+          "methods": 9
+        },
+        {
+          "name": "ProposalRequest",
+          "methods": 3
+        },
+        {
+          "name": "_LineScorer",
+          "methods": 2
+        },
+        {
+          "name": "SearchStopped",
+          "methods": 0
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/object_control.py",
+      "lines": 1951,
+      "functions": 66,
+      "classes": [
+        {
+          "name": "ObjectTextButton",
+          "methods": 1
+        },
+        {
+          "name": "CompareWindow",
+          "methods": 2
+        },
+        {
+          "name": "CellsInfoWindow",
+          "methods": 3
+        },
+        {
+          "name": "DrawingInfoWindow",
+          "methods": 3
+        },
+        {
+          "name": "ImplantInfoWindow",
+          "methods": 1
+        },
+        {
+          "name": "VirusInfoWindow",
+          "methods": 3
+        },
+        {
+          "name": "ProbeInfoWindow",
+          "methods": 4
+        },
+        {
+          "name": "SinglePiece",
+          "methods": 6
+        },
+        {
+          "name": "RegisteredObject",
+          "methods": 8
+        },
+        {
+          "name": "BottomButton",
+          "methods": 1
+        },
+        {
+          "name": "ObjectControl",
+          "methods": 33
+        },
+        {
+          "name": "SignalProxy",
+          "methods": 0
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/probe_utiles.py",
+      "lines": 1613,
+      "functions": 59,
+      "classes": [
+        {
+          "name": "Probe",
+          "methods": 11
+        },
+        {
+          "name": "MultiProbes",
+          "methods": 4
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/v2/shell.py",
+      "lines": 1523,
+      "functions": 73,
+      "classes": [
+        {
+          "name": "V2Window",
+          "methods": 70
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/atlas_view.py",
+      "lines": 1494,
+      "functions": 75,
+      "classes": [
+        {
+          "name": "PageController",
+          "methods": 12
+        },
+        {
+          "name": "SliceRotation",
+          "methods": 6
+        },
+        {
+          "name": "ImageLabel",
+          "methods": 1
+        },
+        {
+          "name": "RotationBtn",
+          "methods": 1
+        },
+        {
+          "name": "AtlasView",
+          "methods": 55
+        },
+        {
+          "name": "SignalProxy",
+          "methods": 0
+        },
+        {
+          "name": "SignalProxy",
+          "methods": 0
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/atlas_matching.py",
+      "lines": 1252,
+      "functions": 65,
+      "classes": [
+        {
+          "name": "Orientation",
+          "methods": 3
+        },
+        {
+          "name": "Candidate",
+          "methods": 0
+        },
+        {
+          "name": "DepthMatch",
+          "methods": 0
+        },
+        {
+          "name": "Placement",
+          "methods": 0
+        },
+        {
+          "name": "_AtlasOutline",
+          "methods": 2
+        },
+        {
+          "name": "PhysicalSection",
+          "methods": 5
+        },
+        {
+          "name": "NormalisedSection",
+          "methods": 2
+        },
+        {
+          "name": "TiltMatch",
+          "methods": 0
+        },
+        {
+          "name": "Suggestion",
+          "methods": 0
+        },
+        {
+          "name": "SuggestionReport",
+          "methods": 1
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/v2/plan_editor.py",
+      "lines": 1172,
+      "functions": 63,
+      "classes": [
+        {
+          "name": "_Steering",
+          "methods": 2
+        },
+        {
+          "name": "PlanEditor",
+          "methods": 53
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/implants.py",
+      "lines": 1022,
+      "functions": 52,
+      "classes": [
+        {
+          "name": "Implant",
+          "methods": 3
+        },
+        {
+          "name": "ImplantBook",
+          "methods": 13
+        },
+        {
+          "name": "AtlasFrame",
+          "methods": 5
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/allen_downloader.py",
+      "lines": 923,
+      "functions": 36,
+      "classes": [
+        {
+          "name": "WorkerProcessAllen",
+          "methods": 5
+        },
+        {
+          "name": "MeshDownloader",
+          "methods": 3
+        },
+        {
+          "name": "AllenDownloader",
+          "methods": 26
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/utils.py",
+      "lines": 840,
+      "functions": 47,
+      "classes": []
+    },
+    {
+      "file": "driftlessmap/probe_plan_engine.py",
+      "lines": 797,
+      "functions": 48,
+      "classes": [
+        {
+          "name": "ProbePlanEngineMixin",
+          "methods": 43
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/image_view.py",
+      "lines": 785,
+      "functions": 45,
+      "classes": [
+        {
+          "name": "ImagePageController",
+          "methods": 6
+        },
+        {
+          "name": "ImageView",
+          "methods": 38
+        },
+        {
+          "name": "SignalProxy",
+          "methods": 0
+        },
+        {
+          "name": "SignalProxy",
+          "methods": 0
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/atlas_processor.py",
+      "lines": 758,
+      "functions": 25,
+      "classes": [
+        {
+          "name": "CustomerAtlasWorker",
+          "methods": 5
+        },
+        {
+          "name": "AtlasProcessor",
+          "methods": 20
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/image_reader.py",
+      "lines": 732,
+      "functions": 27,
+      "classes": [
+        {
+          "name": "ImageReader",
+          "methods": 1
+        },
+        {
+          "name": "EmbeddedImageReader",
+          "methods": 1
+        },
+        {
+          "name": "TIFFReader",
+          "methods": 6
+        },
+        {
+          "name": "ImagesReader",
+          "methods": 2
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/wtiles.py",
+      "lines": 718,
+      "functions": 47,
+      "classes": [
+        {
+          "name": "LayerSettingDialog",
+          "methods": 3
+        },
+        {
+          "name": "SliceSettingDialog",
+          "methods": 5
+        },
+        {
+          "name": "QDoubleButton",
+          "methods": 3
+        },
+        {
+          "name": "QLabelClickable",
+          "methods": 5
+        },
+        {
+          "name": "QFrameClickable",
+          "methods": 5
+        },
+        {
+          "name": "LineEditEntered",
+          "methods": 2
+        },
+        {
+          "name": "IntLineEdit",
+          "methods": 2
+        },
+        {
+          "name": "FaceCombo",
+          "methods": 2
+        },
+        {
+          "name": "LinearSiliconInfoDialog",
+          "methods": 14
+        },
+        {
+          "name": "MultiProbePlanningDialog",
+          "methods": 6
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/persistence.py",
+      "lines": 691,
+      "functions": 27,
+      "classes": [
+        {
+          "name": "ArchiveAttachment",
+          "methods": 3
+        },
+        {
+          "name": "_LegacyPandasNA",
+          "methods": 0
+        },
+        {
+          "name": "_LegacyPandasStringDtype",
+          "methods": 1
+        },
+        {
+          "name": "_LegacyPandasStringArray",
+          "methods": 2
+        },
+        {
+          "name": "RestrictedUnpickler",
+          "methods": 1
+        },
+        {
+          "name": "PickledMeshState",
+          "methods": 1
+        },
+        {
+          "name": "MeshUnpickler",
+          "methods": 0
+        },
+        {
+          "name": "_ArchiveReader",
+          "methods": 2
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/v2/implant_card.py",
+      "lines": 677,
+      "functions": 41,
+      "classes": [
+        {
+          "name": "ImplantDialog",
+          "methods": 5
+        },
+        {
+          "name": "ImplantCard",
+          "methods": 35
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/v2/section_panel.py",
+      "lines": 657,
+      "functions": 35,
+      "classes": [
+        {
+          "name": "InputPreview",
+          "methods": 1
+        },
+        {
+          "name": "SectionPanel",
+          "methods": 29
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/toolbox.py",
+      "lines": 631,
+      "functions": 14,
+      "classes": [
+        {
+          "name": "ToolBox",
+          "methods": 13
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/image_curves.py",
+      "lines": 582,
+      "functions": 29,
+      "classes": [
+        {
+          "name": "CurvesPlot",
+          "methods": 13
+        },
+        {
+          "name": "CurveWidget",
+          "methods": 16
+        },
+        {
+          "name": "SignalProxy",
+          "methods": 0
+        },
+        {
+          "name": "SignalProxy",
+          "methods": 0
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/implant_engine.py",
+      "lines": 566,
+      "functions": 39,
+      "classes": [
+        {
+          "name": "ImplantEngineMixin",
+          "methods": 35
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/triangulation.py",
+      "lines": 552,
+      "functions": 18,
+      "classes": [
+        {
+          "name": "TriangulationError",
+          "methods": 0
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/probe_reconstruction.py",
+      "lines": 523,
+      "functions": 14,
+      "classes": []
+    },
+    {
+      "file": "driftlessmap/layers_control.py",
+      "lines": 517,
+      "functions": 23,
+      "classes": [
+        {
+          "name": "SingleLayer",
+          "methods": 8
+        },
+        {
+          "name": "LayersControl",
+          "methods": 15
+        },
+        {
+          "name": "SignalProxy",
+          "methods": 0
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/section_engine.py",
+      "lines": 482,
+      "functions": 26,
+      "classes": [
+        {
+          "name": "SectionsMixin",
+          "methods": 25
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/auto_registration.py",
+      "lines": 439,
+      "functions": 25,
+      "classes": [
+        {
+          "name": "LandmarkProposal",
+          "methods": 0
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/atlas_loader.py",
+      "lines": 411,
+      "functions": 13,
+      "classes": [
+        {
+          "name": "AtlasLoader",
+          "methods": 2
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/atlas_downloader.py",
+      "lines": 402,
+      "functions": 22,
+      "classes": [
+        {
+          "name": "DownloadThread",
+          "methods": 2
+        },
+        {
+          "name": "WorkerProcessData",
+          "methods": 4
+        },
+        {
+          "name": "AtlasDownloader",
+          "methods": 15
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/probe_csv.py",
+      "lines": 396,
+      "functions": 15,
+      "classes": []
+    },
+    {
+      "file": "driftlessmap/v2/register_panel.py",
+      "lines": 392,
+      "functions": 28,
+      "classes": [
+        {
+          "name": "RegisterPanel",
+          "methods": 26
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/roi_analysis.py",
+      "lines": 383,
+      "functions": 9,
+      "classes": []
+    },
+    {
+      "file": "driftlessmap/image_stacks.py",
+      "lines": 371,
+      "functions": 22,
+      "classes": [
+        {
+          "name": "ClickableImage",
+          "methods": 4
+        },
+        {
+          "name": "SliceStack",
+          "methods": 9
+        },
+        {
+          "name": "ImageStacks",
+          "methods": 9
+        },
+        {
+          "name": "SignalProxy",
+          "methods": 0
+        },
+        {
+          "name": "SignalProxy",
+          "methods": 0
+        },
+        {
+          "name": "SignalProxy",
+          "methods": 0
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/sections.py",
+      "lines": 370,
+      "functions": 30,
+      "classes": [
+        {
+          "name": "SectionEntry",
+          "methods": 3
+        },
+        {
+          "name": "SectionBook",
+          "methods": 16
+        },
+        {
+          "name": "SpillCache",
+          "methods": 5
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/project_session.py",
+      "lines": 363,
+      "functions": 10,
+      "classes": [
+        {
+          "name": "ProjectSnapshot",
+          "methods": 2
+        },
+        {
+          "name": "ProjectSessionMixin",
+          "methods": 7
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/label_tree.py",
+      "lines": 362,
+      "functions": 22,
+      "classes": [
+        {
+          "name": "SignalBlock",
+          "methods": 3
+        },
+        {
+          "name": "LabelTree",
+          "methods": 19
+        },
+        {
+          "name": "SignalProxy",
+          "methods": 0
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/provenance.py",
+      "lines": 349,
+      "functions": 15,
+      "classes": []
+    },
+    {
+      "file": "driftlessmap/v2/proposal_dialog.py",
+      "lines": 340,
+      "functions": 17,
+      "classes": [
+        {
+          "name": "ProposalDialog",
+          "methods": 15
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/mapping_records.py",
+      "lines": 337,
+      "functions": 26,
+      "classes": [
+        {
+          "name": "MappingRecord",
+          "methods": 4
+        },
+        {
+          "name": "MappingLedger",
+          "methods": 12
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/v2/probes.py",
+      "lines": 330,
+      "functions": 32,
+      "classes": [
+        {
+          "name": "ProbeBook",
+          "methods": 29
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/v2/allen_download_dialog.py",
+      "lines": 329,
+      "functions": 11,
+      "classes": [
+        {
+          "name": "_Tile",
+          "methods": 3
+        },
+        {
+          "name": "AllenDownloadDialog",
+          "methods": 8
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/v2/results_panel.py",
+      "lines": 322,
+      "functions": 15,
+      "classes": [
+        {
+          "name": "ResultsPanel",
+          "methods": 15
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/v2/outline_editor.py",
+      "lines": 310,
+      "functions": 17,
+      "classes": [
+        {
+          "name": "OutlineEditor",
+          "methods": 15
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/rat_atlases.py",
+      "lines": 296,
+      "functions": 15,
+      "classes": [
+        {
+          "name": "AtlasFile",
+          "methods": 0
+        },
+        {
+          "name": "RatAtlas",
+          "methods": 1
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/slice_stacks.py",
+      "lines": 287,
+      "functions": 21,
+      "classes": [
+        {
+          "name": "ClickableSlice",
+          "methods": 4
+        },
+        {
+          "name": "SliceStacks",
+          "methods": 15
+        },
+        {
+          "name": "SignalProxy",
+          "methods": 0
+        },
+        {
+          "name": "SignalProxy",
+          "methods": 0
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/v2/annotate_panel.py",
+      "lines": 276,
+      "functions": 13,
+      "classes": [
+        {
+          "name": "AnnotatePanel",
+          "methods": 11
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/v2/widgets.py",
+      "lines": 275,
+      "functions": 23,
+      "classes": [
+        {
+          "name": "Card",
+          "methods": 3
+        },
+        {
+          "name": "Disclosure",
+          "methods": 2
+        },
+        {
+          "name": "_Responder",
+          "methods": 4
+        },
+        {
+          "name": "StepPanel",
+          "methods": 7
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/v2/project_panel.py",
+      "lines": 271,
+      "functions": 13,
+      "classes": [
+        {
+          "name": "ProjectPanel",
+          "methods": 13
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/v2/state.py",
+      "lines": 251,
+      "functions": 10,
+      "classes": []
+    },
+    {
+      "file": "driftlessmap/section_suggestion_dialog.py",
+      "lines": 239,
+      "functions": 10,
+      "classes": [
+        {
+          "name": "SectionSuggestionDialog",
+          "methods": 7
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/v2/shank_view.py",
+      "lines": 238,
+      "functions": 12,
+      "classes": [
+        {
+          "name": "ShankView",
+          "methods": 11
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/v2/rat_download_dialog.py",
+      "lines": 227,
+      "functions": 10,
+      "classes": [
+        {
+          "name": "RatAtlasDownloadDialog",
+          "methods": 9
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/v2/channel_strip.py",
+      "lines": 224,
+      "functions": 15,
+      "classes": [
+        {
+          "name": "ChannelStrip",
+          "methods": 13
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/plan_overlay.py",
+      "lines": 221,
+      "functions": 13,
+      "classes": [
+        {
+          "name": "PlanOverlay",
+          "methods": 13
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/v2/probe_card.py",
+      "lines": 220,
+      "functions": 18,
+      "classes": [
+        {
+          "name": "ProbeControls",
+          "methods": 18
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/obj_items.py",
+      "lines": 212,
+      "functions": 13,
+      "classes": [
+        {
+          "name": "ImplantItem",
+          "methods": 2
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/czi_reader.py",
+      "lines": 211,
+      "functions": 5,
+      "classes": [
+        {
+          "name": "CZIReader",
+          "methods": 3
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/download_utils.py",
+      "lines": 193,
+      "functions": 8,
+      "classes": [
+        {
+          "name": "DownloadCancelled",
+          "methods": 0
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/probe_hardware.py",
+      "lines": 180,
+      "functions": 8,
+      "classes": []
+    },
+    {
+      "file": "driftlessmap/landmarks.py",
+      "lines": 173,
+      "functions": 6,
+      "classes": [
+        {
+          "name": "LandmarkModel",
+          "methods": 3
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/region_colors.py",
+      "lines": 172,
+      "functions": 6,
+      "classes": []
+    },
+    {
+      "file": "driftlessmap/registration_input.py",
+      "lines": 171,
+      "functions": 9,
+      "classes": [
+        {
+          "name": "RegistrationInput",
+          "methods": 5
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/v2/theme.py",
+      "lines": 171,
+      "functions": 2,
+      "classes": []
+    },
+    {
+      "file": "driftlessmap/project_io.py",
+      "lines": 170,
+      "functions": 10,
+      "classes": []
+    },
+    {
+      "file": "driftlessmap/movable_points.py",
+      "lines": 154,
+      "functions": 11,
+      "classes": [
+        {
+          "name": "MovablePoints",
+          "methods": 5
+        },
+        {
+          "name": "TriangulationPoints",
+          "methods": 6
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/transactions.py",
+      "lines": 152,
+      "functions": 16,
+      "classes": [
+        {
+          "name": "_Packed",
+          "methods": 2
+        },
+        {
+          "name": "Transaction",
+          "methods": 0
+        },
+        {
+          "name": "TransactionHistory",
+          "methods": 12
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/v2/commands.py",
+      "lines": 149,
+      "functions": 13,
+      "classes": [
+        {
+          "name": "Command",
+          "methods": 2
+        },
+        {
+          "name": "CommandRegistry",
+          "methods": 6
+        },
+        {
+          "name": "CommandPalette",
+          "methods": 5
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/widgets_utils.py",
+      "lines": 147,
+      "functions": 10,
+      "classes": [
+        {
+          "name": "BWSpin",
+          "methods": 1
+        },
+        {
+          "name": "GammaSpin",
+          "methods": 1
+        },
+        {
+          "name": "ColorCombo",
+          "methods": 1
+        },
+        {
+          "name": "ChannelSelector",
+          "methods": 7
+        },
+        {
+          "name": "SignalProxy",
+          "methods": 0
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/v2/spacing_dialog.py",
+      "lines": 131,
+      "functions": 5,
+      "classes": [
+        {
+          "name": "SpacingDialog",
+          "methods": 4
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/user_settings.py",
+      "lines": 128,
+      "functions": 13,
+      "classes": []
+    },
+    {
+      "file": "driftlessmap/implant_overlay.py",
+      "lines": 126,
+      "functions": 9,
+      "classes": [
+        {
+          "name": "ImplantOverlay",
+          "methods": 9
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/v2/adopted.py",
+      "lines": 126,
+      "functions": 7,
+      "classes": []
+    },
+    {
+      "file": "driftlessmap/v2/match_panel.py",
+      "lines": 124,
+      "functions": 7,
+      "classes": [
+        {
+          "name": "MatchPanel",
+          "methods": 7
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/registration_review.py",
+      "lines": 115,
+      "functions": 7,
+      "classes": [
+        {
+          "name": "RegistrationReview",
+          "methods": 3
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/file_dialogs.py",
+      "lines": 113,
+      "functions": 9,
+      "classes": []
+    },
+    {
+      "file": "driftlessmap/sections_dialog.py",
+      "lines": 112,
+      "functions": 7,
+      "classes": [
+        {
+          "name": "SectionsDialog",
+          "methods": 7
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/atlas_transform.py",
+      "lines": 111,
+      "functions": 8,
+      "classes": []
+    },
+    {
+      "file": "driftlessmap/v2/channel_display.py",
+      "lines": 107,
+      "functions": 8,
+      "classes": []
+    },
+    {
+      "file": "driftlessmap/v2/section_bar.py",
+      "lines": 105,
+      "functions": 7,
+      "classes": [
+        {
+          "name": "SectionBar",
+          "methods": 6
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/v2/region_picker.py",
+      "lines": 92,
+      "functions": 5,
+      "classes": [
+        {
+          "name": "RegionPicker",
+          "methods": 3
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/registration_channels_dialog.py",
+      "lines": 76,
+      "functions": 3,
+      "classes": [
+        {
+          "name": "RegistrationChannelsDialog",
+          "methods": 3
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/background.py",
+      "lines": 73,
+      "functions": 4,
+      "classes": [
+        {
+          "name": "_Worker",
+          "methods": 2
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/interfaces.py",
+      "lines": 72,
+      "functions": 4,
+      "classes": []
+    },
+    {
+      "file": "driftlessmap/region_meshes.py",
+      "lines": 71,
+      "functions": 2,
+      "classes": []
+    },
+    {
+      "file": "driftlessmap/scale_bar.py",
+      "lines": 71,
+      "functions": 5,
+      "classes": [
+        {
+          "name": "ScaleBar",
+          "methods": 3
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/layer_geometry.py",
+      "lines": 66,
+      "functions": 8,
+      "classes": []
+    },
+    {
+      "file": "driftlessmap/pixel_size_dialog.py",
+      "lines": 64,
+      "functions": 2,
+      "classes": [
+        {
+          "name": "PixelSizeDialog",
+          "methods": 2
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/state_digest.py",
+      "lines": 48,
+      "functions": 2,
+      "classes": []
+    },
+    {
+      "file": "driftlessmap/v2/__init__.py",
+      "lines": 39,
+      "functions": 1,
+      "classes": []
+    },
+    {
+      "file": "driftlessmap/resources.py",
+      "lines": 34,
+      "functions": 3,
+      "classes": []
+    },
+    {
+      "file": "driftlessmap/cell_detection.py",
+      "lines": 27,
+      "functions": 1,
+      "classes": []
+    },
+    {
+      "file": "driftlessmap/about.py",
+      "lines": 25,
+      "functions": 1,
+      "classes": [
+        {
+          "name": "AboutDriftlessMapWindow",
+          "methods": 1
+        }
+      ]
+    },
+    {
+      "file": "driftlessmap/layer_validation.py",
+      "lines": 25,
+      "functions": 1,
+      "classes": []
+    },
+    {
+      "file": "driftlessmap/run_driftlessmap.py",
+      "lines": 22,
+      "functions": 1,
+      "classes": []
+    },
+    {
+      "file": "driftlessmap/slice_validation.py",
+      "lines": 20,
+      "functions": 1,
+      "classes": []
+    },
+    {
+      "file": "driftlessmap/coordinate_validation.py",
+      "lines": 19,
+      "functions": 2,
+      "classes": []
+    },
+    {
+      "file": "driftlessmap/__init__.py",
+      "lines": 16,
+      "functions": 1,
+      "classes": []
+    },
+    {
+      "file": "driftlessmap/version.py",
+      "lines": 9,
+      "functions": 0,
+      "classes": []
+    },
+    {
+      "file": "driftlessmap/__main__.py",
+      "lines": 5,
+      "functions": 0,
+      "classes": []
+    },
+    {
+      "file": "driftlessmap/v2/__main__.py",
+      "lines": 5,
+      "functions": 0,
+      "classes": []
+    }
+  ]
+}

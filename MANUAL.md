@@ -2812,3 +2812,10 @@ experiment/
 The processed atlas itself can remain in a shared read-only location, provided
 its absolute path remains stable and the experiment records exactly which atlas
 folder was used.
+
+### Spacing conflict reporting (next release)
+
+Space out also reports conflicts between plans that were left fixed. Select
+one of those plans to let it move. Overlapping fixed tips remain a conflict:
+tilting cannot separate coincident tips, so move a tip or change the device
+dimensions.
