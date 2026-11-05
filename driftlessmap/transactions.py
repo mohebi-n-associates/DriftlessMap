@@ -90,6 +90,7 @@ class Transaction:
     label: str           # names the action, e.g. "Map cells"
     state: object        # packed state from before the action (after, once undone)
     size: int
+    seq: int = 0         # orders it against point steps (2.9.3)
 
 
 class TransactionHistory:
@@ -98,17 +99,24 @@ class TransactionHistory:
         self.budget_bytes = int(budget_bytes)
         self._undo = []
         self._redo = []
+        # Steps numbered below this are gone: newer than none of what is left
+        # (2.9.3). The engine drops point steps older than a dropped step.
+        self.horizon = 0
+        self.barrier = False   # set when undo/redo had to clear everything
 
     def clear(self):
         self._undo.clear()
         self._redo.clear()
 
-    def prepare(self, label, state):
+    def _drop(self, stack):
+        self.horizon = max(self.horizon, stack.pop(0).seq)
+
+    def prepare(self, label, state, seq=0):
         """Pack ``state`` for an action; None when it exceeds the budget."""
         packed, size = pack(state)
         if size > self.budget_bytes:
             return None
-        return Transaction(label, packed, size)
+        return Transaction(label, packed, size, seq)
 
     def commit(self, transaction):
         """Record a prepared transaction once its action has succeeded."""
@@ -118,12 +126,13 @@ class TransactionHistory:
 
     def _trim(self):
         while self._undo and (len(self._undo) > self.max_steps or self._used() > self.budget_bytes):
-            self._undo.pop(0)
+            self._drop(self._undo)
 
-    def _remember_inverse(self, stack, label, state):
-        transaction = self.prepare(label, state)
+    def _remember_inverse(self, stack, label, state, seq=0):
+        transaction = self.prepare(label, state, seq)
         if transaction is None:
             # A state we cannot retain is a history barrier in both directions.
+            self.barrier = True
             self.clear()
             return
         stack.append(transaction)
@@ -131,14 +140,24 @@ class TransactionHistory:
             # Keep the next step in the direction just taken, dropping the
             # farthest entries first. Both stacks share the same budget.
             other = self._undo if stack is self._redo else self._redo
-            (other if other else stack).pop(0)
+            self._drop(other if other else stack)
 
     def _used(self):
         return sum(t.size for t in self._undo) + sum(t.size for t in self._redo)
 
+    def clear_redo(self):
+        """A new edit starts a new branch: what was undone cannot come back."""
+        self._redo.clear()
+
     def labels(self):
         """(undo labels, redo labels), the next step first."""
         return ([t.label for t in reversed(self._undo)], [t.label for t in reversed(self._redo)])
+
+    def undo_transaction(self):
+        return self._undo[-1] if self._undo else None
+
+    def redo_transaction(self):
+        return self._redo[-1] if self._redo else None
 
     def undo_label(self):
         return self._undo[-1].label if self._undo else None
@@ -151,12 +170,77 @@ class TransactionHistory:
         if not self._undo:
             return None
         transaction = self._undo.pop()
-        self._remember_inverse(self._redo, transaction.label, current_state)
+        self._remember_inverse(self._redo, transaction.label, current_state, transaction.seq)
         return unpack(transaction.state)
 
     def redo(self, current_state):
         if not self._redo:
             return None
         transaction = self._redo.pop()
-        self._remember_inverse(self._undo, transaction.label, current_state)
+        self._remember_inverse(self._undo, transaction.label, current_state, transaction.seq)
         return unpack(transaction.state)
+
+
+POINT_MAX_STEPS = 200
+
+
+@dataclass
+class PointStep:
+    seq: int             # orders this step against the per-tool history
+    label: str
+    state: dict          # the point lists from before the step (after, once undone)
+
+
+class PointHistory:
+    """Undo for single point edits (2.9.3): marking and erasing probe points,
+    cells and atlas contour points.
+
+    Each step keeps only the point lists, never objects or masks, so a click
+    stays cheap however large the project is, and point steps never push
+    Map, Build or other mapping steps out of their own bounded history.
+    Point and mapping steps share one numbering, so Undo takes back whichever
+    is newest; point steps older than a mapping step that left the history
+    are dropped with it (``TransactionHistory.horizon``).
+    """
+
+    def __init__(self, max_steps=POINT_MAX_STEPS):
+        self.max_steps = int(max_steps)
+        self._undo = []
+        self._redo = []
+
+    def clear(self):
+        self._undo.clear()
+        self._redo.clear()
+
+    def clear_redo(self):
+        self._redo.clear()
+
+    def record(self, seq, label, before):
+        self._undo.append(PointStep(seq, label, copy.deepcopy(before)))
+        self._redo.clear()
+        del self._undo[:-self.max_steps]
+
+    def drop_before(self, seq):
+        """Forget steps numbered below ``seq`` (a mapping step between them is gone)."""
+        self._undo = [step for step in self._undo if step.seq > seq]
+        self._redo = [step for step in self._redo if step.seq > seq]
+
+    def undo_step(self):
+        return self._undo[-1] if self._undo else None
+
+    def redo_step(self):
+        return self._redo[-1] if self._redo else None
+
+    def labels(self):
+        return ([s.label for s in reversed(self._undo)], [s.label for s in reversed(self._redo)])
+
+    def undo(self, current):
+        """Return the state to restore, keeping ``current`` for redo."""
+        step = self._undo.pop()
+        self._redo.append(PointStep(step.seq, step.label, copy.deepcopy(current)))
+        return copy.deepcopy(step.state)
+
+    def redo(self, current):
+        step = self._redo.pop()
+        self._undo.append(PointStep(step.seq, step.label, copy.deepcopy(current)))
+        return copy.deepcopy(step.state)

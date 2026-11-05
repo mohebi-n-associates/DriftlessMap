@@ -2,7 +2,7 @@
 
 Stable release: **2.0.0**, 29 October 2026 (PyPI, and a GitHub release with
 Windows and macOS builds), after release candidates 2.0.0rc1 (published) to
-2.0.0rc16. Current release: 2.9.0, 5 November 2026 (service extraction and performance); previously 2.8.8, 4 November 2026 (Space out: tilting plans that come too close; 2.8.7, the same day, put a prism's tip at its imaging face's bottom left corner; 2.8.6, the same day, published probe planning, Phases 1-4, the fixes from `reviews/2.8.3`, planned fibers and prisms, and probe hardware with 2.8.0-2.8.5; 2.7.0, 3 November 2026, was the one before); the waiver below
+2.0.0rc16. Current release: 2.9.3, 5 November 2026 (multi-step Undo and object state from 2.9.2, with the 2.9.3 Undo fixes); previously 2.9.0, the same day (service extraction and performance); 2.8.8, 4 November 2026 (Space out: tilting plans that come too close; 2.8.7, the same day, put a prism's tip at its imaging face's bottom left corner; 2.8.6, the same day, published probe planning, Phases 1-4, the fixes from `reviews/2.8.3`, planned fibers and prisms, and probe hardware with 2.8.0-2.8.5; 2.7.0, 3 November 2026, was the one before); the waiver below
 applies to it as well. Passing automated tests does not satisfy the native-installation or
 user-evaluation gates.
 
@@ -124,7 +124,15 @@ version is excluded. Existing real-data/native installation gates stay pending.
 
 ## 2.9.2 source-only refactoring
 
-2.9.2 is unpublished by owner instruction. See
+2.9.2 was not released on its own; it was published with 2.9.3. See
 `reviews/2.9.2/IMPLEMENTATION.md` for the object model, stable identity payload
 fields, extracted export workflow, undo memory comparison and remaining work.
 Synthetic benchmarks do not close real-data or clean-install gates.
+
+## 2.9.3 Undo fixes
+
+Fixes three regressions found reviewing 2.9.2, each reproduced in the real
+engine before and covered by tests after: a per-tool stroke blocked Undo from
+reaching points and mapping steps; a point click snapshotted the whole document
+(375 ms with a 40 MB object, now about 1 ms); point clicks pushed mapping steps
+out of the 10-step history. Real-data trials remain pending as above.

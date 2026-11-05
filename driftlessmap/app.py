@@ -105,7 +105,7 @@ from .triangulation import (
 )
 
 from .interfaces import start_interface
-from .transactions import TransactionHistory, unpack
+from .transactions import PointHistory, TransactionHistory, unpack
 from .project_session import ProjectSessionMixin
 from .state_digest import state_digest
 from .implant_engine import ImplantEngineMixin
@@ -226,17 +226,24 @@ script_dir = dirname(realpath(__file__))
 FORM_Main, _ = loadUiType((join(dirname(__file__), "main_window.ui")))
 
 
-def undo_action(label, layers=None):
-    """Capture annotation state before an edit, including the first point."""
+def point_action(label, layers=None):
+    """Record a point edit in the point history (2.9.3), including the first point.
+
+    Only the point lists are kept (``DriftlessMap._point_state``), so a click
+    stays cheap and never pushes mapping steps out of their history. With
+    ``layers``, only edits on one of those selected layers are recorded here;
+    others keep the per-tool history.
+    """
     def decorate(method):
         @wraps(method)
         def recorded(self, *args, **kwargs):
+            if self._transaction_depth or self._recording_points:
+                return method(self, *args, **kwargs)
             if layers is not None:
                 selected = self.layer_ctrl.current_layer_index
                 if len(selected) != 1 or self.layer_ctrl.layer_link[selected[0]] not in layers:
                     return method(self, *args, **kwargs)
-            with self.undoable(label):
-                return method(self, *args, **kwargs)
+            return self._record_point_edit(label, method, args, kwargs)
         return recorded
     return decorate
 
@@ -287,6 +294,10 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
         # Undo for Map, Update mapping, Make parts and Build (not saved).
         self.undo_history = TransactionHistory()
         self._transaction_depth = 0
+        self.point_history = PointHistory()   # single point edits, 2.9.3
+        self._recording_points = False
+        self._history_epoch = 0               # changes whenever older steps are dropped
+        self._edit_seq = 0                    # orders point and per-tool steps
         # Fibers and prisms, and their outlines on the loaded section.
         self._init_implants()
         self._init_probe_plans()
@@ -410,6 +421,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
         self.register_method = 0
 
         self.action_list = []
+        self._forget_point_history()
 
 
         self.object_3d_list = []
@@ -1549,8 +1561,11 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
 
 
     def save_current_action(self, current_tool, layer_link, data, layer_tb):
-        if self._transaction_depth:
-            return  # The enclosing transaction already owns this edit.
+        if self._transaction_depth or self._recording_points:
+            return  # The enclosing transaction or point step already owns this edit.
+        # A new edit starts a new branch: undone point or mapping steps go.
+        self.point_history.clear_redo()
+        self.undo_history.clear_redo()
         if self.action_id != 0:
             del_index = np.arange(
                 len(self.action_list) + self.action_id, len(self.action_list)
@@ -1564,14 +1579,19 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
             "link": layer_link,
             "data": copy.deepcopy(data),
             "layer": None if layer_tb is None else np.array(layer_tb, copy=True),
+            "seq": self._next_edit_seq(),
         }
         self.action_list.append(current_action)
         if len(self.action_list) > 6:
             del self.action_list[0]
 
     def redo_called(self):
+        """Redo the step undone last: a point edit, a tool edit or a mapping step."""
         self.flush_plan_edits()
-        if not self.action_list:
+        kind, _label = self.next_redo()
+        if kind == "point":
+            return self._step_points(self.point_history.redo, "Redid")
+        if kind != "tool":
             return self.redo_mapping_step()
         self.action_id += 1
         if self.action_id > 0:
@@ -1580,8 +1600,16 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
         self.set_undo_redo_data()
 
     def undo_called(self):
+        """Undo the newest step: a point edit, a tool edit or a mapping step.
+
+        Every step is numbered when recorded (``_next_edit_seq``), so Undo
+        takes back the newest of the three histories' next steps.
+        """
         self.flush_plan_edits()
-        if not self.action_list:
+        kind, _label = self.next_undo()
+        if kind == "point":
+            return self._step_points(self.point_history.undo, "Undid")
+        if kind != "tool":
             return self.undo_mapping_step()
         self.action_id -= 1
         if abs(self.action_id) >= len(self.action_list):
@@ -1589,12 +1617,107 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
             return
         self.set_undo_redo_data()
 
+    # ------------------------------------------------------- point history
+    POINT_KEYS = ("img-probe", "img-cells", "cell_size", "cell_symbol", "cell_layer_index",
+                  "cell_count")
+    ATLAS_POINT_KEYS = ("atlas-probe", "atlas-cells", "cell_size", "cell_symbol",
+                        "cell_layer_index", "cell_count", "atlas-contour")
+
+    def _next_edit_seq(self):
+        self._edit_seq += 1
+        return self._edit_seq
+
+    def _drop_points_past_horizon(self):
+        """Forget point steps that a lost mapping step separates from now."""
+        if self.undo_history.barrier:
+            self.undo_history.barrier = False
+            self._forget_point_history()
+        else:
+            self.point_history.drop_before(self.undo_history.horizon)
+
+    def _forget_point_history(self):
+        self.point_history.clear()
+        self._history_epoch += 1
+
+    def _point_state(self, copy_state=True):
+        """The point lists a point step can change (never objects or masks)."""
+        state = {"img": {key: self.working_img_data[key] for key in self.POINT_KEYS},
+                 "atlas": {key: self.working_atlas_data[key] for key in self.ATLAS_POINT_KEYS}}
+        return copy.deepcopy(state) if copy_state else state
+
+    def _record_point_edit(self, label, method, args, kwargs):
+        before = self._point_state()
+        epoch = self._history_epoch
+        self._recording_points = True
+        try:
+            result = method(self, *args, **kwargs)
+        finally:
+            self._recording_points = False
+        # A mapping step inside the edit dropped the older history; keep it so.
+        if epoch == self._history_epoch and \
+                state_digest(self._point_state(copy_state=False)) != state_digest(before):
+            if self.action_id != 0:   # undone tool edits cannot come back now
+                del self.action_list[len(self.action_list) + self.action_id:]
+                self.action_id = 0
+            self.undo_history.clear_redo()
+            self.point_history.record(self._next_edit_seq(), label, before)
+            self.sync_mapping_undo_actions()
+        return result
+
+    def _set_point_state(self, state):
+        self.working_img_data.update(state["img"])
+        self.working_atlas_data.update(state["atlas"])
+        for kind in ("probe", "cells"):
+            self._show_section_marks(kind)
+        for kind in ("probe", "cells", "contour"):
+            self._show_atlas_marks(kind)
+        self.tool_box.update_cell_count_label(self.working_img_data["cell_count"])
+        self.refresh_kept_marks()
+
+    def _step_points(self, step, verb):
+        upcoming = (self.point_history.undo_step() if verb == "Undid"
+                    else self.point_history.redo_step())
+        self._set_point_state(step(self._point_state(copy_state=False)))
+        self.sync_mapping_undo_actions()
+        self.print_message("{} {}.".format(verb, upcoming.label.lower()), self.normal_color)
+        return True
+
+    def _tool_undo_seq(self):
+        done = len(self.action_list) + self.action_id
+        return self.action_list[done - 1].get("seq", 0) if done > 1 else None
+
+    def _tool_redo_seq(self):
+        if self.action_id >= 0:
+            return None
+        return self.action_list[len(self.action_list) + self.action_id].get("seq", 0)
+
+    def next_undo(self):
+        """``(kind, label)`` of what Undo takes back next: kind is "point",
+        "tool" (a per-tool edit such as a pencil stroke), "mapping" or None."""
+        point, tool = self.point_history.undo_step(), self._tool_undo_seq()
+        mapping = self.undo_history.undo_transaction()
+        candidates = [(step.seq, "point", step.label) for step in (point,) if step is not None]
+        candidates += [(tool, "tool", "tool edit")] if tool is not None else []
+        candidates += [(mapping.seq, "mapping", mapping.label)] if mapping is not None else []
+        return max(candidates)[1:] if candidates else (None, None)
+
+    def next_redo(self):
+        """``(kind, label)`` of what Redo brings back next (see ``next_undo``)."""
+        point, tool = self.point_history.redo_step(), self._tool_redo_seq()
+        mapping = self.undo_history.redo_transaction()
+        candidates = [(step.seq, "point", step.label) for step in (point,) if step is not None]
+        candidates += [(tool, "tool", "tool edit")] if tool is not None else []
+        candidates += [(mapping.seq, "mapping", mapping.label)] if mapping is not None else []
+        return min(candidates)[1:] if candidates else (None, None)
+
     def forget_layer_actions(self, layer_link):
         """Drop undo history for a layer that no longer exists."""
-        self.action_list = [
-            action for action in self.action_list if action["link"] != layer_link
-        ]
-        self.action_id = 0
+        kept = [action for action in self.action_list if action["link"] != layer_link]
+        if len(kept) != len(self.action_list):
+            # Only a changed list resets the position: resetting it otherwise
+            # silently brought undone tool edits back into reach (2.9.3).
+            self.action_list = kept
+            self.action_id = 0
 
     def set_undo_redo_data(self):
         current_action = self.action_list[self.action_id - 1]
@@ -1716,6 +1839,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
         self.reset_corners_hist()
         self.print_message("Processing image is deleted.", self.normal_color)
         self.action_list = []
+        self._forget_point_history()
         self.action_id = 0
 
     def cut_image(self):
@@ -1759,6 +1883,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
             self.layer_ctrl.master_layers(res, layer_type="img-process", color=[])
             self.inactive_lasso()
             self.action_list = []
+            self._forget_point_history()
             self.action_id = 0
 
     # ------------------------------------------------------------------
@@ -4682,7 +4807,8 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
         identities = {"obj_id": list(self.document.objects.obj_id),
                       "obj_count": self.document.objects.obj_count}
         before = self._transaction_signature()
-        transaction = self.undo_history.prepare(label, self._transaction_state(copy_state=False))
+        transaction = self.undo_history.prepare(label, self._transaction_state(copy_state=False),
+                                                self._next_edit_seq())
         if transaction is None:
             self.print_message("{} is too large to undo (over the undo memory budget); it "
                                "will not be undoable.".format(label), self.reminder_color)
@@ -4694,6 +4820,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
                 self._restore_transaction_state(unpack(transaction.state))
             else:
                 self.undo_history.clear()
+                self._forget_point_history()
             self.sync_mapping_undo_actions()
             raise
         finally:
@@ -4701,8 +4828,11 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
         if self._transaction_signature() != before:
             if transaction is None:
                 self.undo_history.clear()
+                self._forget_point_history()
             else:
                 self.undo_history.commit(transaction)
+                self.point_history.clear_redo()
+                self._drop_points_past_horizon()
             # The per-tool edit history refers to state this action replaced.
             self.action_list = []
             self.action_id = 0
@@ -4741,6 +4871,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
         self._restore_transaction_state(state)
         self.action_list = []
         self.action_id = 0
+        self._drop_points_past_horizon()
         self.sync_mapping_undo_actions()
         self.print_message("{} {}.".format(verb, label), self.normal_color)
         return True
@@ -5193,6 +5324,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
         )
         self.delete_all_atlas_layer()
         self.action_list = []
+        self._forget_point_history()
         self.action_id = 0
 
     def img_stacks_clicked(self, pos):
@@ -5295,7 +5427,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
                 np.asarray(self.working_img_data["ruler_path"])
             )
 
-    @undo_action("Erase points", layers=("img-probe", "img-cells"))
+    @point_action("Erase points", layers=("img-probe", "img-cells"))
     def _image_click_eraser(self, pos, x, y):
         if (
             not self.layer_ctrl.layer_id
@@ -5591,7 +5723,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
                 strict=False, show_error=False
             )
 
-    @undo_action("Mark cells")
+    @point_action("Mark cells")
     def _image_click_loc(self, pos, x, y):
         if self.tool_box.cell_selector_btn.isChecked():
             if "rgb" in self.image_view.image_file.pixel_type:
@@ -5667,7 +5799,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
                 pos=np.asarray(self.working_img_data["img-blob"])
             )
 
-    @undo_action("Mark probe point")
+    @point_action("Mark probe point")
     def _image_click_probe(self, pos, x, y):
         self.working_img_data["img-probe"].append([x, y])
         self.image_view.img_stacks.image_dict["img-probe"].setData(
@@ -5857,7 +5989,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
         if self.tool_box.triang_vis_btn.isChecked():
             self.update_histo_tri_lines()
 
-    @undo_action("Erase probe point")
+    @point_action("Erase probe point")
     def img_probe_pnts_clicked(self, points, ev):
         if (
             not self.tool_box.checkable_btn_dict["eraser_btn"].isChecked()
@@ -5870,7 +6002,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
             np.asarray(self.working_img_data["img-probe"])
         )
 
-    @undo_action("Erase cell")
+    @point_action("Erase cell")
     def img_cell_pnts_clicked(self, points, ev):
         if (
             not self.tool_box.checkable_btn_dict["eraser_btn"].isChecked()
@@ -6284,7 +6416,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
         else:
             self.print_message("", self.normal_color)
 
-    @undo_action("Erase atlas probe point")
+    @point_action("Erase atlas probe point")
     def atlas_erasing_probe(self, pos):
         x = pos[0]
         y = pos[1]
@@ -6456,7 +6588,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
         current_data = {"data": self.working_atlas_data["lasso_path"].copy()}
         self.save_current_action("lasso_btn", "lasso_path", current_data, None)
 
-    @undo_action("Mark atlas probe point")
+    @point_action("Mark atlas probe point")
     def _atlas_click_probe(self, pos, x, y):
         self.working_atlas_data["atlas-probe"].append([x, y])
 
@@ -6722,7 +6854,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
         # else:
         #     self.atlas_view.working_atlas.image_dict['atlas-probe'].clear()
 
-    @undo_action("Erase atlas contour point")
+    @point_action("Erase atlas contour point")
     def atlas_contour_pnts_clicked(self, points, ev):
         if self.num_windows == 4 or not self.working_atlas_data["atlas-contour"]:
             return
@@ -8000,6 +8132,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
             self.editing_units = set()
             self.implant_outlines = {}
             self.undo_history.clear()
+            self._forget_point_history()
             self.sync_mapping_undo_actions()
             self.refresh_kept_marks()
             self.registration_input = None
@@ -9895,6 +10028,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
         self._load_implants(p_dict)
         self._load_probe_plans(p_dict)
         self.undo_history.clear()
+        self._forget_point_history()
         self.sync_mapping_undo_actions()
         self.refresh_kept_marks()
         if problems:

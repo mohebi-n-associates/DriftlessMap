@@ -1,7 +1,7 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 2.9.2 (unpublished source version)**. Section 2 explains how to
-install it; `pip install driftlessmap` installs 2.9.0.
+This manual applies to **DriftlessMap 2.9.3**. Section 2 explains how to
+install it.
 
 DriftlessMap - Histological E-data Registration in Brain Space - is a desktop
 application for aligning rodent histology with a reference atlas, reconstructing
@@ -2827,7 +2827,7 @@ length. Planning readouts are reused until their atlas or pose changes.
 Requested TIFF pyramid levels are decoded directly, and object exports and
 region-surface generation run outside the GUI thread.
 
-### Object state and history (2.9.2, unpublished)
+### Object state and history (2.9.2, released in 2.9.3)
 
 Object identities are retained across saving and reopening, including deleted
 ID gaps. Older projects receive identities when opened. Undo snapshots share
@@ -2835,14 +2835,28 @@ repeated references to the same array within each snapshot, while separate
 snapshots remain independent. Save formats and normal object workflows stay
 compatible with older versions.
 
-### Multi-step Undo (2.9.2)
+### Multi-step Undo (2.9.2, revised in 2.9.3)
 
 Click **Undo** above the canvas, or press **Ctrl+Z** (Windows/Linux) or **Cmd+Z**
-(macOS). Repeat to take back earlier actions. The button tooltip names the next
-action; **Ctrl/Cmd+Shift+Z** redoes. Probe/cell points, mapping, building, plan
-edits and other transaction actions share up to 10 steps within a 500 MB budget.
-The first probe/cell point is undoable too. New edits discard the redo branch.
-Edit > Mapping history lists retained transaction steps. Older raster/tool
-operations retain their existing separate history. Opening/changing sections or
-projects clears history; file, display and registration changes are not universal
-undo operations. Text fields keep their own normal Undo.
+(macOS). Repeat to take back earlier actions, newest first, whatever kind they
+are: probe, cell and atlas contour points, pencil, eraser, lasso and magic wand
+strokes, and mapping steps (Map, Update or Remove mapping, Make parts, Build,
+Delete and plan edits). The button tooltip names the next action;
+**Ctrl/Cmd+Shift+Z** redoes, oldest first. The first probe/cell point is
+undoable too. A new edit discards the redo branch.
+
+Point edits keep their own history of up to 200 steps, holding only the point
+lists, so a click stays instant however large the project is and point edits
+never push mapping steps out. Mapping steps keep up to 10 steps within a 500 MB
+budget; points marked before a mapping step that has left that history can no
+longer be undone. Pencil, eraser, lasso and wand strokes keep the six most recent
+(the oldest of them cannot be taken back on its own). Edit > Mapping history
+lists the retained mapping steps and how many point edits come before them.
+Opening/changing sections or projects clears history; file, display and
+registration changes are not undo operations. Text fields keep their own normal
+Undo.
+
+In 2.9.2, a pencil, eraser, lasso or wand stroke stopped Undo from reaching
+point edits and mapping steps; each point click took a snapshot of the whole
+document (about 0.4 s with a 40 MB object), and ten point clicks pushed a Build
+out of the undo history. 2.9.3 fixes all three.
