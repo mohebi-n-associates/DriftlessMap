@@ -31,3 +31,26 @@ class PlanServiceTests(unittest.TestCase):
         with self.assertRaises(SearchStopped):
             space_plans(atlas, plans, [p.probe for p in plans], progress=lambda: False)
         self.assertEqual(before, [p.to_dict() for p in plans])
+
+
+class SpacingJobTests(unittest.TestCase):
+    def test_changed_document_rejects_worker_result(self):
+        from types import SimpleNamespace
+        from driftlessmap.probe_plans import PlanBook
+        from driftlessmap.probe_plan_engine import ProbePlanEngineMixin
+        atlas, _, _ = make_atlas()
+        plan = fiber('Fiber 1', [0, 0, -1200])
+        book = PlanBook()
+        book.set(plan)
+        engine = SimpleNamespace(plan_atlas=lambda: atlas, flush_plan_edits=lambda: None,
+                                 probe_plans=book, plan_service=PlanService(),
+                                 project_created_at='original', plan_previews={})
+
+        def finish(*args, **kwargs):
+            engine.project_created_at = 'replacement'
+            return [plan.copy(ml_tilt_deg=10)], {'moved': ['Fiber 1'], 'clashes': [], 'ap_used': False}
+
+        with patch('driftlessmap.background.run_in_background', side_effect=finish):
+            result = ProbePlanEngineMixin.space_out_plans(engine, ['Fiber 1'])
+        self.assertTrue(result['stale'])
+        self.assertEqual(book.get('Fiber 1').ml_tilt_deg, 0)

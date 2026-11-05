@@ -493,7 +493,9 @@ class ProbePlanEngineMixin:
                 progress=lambda: not cancelled.is_set(), cancel_event=cancelled)
         except SearchStopped:
             return {"moved": [], "clashes": [], "ap_used": False, "cancelled": True}
-        if (self.plan_atlas() is not atlas or self.project_created_at != document
+        if cancelled.is_set():
+            return {"moved": [], "clashes": [], "ap_used": False, "cancelled": True}
+        if (self.plan_previews or self.plan_atlas() is not atlas or self.project_created_at != document
                 or signature != [self.plan_service.key(p) for p in self.probe_plans.plans()]):
             return {"moved": [], "clashes": [], "ap_used": False, "stale": True}
         if report["moved"]:
