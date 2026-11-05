@@ -1,0 +1,31 @@
+REVIEW_RESULT {"case": "pure_perf", "operation": "plan_readout", "kind": "probe", "median_seconds": 0.0008099169936031103}
+REVIEW_RESULT {"case": "pure_perf", "operation": "plan_readout", "kind": "fiber", "median_seconds": 0.0032407910330221057}
+REVIEW_RESULT {"case": "pure_perf", "operation": "plan_readout", "kind": "prism", "median_seconds": 0.005943208001554012}
+REVIEW_RESULT {"case": "pure_perf", "operation": "space_plans_2_fibers", "seconds": 0.1253356250235811, "report": {"moved": ["Fiber 1", "Fiber 2"], "clashes": [], "ap_used": false}}
+         219529 function calls in 0.125 seconds
+
+   Ordered by: cumulative time
+   List reduced from 91 to 18 due to restriction <18>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.000    0.000    0.125    0.125 probe_plans.py:1195(space_plans)
+       27    0.001    0.000    0.123    0.005 probe_plans.py:1292(resolve)
+      293    0.000    0.000    0.118    0.000 probe_plans.py:1274(apply)
+      295    0.000    0.000    0.098    0.000 probe_plans.py:1219(<lambda>)
+      240    0.000    0.000    0.097    0.000 probe_plans.py:1283(try_step)
+      295    0.013    0.000    0.096    0.000 probe_plans.py:482(surface_entry)
+     9440    0.045    0.000    0.076    0.000 probe_plans.py:448(labels_at)
+      294    0.002    0.000    0.020    0.000 probe_plans.py:1233(gap)
+    18880    0.008    0.000    0.019    0.000 fromnumeric.py:86(_wrapreduction_any_all)
+     9440    0.003    0.000    0.014    0.000 fromnumeric.py:2586(all)
+     9440    0.003    0.000    0.010    0.000 fromnumeric.py:2474(any)
+    19462    0.010    0.000    0.010    0.000 {method 'reduce' of 'numpy.ufunc' objects}
+     1180    0.007    0.000    0.010    0.000 probe_plans.py:1093(_segment_distance)
+     1475    0.000    0.000    0.007    0.000 probe_plans.py:189(direction)
+     1475    0.002    0.000    0.006    0.000 probe_plans.py:52(direction_from_tilts)
+     2949    0.003    0.000    0.005    0.000 _linalg.py:2615(norm)
+      240    0.000    0.000    0.005    0.000 probe_plans.py:1270(tilt)
+      240    0.000    0.000    0.005    0.000 probe_plans.py:212(copy)
+
+
+

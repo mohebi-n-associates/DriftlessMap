@@ -1,3 +1,12 @@
+## 2.9.0 — 5 November 2026
+
+- Correct prism solid containment, overlapping-tip and fixed-device clearance reporting.
+- Reuse scientific planning readouts and pair clearances through a bounded, GUI-free service.
+- Run spacing with cancellation and stale-result rejection; avoid anatomy computation for trial poses.
+- Separate object archive writing from widgets and run it off the GUI thread; build region surfaces in a worker.
+- Decode a requested TIFF pyramid level directly without first decoding the full-resolution plane.
+- Exclude PyQt6 6.12.0's malformed typing stubs; desktop bundles use Qt/PyQt6 6.11.0.
+
 # What’s New in DriftlessMap
 
 This cumulative release history is maintained as a single document. New
@@ -2446,8 +2455,3 @@ The changes were kept as separate issue-level commits:
 | `c0bc2d9` | Add regression test CI |
 | `f6d20ff` | Remove unused HDF5 runtime dependencies |
 | `00b5368` | Bump HERBS version to 0.2.8.1 |
-
-## Unreleased — work toward 2.9.0
-
-- Keep overlapping tips and fixed-device conflicts visible after Space out.
-- Avoid full anatomical readouts for every trial spacing pose.

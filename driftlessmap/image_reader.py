@@ -437,7 +437,7 @@ class TIFFReader(object):
     come from OME or ImageJ metadata when present.
     """
 
-    def __init__(self, image_file_path, planes=None):
+    def __init__(self, image_file_path, planes=None, scale=None):
         self.error_index = 0
         self.error_message = None
         self.is_czi = False
@@ -475,8 +475,15 @@ class TIFFReader(object):
                 self._fail(7)
                 return
             series = tiff_file.series[0]
-            image = np.asarray(series.asarray())
-            axes = series.axes
+            # Select a requested pyramid level before decoding any pixels.
+            # Paged series keep their established full-resolution layout.
+            scales = level_scales(series)
+            single_plane = all(size == 1 or axis in "YXCS"
+                               for axis, size in zip(series.axes, series.shape))
+            initial_level = choose_level(scales, scale) if single_plane else 0
+            source = (getattr(series, "levels", None) or [series])[initial_level]
+            image = np.asarray(source.asarray())
+            axes = source.axes
             layout = self._interpret(image, axes)
             if layout is None:
                 return
@@ -510,7 +517,7 @@ class TIFFReader(object):
                        for i, c in enumerate(colours or default_colours)]
             _set_channel_metadata(self, colours, names or default_names)
         self.data["scene 0"] = layout
-        self.scale["scene 0"] = 1.0
+        self.scale["scene 0"] = scales[initial_level]
 
     def _fail(self, index):
         self.error_index = index

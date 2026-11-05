@@ -22,7 +22,7 @@ class _Worker(QObject):
             self.done.emit(result, None)
 
 
-def run_in_background(parent, message, function, *args, **kwargs):
+def run_in_background(parent, message, function, *args, cancel_event=None, **kwargs):
     """Call ``function`` on a worker thread and return its result.
 
     The caller waits in a local event loop, so the window keeps repainting
@@ -55,7 +55,11 @@ def run_in_background(parent, message, function, *args, **kwargs):
     dialog.setWindowModality(Qt.WindowModality.WindowModal)
     # Shown almost at once, so a click visibly starts the work.
     dialog.setMinimumDuration(150)
-    dialog.setCancelButton(None)
+    if cancel_event is None:
+        dialog.setCancelButton(None)
+    else:
+        dialog.setCancelButtonText("Cancel")
+        dialog.canceled.connect(cancel_event.set)
 
     thread.start()
     try:

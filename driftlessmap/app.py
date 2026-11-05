@@ -6756,7 +6756,13 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
             # The region meshes are in the processed segmentation's frame;
             # the view holds it reordered (see load_volume_atlas), so undo that.
             labels = np.transpose(view.atlas_label[::-1, :, :], (1, 2, 0))
-            surface = region_surface(labels, descendants(view.label_info, label_id))
+            source_labels = view.atlas_label
+            self.region_surfaces[label_id] = None  # Prevent reentrant refresh work.
+            surface = run_in_background(
+                self, "Building region surface...", region_surface, labels,
+                descendants(view.label_info, label_id))
+            if view.atlas_label is not source_labels:
+                return None
             if surface is not None:
                 mesh = gl.GLMeshItem(meshdata=gl.MeshData(vertexes=surface[0],
                                                           faces=surface[1]),
@@ -7901,7 +7907,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
             elif image_file_type in (".tif", ".tiff"):
                 try:
                     image_file = tiff_reader.shared() if tiff_reader is not None else \
-                        TIFFReader(image_file_path, planes=planes)
+                        TIFFReader(image_file_path, planes=planes, scale=_valid_read_scale(scale))
                     scale = _valid_read_scale(scale)
                     if image_file.error_index == 0 and image_file.has_levels and scale:
                         image_file.read_data(scale, scene_index=0)
@@ -8469,25 +8475,16 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
 
     def _write_object_files(self, indexes, folder, provenance):
         """Write objects as ``.dmapobj`` files; returns ``(paths, error)``."""
-        paths = []
-        file_stems = self._object_file_names(
-            [self.object_ctrl.obj_name[index] for index in indexes]
-        )
-        for index, file_stem in zip(indexes, file_stems):
-            data = {
-                "type": self.object_ctrl.obj_type[index],
-                "data": self.object_ctrl.obj_data[index],
-                "name": self.object_ctrl.obj_name[index],
-                "provenance": provenance,
-                # Out-of-date results stay exportable, with this note.
-                "mapping_status": self.object_mapping_status(index),
-            }
-            path = os.path.join(folder, "{}.dmapobj".format(file_stem))
-            success, error = save_driftlessmap_file(path, data, "object")
-            if not success:
-                return paths, error
-            paths.append(path)
-        return paths, None
+        from .object_export import write_objects
+
+        # Capture widgets on the GUI thread; the writer receives only data.
+        objects = [{"type": self.object_ctrl.obj_type[index],
+                    "data": self.object_ctrl.obj_data[index],
+                    "name": self.object_ctrl.obj_name[index],
+                    "provenance": provenance,
+                    "mapping_status": self.object_mapping_status(index)}
+                   for index in indexes]
+        return run_in_background(self, "Exporting objects...", write_objects, objects, folder)
 
     def export_all_results(self, folder):
         """Export every available result into ``folder`` (created if needed).

@@ -21,3 +21,9 @@ Branch: `codex/2.9.0-refactoring`. Release, merge, push, PyPI publication and na
 6. Synchronize 2.9.0 version metadata/docs, commit final changes, push and merge validated work, publish the GitHub release, verify PyPI and Windows/macOS build workflows and uploaded artifacts.
 
 Version is deliberately still 2.8.8 until release preparation. No release has been published by this checkpoint.
+
+## Continued implementation
+
+See `../2.9.0/IMPLEMENTATION.md` for delivered release work and the explicit
+longer-term architectural scope. The checkpoint above records the first commit,
+not the final release status.

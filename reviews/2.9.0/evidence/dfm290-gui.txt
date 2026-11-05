@@ -1,0 +1,38 @@
+qt.qpa.fonts: Populating font family aliases took 55 ms. Replace uses of missing font family "Sans Serif" with one that exists to avoid this cost. 
+QOpenGLWidget is not supported on this platform.
+REVIEW_RESULT {"case": "gui_perf", "operation": "unchanged_shell_refresh_prism", "seconds": [0.0026980830589309335, 0.002307749935425818, 0.0022966250544413924]}
+         10336 function calls (9748 primitive calls) in 0.007 seconds
+
+   Ordered by: cumulative time
+   List reduced from 357 to 25 due to restriction <25>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        3    0.000    0.000    0.007    0.002 shell.py:1481(refresh)
+        3    0.000    0.000    0.006    0.002 annotate_panel.py:259(refresh)
+        3    0.000    0.000    0.005    0.002 implant_card.py:637(refresh)
+        3    0.000    0.000    0.005    0.002 implant_card.py:580(_sync_actions)
+        3    0.000    0.000    0.004    0.001 plan_editor.py:445(set_probe)
+        3    0.000    0.000    0.004    0.001 plan_editor.py:463(sync)
+        3    0.000    0.000    0.003    0.001 plan_editor.py:547(_show_readout)
+        3    0.000    0.000    0.003    0.001 shank_view.py:38(show_plan)
+        3    0.001    0.000    0.002    0.001 probe_plans.py:876(probe_plane)
+        6    0.000    0.000    0.001    0.000 probe_plan_engine.py:263(probe_plan_readout)
+       15    0.000    0.000    0.001    0.000 app.py:1932(current_registration_fingerprint)
+       15    0.000    0.000    0.001    0.000 registration_review.py:37(registration_fingerprint)
+        9    0.000    0.000    0.001    0.000 app.py:5099(mapping_overview)
+        6    0.000    0.000    0.001    0.000 probe_plans.py:1548(planned_model)
+        3    0.000    0.000    0.001    0.000 plan_editor.py:510(_fill)
+        3    0.000    0.000    0.001    0.000 shank_view.py:54(_colour_image)
+        3    0.000    0.000    0.001    0.000 probe_plans.py:448(labels_at)
+       30    0.000    0.000    0.001    0.000 numeric.py:1563(cross)
+       15    0.000    0.000    0.001    0.000 probe_plans.py:202(normal)
+       15    0.000    0.000    0.001    0.000 probe_plans.py:70(face_normal)
+        3    0.000    0.000    0.001    0.000 _arraysetops_impl.py:145(unique)
+       15    0.000    0.000    0.001    0.000 triangulation.py:79(canonical_simplices)
+        3    0.000    0.000    0.000    0.000 state.py:132(step_status)
+        6    0.000    0.000    0.000    0.000 app.py:1966(registration_review_state)
+       90    0.000    0.000    0.000    0.000 numeric.py:1489(moveaxis)
+
+
+
+REVIEW_RESULT {"case": "gui_perf", "operation": "unchanged_overlay_refresh_prism", "seconds": [0.00017729098908603191, 0.00011037499643862247, 9.979202877730131e-05]}

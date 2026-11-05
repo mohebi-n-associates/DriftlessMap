@@ -1173,6 +1173,10 @@ def _pair_gap(plan_a, read_a, plan_b, read_b, above_um=CLEARANCE_ABOVE_UM):
     """``(gap, point)``: the smallest distance between the two devices'
     surfaces (negative where they overlap, by as much) and where on the first
     it is; None when either has no entry."""
+    if plan_a.kind == PRISM or plan_b.kind == PRISM:
+        from .solid_geometry import prism_pair_gap
+
+        return prism_pair_gap(plan_a, read_a, plan_b, read_b, above_um)
     best = None
     for a0, a1, ra in plan_segments(plan_a, read_a, above_um):
         for b0, b1, rb in plan_segments(plan_b, read_b, above_um):
@@ -1189,7 +1193,7 @@ SPACING_MAX_STEPS = 600
 
 
 def space_plans(atlas, plans, movable, gap_um=CLEARANCE_UM, max_ml_deg=30.0,
-                max_ap_deg=30.0, readout=None):
+                max_ap_deg=30.0, readout=None, progress=None):
     """Tilt the ``movable`` plans (names) about their tips so that every pair
     of plans keeps ``gap_um`` between their surfaces (2.8.8).
 
@@ -1230,6 +1234,9 @@ def space_plans(atlas, plans, movable, gap_um=CLEARANCE_UM, max_ml_deg=30.0,
         """How far the pair is from the gap it needs (negative: short).
         Parts that reach both tips need no more than the tips allow, as
         tilting about the tips cannot widen them."""
+        if current[a].kind == PRISM or current[b].kind == PRISM:
+            physical = _pair_gap(current[a], reads[a], current[b], reads[b])
+            return None if physical is None else physical[0] - gap_um
         seg_a = plan_segments(current[a], reads[a])
         seg_b = plan_segments(current[b], reads[b])
         if not seg_a or not seg_b:
@@ -1265,6 +1272,8 @@ def space_plans(atlas, plans, movable, gap_um=CLEARANCE_UM, max_ml_deg=30.0,
         return plan.copy(**{axis: value})
 
     def apply(name, plan):
+        if progress is not None and not progress():
+            raise SearchStopped()
         current[name] = plan
         reads[name] = readout(plan)
         for pair in required:

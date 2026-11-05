@@ -8,7 +8,9 @@ or important workflows change.
 
 ## Project identity
 
-- Current release: DriftlessMap 2.8.8 (4 November 2026; Space out). 2.8.7
+- Current release: DriftlessMap 2.9.0 (5 November 2026; planning services,
+  solid clearance, responsive jobs and direct pyramid loading). 2.8.8
+  (4 November 2026; Space out). 2.8.7
   (a prism's tip at its imaging face's bottom left corner). 2.8.6 (4 November 2026; probe planning,
   `probe_planning_design.md` Phases 1-4, `reviews/2.8.3` R1-R8, planned
   fibers and prisms (its section 6) and probe hardware (section 7); the owner
@@ -207,9 +209,18 @@ or important workflows change.
   gap: ML before AP, smallest largest tilt, back towards the start; `moved`,
   `clashes`, `ap_used`), engine `space_out_plans` (one undoable step),
   `v2/spacing_dialog.SpacingDialog`, Space out… and command `plan.space`.
-- Work toward 2.9.0: spacing trials calculate only surface entry and geometry;
+- 2.9.0: spacing trials calculate only surface entry and geometry;
   anatomical readouts remain in build/display. Fixed-device conflicts and
   overlapping fixed tips remain visible in the spacing report.
+- `plan_service.PlanService` owns bounded copied readouts and pair results keyed
+  by the complete plan payload and installed immutable PlanAtlas identity.
+  `solid_geometry` checks convex prism solids, including containment, against
+  other prisms and device capsules. `object_export.write_objects` writes captured
+  object payloads without widgets. Background jobs optionally take a cancellation
+  Event; spacing checks it between trials and rejects changed inputs on completion.
+  TIFFReader accepts an initial scale, selecting single-plane pyramid levels
+  before decoding. Region surfaces are calculated in a worker, installed in Qt
+  on the GUI thread. PyQt6 6.12.0 is excluded for malformed typing stubs.
 - `driftlessmap/project_session.py`: `ProjectSessionMixin.project_payload` is the
   shared saved-state collector. `load_project` snapshots the active document and
   restores it on failure, including its original reader, in-memory atlas and undo

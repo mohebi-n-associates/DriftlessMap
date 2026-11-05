@@ -110,6 +110,10 @@ def spacing_summary(engine, report):
     """What Space out did, in words."""
     if report is None:
         return "Load an atlas first."
+    if report.get("cancelled"):
+        return "Spacing cancelled. No poses were changed."
+    if report.get("stale"):
+        return "The project changed during spacing. Run Space out again."
     lines = []
     if report["moved"]:
         parts = []
