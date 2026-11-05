@@ -2,6 +2,11 @@ name: Build desktop applications
 
 on:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing release tag to attach the installers to (optional)
+        required: false
+        default: ""
   release:
     types: [published]
 
@@ -25,7 +30,8 @@ jobs:
             artifact: dist/DriftlessMap-*-Windows-x64.zip
             artifact_name: DriftlessMap-Windows-x64
           - name: macOS Apple Silicon
-            os: macos-14
+            # GitHub retired the macos-14 runner (5 November 2026).
+            os: macos-15
             command: ./packaging/build_macos.sh
             artifact: dist/DriftlessMap-*-macOS-arm64.dmg
             artifact_name: DriftlessMap-macOS-arm64
@@ -70,7 +76,7 @@ jobs:
 
   attach:
     name: Attach installers to the release
-    if: github.event_name == 'release'
+    if: github.event_name == 'release' || inputs.release_tag != ''
     needs: desktop
     runs-on: ubuntu-latest
     # Only this job, which runs no build code, may write to the repository.
@@ -84,6 +90,7 @@ jobs:
       - name: Upload installers
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
         run: >
-          gh release upload "${{ github.event.release.tag_name }}"
+          gh release upload "$RELEASE_TAG"
           installers/* --clobber --repo "${{ github.repository }}"

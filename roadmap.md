@@ -626,7 +626,7 @@ Also set `testpaths` for pytest.
   so the "built reproducibly" claim in WhatsNew is true.
 - **Windows build script.** `build_windows.ps1` must check
   `$LASTEXITCODE` after each step.
-- **macOS builds.** The DMG is arm64-only (`macos-14`). Either label it
+- **macOS builds.** The DMG is arm64-only (`macos-15`). Either label it
   "Apple Silicon" or add an Intel/universal build.
 - **Code signing.** Plan Apple notarization and Windows Authenticode signing.
 - **Citation metadata.** Add `date-released` to `CITATION.cff`.

@@ -585,7 +585,8 @@ universal undo for view, registration, file or display settings.
 - `.github/workflows/desktop-builds.yml`: builds both native desktop artifacts
   with `packaging/constraints-desktop.txt`, signs them when signing secrets are
   configured, and attaches them to published GitHub releases from a separate
-  write-permitted job.
+  write-permitted job (macOS on `macos-15`; a manual run given `release_tag`
+  attaches to that existing release).
 - `MANUAL.md`, `WhatsNew.md`, `UpdateLog.md`: user behavior and release history.
 - `tests/`: unittest-compatible test suite; CI also invokes it through pytest.
 
