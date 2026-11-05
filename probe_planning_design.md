@@ -232,8 +232,9 @@ are planned; a prism defaults to 1.5 × 1.5 × 3 mm with a 45° bottom.
   not read them as probes.
 * **The device's size.** Checks run along lines parallel to the axis
   (`device_lines`): a probe's shanks, a fiber's axis and rim, a prism's
-  footprint grid. A prism's tip is the middle of the imaging face's bottom
-  edge; behind the face its bottom rises by `1 / tan(bevel)` per µm, so at
+  footprint grid. A prism's tip is the bottom left corner of the imaging face as you
+  face it (2.8.7; until 2.8.6 the edge's middle, migrated on load by
+  `tip_at`); the face runs from it along `across_face`; behind the face its bottom rises by `1 / tan(bevel)` per µm, so at
   45° the back edge is as much higher as the prism is deep. `length_um` is the
   face's edge.
 * **The prism's view.** The mirror sends the view out of the face from the

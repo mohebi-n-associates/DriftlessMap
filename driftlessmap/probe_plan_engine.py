@@ -41,6 +41,7 @@ from .probe_plans import (
     FIBER,
     PRISM,
     device_lines,
+    face_middle_um,
     imaging_summary,
     planned_model,
     region_summary,
@@ -53,13 +54,15 @@ PLAN_SUFFIX = " plan"
 # A staged plan edit is stored and built once edits settle for this long, or at
 # once before anything reads or replaces the document (review R2 of 2.8.3).
 PLAN_SETTLE_MS = 500
+# A new prism plan keeps this far from the midline (2.8.7).
+DEFAULT_MIDLINE_MARGIN_UM = 250.0
 
 
 def plan_focus_um(plan):
     """Where Show on atlas puts the pages: a probe's tip; inside a fiber just
     above its tip, and inside a prism beside its imaging face, so every page
     cuts it (the tip lies on the device's surface)."""
-    tip = np.asarray(plan.tip_um, dtype=float)
+    tip = face_middle_um(plan)
     if plan.is_probe:
         return tip
     up = -plan.direction
@@ -87,7 +90,7 @@ def implant_plan_lines(plan, readout, type_name):
         lines.append("Depth: {:.3f} mm along the {}".format(readout["depth_um"] / 1000.0,
                                                            plan.kind))
     lines.append("{}: {} · in {}".format(
-        "Bottom of the imaging face" if plan.kind == PRISM else "Tip",
+        "Imaging face's bottom left corner" if plan.kind == PRISM else "Tip",
         triple(readout["tip_um"]), readout["tip_region"][1]))
     lines.append("Tilt: {}".format(readout.get("tilt", "")))
     if plan.kind == PRISM:
@@ -233,6 +236,19 @@ class ProbePlanEngineMixin:
                     "lateral": 90.0 if side > 0 else 270.0,
                     "medial": 270.0 if side > 0 else 90.0}[implant.specs.get("face", "lateral")]
             plan = plan.copy(roll_deg=roll)
+            # The face's middle where a probe would go; the tip is its bottom
+            # left corner (2.8.7).
+            shift = face_middle_um(plan) - np.asarray(plan.tip_um, dtype=float)
+            tip = np.asarray(probe.tip_um, dtype=float) - shift
+            # Keep the whole prism on its side, 0.25 mm from the midline.
+            nearest = min(side * float(tip[0] + offset[0])
+                          for _name, offset, _raised in device_lines(plan, outline=True))
+            if nearest < DEFAULT_MIDLINE_MARGIN_UM:
+                tip[0] += side * (DEFAULT_MIDLINE_MARGIN_UM - nearest)
+            centred = plan.copy(tip_um=tip.tolist())
+            # In a brain too narrow for that, the tip stays where a probe's would.
+            if atlas is None or plan_readout(centred, atlas)["entry_um"] is not None:
+                plan = centred
             if atlas is not None:
                 readout = plan_readout(plan, atlas)
                 limit = implant.specs["length_um"] - 500.0
@@ -504,7 +520,16 @@ class ProbePlanEngineMixin:
         if not isinstance(data, dict) or data.get("plan_of") is None:
             return None
         plan = self.probe_plans.get(data["plan_of"])
-        if plan is None or plan.to_dict() != data.get("plan"):
+        if plan is None:
+            return BUILD_CHANGED
+        built = data.get("plan")
+        try:
+            # Read as a plan, so one saved before a migration (a 2.8.5-2.8.6
+            # prism's tip) compares as the same plan.
+            built = ProbePlan.from_dict(built).to_dict()
+        except (ValueError, TypeError):
+            return BUILD_CHANGED
+        if plan.to_dict() != built:
             return BUILD_CHANGED
         return CURRENT
 

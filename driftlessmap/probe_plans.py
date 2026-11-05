@@ -29,6 +29,10 @@ PLAN_FIELDS = ("probe", "tip_um", "ap_tilt_deg", "ml_tilt_deg", "roll_deg",
 # What a plan places (2.8.5): a probe, or an optical fiber or microprism of
 # the project's implants. Implant plans keep a copy of the implant's specs.
 PROBE, FIBER, PRISM = "probe", "fiber", "prism"
+# A prism's tip (since 2.8.7): the left corner of the imaging face's bottom
+# edge, as you face the face (``tip_at`` in saved plans; without it the tip is
+# that edge's middle, as 2.8.5-2.8.6 saved it).
+PRISM_TIP_AT = "face bottom left corner"
 KINDS = (PROBE, FIBER, PRISM)
 # A prism's footprint and a fiber's rim are checked along lines parallel to
 # the axis, at most this far apart.
@@ -226,15 +230,22 @@ class ProbePlan:
             "avoid": list(self.avoid),
         } | ({} if self.kind == PROBE else {
             # Only implant plans carry these, so probe plans read as in 2.8.4.
-            "kind": self.kind, "specs": dict(self.specs), "implant_id": self.implant_id})
+            "kind": self.kind, "specs": dict(self.specs), "implant_id": self.implant_id}) \
+            | ({"tip_at": PRISM_TIP_AT} if self.kind == PRISM else {})
 
     @classmethod
     def from_dict(cls, data):
         if not isinstance(data, dict):
             raise ValueError("a plan must be a dictionary")
         try:
+            tip = data["tip_um"]
+            if data.get("kind") == PRISM and data.get("tip_at") != PRISM_TIP_AT:
+                # 2.8.5-2.8.6 kept a prism's tip at the middle of the face's
+                # bottom edge; since 2.8.7 it is that edge's left corner, as
+                # you face the face. The prism stays where it was.
+                tip = prism_corner_from_middle(data, tip)
             return cls(
-                data["probe"], data["tip_um"],
+                data["probe"], tip,
                 data.get("ap_tilt_deg", 0.0), data.get("ml_tilt_deg", 0.0),
                 data.get("roll_deg", 0.0), data.get("probe_settings"),
                 data.get("shank_offsets_um"), data.get("bank", 0), data.get("craniotomy"),
@@ -248,6 +259,27 @@ class ProbePlan:
 
     def __repr__(self):
         return "ProbePlan({!r})".format(self.to_dict())
+
+
+def prism_corner_from_middle(data, middle_um):
+    """The tip (left corner of the face's bottom edge) of a prism whose saved
+    tip is that edge's middle (2.8.5-2.8.6 plans); ``data`` is the plan dict."""
+    direction = direction_from_tilts(float(data.get("ap_tilt_deg", 0.0)),
+                                     float(data.get("ml_tilt_deg", 0.0)))
+    normal = face_normal(direction, float(data.get("roll_deg", 0.0)))
+    width = float((data.get("specs") or {}).get("width_um", 1500.0))
+    corner = np.asarray(middle_um, dtype=float) - across_face(direction, normal) * width / 2.0
+    return corner.tolist()
+
+
+def face_middle_um(plan):
+    """The middle of a prism's imaging face's bottom edge (its tip is the
+    edge's left corner as you face it: ``across_face`` runs to the right);
+    any other plan's tip."""
+    tip = np.asarray(plan.tip_um, dtype=float)
+    if plan.kind != PRISM:
+        return tip
+    return tip + across_face(plan.direction, plan.normal) * plan.specs["width_um"] / 2.0
 
 
 def plan_from_points(probe, entry_um, tip_um, **keep):
@@ -762,7 +794,7 @@ def coordinate_line(plan, readout, atlas_name=""):
         if plan.kind == PRISM:
             device.insert(0, "imaging face looks {} (turned {:.0f}° from anterior)".format(
                 readout.get("face", ""), plan.roll_deg))
-    lowest = "bottom of the imaging face" if plan.kind == PRISM else "tip"
+    lowest = "imaging face's bottom left corner" if plan.kind == PRISM else "tip"
     parts = [
         "{}:".format(plan.probe),
         "atlas {}".format(atlas_name) if atlas_name else "",
@@ -1281,7 +1313,8 @@ def device_lines(plan, outline=False):
     (offset across its face, as the engine lays shanks out). A fiber has its
     axis and ``FIBER_RIM_LINES`` lines on its rim. A prism has a grid over its
     cross-section at most ``LINE_SPACING_UM`` apart (its boundary only, with
-    ``outline``): its tip is the middle of the imaging face's bottom edge, the
+    ``outline``): its tip is the left corner of the imaging face's bottom edge
+    as you face it (2.8.7; the face runs from it along ``across``), the
     face looks along ``plan.normal``, and behind the face the bevelled bottom
     rises by ``prism_rise`` per µm.
     """
@@ -1305,12 +1338,12 @@ def device_lines(plan, outline=False):
     width, depth = plan.specs["width_um"], plan.specs["depth_um"]
     rise = prism_rise(plan.specs)
     behind = np.linspace(0.0, depth, max(2, int(math.ceil(depth / LINE_SPACING_UM)) + 1))
-    sideways = np.linspace(-width / 2.0, width / 2.0,
-                           max(2, int(math.ceil(width / LINE_SPACING_UM)) + 1))
+    # From the tip (the face's bottom left corner) across to its right corner.
+    sideways = np.linspace(0.0, width, max(2, int(math.ceil(width / LINE_SPACING_UM)) + 1))
     lines = []
     for x in behind:
         for w in sideways:
-            if outline and 0 < x < depth and -width / 2.0 < w < width / 2.0:
+            if outline and 0 < x < depth and 0 < w < width:
                 continue
             lines.append(("The prism", -normal * x + across * w, float(x * rise)))
     return lines
@@ -1344,7 +1377,7 @@ def planned_model(plan, readout, vox_um):
     from .implants import prism_rise
 
     normal = plan.normal
-    return {"type": "prism", "bottom": (tip / vox_um).tolist(),
+    return {"type": "prism", "bottom": (face_middle_um(plan) / vox_um).tolist(),
             "up": (-direction).tolist(), "face_normal": normal.tolist(),
             "across": across_face(direction, normal).tolist(),
             "length_vox": plan.specs["length_um"] / vox_um,
@@ -1374,7 +1407,7 @@ def face_view(plan, atlas, reach_um=FACE_LOOK_UM):
     ups = np.arange(step / 2.0, height, step)
     sides = np.arange(-width / 2.0 + step / 2.0, width / 2.0, step)
     outs = np.linspace(atlas.vox_um, max(reach_um, atlas.vox_um), 4)
-    tip = np.asarray(plan.tip_um, dtype=float)
+    tip = face_middle_um(plan)
     points = (tip[None, None, None, :]
               - ups[:, None, None, None] * direction
               + sides[None, :, None, None] * across

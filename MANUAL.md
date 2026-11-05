@@ -1,7 +1,7 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 2.8.6**. Section 2 explains how to
-install it; `pip install driftlessmap` installs 2.8.6.
+This manual applies to **DriftlessMap 2.8.7**. Section 2 explains how to
+install it; `pip install driftlessmap` installs 2.8.7.
 
 DriftlessMap - Histological E-data Registration in Brain Space - is a desktop
 application for aligning rodent histology with a reference atlas, reconstructing
@@ -1775,10 +1775,17 @@ proposals do not apply.
   of that the rim or footprint touches, a craniotomy the device does not fit
   through, a tip or bottom outside the brain, and the distance to other plans
   (measured to the device's surface) are reported as for a probe.
-- **A prism** is set by the middle of its imaging face's bottom edge, its
-  deepest point. **Face** turns the imaging face about the prism's axis (0°:
-  it looks anterior; 90°: the animal's right); a new plan looks the way the
-  prism's Imaging face setting says. Its size is width (along the face) ×
+- **A prism** is set by the bottom left corner of its imaging face as you
+  face it (since 2.8.7): the face's bottom edge, its deepest edge, runs from
+  that corner to your right. Facing a posterior face (from behind the
+  prism), the corner is the face's end on the animal's left. The Imaging
+  face view draws the face from the tip line to the right. **Face** turns the
+  imaging face about the prism's axis (0°: it looks anterior; 90°: the
+  animal's right); a new plan looks the way the prism's Imaging face setting
+  says (posterior by default since 2.8.7), with the face's middle where a
+  probe plan would start, and Snap tip to region puts the face's middle on
+  the region's centre. Plans saved by 2.8.5-2.8.6, which gave the edge's
+  middle, open with the prism where it was and the tip moved to the corner. Its size is width (along the face) ×
   depth (away from the face) × length (the face's long edge), 1.5 × 1.5 × 3 mm
   by default, with the bottom bevelled at 45° (the mirror), deepest at the
   face; set them with **Settings…** in the Implants card (Bottom angle 90° is
@@ -2026,7 +2033,7 @@ specifications:
   estimate; the reported tip does not depend on it.
 - *Microprism*: width along the imaging face, depth away from it (default
   1500 × 1500 µm), and which side is the imaging face (medial, lateral,
-  anterior or posterior). For a medial or lateral face the depth is the
+  anterior or posterior; posterior by default since 2.8.7). For a medial or lateral face the depth is the
   prism's ML size.
 
 **Settings…** changes these later (build again to use them); names cannot
