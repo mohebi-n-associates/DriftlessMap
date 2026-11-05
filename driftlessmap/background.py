@@ -68,6 +68,8 @@ def run_in_background(parent, message, function, *args, cancel_event=None, **kwa
     finally:
         thread.quit()
         thread.wait()
+        if cancel_event is not None:
+            dialog.canceled.disconnect(cancel_event.set)
         dialog.close()
         dialog.deleteLater()
         worker.deleteLater()

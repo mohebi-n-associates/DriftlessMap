@@ -26,6 +26,12 @@ class BackgroundTests(unittest.TestCase):
         self.assertEqual(run_in_background(parent, "Working...", work, 6, scale=7), 42)
         self.assertNotEqual(seen[0], gui_thread)
 
+    def test_successful_cleanup_does_not_signal_cancellation(self):
+        cancelled = threading.Event()
+        self.assertEqual(run_in_background(QWidget(), "Working...", lambda: 42,
+                                           cancel_event=cancelled), 42)
+        self.assertFalse(cancelled.is_set())
+
     def test_event_loop_can_cancel_running_work(self):
         cancelled = threading.Event()
         beats = []
