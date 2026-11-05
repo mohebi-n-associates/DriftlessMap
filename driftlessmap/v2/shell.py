@@ -248,6 +248,26 @@ class V2Window(QMainWindow):
                                        QSizePolicy.Policy.Preferred)
         self.plane_label.setMinimumWidth(0)
         header_layout.addWidget(self.plane_label, 1)
+        self.undo_button = QToolButton()
+        self.undo_button.setObjectName("Segment")
+        self.undo_button.setText("Undo")
+        self.undo_button.clicked.connect(lambda: self.run("edit.undo"))
+        history_bar = QHBoxLayout()
+        history_bar.setContentsMargins(8, 4, 8, 4)
+        history_bar.addWidget(self.undo_button)
+        self.redo_button = QToolButton()
+        self.redo_button.setObjectName("Segment")
+        self.redo_button.setText("Redo")
+        self.redo_button.clicked.connect(lambda: self.run("edit.redo"))
+        history_bar.addWidget(self.redo_button)
+        history_button = QToolButton()
+        history_button.setObjectName("Segment")
+        history_button.setText("History")
+        history_button.setToolTip("Show retained undo and redo steps")
+        history_button.clicked.connect(self.show_mapping_history)
+        history_bar.addWidget(history_button)
+        history_bar.addStretch(1)
+        outer.insertLayout(0, history_bar)
         self.focus_button = QToolButton()
         self.focus_button.setObjectName("Segment")
         self.focus_button.setText("Focus")
@@ -502,6 +522,21 @@ class V2Window(QMainWindow):
 
     def _name_undo_steps(self):
         history = self.engine.undo_history
+        label = history.undo_label()
+        pending = bool(self.engine.plan_previews)
+        legacy = len(self.engine.action_list) + self.engine.action_id > 1
+        available = legacy if self.engine.action_list else bool(label)
+        self.undo_button.setEnabled(pending or available)
+        self.undo_button.setToolTip("Undo {} ({}); repeat for earlier actions".format(
+            "plan edit" if pending else "tool edit" if legacy else
+            label if available else "(nothing to undo)",
+            QKeySequence("Ctrl+Z").toString(QKeySequence.SequenceFormat.NativeText)))
+        redo_label = history.redo_label()
+        can_redo = self.engine.action_id < 0 if self.engine.action_list else bool(redo_label)
+        self.redo_button.setEnabled(can_redo and not pending)
+        self.redo_button.setToolTip("Redo {} ({})".format(
+            "tool edit" if self.engine.action_list else redo_label or "(nothing to redo)",
+            QKeySequence("Ctrl+Shift+Z").toString(QKeySequence.SequenceFormat.NativeText)))
         for menu_item, label, verb in ((self.undo_step_item, history.undo_label(), "Undo"),
                                        (self.redo_step_item, history.redo_label(), "Redo")):
             menu_item.setText("{} {}".format(verb, label) if label
@@ -598,15 +633,16 @@ class V2Window(QMainWindow):
 
     def mapping_history_text(self):
         undo, redo = self.engine.undo_history.labels()
-        lines = ["Undo mapping step ({}) takes back, newest first:".format(
-            QKeySequence("Ctrl+Alt+Z").toString(QKeySequence.SequenceFormat.NativeText))]
+        lines = ["Undo ({}) takes back, newest first:".format(
+            QKeySequence("Ctrl+Z").toString(QKeySequence.SequenceFormat.NativeText))]
         lines += ["  {}. {}".format(n, label) for n, label in enumerate(undo, start=1)] or \
             ["  nothing"]
         lines += ["", "Redo mapping step brings back, next first:"]
         lines += ["  {}. {}".format(n, label) for n, label in enumerate(redo, start=1)] or \
             ["  nothing"]
-        lines += ["", "These steps are Map, Update or Remove mapping, Make parts, Build and "
-                  "Delete. Ordinary Undo (Ctrl/Cmd+Z) takes back single points and strokes. "
+        lines += ["", "These steps include probe/cell points, Map, Update or Remove mapping, "
+                  "Make parts, Build, Delete and plan edits. Use the top Undo button or "
+                  "Ctrl/Cmd+Z repeatedly; Ctrl/Cmd+Shift+Z redoes. "
                   "Opening or removing a section, loading an image or opening a project "
                   "clears this history (a message says so); at most 10 steps are kept."]
         return "\n".join(lines)
@@ -1494,6 +1530,7 @@ class V2Window(QMainWindow):
             current.refresh()
             current.apply_gates()
         self.plane_label.setText(state.plane_summary(engine))
+        self._name_undo_steps()
         self.section_bar.refresh()
         self.channel_strip.refresh()
         tool = engine.current_checked_tool

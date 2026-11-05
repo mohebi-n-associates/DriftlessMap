@@ -1,4 +1,8 @@
-## 2.9.1 — unpublished
+## 2.9.2 — unpublished
+
+- Add a visible top Undo button; Ctrl/Cmd+Z walks backward through retained
+  annotation, mapping, build and plan steps; Ctrl/Cmd+Shift+Z redoes.
+- Record probe/cell point edits before mutation, so even the first point can be undone.
 
 - Move object data and creation/deletion into a document-owned, GUI-free model;
   keep the existing controls as adapters.

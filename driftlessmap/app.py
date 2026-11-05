@@ -5,6 +5,7 @@ import copy
 import importlib.util
 import hashlib
 from contextlib import contextmanager
+from functools import wraps
 from pathlib import Path
 import tempfile
 
@@ -223,6 +224,21 @@ from .user_settings import load_last_atlas_path, save_last_atlas_path
 
 script_dir = dirname(realpath(__file__))
 FORM_Main, _ = loadUiType((join(dirname(__file__), "main_window.ui")))
+
+
+def undo_action(label, layers=None):
+    """Capture annotation state before an edit, including the first point."""
+    def decorate(method):
+        @wraps(method)
+        def recorded(self, *args, **kwargs):
+            if layers is not None:
+                selected = self.layer_ctrl.current_layer_index
+                if len(selected) != 1 or self.layer_ctrl.layer_link[selected[0]] not in layers:
+                    return method(self, *args, **kwargs)
+            with self.undoable(label):
+                return method(self, *args, **kwargs)
+        return recorded
+    return decorate
 
 
 class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin, SectionsMixin, QMainWindow,
@@ -1533,6 +1549,8 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
 
 
     def save_current_action(self, current_tool, layer_link, data, layer_tb):
+        if self._transaction_depth:
+            return  # The enclosing transaction already owns this edit.
         if self.action_id != 0:
             del_index = np.arange(
                 len(self.action_list) + self.action_id, len(self.action_list)
@@ -1552,6 +1570,9 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
             del self.action_list[0]
 
     def redo_called(self):
+        self.flush_plan_edits()
+        if not self.action_list:
+            return self.redo_mapping_step()
         self.action_id += 1
         if self.action_id > 0:
             self.action_id -= 1
@@ -1559,6 +1580,9 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
         self.set_undo_redo_data()
 
     def undo_called(self):
+        self.flush_plan_edits()
+        if not self.action_list:
+            return self.undo_mapping_step()
         self.action_id -= 1
         if abs(self.action_id) >= len(self.action_list):
             self.action_id += 1
@@ -2587,6 +2611,10 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
         # lasso related
         self.tool_box.lasso_color_btn.sigColorChanged.connect(self.lasso_color_changed)
 
+        self.undo_button = QPushButton("Undo")
+        self.undo_button.setToolTip("Undo the last action (Ctrl/Cmd+Z); repeat for earlier actions")
+        self.undo_button.clicked.connect(self.undo_called)
+        self.toolbar.addWidget(self.undo_button)
         self.toolbar.addAction(self.tool_box.add_atlas)
         self.toolbar.addAction(self.tool_box.add_image_stack)
         #     self.toolBar.addAction(add_cell_act)
@@ -5267,6 +5295,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
                 np.asarray(self.working_img_data["ruler_path"])
             )
 
+    @undo_action("Erase points", layers=("img-probe", "img-cells"))
     def _image_click_eraser(self, pos, x, y):
         if (
             not self.layer_ctrl.layer_id
@@ -5562,6 +5591,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
                 strict=False, show_error=False
             )
 
+    @undo_action("Mark cells")
     def _image_click_loc(self, pos, x, y):
         if self.tool_box.cell_selector_btn.isChecked():
             if "rgb" in self.image_view.image_file.pixel_type:
@@ -5637,6 +5667,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
                 pos=np.asarray(self.working_img_data["img-blob"])
             )
 
+    @undo_action("Mark probe point")
     def _image_click_probe(self, pos, x, y):
         self.working_img_data["img-probe"].append([x, y])
         self.image_view.img_stacks.image_dict["img-probe"].setData(
@@ -5826,6 +5857,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
         if self.tool_box.triang_vis_btn.isChecked():
             self.update_histo_tri_lines()
 
+    @undo_action("Erase probe point")
     def img_probe_pnts_clicked(self, points, ev):
         if (
             not self.tool_box.checkable_btn_dict["eraser_btn"].isChecked()
@@ -5838,6 +5870,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
             np.asarray(self.working_img_data["img-probe"])
         )
 
+    @undo_action("Erase cell")
     def img_cell_pnts_clicked(self, points, ev):
         if (
             not self.tool_box.checkable_btn_dict["eraser_btn"].isChecked()
@@ -6251,6 +6284,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
         else:
             self.print_message("", self.normal_color)
 
+    @undo_action("Erase atlas probe point")
     def atlas_erasing_probe(self, pos):
         x = pos[0]
         y = pos[1]
@@ -6422,6 +6456,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
         current_data = {"data": self.working_atlas_data["lasso_path"].copy()}
         self.save_current_action("lasso_btn", "lasso_path", current_data, None)
 
+    @undo_action("Mark atlas probe point")
     def _atlas_click_probe(self, pos, x, y):
         self.working_atlas_data["atlas-probe"].append([x, y])
 
@@ -6687,6 +6722,7 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
         # else:
         #     self.atlas_view.working_atlas.image_dict['atlas-probe'].clear()
 
+    @undo_action("Erase atlas contour point")
     def atlas_contour_pnts_clicked(self, points, ev):
         if self.num_windows == 4 or not self.working_atlas_data["atlas-contour"]:
             return

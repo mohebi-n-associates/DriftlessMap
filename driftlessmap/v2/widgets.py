@@ -268,8 +268,9 @@ def undo_help():
     return {
         "point": "{} (Edit > Undo) removes the last point; repeat to walk back.".format(
             keys("Ctrl+Z")),
-        "step": "Edit > Undo mapping step ({}) takes back the last Map, Update "
-                "mapping, Make parts or Build.".format(keys("Ctrl+Alt+Z")),
+        "step": "Undo ({}) takes back the last Map, Update mapping, Make parts or Build; "
+                "repeat for earlier actions. Edit > Undo mapping step is also available.".format(
+                    keys("Ctrl+Z")),
         "edit": "To correct mapped points instead, select the mapping under Mapped "
                 "marks on this section and click Edit marks.",
     }

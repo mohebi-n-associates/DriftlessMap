@@ -8,7 +8,7 @@ or important workflows change.
 
 ## Project identity
 
-- Source version: **2.9.1, unpublished**. Do not tag or publish this version
+- Source version: **2.9.2, unpublished**. Do not tag or publish this version
   without a new owner instruction. Current published release: DriftlessMap 2.9.0 (5 November 2026; planning services,
   solid clearance, responsive jobs and direct pyramid loading). 2.8.8
   (4 November 2026; Space out). 2.8.7
@@ -37,6 +37,16 @@ or important workflows change.
   `CITATION.cff`, `AUTHOR.txt`, `CONTRIBUTORS.md`, About dialog). Keep the
   HERBS copyright notice in `LICENSE.txt` (MIT condition), and preserve legacy
   HERBS file compatibility and coordinate field names where documented.
+
+## Undo in 2.9.2
+
+The top Undo button and Ctrl/Cmd+Z walk backward through up to 10 retained
+transaction steps (500 MB shared with redo); Ctrl/Cmd+Shift+Z restores them.
+Probe/cell point additions and point deletion handlers use `undo_action` to
+capture pre-edit state, including the first point. They share the history of
+mapping, building and plan edits. Older raster/tool edits retain their separate
+history. Section/document transitions clear history as before. This is not a
+universal undo for view, registration, file or display settings.
 
 ## Fast architecture map
 

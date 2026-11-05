@@ -122,9 +122,9 @@ coverage and measured synthetic performance. Ruff and mypy (36 modules) pass
 with PyQt6 6.11.0. The 6.12.0 stubs have invalid parameter ordering and that
 version is excluded. Existing real-data/native installation gates stay pending.
 
-## 2.9.1 source-only refactoring
+## 2.9.2 source-only refactoring
 
-2.9.1 is unpublished by owner instruction. See
-`reviews/2.9.1/IMPLEMENTATION.md` for the object model, stable identity payload
+2.9.2 is unpublished by owner instruction. See
+`reviews/2.9.2/IMPLEMENTATION.md` for the object model, stable identity payload
 fields, extracted export workflow, undo memory comparison and remaining work.
 Synthetic benchmarks do not close real-data or clean-install gates.
