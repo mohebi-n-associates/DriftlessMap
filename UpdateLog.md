@@ -1,3 +1,14 @@
+## 2.9.3 — unpublished
+
+- Fix Undo after a pencil, eraser, lasso or magic wand stroke: it now takes back
+  point edits and mapping steps too, newest first, instead of stopping.
+- Point clicks are instant again: a point step keeps only the point lists, not a
+  copy of the whole document (about 0.4 s per click with a 40 MB object in 2.9.2).
+- Point edits no longer push Map, Build and other mapping steps out of the
+  10-step undo history; they keep their own history of up to 200 steps.
+- Undoing a stroke can no longer be silently reversed when a layer's last point
+  is removed.
+
 ## 2.9.2 — unpublished
 
 - Add a visible top Undo button; Ctrl/Cmd+Z walks backward through retained

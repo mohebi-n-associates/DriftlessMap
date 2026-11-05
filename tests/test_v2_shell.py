@@ -3169,6 +3169,86 @@ class V2ShellTests(unittest.TestCase):
             self.assertEqual(engine.working_img_data["img-cells"], [[10.0, 12.0]])
             self.assertEqual(sum(engine.working_img_data["cell_count"]), 1)
 
+    def _point_window(self, folder):
+        import cv2
+        from tests.atlas_fixture import make_processed_atlas
+
+        root = Path(folder)
+        window = self.make_window(folder)
+        engine = window.engine
+        self.assertTrue(engine.load_volume_atlas(str(make_processed_atlas(root / "atlas"))))
+        cv2.imwrite(str(root / "s.png"), np.full((40, 30, 3), 120, dtype=np.uint8))
+        self.assertTrue(engine.load_single_image_file(str(root / "s.png"), ".png"))
+        window.go_to("annotate")
+        probes = window.panels["annotate"].implants.probe_card
+        probes.new_probe("NP A")
+        probes.toggle_marking()
+        return window, engine
+
+    @isolated_gui_test
+    def test_undo_takes_tool_and_point_edits_back_newest_first(self):
+        # 2.9.2 regression: once a pencil/lasso/wand stroke was recorded, Undo
+        # only walked the per-tool history and never reached the points.
+        with tempfile.TemporaryDirectory() as folder:
+            window, engine = self._point_window(folder)
+            engine._image_click_probe((10.0, 10.0), 10.0, 10.0)
+            engine.save_current_action("lasso_btn", "lasso_path", {"data": [1]}, None)
+            engine._image_click_probe((12.0, 20.0), 12.0, 20.0)
+            engine.save_current_action("lasso_btn", "lasso_path", {"data": [2]}, None)
+            self.assertEqual(engine.next_undo()[0], "tool")
+            engine.undo_called()                         # the second stroke
+            self.assertEqual(engine.next_undo(), ("point", "Mark probe point"))
+            engine.undo_called()
+            self.assertEqual(len(engine.working_img_data["img-probe"]), 1)
+            # The first stroke cannot be undone by the per-tool history (it
+            # keeps states after edits), so the first point comes next.
+            engine.undo_called()
+            self.assertEqual(engine.working_img_data["img-probe"], [])
+            self.assertNotIn(engine.next_undo()[0], ("point", "tool"))
+            window.refresh()
+            self.assertEqual(window.undo_button.isEnabled(), engine.next_undo()[0] is not None)
+            # Redo brings them back oldest first.
+            self.assertEqual(engine.next_redo(), ("point", "Mark probe point"))
+            engine.redo_called()
+            engine.redo_called()
+            self.assertEqual(len(engine.working_img_data["img-probe"]), 2)
+            self.assertEqual(engine.next_redo()[0], "tool")
+
+    @isolated_gui_test
+    def test_point_edits_never_push_out_mapping_steps_and_stay_cheap(self):
+        import time
+
+        with tempfile.TemporaryDirectory() as folder:
+            window, engine = self._point_window(folder)
+            with engine.undoable("Build NP A"):
+                engine.working_img_data["img-probe"].append([1.0, 1.0])
+            # A large object makes a whole-document snapshot slow (2.9.2:
+            # about 0.4 s per click); a point step copies only point lists.
+            big = np.random.default_rng(0).integers(0, 2, (20, 1000, 1000), dtype=np.uint8)
+            engine.object_ctrl.add_object("Cells - piece", "cell piece",
+                                          {"data": big, "vis_color": (255, 0, 0, 255)},
+                                          "opaque")
+            started = time.perf_counter()
+            for i in range(12):
+                engine._image_click_probe((5.0 + i, 3.0 + 2 * i), 5.0 + i, 3.0 + 2 * i)
+            self.assertLess((time.perf_counter() - started) / 12, 0.05)
+            self.assertEqual(engine.undo_history.labels()[0], ["Build NP A"])
+            for _ in range(12):
+                self.assertEqual(engine.next_undo()[0], "point")
+                engine.undo_called()
+            self.assertEqual(engine.working_img_data["img-probe"], [[1.0, 1.0]])
+            self.assertEqual(engine.next_undo(), ("mapping", "Build NP A"))
+            engine.undo_called()
+            self.assertEqual(engine.working_img_data["img-probe"], [])
+            # Redo goes forward in the order things were done: the Build first.
+            self.assertEqual(engine.next_redo(), ("mapping", "Build NP A"))
+            engine.redo_called()
+            self.assertEqual(engine.next_redo(), ("point", "Mark probe point"))
+            engine.undo_called()
+            # A new point edit starts a new branch: the Build cannot be redone.
+            engine._image_click_probe((20.0, 30.0), 20.0, 30.0)
+            self.assertEqual(engine.next_redo(), (None, None))
+
     @isolated_gui_test
     def test_a_deleted_probe_leaves_no_marks_on_screen(self):
         import cv2

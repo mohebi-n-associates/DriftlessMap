@@ -522,20 +522,16 @@ class V2Window(QMainWindow):
 
     def _name_undo_steps(self):
         history = self.engine.undo_history
-        label = history.undo_label()
         pending = bool(self.engine.plan_previews)
-        legacy = len(self.engine.action_list) + self.engine.action_id > 1
-        available = legacy if self.engine.action_list else bool(label)
-        self.undo_button.setEnabled(pending or available)
+        _kind, label = self.engine.next_undo()
+        self.undo_button.setEnabled(pending or label is not None)
         self.undo_button.setToolTip("Undo {} ({}); repeat for earlier actions".format(
-            "plan edit" if pending else "tool edit" if legacy else
-            label if available else "(nothing to undo)",
+            "plan edit" if pending else label or "(nothing to undo)",
             QKeySequence("Ctrl+Z").toString(QKeySequence.SequenceFormat.NativeText)))
-        redo_label = history.redo_label()
-        can_redo = self.engine.action_id < 0 if self.engine.action_list else bool(redo_label)
-        self.redo_button.setEnabled(can_redo and not pending)
+        _kind, redo_label = self.engine.next_redo()
+        self.redo_button.setEnabled(redo_label is not None and not pending)
         self.redo_button.setToolTip("Redo {} ({})".format(
-            "tool edit" if self.engine.action_list else redo_label or "(nothing to redo)",
+            redo_label or "(nothing to redo)",
             QKeySequence("Ctrl+Shift+Z").toString(QKeySequence.SequenceFormat.NativeText)))
         for menu_item, label, verb in ((self.undo_step_item, history.undo_label(), "Undo"),
                                        (self.redo_step_item, history.redo_label(), "Redo")):
@@ -640,11 +636,16 @@ class V2Window(QMainWindow):
         lines += ["", "Redo mapping step brings back, next first:"]
         lines += ["  {}. {}".format(n, label) for n, label in enumerate(redo, start=1)] or \
             ["  nothing"]
-        lines += ["", "These steps include probe/cell points, Map, Update or Remove mapping, "
-                  "Make parts, Build, Delete and plan edits. Use the top Undo button or "
-                  "Ctrl/Cmd+Z repeatedly; Ctrl/Cmd+Shift+Z redoes. "
-                  "Opening or removing a section, loading an image or opening a project "
-                  "clears this history (a message says so); at most 10 steps are kept."]
+        points, _redo_points = self.engine.point_history.labels()
+        lines += ["", "Before these, Undo first takes back the {} probe, cell and contour "
+                  "point edit{} made since the last of them.".format(
+                      len(points), "" if len(points) == 1 else "s")]
+        lines += ["", "These steps are Map, Update or Remove mapping, Make parts, Build, "
+                  "Delete and plan edits. Use the top Undo button or Ctrl/Cmd+Z "
+                  "repeatedly; Ctrl/Cmd+Shift+Z redoes. Point edits are kept apart (up to "
+                  "200), so they never push these steps out. Opening or removing a section, "
+                  "loading an image or opening a project clears this history (a message "
+                  "says so); at most 10 steps are kept."]
         return "\n".join(lines)
 
     def show_mapping_history(self):

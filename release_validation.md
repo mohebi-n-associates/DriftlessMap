@@ -128,3 +128,11 @@ version is excluded. Existing real-data/native installation gates stay pending.
 `reviews/2.9.2/IMPLEMENTATION.md` for the object model, stable identity payload
 fields, extracted export workflow, undo memory comparison and remaining work.
 Synthetic benchmarks do not close real-data or clean-install gates.
+
+## 2.9.3 Undo fixes (unpublished)
+
+Fixes three regressions found reviewing 2.9.2, each reproduced in the real
+engine before and covered by tests after: a per-tool stroke blocked Undo from
+reaching points and mapping steps; a point click snapshotted the whole document
+(375 ms with a 40 MB object, now about 1 ms); point clicks pushed mapping steps
+out of the 10-step history. Real-data trials remain pending as above.

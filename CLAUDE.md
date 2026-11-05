@@ -8,7 +8,7 @@ or important workflows change.
 
 ## Project identity
 
-- Source version: **2.9.2, unpublished**. Do not tag or publish this version
+- Source version: **2.9.3, unpublished** (fixes to 2.9.2's Undo). Do not tag or publish this version
   without a new owner instruction. Current published release: DriftlessMap 2.9.0 (5 November 2026; planning services,
   solid clearance, responsive jobs and direct pyramid loading). 2.8.8
   (4 November 2026; Space out). 2.8.7
@@ -38,14 +38,27 @@ or important workflows change.
   HERBS copyright notice in `LICENSE.txt` (MIT condition), and preserve legacy
   HERBS file compatibility and coordinate field names where documented.
 
-## Undo in 2.9.2
+## Undo (2.9.2, fixed in 2.9.3)
 
-The top Undo button and Ctrl/Cmd+Z walk backward through up to 10 retained
-transaction steps (500 MB shared with redo); Ctrl/Cmd+Shift+Z restores them.
-Probe/cell point additions and point deletion handlers use `undo_action` to
-capture pre-edit state, including the first point. They share the history of
-mapping, building and plan edits. Older raster/tool edits retain their separate
-history. Section/document transitions clear history as before. This is not a
+The top Undo button and Ctrl/Cmd+Z (`undo_called`) take back the newest of three
+histories' next steps; Ctrl/Cmd+Shift+Z (`redo_called`) the oldest undone. Every
+step gets a number from `_next_edit_seq`; `next_undo`/`next_redo` compare them
+and name the step (V2 button tooltips).
+- Mapping steps: `TransactionHistory` (10 steps, 500 MB; `Transaction.seq`) via
+  `undoable`. Recording or undoing one clears the per-tool list.
+- Point edits: `transactions.PointHistory` (200 steps) via the `point_action`
+  decorator on probe/cell/contour click and erase handlers. It keeps only
+  `_point_state` (the point lists, never objects or masks): a whole-document
+  snapshot per click (2.9.2) cost ~0.4 s with a 40 MB object and pushed Build
+  out of the 10 mapping steps. Point steps older than a mapping step that left
+  its history are dropped (`TransactionHistory.horizon`, `barrier`;
+  `_drop_points_past_horizon`).
+- Per-tool edits: `action_list`/`action_id` (pencil, eraser, lasso, wand; six
+  post-edit states, entries carry `seq`). `save_current_action` is skipped inside
+  a mapping step or point step. `forget_layer_actions` resets the position only
+  when it removed entries.
+A new edit of any kind clears every redo branch. Section/document transitions
+clear all histories (`_forget_point_history` with each reset). This is not a
 universal undo for view, registration, file or display settings.
 
 ## Fast architecture map
