@@ -3,6 +3,19 @@
 This cumulative release history is maintained as a single document. New
 releases are added at the top; earlier release notes remain below them.
 
+## DriftlessMap 2.8.7
+
+Release, 4 November 2026: a prism's tip is a corner you can find.
+
+- **A prism's tip is the bottom left corner of its imaging face**, as you
+  face the face: Tip AP/ML/DV, the entry and the depth give that corner, and
+  the face's bottom edge runs from it to your right. Before, the tip was the
+  middle of that edge, which is hard to find on the prism itself.
+- Plans saved by 2.8.5 and 2.8.6 open with the prism where it was; only
+  their tip moves to the corner.
+- **New prisms face posterior** by default.
+- Snap tip to region and new plans place the face's middle, as before.
+
 ## DriftlessMap 2.8.6
 
 Release, 4 November 2026: probe hardware, as in Pinpoint.

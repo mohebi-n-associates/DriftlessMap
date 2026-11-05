@@ -1171,7 +1171,11 @@ class V2ShellTests(unittest.TestCase):
                               prism.specs["length_um"], prism.specs["bevel_deg"]),
                              ("prism", 1500.0, 1500.0, 3000.0, 45.0))
             plan = engine.implant_plan(prism.implant_id)
-            self.assertEqual(plan.roll_deg, 90.0)      # lateral, on the right
+            self.assertEqual(plan.roll_deg, 180.0)     # faces posterior by default (2.8.7)
+            self.assertEqual(prism.specs["face"], "posterior")
+            # The tip is the face's bottom left corner: facing posterior, the
+            # face runs from it towards the animal's right.
+            self.assertEqual(plan.to_dict()["tip_at"], "face bottom left corner")
             editor = window.panels["annotate"].implants.plan_editor
             self.assertTrue(editor.isVisibleTo(window))
             self.assertEqual(editor.roll_label.text(), "Face")
@@ -1189,7 +1193,7 @@ class V2ShellTests(unittest.TestCase):
             # Turning the face is a staged edit like any other.
             self.assertTrue(editor.steer_key(Qt.Key.Key_O))
             editor.commit()
-            self.assertEqual(engine.implant_plan(prism.implant_id).roll_deg, 91.0)
+            self.assertEqual(engine.implant_plan(prism.implant_id).roll_deg, 181.0)
 
             window.run("fiber.plan")
             window.refresh()

@@ -29,6 +29,7 @@ from PyQt6.QtWidgets import (
 )
 
 from ..probe_plans import (
+    face_middle_um,
     CLEARANCE_UM,
     FACE_LOOK_UM,
     imaging_summary,
@@ -173,8 +174,9 @@ HINTS = {
     "fiber": "Plan where the fiber goes before surgery: set its tip (or the entry and the "
              "depth) and the tilts, click the entry and the tip on the atlas, snap the tip to "
              "a region, or steer it with the keys. Its outline is drawn on the atlas.",
-    "prism": "Plan where the prism goes before surgery: the tip is the middle of the imaging "
-             "face's bottom edge (its deepest point); Face turns the imaging face (0° looks "
+    "prism": "Plan where the prism goes before surgery: the tip is the bottom left corner "
+             "of the imaging face as you face it (the face's deepest edge runs right from "
+             "it); Face turns the imaging face (0° looks "
              "anterior, 90° the animal's right). The readout lists what the face looks into.",
 }
 
@@ -556,7 +558,7 @@ class PlanEditor(Card):
             lines.append("<b>Depth</b> {:.2f} mm along the {}".format(
                 readout["depth_um"] / 1000.0, kind))
         lines.append("<b>{}</b> {} · in {}".format(
-            "Bottom" if kind == "prism" else "Tip",
+            "Corner" if kind == "prism" else "Tip",
             triple(readout["tip_um"]), html.escape(readout["tip_region"][0])))
         lines.append("<b>Tilt</b> {}{}".format(
             html.escape(readout["tilt"]),
@@ -1004,7 +1006,10 @@ class PlanEditor(Card):
         if centre is None:
             self._say(False, "That region is not in the atlas volume.")
             return
-        new = plan.copy(tip_um=centre)
+        # A prism's face (the middle of its bottom edge) goes to the centre;
+        # its tip is the edge's left corner (2.8.7).
+        shift = face_middle_um(plan) - np.asarray(plan.tip_um, dtype=float)
+        new = plan.copy(tip_um=(np.asarray(centre, dtype=float) - shift).tolist())
         ok, message = self.engine.set_probe_plan(new, colour=self._colour())
         self.engine.show_plan_on_atlas(self.probe)
         # The region is checked, so it is drawn on the atlas views and in 3D.

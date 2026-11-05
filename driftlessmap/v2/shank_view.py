@@ -107,7 +107,10 @@ class ShankView(QWidget):
             # A fiber's or prism's outline in this plane (the prism's: its
             # imaging face, which the plane contains).
             specs = self.plan.specs
-            half = specs["diameter_um"] / 2.0 if kind == "fiber" else specs["width_um"] / 2.0
+            # A fiber about its axis; a prism's face from the tip (its bottom
+            # left corner, 2.8.7) to the right.
+            near, far = ((-specs["diameter_um"] / 2.0, specs["diameter_um"] / 2.0)
+                           if kind == "fiber" else (0.0, specs["width_um"]))
             upper = max(top, depth - specs["length_um"]) if kind == "prism" else \
                 max(top, depth - specs["fiber_length_um"])
             if kind == "fiber" and depth - specs["fiber_length_um"] > top:
@@ -122,7 +125,7 @@ class ShankView(QWidget):
             fill.setAlpha(40)
             painter.setPen(QPen(colour, 1, Qt.PenStyle.DashLine))
             painter.setBrush(fill)
-            painter.drawRect(QRectF(point(-half, upper), point(half, depth)))
+            painter.drawRect(QRectF(point(near, upper), point(far, depth)))
             window = self.readout.get("imaging_window_um")
             if kind == "prism" and window and window[1] > 0:
                 # The imaging window: the face's bottom, as high as the bevel
@@ -130,10 +133,10 @@ class ShankView(QWidget):
                 fill.setAlpha(110)
                 painter.setPen(QPen(colour, 2))
                 painter.setBrush(fill)
-                painter.drawRect(QRectF(point(-half, depth - window[1]), point(half, depth)))
+                painter.drawRect(QRectF(point(near, depth - window[1]), point(far, depth)))
                 painter.setPen(QColor(255, 255, 255))
                 painter.setFont(QFont(painter.font().family(), 8))
-                painter.drawText(point(-half, depth - window[1]) + QPointF(3, 11),
+                painter.drawText(point(near, depth - window[1]) + QPointF(3, 11),
                                  "{:.1f} × {:.1f} mm".format(window[0] / 1000.0,
                                                              window[1] / 1000.0))
         for offset in (self.plan.shank_offsets_um or [0.0]) if kind == "probe" else [0.0]:

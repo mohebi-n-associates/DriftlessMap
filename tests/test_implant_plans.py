@@ -22,6 +22,7 @@ from driftlessmap.probe_plans import (
     clearances,
     coordinate_line,
     device_lines,
+    face_middle_um,
     face_view,
     plan_readout,
     planned_model,
@@ -113,10 +114,44 @@ class GeometryTests(unittest.TestCase):
         flat = prism([0.0, 0.0, -1000.0], bevel_deg=90.0)
         self.assertTrue(all(raised == 0.0 for _n, _o, raised in device_lines(flat)))
 
+    def test_the_tip_is_the_bottom_left_corner_of_the_face(self):
+        # Face looking posterior: you face it from behind, looking anterior,
+        # so its left is the animal's left (ML -) and the face runs to ML +.
+        plan = prism([0.0, 0.0, -1000.0], roll=180.0)
+        np.testing.assert_allclose(plan.normal, [0.0, -1.0, 0.0], atol=1e-12)
+        on_face = [o for _n, o, raised in device_lines(plan) if raised == 0.0]
+        ml = sorted({round(float(o[0]), 6) for o in on_face})
+        self.assertEqual((ml[0], ml[-1]), (0.0, 400.0))
+        self.assertTrue(all(abs(o[1]) < 1e-9 and abs(o[2]) < 1e-9 for o in on_face))
+        np.testing.assert_allclose(face_middle_um(plan), [200.0, 0.0, -1000.0], atol=1e-9)
+        # Facing anterior (you look posterior), the face runs to the animal's left.
+        np.testing.assert_allclose(face_middle_um(prism([0.0, 0.0, -1000.0], roll=0.0)),
+                                   [-200.0, 0.0, -1000.0], atol=1e-9)
+        # Tilted towards the side, the face still runs from the tip to its right.
+        tilted = prism([0.0, 0.0, -1000.0], roll=180.0).copy(ml_tilt_deg=20.0)
+        across = face_middle_um(tilted) - np.asarray(tilted.tip_um)
+        self.assertAlmostEqual(float(np.linalg.norm(across)), 200.0)
+        self.assertAlmostEqual(float(np.dot(across, tilted.direction)), 0.0)
+        self.assertGreater(across[0], 0.0)
+
+    def test_older_prism_plans_keep_their_place(self):
+        # 2.8.5-2.8.6 saved the middle of the face's bottom edge as the tip.
+        new = prism([500.0, 100.0, -900.0], roll=180.0).copy(ml_tilt_deg=10.0)
+        old = new.to_dict()
+        del old["tip_at"]
+        old["tip_um"] = face_middle_um(new).tolist()
+        again = ProbePlan.from_dict(old)
+        np.testing.assert_allclose(again.tip_um, new.tip_um, atol=1e-9)
+        self.assertEqual(again.to_dict()["tip_at"], new.to_dict()["tip_at"])
+        self.assertEqual(ProbePlan.from_dict(new.to_dict()), new)     # no second shift
+        # Fibers and probes have no corner.
+        self.assertNotIn("tip_at", fiber([0.0, 0.0, -800.0]).to_dict())
+
     def test_the_planned_prism_model_has_the_bevel(self):
         plan = prism([0.0, 0.0, -1000.0], roll=90.0)
         model = planned_model(plan, {"entry_um": [0.0, 0.0, 0.0]}, 50.0)
-        # Bottom at (0, 0, -20) voxels; the prism lies at ML -8..0, AP -4..4.
+        # Bottom at (0, 0, -20) voxels; the prism lies at ML -8..0, AP 0..8
+        # (the tip is the face's bottom left corner, facing it from the right).
         corners = model_segments(model)
         self.assertAlmostEqual(corners[:, 2].min(), -20.0)
         self.assertAlmostEqual(corners[:, 2].max(), -20.0 + 40.0)
@@ -144,7 +179,8 @@ class ReadoutTests(unittest.TestCase):
     def test_the_imaging_face_looks_into_what_is_in_front_of_it(self):
         # Face at ML +0.15 mm looking right, its bottom 1.25 mm deep at AP 0:
         # the view (bottom 0.4 mm, ±0.2 mm, 0.05-0.2 mm out) is three quarters RT.
-        plan = prism([150.0, 0.0, -1250.0], roll=90.0)
+        # Facing the face (from the right), its left corner is 0.2 mm posterior.
+        plan = prism([150.0, -200.0, -1250.0], roll=90.0)
         height, regions = face_view(plan, self.atlas)
         self.assertAlmostEqual(height, 400.0)
         fractions = {r["acronym"]: r["fraction"] for r in regions}
@@ -154,7 +190,7 @@ class ReadoutTests(unittest.TestCase):
         self.assertEqual(readout["face"], "lateral (the animal's right)")
         self.assertEqual(readout["warnings"], [])
         line = coordinate_line(plan, readout)
-        self.assertIn("bottom of the imaging face", line)
+        self.assertIn("imaging face's bottom left corner AP -0.200", line)
         self.assertIn("face looks into RT 75%, CH 25%", line)
         # Looking left, the same face sees only CH.
         left = face_view(prism([150.0, 0.0, -1250.0], roll=270.0), self.atlas)[1]

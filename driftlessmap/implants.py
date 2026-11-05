@@ -40,7 +40,7 @@ DEFAULT_SPECS = {
     # width runs along the imaging face, depth away from it; length is the
     # imaging face's long edge, and the bottom is bevelled at bevel_deg to the
     # long edges (the mirror; 90 is a flat bottom), deepest at the face (2.8.5).
-    PRISM: {"width_um": 1500.0, "depth_um": 1500.0, "face": "lateral",
+    PRISM: {"width_um": 1500.0, "depth_um": 1500.0, "face": "posterior",
             "length_um": 3000.0, "bevel_deg": 45.0},
 }
 # The settings a fit from mapped outlines uses.
