@@ -1,3 +1,21 @@
+## 2.9.4 — 17 November 2026
+
+- Fix projects that would not open on another computer: the same atlas
+  processed there (or by a DriftlessMap older or newer than 1.4.35, which
+  changed how atlas files are written) was refused with "checksum differs for
+  atlas_axis_info.pkl". The atlas is now checked by its data (axes, regions,
+  template and annotation), whatever way its files were written; a different
+  atlas is still refused.
+- The 3D meshes and region outlines of an atlas are display caches that every
+  computer builds a little differently; they no longer decide whether an atlas
+  is the project's.
+- Opening a project looks for its atlas in the atlas already loaded and the
+  one last used on this computer before asking for a folder.
+- The "atlas not found" message names the folder the project was saved with,
+  and a wrong choice can be corrected without opening the project again.
+- New saves record a content checksum of the atlas files, and atlas files are
+  written in one fixed format, so later versions cannot split atlases again.
+
 ## 2.9.3 — 5 November 2026
 
 - Fix Undo after a pencil, eraser, lasso or magic wand stroke: it now takes back

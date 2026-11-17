@@ -154,11 +154,11 @@ from .about import AboutDriftlessMapWindow
 from .persistence import save_driftlessmap_file
 from .provenance import (
     ATLAS_IDENTITY_FILES,
+    candidate_paths,
     describe_atlas_path,
     describe_path,
     pack_path,
     path_stat_signature,
-    references_match,
     resolve_reference,
     unpack_path,
     utc_now_iso,
@@ -8004,7 +8004,8 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
 
         Results are in the loaded atlas's coordinates and labels, so another
         atlas would mislabel them. The same folder unchanged, or a copy with
-        identical content (relocated), may replace it.
+        identical data (relocated, or processed on another computer), may
+        replace it.
         """
         current = self.volume_atlas_path
         if current is None or not self.has_atlas_results():
@@ -8030,17 +8031,12 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
                         os.path.basename(os.path.normpath(current)),
                         os.path.basename(os.path.normpath(atlas_folder))))
 
-        def sizes(folder):
-            return sorted((name, os.path.getsize(os.path.join(folder, name)))
-                          for name in ATLAS_IDENTITY_FILES
-                          if os.path.isfile(os.path.join(folder, name)))
-
         try:
-            # Different file sizes already mean different content; otherwise hash.
-            same = sizes(current) == sizes(atlas_folder) and run_in_background(
+            # By the atlas data, not the files' bytes: the same atlas processed
+            # on another computer is encoded differently (verify_reference).
+            same = run_in_background(
                 self, "Comparing the atlases...",
-                lambda: references_match(describe_atlas_path(current),
-                                         describe_atlas_path(atlas_folder)))
+                lambda: verify_reference(atlas_folder, describe_atlas_path(current))[0])
         except (OSError, ValueError):
             same = False
         if same:
@@ -9358,29 +9354,53 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
         return clean_interface_state(self.interface_state)
 
     def _ask_for_verified_input(self, reference, title):
-        QMessageBox.warning(
-            self,
-            "Project input unavailable",
-            "{} was moved, deleted, or no longer matches its saved checksum. "
-            "Select the original input to continue.".format(title),
-        )
-        if reference.get("kind") == "directory":
-            candidate = file_dialogs.get_existing_directory(self, title, self.home_path)
+        """Ask where a project's linked input is; None when the user gives up.
+
+        ``reference`` is the saved one: a folder is the volume atlas, a file
+        the histology source.
+        """
+        is_atlas = reference.get("kind") == "directory"
+        saved_at = reference.get("absolute_path") or reference.get("name") or "its saved place"
+        if is_atlas:
+            message = (
+                "This project was made with the volume atlas saved in:\n\n{}\n\n"
+                "That folder is not on this computer, or its atlas files have changed. "
+                "Choose the folder that holds the same atlas. A copy processed on "
+                "another computer is accepted when its data are identical.".format(saved_at)
+            )
         else:
-            candidate = file_dialogs.get_open_file_name(self, title, self.home_path)[0]
-        if not candidate:
-            return None
-        matches, reason = verify_reference(candidate, reference)
-        if not matches:
-            QMessageBox.critical(
+            message = (
+                "This project's histology source was saved as:\n\n{}\n\n"
+                "That file is not on this computer, or it has changed. Choose the "
+                "original file, or cancel to continue without it.".format(saved_at)
+            )
+        QMessageBox.warning(self, "Project input not found", message)
+        while True:
+            if is_atlas:
+                candidate = file_dialogs.get_existing_directory(self, title, self.home_path)
+            else:
+                candidate = file_dialogs.get_open_file_name(self, title, self.home_path)[0]
+            if not candidate:
+                return None
+            try:
+                matches, reason = run_in_background(
+                    self, "Checking the selected input...",
+                    verify_reference, candidate, reference)
+            except OSError as exc:
+                matches, reason = False, "it could not be read ({})".format(exc)
+            if matches:
+                return candidate
+            answer = QMessageBox.critical(
                 self,
                 "Input does not match",
-                "The selected input is not the one recorded by this project: {}.".format(
-                    reason
-                ),
+                "{} is not the {} this project was made with: {}.\n\n"
+                "Choose another, or cancel.".format(
+                    candidate, "atlas" if is_atlas else "file", reason),
+                QMessageBox.StandardButton.Retry | QMessageBox.StandardButton.Cancel,
+                QMessageBox.StandardButton.Retry,
             )
-            return None
-        return candidate
+            if answer != QMessageBox.StandardButton.Retry:
+                return None
 
     def _extract_portable_histology(self, project_dict):
         sources = project_dict.get("portable_sources") or {}
@@ -9417,13 +9437,26 @@ class DriftlessMap(ProjectSessionMixin, ImplantEngineMixin, ProbePlanEngineMixin
         ):
             resolved_atlas = None
             if atlas_reference is not None:
+                # After the saved places, the atlases this computer already
+                # uses: the same atlas rarely has the same path elsewhere.
                 resolved_atlas, _ = run_in_background(
                     self,
                     "Verifying the project's atlas...",
                     resolve_reference,
                     atlas_reference,
                     project_path=project_path,
+                    extra=(self.volume_atlas_path, load_last_atlas_path()),
                 )
+                if resolved_atlas is not None and not any(
+                    os.path.abspath(resolved_atlas) == os.path.abspath(str(place))
+                    for place in candidate_paths(atlas_reference, project_path)
+                ):
+                    self.print_message(
+                        "The project's atlas was saved in {}; the same atlas in {} "
+                        "is used.".format(
+                            atlas_reference.get("absolute_path"), resolved_atlas),
+                        self.normal_color,
+                    )
                 if resolved_atlas is None:
                     resolved_atlas = self._ask_for_verified_input(
                         atlas_reference, "Locate Volume Atlas Folder"

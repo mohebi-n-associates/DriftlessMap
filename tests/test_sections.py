@@ -739,6 +739,12 @@ class SectionPersistenceTests(SectionEngineTests):
             copy = root / "atlas-copy"
             shutil.copytree(original, copy)
             self.assertTrue(window.load_volume_atlas(str(copy)))
+            # 2.9.4: so is the same atlas as another computer processed it
+            # (older pickle protocol, its own meshes).
+            elsewhere = make_processed_atlas(root / "atlas-elsewhere", protocol=4,
+                                             mesh_offset=0.5)
+            self.assertTrue(window.load_volume_atlas(str(elsewhere)))
+            self.assertTrue(window.load_volume_atlas(str(copy)))
 
             # 2.6.0 review F1: the loaded folder's files changed in place, or a
             # copy of the changed files, or the folder is gone: refused.
@@ -766,6 +772,58 @@ class SectionPersistenceTests(SectionEngineTests):
             self.assertIsNotNone(fresh.atlas_replacement_problem(str(other)))
             payload_window, _payload = self.open_project(root, path)
             self.assertEqual(len(payload_window.mapping_ledger), 2)
+
+    @isolated_gui_test
+    def test_a_project_opens_with_the_same_atlas_from_another_computer(self):
+        # 2.9.4: a project saved on a PC did not open on a Mac whose copy of
+        # the same atlas had been processed by a later version.
+        import copy
+        import shutil
+
+        from driftlessmap.persistence import load_driftlessmap_file
+        from tests.atlas_fixture import make_processed_atlas
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            window, fiber, _first_id, _raster = self.two_section_project(root)
+            self.assertTrue(window.build_implant(fiber.implant_id)[0])
+            path = root / "two.dmap"
+            self.assertTrue(window.save_project_called(path=str(path)))
+            payload, error = load_driftlessmap_file(str(path), expected_kind="project")
+            self.assertIsNone(error)
+            records = payload["atlas_provenance"]["reference"]["files"]
+            self.assertTrue(any("content_sha256" in record for record in records))
+            # As versions before 2.9.4 saved it: checksums of the files only.
+            older = copy.deepcopy(payload)
+            for record in older["atlas_provenance"]["reference"]["files"]:
+                record.pop("content_sha256", None)
+
+            shutil.rmtree(window.volume_atlas_path)
+            here = make_processed_atlas(root / "this-computer" / "my-atlas", protocol=4,
+                                        mesh_offset=0.5)
+            other = make_processed_atlas(root / "this-computer" / "other", voxel_size=50)
+            for saved in (payload, older):
+                # The atlas this computer has loaded is tried before asking.
+                opened = DriftlessMap()
+                self.windows.append(opened)
+                self.assertTrue(opened.load_volume_atlas(str(here)))
+                with patch.object(DriftlessMap, "_ask_for_verified_input",
+                                  side_effect=AssertionError("asked for the atlas")):
+                    prepared = opened.prepare_project_sources(saved, str(path))
+                self.assertTrue(os.path.samefile(prepared["atlas_path"], here))
+                self.assertIn("the same atlas in", opened.statusbar.currentMessage())
+                self.assertTrue(opened.load_project(prepared, project_path=str(path)))
+                self.assertEqual(len(opened.mapping_ledger), 2)
+                self.assertEqual(opened.object_ctrl.obj_type, ["merged fiber"])
+
+                # A different atlas is not taken; the user is asked.
+                wrong = DriftlessMap()
+                self.windows.append(wrong)
+                self.assertTrue(wrong.load_volume_atlas(str(other)))
+                with patch.object(DriftlessMap, "_ask_for_verified_input",
+                                  return_value=None) as ask:
+                    self.assertIsNone(wrong.prepare_project_sources(saved, str(path)))
+                ask.assert_called_once()
 
     @isolated_gui_test
     def test_a_portable_copy_treats_every_changed_original_alike(self):

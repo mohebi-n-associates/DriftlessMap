@@ -1,6 +1,6 @@
 # DriftlessMap User Manual
 
-This manual applies to **DriftlessMap 2.9.3**. Section 2 explains how to
+This manual applies to **DriftlessMap 2.9.4**. Section 2 explains how to
 install it.
 
 DriftlessMap - Histological E-data Registration in Brain Space - is a desktop
@@ -714,8 +714,10 @@ preferences. If that folder was moved, DriftlessMap asks for a new location.
 
 A project's landmarks, mappings and objects are in the coordinates and regions
 of the atlas they were made with. Once a project has any of them, loading a
-different atlas is refused (since 2.5.5); loading the same atlas again, or an
-identical copy of it from another folder, is allowed. If the loaded atlas's own
+different atlas is refused (since 2.5.5); loading the same atlas again, or a
+copy of it from another folder, is allowed, also when that copy was processed
+on another computer (since 2.9.4; see "The same atlas on another computer"
+under Save Project). If the loaded atlas's own
 files changed or disappeared after loading, nothing can be compared with
 them, so any replacement is refused (since 2.6.1); restore the files, or save
 and reopen the project, which checks the atlas by its saved checksum. To work with another
@@ -2398,10 +2400,28 @@ Use **File > Save Project** frequently. A project records:
   it open as before.
 
 **Save Project** creates a linked project. The processed volume atlas is not
-embedded because it is large, but its scientifically relevant cache files are
-identified by SHA-256 checksums. DriftlessMap first tries a project-relative
-path, then the recorded absolute path. If neither contains the expected atlas,
-it asks for the atlas folder and rejects a selection whose checksum differs.
+embedded because it is large, but the files that are the atlas (its axes,
+regions, template and annotation) are identified by SHA-256 checksums of both
+the files and the data in them. DriftlessMap first tries a project-relative
+path, then the recorded absolute path, then the atlas that is loaded and the
+one last used on this computer. If none holds the project's atlas, it names
+the folder the project was saved with, asks for the atlas folder, and says why
+a selection is not that atlas; you can choose again.
+
+**The same atlas on another computer (2.9.4).** A project made on one computer
+opens on another that has the same atlas, without copying the atlas folder
+along: download or process the atlas there as usual. The atlas is accepted
+when its data are identical, however its files were written. This matters
+because DriftlessMap 1.4.35 changed the way atlas files are written, so an
+atlas processed before it and one processed after it never had the same file
+checksums, and earlier versions refused the project ("checksum differs for
+atlas_axis_info.pkl"). The 3D meshes and region outlines in an atlas folder
+are display caches built from the annotation; they differ slightly between
+computers and are not part of the check. A different atlas (another
+resolution, another annotation, one changed voxel) is still refused. Checking
+an atlas written the other way reads its template and annotation once, which
+takes some seconds for a 10 um atlas. Projects saved by 2.9.4 open in earlier
+versions as before.
 
 The lossless active histology raster is always embedded, along with source
 scene/page, channel, curve, and scale metadata. If the original source cannot
