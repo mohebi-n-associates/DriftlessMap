@@ -327,12 +327,21 @@ def load_mesh_pickle(file_path):
     raise ValueError("Mesh file does not contain mesh data.")
 
 
+def read_inert_pickle(stream, normalize=True):
+    """Read inert data from an open pickle stream, raising when it is unsafe.
+
+    ``normalize=False`` keeps the values exactly as stored (legacy pandas
+    string arrays stay stand-ins), for callers that compare encodings.
+    """
+    data = RestrictedUnpickler(stream).load()
+    return _normalize_legacy_pandas_arrays(data) if normalize else data
+
+
 def load_legacy_pickle(file_path):
     """Load inert data from a legacy pickle with a consistent result tuple."""
     try:
         with open(file_path, "rb") as infile:
-            data = RestrictedUnpickler(infile).load()
-        return _normalize_legacy_pandas_arrays(data), None
+            return read_inert_pickle(infile), None
     except OSError as exc:
         return None, "Unable to read file: {}".format(exc)
     except Exception as exc:
@@ -557,6 +566,12 @@ def _fsync_directory(path):
         os.close(descriptor)
 
 
+# Processed-atlas caches are written with one fixed pickle protocol, so the
+# same atlas processed on any computer or Python gives the same files.
+# ``pickle.HIGHEST_PROTOCOL`` would change them whenever Python adds one.
+CACHE_PICKLE_PROTOCOL = 5
+
+
 def write_cache_pickle(file_path, value):
     """Atomically write a processed-atlas cache file.
 
@@ -574,7 +589,7 @@ def write_cache_pickle(file_path, value):
         temporary_path = Path(temporary.name)
     try:
         with open(temporary_path, "wb") as stream:
-            pickle.dump(value, stream, protocol=pickle.HIGHEST_PROTOCOL)
+            pickle.dump(value, stream, protocol=CACHE_PICKLE_PROTOCOL)
             stream.flush()
             os.fsync(stream.fileno())
         os.chmod(str(temporary_path), _target_mode(destination))

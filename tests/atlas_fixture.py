@@ -6,9 +6,9 @@ import pickle
 import numpy as np
 
 
-def _dump(path, value):
+def _dump(path, value, protocol=5):
     with Path(path).open("wb") as stream:
-        pickle.dump(value, stream, protocol=pickle.HIGHEST_PROTOCOL)
+        pickle.dump(value, stream, protocol=protocol)
 
 
 def _cube_mesh(offset=0.0):
@@ -21,13 +21,16 @@ def _cube_mesh(offset=0.0):
     return gl.MeshData(vertexes=vertexes, faces=faces)
 
 
-def make_processed_atlas(folder, shape=(40, 32, 24), voxel_size=25, axis_info=False):
+def make_processed_atlas(folder, shape=(40, 32, 24), voxel_size=25, axis_info=False,
+                         protocol=5, mesh_offset=0.0):
     """Write a minimal processed atlas and return its folder.
 
     ``shape`` is the stored (anterior, dorsal, right) volume shape. The brain
     is a box filled with label 10 (``child``) whose dorsal half is label 20
     (``grandchild``); the outside is 0. ``axis_info`` also writes
     ``atlas_axis_info.pkl`` (stored order, no flips), which probe builds need.
+    ``protocol`` and ``mesh_offset`` give the same atlas as another computer
+    or DriftlessMap version processed it: other pickle bytes, other meshes.
     """
     folder = Path(folder)
     folder.mkdir(parents=True, exist_ok=True)
@@ -46,10 +49,11 @@ def make_processed_atlas(folder, shape=(40, 32, 24), voxel_size=25, axis_info=Fa
         {"name": "right", "values": np.arange(shape[2]) * voxel_size, "units": "um"},
         {"vxsize": voxel_size, "Bregma": bregma},
     ]
-    _dump(folder / "atlas_pre_made.pkl", {"data": atlas, "info": atlas_info})
+    _dump(folder / "atlas_pre_made.pkl", {"data": atlas, "info": atlas_info}, protocol)
     _dump(
         folder / "segment_pre_made.pkl",
         {"data": labels, "unique_label": np.array([0, 10, 20])},
+        protocol,
     )
     _dump(
         folder / "atlas_labels.pkl",
@@ -61,14 +65,16 @@ def make_processed_atlas(folder, shape=(40, 32, 24), voxel_size=25, axis_info=Fa
             "color": np.array([[255, 255, 255], [200, 100, 50], [50, 100, 200]]),
             "level_indicator": [1, 2, 3],
         },
+        protocol,
     )
-    _dump(folder / "atlas_meshdata.pkl", _cube_mesh())
+    _dump(folder / "atlas_meshdata.pkl", _cube_mesh(mesh_offset), protocol)
     _dump(
         folder / "atlas_small_meshdata.pkl",
-        {"10": _cube_mesh(1.0), "20": _cube_mesh(2.0)},
+        {"10": _cube_mesh(1.0 + mesh_offset), "20": _cube_mesh(2.0 + mesh_offset)},
+        protocol,
     )
     if axis_info:
         _dump(folder / "atlas_axis_info.pkl",
               {"to_HERBS": (0, 1, 2), "from_HERBS": (0, 1, 2),
-               "direction_change": (False, False, False), "size": tuple(shape)})
+               "direction_change": (False, False, False), "size": tuple(shape)}, protocol)
     return folder

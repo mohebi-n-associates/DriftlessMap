@@ -8,7 +8,9 @@ or important workflows change.
 
 ## Project identity
 
-- Source version: **2.9.3**. Current published release: DriftlessMap 2.9.3
+- Source version: **2.9.4**. Current published release: DriftlessMap 2.9.4
+  (17 November 2026; atlas identity by content, so a project opens with the
+  same atlas processed on another computer). 2.9.3
   (5 November 2026; multi-step Undo from 2.9.2 with its fixes, and
   document-owned object state). 2.9.0 (5 November 2026; planning services,
   solid clearance, responsive jobs and direct pyramid loading). 2.8.8
@@ -272,6 +274,23 @@ universal undo for view, registration, file or display settings.
   restricted legacy-pickle reader.
 - `driftlessmap/provenance.py`: SHA-256 input identity, relative/absolute path
   hints, relocation and verification, portable source packing/extraction.
+  An atlas is identified by the data in `ATLAS_CONTENT_FILES` (axes, regions,
+  template, annotation), never by the other `ATLAS_IDENTITY_FILES` (meshes,
+  outlines: display caches that differ between computers; still recorded so
+  older versions open new projects). `verify_reference` on an atlas reference
+  (`_verify_atlas`): cheap existence and `_plausible_size` checks on every
+  content file first, then per file the byte SHA-256, else the record's
+  `content_sha256` (`content_digest`: encoding- and platform-independent, read
+  through the restricted unpickler; recorded by `describe_atlas_path` since
+  2.9.4, `hash_file_and_content` reads once), else for older references the
+  file written again with each of `ATLAS_PICKLE_PROTOCOLS`
+  (`_matches_another_encoding`; exact size and SHA-256 required). 1.4.35
+  changed atlas caches from pickle protocol 4 to 5, which split identical
+  atlases until 2.9.4; `persistence.CACHE_PICKLE_PROTOCOL` is now fixed (never
+  `HIGHEST_PROTOCOL`). `resolve_reference(extra=)` also tries the loaded and
+  last-used atlas folders (`prepare_project_sources`);
+  `atlas_replacement_problem` compares with `verify_reference`, not
+  `references_match` (exact bytes).
 - `driftlessmap/image_reader.py`: conventional, TIFF, folder, and embedded
   active-raster readers. TIFF axes beyond C and the paged axis are read at
   the plane in `plane_selection` (saved in `img_ctrl_data`; default first
@@ -651,9 +670,12 @@ universal undo for view, registration, file or display settings.
   into the archive. Large CZI files must remain streaming attachments; do not
   turn them into in-memory byte arrays.
 - Processed volume atlases are deliberately not embedded. Atlas identity covers
-  recognized cache files, voxel size/shape, axis metadata, and known provider
-  version. Loading rejects mismatched atlas content and allows verified
-  relocation.
+  the data of the content files (axes, regions, template, annotation), voxel
+  size/shape, axis metadata, and known provider version, not how the files
+  were pickled nor the display caches (2.9.4). Loading rejects mismatched
+  atlas content and allows verified relocation, including the same atlas
+  processed on another computer. `content_sha256` in a file record is
+  optional: absent in older references, ignored by older versions.
 - Slice-atlas pixels are embedded.
 - If source files change after being loaded, do not silently associate the
   in-memory work with the changed bytes. Atlas changes block saving until

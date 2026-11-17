@@ -2,7 +2,7 @@
 
 Stable release: **2.0.0**, 29 October 2026 (PyPI, and a GitHub release with
 Windows and macOS builds), after release candidates 2.0.0rc1 (published) to
-2.0.0rc16. Current release: 2.9.3, 5 November 2026 (multi-step Undo and object state from 2.9.2, with the 2.9.3 Undo fixes); previously 2.9.0, the same day (service extraction and performance); 2.8.8, 4 November 2026 (Space out: tilting plans that come too close; 2.8.7, the same day, put a prism's tip at its imaging face's bottom left corner; 2.8.6, the same day, published probe planning, Phases 1-4, the fixes from `reviews/2.8.3`, planned fibers and prisms, and probe hardware with 2.8.0-2.8.5; 2.7.0, 3 November 2026, was the one before); the waiver below
+2.0.0rc16. Current release: 2.9.4, 17 November 2026 (atlas identity by content: a project opens with the same atlas processed on another computer); previously 2.9.3, 5 November 2026 (multi-step Undo and object state from 2.9.2, with the 2.9.3 Undo fixes); 2.9.0, the same day (service extraction and performance); 2.8.8, 4 November 2026 (Space out: tilting plans that come too close; 2.8.7, the same day, put a prism's tip at its imaging face's bottom left corner; 2.8.6, the same day, published probe planning, Phases 1-4, the fixes from `reviews/2.8.3`, planned fibers and prisms, and probe hardware with 2.8.0-2.8.5; 2.7.0, 3 November 2026, was the one before); the waiver below
 applies to it as well. Passing automated tests does not satisfy the native-installation or
 user-evaluation gates.
 
@@ -128,6 +128,25 @@ version is excluded. Existing real-data/native installation gates stay pending.
 `reviews/2.9.2/IMPLEMENTATION.md` for the object model, stable identity payload
 fields, extracted export workflow, undo memory comparison and remaining work.
 Synthetic benchmarks do not close real-data or clean-install gates.
+
+## 2.9.4 atlas identity across computers
+
+Reported with real data: a schema-2 project saved on Windows against an Allen
+CCFv3 10 um atlas processed in August 2026 (pickle protocol 4) would not open
+on a Mac whose copy of the atlas was processed in October 2026 (protocol 5,
+after 1.4.35). Evidence, 17 November 2026, macOS arm64, Python 3.14, NumPy
+2.5.4: the Mac's axis info, template, annotation, three outline volumes and
+brain mesh, written again with protocol 4, have exactly the sizes and SHA-256
+checksums the project recorded (`atlas_labels.pkl` was already identical);
+only `atlas_small_meshdata.pkl` differs in content. With 2.9.4 the project's
+reference verifies against the Mac's atlas in 18 s, the project opens through
+File > Open without asking (probe object, 13 landmark pairs, embedded raster),
+a 25 um atlas is refused at once, one changed annotation voxel is refused, and
+a reference saved by 2.9.4 verifies against the protocol-4 files. Not tested:
+opening on the Windows computer itself. Not covered: a project saved before
+2.9.4 against an atlas written by NumPy 1.x (HERBS), whose files name another
+NumPy module, still needs that folder (no NumPy 1.x file was available to
+check an emulation against); once saved by 2.9.4 it opens anywhere.
 
 ## 2.9.3 Undo fixes
 
