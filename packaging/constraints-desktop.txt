@@ -14,7 +14,7 @@ macholib==1.16.4
 natsort==8.4.0
 nibabel==5.4.2
 numpy==2.5.3
-opencv-python-headless==5.0.0.93
+opencv-python-headless==5.1.0.95
 packaging==26.3
 pandas==3.0.6
 Pygments==2.21.0
